@@ -345,6 +345,9 @@ async function createTimelineFromCard(
 ) {
   const narratives = requireNarratives(ctx)
   const card = await readDocument<CardSourceContent>(ctx.documents, input.cardId, applicationDocumentTypes.cardSource)
+  if (input.expectedCardVersion !== undefined && input.expectedCardVersion !== card.version) {
+    throw new Error('Card changed while choosing an opening; reload the Card before starting')
+  }
   const cardContent = normalizeCardContent(card.content)
   const templates = new Map<string, Extract<StateDefinitionDraft, { kind: 'timeline-template' }>>()
   for (const template of cardContent.stateTemplates ?? []) {
@@ -408,10 +411,13 @@ async function createTimelineFromCard(
     contributionSources,
   })
   const variables = await readAgentTurnVariables(ctx, runtimeContext.fallbackUserName, initialState, cardContent.name)
+  if (input.openingIndex !== undefined && input.openingNodes !== undefined) {
+    throw new Error('Choose an opening index or custom opening nodes, not both')
+  }
   const openingEntries = input.openingNodes?.map(entry => ({
     content: entry.content,
     ...(entry.createdAt ? { createdAt: entry.createdAt } : {}),
-  })) ?? readOpeningEntries(cardContent, variables)
+  })) ?? readOpeningEntries(cardContent, variables, input.openingIndex)
   const transaction = await ctx.dataEngine.transact(
     narrativeWriteContext(requestContext, reason),
     async dataTx => requireDocumentParticipant(ctx).participateTransaction(dataTx, async documents => {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, onTestFinished } from 'vitest'
 import { createSqliteDataEngine } from '../../packages/data-engine/src/sqlite.js'
 
 describe('SQLite concurrent transaction stress and SLA gate', () => {
@@ -12,6 +12,7 @@ describe('SQLite concurrent transaction stress and SLA gate', () => {
       createId,
       now,
     })
+    onTestFinished(() => engine.close())
 
     // 运行初始迁移，创建压测表
     engine.migrate({
@@ -91,6 +92,5 @@ describe('SQLite concurrent transaction stress and SLA gate', () => {
     // 4. 硬性性能门线：50 个内存事务串行排队处理总时间必须小于 500ms（平均单事务 < 10ms）
     expect(elapsedMs).toBeLessThan(500)
 
-    engine.close()
   })
 })

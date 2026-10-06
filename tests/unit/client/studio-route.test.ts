@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { readStudioNodeAnchor, readStudioRoute } from '../../../apps/studio-client/src/shared/studio-shell/studio-route.js'
+import { matchRoutes } from 'react-router-dom'
+import { readStudioNodeAnchor, readStudioRoute, STUDIO_ENTRY_PATHS } from '../../../apps/studio-client/src/shared/studio-shell/studio-route.js'
 
 describe('studio routes', () => {
   it('reads chat, character and asset identities from paths', () => {
@@ -16,6 +17,11 @@ describe('studio routes', () => {
 
   it('falls back to the chat route model for unknown paths', () => {
     expect(readStudioRoute('/studio/unknown')).toEqual({ panel: null })
+  })
+
+  it.each(['/studio/macro', '/studio/chat/branch/main'])('keeps %s registered with its historical empty landing', path => {
+    expect(matchRoutes(STUDIO_ENTRY_PATHS.map(path => ({ path })), path)).not.toBeNull()
+    expect(readStudioRoute(path)).toEqual({ panel: null })
   })
 
   it('reads explicit node anchors and rejects unrelated hashes', () => {

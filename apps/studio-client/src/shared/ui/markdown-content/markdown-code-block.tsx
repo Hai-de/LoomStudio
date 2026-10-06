@@ -1,6 +1,7 @@
 import { Check, Copy, WrapText, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
-import { tryWriteClipboardText } from '../../browser/clipboard.js'
+import { useMemo, useState } from 'react'
+import { IconButton } from '@loom-studio/ui'
+import { useCopyFeedback } from '../../hooks/use-copy-feedback.js'
 import { highlightCode } from './code-highlight.js'
 import styles from './markdown-content.module.scss'
 
@@ -17,19 +18,10 @@ export function MarkdownCodeBlock(props: {
   labels: MarkdownCodeBlockLabels
   language?: string
 }) {
-  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
+  const { feedback, copy } = useCopyFeedback()
+  const copyState = feedback?.status ?? 'idle'
   const [wrapped, setWrapped] = useState(false)
   const content = useMemo(() => highlightCode(props.code, props.language), [props.code, props.language])
-
-  useEffect(() => {
-    if (copyState === 'idle') return
-    const timeout = window.setTimeout(() => setCopyState('idle'), 1600)
-    return () => window.clearTimeout(timeout)
-  }, [copyState])
-
-  async function copyCode() {
-    setCopyState(await tryWriteClipboardText(props.code) ? 'copied' : 'failed')
-  }
 
   const copyLabel = copyState === 'copied'
     ? props.labels.copied
@@ -41,24 +33,20 @@ export function MarkdownCodeBlock(props: {
     <div className={styles.codeBlock} data-wrap={wrapped ? 'true' : 'false'}>
       {props.language ? <span className={styles.codeLanguage}>{props.language}</span> : null}
       <div className={styles.codeActions}>
-        <button
+        <IconButton
           aria-label={wrapped ? props.labels.disableWrap : props.labels.enableWrap}
           className={styles.codeAction}
-          title={wrapped ? props.labels.disableWrap : props.labels.enableWrap}
-          type="button"
           onClick={() => setWrapped(value => !value)}
         >
           <WrapText aria-hidden="true" />
-        </button>
-        <button
+        </IconButton>
+        <IconButton
           aria-label={copyLabel}
           className={styles.codeAction}
-          title={copyLabel}
-          type="button"
-          onClick={() => void copyCode()}
+          onClick={() => void copy(props.code)}
         >
           {copyState === 'copied' ? <Check aria-hidden="true" /> : copyState === 'failed' ? <X aria-hidden="true" /> : <Copy aria-hidden="true" />}
-        </button>
+        </IconButton>
       </div>
       <pre><code data-language={props.language}>{content}</code></pre>
     </div>

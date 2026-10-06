@@ -11,6 +11,7 @@ export async function withStudioServer<T>(run: (port: number, dir: string) => Pr
     localPaths: resolveLoomStudioLocalPaths({ home: dir, environment: {} }),
     secretBackend: createMemorySecretBackend(),
     extensionRootDirectory: extensionRootDirectory ?? join(dir, 'empty-repository'),
+    extensionInstalledDirectory: join(dir, 'app/extensions'),
   })
 
   try {

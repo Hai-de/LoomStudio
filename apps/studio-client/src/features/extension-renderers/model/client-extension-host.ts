@@ -106,7 +106,7 @@ export type ClientExtensionDataApi = {
     extract(input: { source: ClientHistorySource; phase?: 'classify' | 'prompt' | 'display'; extractorId: string }, extensionTarget?: ExtensionInstallationTarget): Promise<JsonValue>
   }
   rpc: {
-    call(method: string, params?: JsonValue, owner?: { packageId: string; target: ExtensionInstallationTarget }): Promise<JsonValue>
+    call(method: string, params: JsonValue | undefined, owner: { packageId: string; target: ExtensionInstallationTarget }): Promise<JsonValue>
   }
   assets: {
     url(assetId: string, owner?: { packageId: string; moduleId: string; target: ExtensionInstallationTarget }): string
@@ -142,6 +142,7 @@ type ClientConfigSubscription = {
   input: { scope?: ExtensionStorageScope }
   handler(entries: ExtensionConfigEntry[]): void | Promise<void>
   signature?: string
+  refreshGeneration: number
 }
 
 export function createClientExtensionHost(options: {
@@ -194,6 +195,7 @@ export function createClientExtensionHost(options: {
       target: target ? structuredClone(target) : undefined,
       input: structuredClone(input),
       handler,
+      refreshGeneration: 0,
     })
     return id
   }
@@ -204,9 +206,10 @@ export function createClientExtensionHost(options: {
 
   async function refreshConfigSubscriptions(): Promise<void> {
     await Promise.all([...configSubscriptions.entries()].map(async ([id, subscription]) => {
+      const generation = ++subscription.refreshGeneration
       try {
         const entries = await data.configs.list(subscription.packageId, subscription.input, subscription.target)
-        if (!configSubscriptions.has(id)) return
+        if (!configSubscriptions.has(id) || generation !== subscription.refreshGeneration) return
         const signature = entries.map(entry => `${entry.id}:${entry.version}`).join('|')
         if (signature === subscription.signature) return
         subscription.signature = signature
@@ -288,6 +291,7 @@ export function createClientExtensionHost(options: {
     try {
       if (extensionPackage.target?.kind === 'card' && extensionPackage.target.cardId !== options.rendererHost.scopeSnapshot().cardId) throw new Error('Client module Card is not active')
       const loaded = await loadModule(module.entryUrl, instanceId)
+      record.abortController.signal.throwIfAborted()
       if (extensionPackage.target?.kind === 'card' && extensionPackage.target.cardId !== options.rendererHost.scopeSnapshot().cardId) throw new Error('Client module Card changed while loading')
       const extensionModule = loaded.activate ? loaded as ClientExtensionModule : loaded.default
       if (!extensionModule?.activate) throw new Error('Client extension must export activate(ctx)')
@@ -310,6 +314,7 @@ export function createClientExtensionHost(options: {
       })
       const returnedHandle = await extensionModule.activate(context)
       if (returnedHandle) record.handles.push(returnedHandle)
+      record.abortController.signal.throwIfAborted()
       for (const declared of module.contributions.renderers ?? []) {
         if (record.registeredRendererIds.has(declared.id)) continue
         diagnostics.push({
@@ -343,6 +348,11 @@ export function createClientExtensionHost(options: {
       summaries.set(key, record.summary)
       logger.info('Client extension activation completed', { extension, event: 'extension.activation.completed', data: { outcome: record.summary.state } })
     } catch (error) {
+      if (record.abortController.signal.aborted) {
+        await stop(record)
+        emit()
+        return
+      }
       logger.error('Client extension activation failed', { extension, event: 'extension.activation.failed', data: readLogFailure(error) })
       const message = error instanceof Error ? error.message : String(error)
       diagnostics.push({
@@ -393,15 +403,31 @@ export function createClientExtensionHost(options: {
     return handle
   }
 
+  let lifecycleRevision = 0
   return {
-    reconcile: (packages, reconcileOptions) => serialize(async () => {
+    reconcile: (packages, reconcileOptions) => {
+      const revision = ++lifecycleRevision
       const reload = new Set(reconcileOptions?.reload ?? [])
-      const desired = new Map<string, { extensionPackage: ManagedClientExtensionPackage; module: ManagedClientExtensionModule }>()
-      catalog.clear()
+      const candidates = new Map<string, { extensionPackage: ManagedClientExtensionPackage; module: ManagedClientExtensionModule }>()
       for (const extensionPackage of packages) {
         if (extensionPackage.target?.kind === 'card' && extensionPackage.target.cardId !== options.rendererHost.scopeSnapshot().cardId) continue
         for (const module of extensionPackage.modules) {
-          if (module.runtimeKind !== 'client' || !module.entryUrl) continue
+          if (module.runtimeKind === 'client' && module.entryUrl) {
+            candidates.set(moduleKey(extensionPackage.packageId, module.moduleId, extensionPackage.target), { extensionPackage, module })
+          }
+        }
+      }
+      for (const [key, record] of active) {
+        const next = candidates.get(key)
+        if (!next?.module.desired.enabled || reload.has(key) || next.module.entryUrl !== record.entryUrl
+          || next.extensionPackage.version !== record.packageVersion || next.module.reloadId !== record.reloadId
+          || permissionFingerprint(next.module) !== record.permissions) record.abortController.abort()
+      }
+      return serialize(async () => {
+        if (revision !== lifecycleRevision) return
+        const desired = new Map<string, { extensionPackage: ManagedClientExtensionPackage; module: ManagedClientExtensionModule }>()
+        catalog.clear()
+        for (const { extensionPackage, module } of candidates.values()) {
           const key = moduleKey(extensionPackage.packageId, module.moduleId, extensionPackage.target)
           catalog.set(key, { extensionPackage, module })
           if (!summaries.has(key)) summaries.set(key, { packageId: extensionPackage.packageId, moduleId: module.moduleId, target: extensionPackage.target, state: 'inactive' })
@@ -410,25 +436,25 @@ export function createClientExtensionHost(options: {
             desired.set(key, { extensionPackage, module })
           }
         }
-      }
 
-      for (const [key, record] of active) {
-        const next = desired.get(key)
-        if (!next || reload.has(key) || next.module.entryUrl !== record.entryUrl || next.extensionPackage.version !== record.packageVersion
-          || next.module.reloadId !== record.reloadId
-          || permissionFingerprint(next.module) !== record.permissions) {
-          await stop(record)
+        for (const [key, record] of active) {
+          const next = desired.get(key)
+          if (!next || record.abortController.signal.aborted) {
+            await stop(record)
+          }
         }
-      }
-      for (const [key, next] of desired) {
-        if (!active.has(key)) await activate(next.extensionPackage, next.module)
-      }
-      for (const key of summaries.keys()) {
-        if (!catalog.has(key) && !active.has(key)) summaries.delete(key)
-      }
-      emit()
-    }),
+        for (const [key, next] of desired) {
+          if (revision !== lifecycleRevision) break
+          if (!active.has(key)) await activate(next.extensionPackage, next.module)
+        }
+        for (const key of summaries.keys()) {
+          if (!catalog.has(key) && !active.has(key)) summaries.delete(key)
+        }
+        emit()
+      })
+    },
     executeCommand: async input => {
+      const revision = lifecycleRevision
       input = structuredClone(input)
       const scopes = options.rendererHost.scopeSnapshot()
       const context: ClientCommandInvocationContext = {
@@ -439,6 +465,9 @@ export function createClientExtensionHost(options: {
         ...(scopes.agentSessionId ? { agentSessionId: scopes.agentSessionId } : {}),
       }
       const resolved = await serialize(async () => {
+        if (revision !== lifecycleRevision) {
+          return commandFailure('command.disabled', 'Client Command lifecycle changed before execution')
+        }
         if (input.target?.kind === 'card' && options.rendererHost.scopeSnapshot().cardId !== input.target.cardId) {
           return commandFailure('command.disabled', 'Client Command belongs to a different Card')
         }
@@ -496,11 +525,15 @@ export function createClientExtensionHost(options: {
         return commandFailure('command.execution_failed', message)
       }
     },
-    dispose: () => serialize(async () => {
-      for (const record of [...active.values()].reverse()) await stop(record)
-      catalog.clear()
-      emit()
-    }),
+    dispose: () => {
+      lifecycleRevision += 1
+      for (const record of active.values()) record.abortController.abort()
+      return serialize(async () => {
+        for (const record of [...active.values()].reverse()) await stop(record)
+        catalog.clear()
+        emit()
+      })
+    },
     commandRegistrations: () => [...commandHandlers.values()].map(registration => structuredClone(registration.summary))
       .sort((left, right) => left.commandKey.localeCompare(right.commandKey)),
     backgrounds: () => [...backgrounds.values()]
@@ -683,7 +716,11 @@ function createActivationContext(input: {
       url: assetId => input.data.assets.url(assetId, { packageId: input.extensionPackage.packageId, moduleId: input.module.moduleId, target: installationTarget }),
     },
     files: {
-      url: path => extensionFileUrl(input.extensionPackage.packageId, input.extensionPackage.version, path, installationTarget, input.extensionPackage.archiveDigest),
+      url: path => extensionFileUrl(
+        input.extensionPackage.packageId,
+        installationTarget.kind === 'card' ? input.extensionPackage.version : input.extensionPackage.fileRevision ?? input.extensionPackage.version,
+        path, installationTarget, input.extensionPackage.archiveDigest,
+      ),
     },
     backgrounds: {
       register: background => {

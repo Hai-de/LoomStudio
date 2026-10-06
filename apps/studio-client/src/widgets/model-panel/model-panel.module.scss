@@ -172,6 +172,11 @@
 .sectionHeader,
 .modelRow,
 .availableModel {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  text-align: left;
+  background: transparent;
   display: flex;
   align-items: center;
 }
@@ -566,10 +571,16 @@
     color var(--loom-motion-duration-fast) ease,
     background-color var(--loom-motion-duration-fast) ease;
 
-  &:hover {
+  &:hover:not(:disabled) {
     color: var(--loom-color-text);
     background: var(--loom-color-surface-inset);
   }
+}
+
+.availableModel > svg {
+  flex-shrink: 0;
+  width: var(--loom-icon-size-3);
+  height: var(--loom-icon-size-3);
 }
 
 .modelRow > span,

@@ -1,16 +1,34 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ClientJsonValue } from '@loom-studio/client-bridge'
 import { isValidElement, type ReactElement } from 'react'
 import { AgentChatPanel, buildRenderItems, type AgentChatPanelProps } from '../../../apps/studio-client/src/widgets/agent-chat-panel/agent-chat-panel.js'
 import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/index.js'
 
+const hooks = vi.hoisted(() => ({ cursor: 0, values: [] as unknown[] }))
 vi.mock('react', async importOriginal => ({
   ...await importOriginal<typeof import('react')>(),
-  useState: (initial: unknown) => [typeof initial === 'function' ? initial() : initial, vi.fn()],
+  useState: (initial: unknown) => {
+    const index = hooks.cursor++
+    if (!(index in hooks.values)) hooks.values[index] = typeof initial === 'function' ? initial() : initial
+    return [hooks.values[index], (value: unknown) => {
+      hooks.values[index] = typeof value === 'function' ? value(hooks.values[index]) : value
+    }]
+  },
   useRef: (current: unknown) => ({ current }),
   useEffect: () => undefined,
   useLayoutEffect: () => undefined,
   useMemo: (factory: () => unknown) => factory(),
+}))
+vi.mock('../../../apps/studio-client/src/shared/ui/conversation-viewport/use-conversation-viewport.js', () => ({
+  useConversationViewport: ({ items }: { items: { id: string }[] }) => ({
+    scrollRef: { current: null }, listRef: { current: null }, headerRef: { current: null },
+    scrollMargin: 0, onScroll: vi.fn(),
+    virtualizer: {
+      getTotalSize: () => items.length * 280,
+      getVirtualItems: () => items.map((item, index) => ({ key: item.id, index, start: index * 280 })),
+      measureElement: vi.fn(),
+    },
+  }),
 }))
 type Element = ReactElement<Record<string, unknown>>
 function elements(value: unknown): Element[] {
@@ -22,6 +40,7 @@ function render(element: Element): Element {
   return (element.type as (props: Record<string, unknown>) => Element)(element.props)
 }
 function panelElements(count: number, reply: boolean) {
+  hooks.cursor = 0
   const messages: AgentChatPanelProps['messages'] = Array.from({ length: count }, (_, i) => ({
     id: `tool-${i}`, agentSessionId: 'session', sequence: i, createdAt: '',
     entry: { kind: 'tool-invocation', toolId: 'read', invocationId: `call-${i}`, exposedName: 'read', arguments: {} },
@@ -38,8 +57,24 @@ function panelElements(count: number, reply: boolean) {
   return elements(AgentChatPanel(props))
 }
 const panel = (count: number, reply: boolean) => panelElements(count, reply).find(element => Array.isArray(element.props.tools))!
+beforeEach(() => { hooks.cursor = 0; hooks.values = [] })
 
 describe('Agent tool group identity and collapse', () => {
+  it('retains group and tool expansion by stable ID while their virtual rows are unmounted', () => {
+    const first = panel(2, false)
+    const expansion = first.props.expansion as { toggle(id: string): void; isOpen(id: string): boolean }
+    expansion.toggle(first.props.id as string)
+    expansion.toggle('tool-1')
+    panelElements(0, false)
+    const returned = panel(2, true)
+    const retained = returned.props.expansion as typeof expansion
+    expect(retained.isOpen(returned.props.id as string)).toBe(true)
+    expect(retained.isOpen('tool-1')).toBe(true)
+    expect(retained.isOpen('tool-0')).toBe(false)
+    const collapse = elements(render(returned)).find(element => typeof element.props.open === 'boolean')!
+    expect(collapse.props.open).toBe(true)
+  })
+
   it('shows a pending invocation until its result arrives', () => {
     const invocation = {
       id: 'call', agentSessionId: 'session', sequence: 1, createdAt: '',

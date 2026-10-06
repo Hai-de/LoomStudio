@@ -13,7 +13,7 @@ import { applyDefaultPromptProjection, isPromptResourceArtifact, normalizePrompt
 import defaultPresetTemplate from '../prompt/default-preset.json' with { type: 'json' }
 import type { PromptResourceNode } from '../cards/workspace-types.js'
 import { validateTextTransformRuleDraft, type TextTransformRuleDraft } from '../transforms/history-text.js'
-import { revertApplicationStateChangeset } from '../state/state.js'
+import { revertApplicationStateChangeset, revertApplicationStateDefinitionChangeset } from '../state/state.js'
 import type {
   GetPromptResourceBindingsResult,
   CreatePromptResourceAssetInput,
@@ -122,7 +122,7 @@ export function createPromptRuntimeMethods(ctx: PromptRuntimeContext) {
     duplicatePromptResource: async (input: DuplicatePromptResourceInput, requestContext?: RuntimeRequestContext): Promise<CreatePromptResourceResult> => {
       const source = await ctx.promptResources.getResource(input.resourceId)
       if (!source) throw new Error(`Prompt resource not found: ${input.resourceId}`)
-      const sourceContent = await readMappedResource(ctx.promptResources, input.resourceId)
+      const sourceContent = fromStoredResource(source)
       const duplicateContent = clonePromptResourceContent(sourceContent, ctx.createId, input.name?.trim() || `${sourceContent.rootNode.label} Copy`)
       const sourceMounts = source.resourceKind === 'preset'
         ? await ctx.promptResources.listSettingMounts({ source: { kind: 'preset', id: source.id } })
@@ -293,13 +293,14 @@ export function createPromptRuntimeMethods(ctx: PromptRuntimeContext) {
     createPromptResourceAsset: async (input: CreatePromptResourceAssetInput, requestContext?: RuntimeRequestContext): Promise<UpdatePromptResourceResult> => {
       const current = await ctx.promptResources.getResource(input.resourceId)
       if (!current) throw new Error(`Prompt resource not found: ${input.resourceId}`)
-      const placement = resolveAssetPlacement(fromStoredResource(current).rootNode, input.targetAssetId, input.position)
-      const asset = applyDefaultPromptProjection(input.asset, fromStoredResource(current))
+      const mapped = fromStoredResource(current)
+      const placement = resolveAssetPlacement(mapped.rootNode, input.targetAssetId, input.position)
+      const asset = applyDefaultPromptProjection(input.asset, mapped)
       const mutation: PromptResourceMutation = { kind: 'node.create', parentId: placement.parentId, node: toStoredNodeDraft(asset) }
       const result = await ctx.promptResources.mutateResource({
         ...promptResourceWriteContext(requestContext), reason: 'application.createPromptResourceAsset',
         resourceId: input.resourceId, expectedVersion: current.version,
-        mutations: [{ ...mutation, node: { ...mutation.node, orderIndex: placement.orderIndex } }, ...buildInsertionReorderMutations(fromStoredResource(current).rootNode, placement.parentId, placement.orderIndex)],
+        mutations: [{ ...mutation, node: { ...mutation.node, orderIndex: placement.orderIndex } }, ...buildInsertionReorderMutations(mapped.rootNode, placement.parentId, placement.orderIndex)],
       })
       return { resource: fromStoredResource(result.resource), mutation: { changesetId: result.commit.changesetId } }
     },
@@ -315,11 +316,12 @@ export function createPromptRuntimeMethods(ctx: PromptRuntimeContext) {
     movePromptResourceAsset: async (input: MovePromptResourceAssetInput, requestContext?: RuntimeRequestContext): Promise<UpdatePromptResourceResult> => {
       const current = await ctx.promptResources.getResource(input.resourceId)
       if (!current) throw new Error(`Prompt resource not found: ${input.resourceId}`)
-      const placement = resolveAssetPlacement(fromStoredResource(current).rootNode, input.targetAssetId, input.position)
+      const mapped = fromStoredResource(current)
+      const placement = resolveAssetPlacement(mapped.rootNode, input.targetAssetId, input.position)
       const result = await ctx.promptResources.mutateResource({
         ...promptResourceWriteContext(requestContext), reason: 'application.movePromptResourceAsset',
         resourceId: input.resourceId, expectedVersion: current.version,
-        mutations: buildMoveMutations(fromStoredResource(current).rootNode, input.assetId, placement),
+        mutations: buildMoveMutations(mapped.rootNode, input.assetId, placement),
       })
       return { resource: fromStoredResource(result.resource), mutation: { changesetId: result.commit.changesetId } }
     },
@@ -339,11 +341,10 @@ export function createPromptRuntimeMethods(ctx: PromptRuntimeContext) {
       input: UpdatePromptResourceMacrosInput,
       requestContext?: RuntimeRequestContext,
     ): Promise<UpdatePromptResourceMacrosResult> => {
-      const current = await readMappedResource(ctx.promptResources, input.resourceId)
+      const current = await ctx.promptResources.getResource(input.resourceId)
+      if (!current) throw new Error(`Prompt resource not found: ${input.resourceId}`)
       if (current.resourceKind !== 'preset') throw new Error(`Macro configuration requires a Preset resource: ${input.resourceId}`)
       const macros = normalizeMacros(input.macros, 'Preset')
-      const stored = await ctx.promptResources.getResource(input.resourceId)
-      if (!stored) throw new Error(`Prompt resource not found: ${input.resourceId}`)
       const result = await ctx.promptResources.mutateResource({
         ...promptResourceWriteContext(requestContext),
         reason: 'application.updatePromptResourceMacros',
@@ -353,7 +354,7 @@ export function createPromptRuntimeMethods(ctx: PromptRuntimeContext) {
           kind: 'resource.update',
           patch: {
             metadata: {
-              ...stored.metadata,
+              ...current.metadata,
               macros,
               ...(input.macroOptions !== undefined ? { macroOptions: normalizeMacroOptions(input.macroOptions) } : {}),
             },
@@ -365,8 +366,8 @@ export function createPromptRuntimeMethods(ctx: PromptRuntimeContext) {
 
     revertChangeset: async (input: { changesetId: string }, requestContext?: RuntimeRequestContext): Promise<{ mutation: MutationReceipt }> => {
       const stateRevision = await ctx.states?.getRevisionByChangesetId(input.changesetId)
+      const documentChangeset = await ctx.documents.getChangeset(input.changesetId)
       if (stateRevision) {
-        const documentChangeset = await ctx.documents.getChangeset(input.changesetId)
         const result = await revertApplicationStateChangeset(
           ctx,
           input.changesetId,
@@ -376,6 +377,9 @@ export function createPromptRuntimeMethods(ctx: PromptRuntimeContext) {
             : undefined,
         )
         return { mutation: result }
+      }
+      if (documentChangeset?.operations.some(operation => operation.type === applicationDocumentTypes.stateDefinition)) {
+        return { mutation: await revertApplicationStateDefinitionChangeset(ctx, documentChangeset, requestContext) }
       }
       const result = await ctx.documents.revertChangeset({
         changesetId: input.changesetId,
@@ -414,14 +418,12 @@ async function importPromptResourceContent(
     (result): result is PromiseRejectedResult => result.status === 'rejected',
   )
   if (failedPreparation) {
-    await Promise.all(prepared.map(item => ctx.blobs!.discardPreparedWrite(item.blob)))
     throw failedPreparation.reason
   }
-  try {
-    const transaction = await ctx.dataEngine.transact({
-      ...promptResourceWriteContext(requestContext),
-      reason: 'application.importPromptResource',
-    }, async dataTx => {
+  const transaction = await ctx.dataEngine.transact({
+    ...promptResourceWriteContext(requestContext),
+    reason: 'application.importPromptResource',
+  }, async dataTx => {
     const resourceTx = ctx.promptResources.transaction(dataTx)
     const resource = resourceTx.createResource(toStoredResourceInput({ content }))
     for (const [orderIndex, reference] of (settingMounts ?? []).entries()) {
@@ -482,24 +484,20 @@ async function importPromptResourceContent(
         })
       }
     })
-      if (content.resourceKind === 'preset') {
-        for (const [orderIndex, definition] of ctx.agentTools.list().entries()) {
-          resourceTx.addPresetToolMount({
-            presetResourceId: resource.id, toolId: definition.id, orderIndex, defaultEnabled: false,
-            ...(definition.prompt?.activation ? { activation: structuredClone(definition.prompt.activation) } : {}),
-            ...(definition.prompt?.provider ? { provider: { ...definition.prompt.provider } } : {}),
-            ...(definition.prompt?.content ? { content: { ...definition.prompt.content } } : {}),
-            origin: { kind: 'manual' },
-          })
-        }
+    if (content.resourceKind === 'preset') {
+      for (const [orderIndex, definition] of ctx.agentTools.list().entries()) {
+        resourceTx.addPresetToolMount({
+          presetResourceId: resource.id, toolId: definition.id, orderIndex, defaultEnabled: false,
+          ...(definition.prompt?.activation ? { activation: structuredClone(definition.prompt.activation) } : {}),
+          ...(definition.prompt?.provider ? { provider: { ...definition.prompt.provider } } : {}),
+          ...(definition.prompt?.content ? { content: { ...definition.prompt.content } } : {}),
+          origin: { kind: 'manual' },
+        })
       }
-      return resource
-    })
-    return { resource: transaction.value, commit: transaction.commit }
-  } catch (error) {
-    await Promise.all(prepared.map(item => ctx.blobs!.discardPreparedWrite(item.blob)))
-    throw error
-  }
+    }
+    return resource
+  })
+  return { resource: transaction.value, commit: transaction.commit }
 }
 
 export function createEmptyPromptResourceContent(
@@ -573,13 +571,13 @@ function clonePromptResourceNode(
   return clone(node)
 }
 
-function findPromptNode(
-  root: PromptResourceContent['rootNode'],
+function findPromptNode<T extends { id: string; children?: T[] }>(
+  root: T,
   id: string,
   parentId?: string,
-): { node: PromptResourceContent['rootNode']; parentId?: string; index: number } | undefined {
+): { node: T; parentId?: string; index: number } | undefined {
   if (root.id === id) return { node: root, parentId, index: 0 }
-  for (const [index, child] of ((root.children ?? []) as PromptResourceNode[]).entries()) {
+  for (const [index, child] of (root.children ?? []).entries()) {
     if (child.id === id) return { node: child, parentId: root.id, index }
     const found = findPromptNode(child, id, root.id)
     if (found) return found
@@ -630,25 +628,23 @@ function buildMoveMutations(
   if (source.node.kind === 'module') throw new Error(`Prompt asset cannot be moved: ${nodeId}`)
   if (findPromptNode(source.node, placement.parentId)) throw new Error('Cannot move prompt asset inside its own subtree')
 
-  const siblingLists = new Map<string, string[]>()
-  const visit = (parent: PromptResourceContent['rootNode']): void => {
-    siblingLists.set(parent.id, ((parent.children ?? []) as PromptResourceNode[]).map((child: PromptResourceNode) => child.id))
-    parent.children?.forEach(visit)
-  }
-  visit(root)
-  const sourceSiblings = siblingLists.get(source.parentId) ?? []
-  const destinationSiblings = siblingLists.get(placement.parentId) ?? []
+  const sourceSiblings = (findPromptNode(root, source.parentId)!.node.children ?? []).map(child => child.id)
+  const destinationSiblings = placement.parentId === source.parentId
+    ? sourceSiblings
+    : (findPromptNode(root, placement.parentId)!.node.children ?? []).map(child => child.id)
   const nextSource = sourceSiblings.filter(id => id !== nodeId)
   const nextDestination = placement.parentId === source.parentId ? nextSource : destinationSiblings.filter(id => id !== nodeId)
   const insertAt = Math.max(0, Math.min(placement.orderIndex, nextDestination.length))
   nextDestination.splice(insertAt, 0, nodeId)
-  siblingLists.set(source.parentId, nextSource)
-  siblingLists.set(placement.parentId, nextDestination)
+  const siblingLists = placement.parentId === source.parentId
+    ? [{ parentId: source.parentId, current: sourceSiblings, desired: nextDestination }]
+    : [
+      { parentId: source.parentId, current: sourceSiblings, desired: nextSource },
+      { parentId: placement.parentId, current: destinationSiblings, desired: nextDestination },
+    ]
 
   const mutations: PromptResourceMutation[] = []
-  for (const [parentId, desired] of siblingLists) {
-    const currentParent = findPromptNode(root, parentId)?.node
-    const current = ((currentParent?.children ?? []) as PromptResourceNode[]).map((child: PromptResourceNode) => child.id)
+  for (const { parentId, current, desired } of siblingLists) {
     for (const [orderIndex, childId] of desired.entries()) {
       if (current[orderIndex] === childId && childId !== nodeId) continue
       if (childId === nodeId || current[orderIndex] !== childId) {
@@ -676,24 +672,26 @@ async function updatePromptResourceAssets(input: {
 }): Promise<UpdatePromptResourceResult> {
   const current = await input.ctx.promptResources.getResource(input.resourceId)
   if (!current) throw new Error(`Prompt resource not found: ${input.resourceId}`)
-  const currentTree = fromStoredResource(current).rootNode
-  const mutations: PromptResourceMutation[] = input.updates.map(update => ({
-    kind: 'node.update',
-    nodeId: update.assetId,
-    patch: {
-      ...(update.label === undefined ? {} : { label: update.label }),
-      ...(update.body === undefined ? {} : { body: update.body }),
-      ...(update.capabilities === undefined ? {} : { capabilities: update.capabilities }),
-      ...(update.enabled === undefined ? {} : { enabled: update.enabled }),
-      ...(update.meta === undefined ? {} : { meta: update.meta }),
-      ...(update.orderList === undefined ? {} : {
-        extra: {
-          ...(findPromptNode(currentTree, update.assetId) ? (toStoredNodeDraft(findPromptNode(currentTree, update.assetId)!.node).extra ?? {}) : {}),
-          ...(update.orderList === undefined ? {} : { orderList: update.orderList }),
-        },
-      }),
-    },
-  }))
+  const mutations: PromptResourceMutation[] = input.updates.map(update => {
+    let extra: PromptResourceNode['extra']
+    if (update.orderList !== undefined || update.capabilities?.projection !== undefined) {
+      extra = { ...(findPromptNode(current.rootNode, update.assetId)?.node.extra ?? {}) }
+      if (update.orderList !== undefined) extra.orderList = update.orderList
+      if (update.capabilities?.projection !== undefined) delete extra.projection
+    }
+    return {
+      kind: 'node.update',
+      nodeId: update.assetId,
+      patch: {
+        ...(update.label === undefined ? {} : { label: update.label }),
+        ...(update.body === undefined ? {} : { body: update.body }),
+        ...(update.capabilities === undefined ? {} : { capabilities: update.capabilities }),
+        ...(update.enabled === undefined ? {} : { enabled: update.enabled }),
+        ...(update.meta === undefined ? {} : { meta: update.meta }),
+        ...(extra === undefined ? {} : { extra }),
+      },
+    }
+  })
   const result = await input.ctx.promptResources.mutateResource({
     ...promptResourceWriteContext(input.requestContext),
     reason: 'application.updatePromptResourceAssets',

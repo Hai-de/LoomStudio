@@ -10,6 +10,7 @@ const hooks = vi.hoisted(() => ({
 vi.mock('react', async original => ({
   ...await original<typeof import('react')>(),
   useMemo: (compute: () => unknown) => compute(),
+  useCallback: (callback: unknown) => callback,
   useRef: (current: unknown) => ({ current }),
   useState: (initial: unknown) => [initial, vi.fn()],
   useEffect: (effect: () => void | (() => void)) => hooks.effects.push(effect),

@@ -24,7 +24,7 @@ flowchart TD
     SDK --> Transport["Transport"]
     Transport --> Shared
     Runner --> Core
-    Official["official/extensions/st-data-compat"] --> SDK
+    Official["extensions/st-data-compat"] --> SDK
     Fixtures["tests/fixtures/extensions"] --> SDK
 ```
 

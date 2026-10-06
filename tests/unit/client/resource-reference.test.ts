@@ -124,7 +124,7 @@ describe('resource reference navigation model', () => {
     for (const panel of ['resource', 'preset'] as const) {
       for (const resourceId of ['first', 'second', 'first']) {
         expect(readStudioRoute(`/studio/${panel === 'preset' ? 'presets' : 'resources'}/reference/${encodeURIComponent(resourceId)}/node/shared-node`)).toEqual({
-          panel, resourceId, assetId: 'shared-node',
+          panel: panel === 'preset' ? 'agent' : panel, resourceId, assetId: 'shared-node',
         })
       }
     }

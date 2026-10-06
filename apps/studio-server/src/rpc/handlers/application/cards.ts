@@ -151,10 +151,9 @@ function readOptionalOpening(params: JsonValue | undefined, key: string): Openin
   const value = params[key]
   if (typeof value === 'string') return value
   if (!isRecord(value)) throw new Error(`Expected opening param: ${key}`)
-  const entries = Array.isArray(value.entries) ? value.entries : []
-
-  return {
-    entries: entries.map(entry => {
+  function readEntries(entries: JsonValue | undefined): NonNullable<OpeningChatInput['entries']> {
+    if (entries !== undefined && !Array.isArray(entries)) throw new Error(`Expected opening entries array: ${key}`)
+    return (entries ?? []).map(entry => {
       if (!isRecord(entry) || typeof entry.content !== 'string') {
         throw new Error(`Expected opening entry content: ${key}`)
       }
@@ -166,7 +165,19 @@ function readOptionalOpening(params: JsonValue | undefined, key: string): Openin
         role: entry.role,
         content: entry.content,
       }
-    }),
+    })
+  }
+  if (value.alternatives !== undefined && !Array.isArray(value.alternatives)) {
+    throw new Error('Expected opening alternatives array')
+  }
+  return {
+    entries: readEntries(value.entries),
+    ...(value.alternatives !== undefined ? {
+      alternatives: value.alternatives.map(alternative => {
+        if (!isRecord(alternative) || !Array.isArray(alternative.entries)) throw new Error('Expected opening alternative entries')
+        return { entries: readEntries(alternative.entries) }
+      }),
+    } : {}),
   }
 }
 

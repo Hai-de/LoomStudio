@@ -7,7 +7,7 @@ import type { NarrativeStore } from '@loom-studio/application-data'
 import type { PromptResourceStore } from '@loom-studio/application-data'
 import { createId as createSharedId, nowIso } from '@loom-studio/shared'
 import { createStateStore, type StateStore } from '@loom-studio/application-data'
-import { createDocumentBackedAiGateway, providerToGateway } from '../providers/gateway.js'
+import { createDocumentBackedAiGateway } from '../providers/gateway.js'
 import { createAgentToolRegistry, type AgentToolRegistry } from '../agents/tool-registry.js'
 import type { AiGateway, ApplicationRuntimeOptions, BlobStorage, MediaAssetLookup, SourceArtifactStorage } from '../types.js'
 import { createMacroProviderRegistry, type MacroProviderRegistry } from '../prompt/macro-provider-registry.js'
@@ -79,11 +79,11 @@ export function createApplicationRuntimeContext(options: ApplicationRuntimeOptio
     macroProviders: options.macroProviders ?? createMacroProviderRegistry(),
     stateContributions: options.stateContributions ?? createStateContributionRegistry(),
     timelineArchiveParticipants: createTimelineArchiveParticipantRegistry(options.timelineArchiveParticipants),
-    gateway: options.gateway ?? (options.provider ? providerToGateway(options.provider) : createDocumentBackedAiGateway({
+    gateway: options.gateway ?? createDocumentBackedAiGateway({
       documents: options.documents,
       secrets: options.secrets,
       providerAdapters,
-    })),
+    }),
     now: runtimeNow,
     createId: runtimeCreateId,
   }

@@ -8,8 +8,7 @@ self.onmessage = async (event: MessageEvent<{ id: number; texts: string[] }>) =>
     const counts: number[] = []
     for (const text of texts) {
       const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
-      const key = 'o200k_base:gpt-tokenizer@4.0.0:literal-text-v1:' +
-        Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+      const key = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
       let count = cache.get(key)
       if (count === undefined) {
         count = countText(text).baseTokens

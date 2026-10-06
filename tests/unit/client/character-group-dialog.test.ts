@@ -1,7 +1,5 @@
-import { createElement, type ComponentProps } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { CharacterPanel } from '../../../apps/studio-client/src/widgets/character-panel/character-panel.js'
+import { characterPanelProps, renderCharacterPanel } from '../../support/client/character-panel.js'
 
 const gallery = vi.hoisted(() => ({
   groupsOpen: true,
@@ -14,31 +12,12 @@ vi.mock('../../../apps/studio-client/src/widgets/character-panel/character-galle
   useCharacterGalleryStore: () => gallery,
 }))
 
-const props: ComponentProps<typeof CharacterPanel> = {
-  active: true,
-  busy: false,
-  cardDraft: { name: '', userName: '', description: '' },
-  cards: [],
-  timelines: [],
-  t: key => key,
-  onChangeCardDraft: () => undefined,
-  onCreateCard: async () => undefined,
-  onCreateTimelineFromCard: async () => undefined,
-  onExportCard: async () => undefined,
-  onImportCards: async () => undefined,
-  onDeleteCards: async () => undefined,
-  onPreviewCardDeletion: async () => ({ timelines: [] }),
-  onSelectCard: () => undefined,
-  onOpenTimeline: () => undefined,
-  onOpenStatePanel: () => undefined,
-  onUpdateCardMedia: async () => undefined,
-  onUpdateCard: async () => undefined,
-}
+const props = characterPanelProps()
 
 describe('Character Group Dialog', () => {
   it('renders the real shared native dialog with an associated title and group controls', () => {
     gallery.groupsOpen = true
-    const html = renderToStaticMarkup(createElement(CharacterPanel, props))
+    const html = renderCharacterPanel(props)
     const dialog = html.match(/<dialog\b[^>]*>[\s\S]*?character-group-dialog[\s\S]*?<\/dialog>/)?.[0]
     expect(dialog).toBeDefined()
     expect(dialog).toContain('data-loom-ui-dialog=""')
@@ -60,7 +39,7 @@ describe('Character Group Dialog', () => {
 
   it('unmounts the group dialog when its existing open state is false', () => {
     gallery.groupsOpen = false
-    const html = renderToStaticMarkup(createElement(CharacterPanel, props))
+    const html = renderCharacterPanel(props)
     expect(html).not.toContain('character-group-dialog')
   })
 })

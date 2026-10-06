@@ -1,6 +1,6 @@
 import { realpathSync } from 'node:fs'
 import { createTextTokenCounter } from '@loom-studio/tokenizer/async'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
@@ -44,7 +44,7 @@ import {
   storageInstallationId,
 } from './storage.js'
 
-export async function loadServerModule(record: ExtensionModuleRecord, instanceId: string): Promise<ServerExtensionModule> {
+export async function loadServerModule(record: ExtensionModuleRecord, instanceId: string, options?: ExtensionHostOptions): Promise<ServerExtensionModule> {
   const entry = record.moduleManifest.entry
   const directory = realpathSync(record.directory)
   const modulePath = realpathSync(resolve(directory, entry))
@@ -52,7 +52,19 @@ export async function loadServerModule(record: ExtensionModuleRecord, instanceId
   if (!pathFromDirectory || pathFromDirectory.startsWith('..') || isAbsolute(pathFromDirectory)) {
     throw new Error(`Extension module entry must stay inside its package directory: ${entry}`)
   }
-  const loaded = await import(`${pathToFileURL(modulePath).href}?instance=${encodeURIComponent(instanceId)}`) as Partial<ServerExtensionModule> & { default?: ServerExtensionModule }
+  let runtimePath = modulePath
+  if (options?.serverModuleSnapshotRoot) {
+    const snapshot = join(options.serverModuleSnapshotRoot, instanceId)
+    record.instance!.scope.track('server-module-snapshot', { dispose: () => rm(snapshot, { recursive: true, force: true }) })
+    await mkdir(options.serverModuleSnapshotRoot, { recursive: true })
+    await cp(directory, snapshot, {
+      recursive: true,
+      filter: path => !['.git', '.loom-source.json', 'node_modules'].includes(relative(directory, path).split(/[\\/]/)[0] ?? ''),
+    })
+    runtimePath = resolve(snapshot, pathFromDirectory)
+    // ponytail: Node ESM cannot evict old module graphs; snapshots refresh relative imports, while process restart releases cached modules.
+  }
+  const loaded = await import(`${pathToFileURL(runtimePath).href}?instance=${encodeURIComponent(instanceId)}`) as Partial<ServerExtensionModule> & { default?: ServerExtensionModule }
   if (loaded.activate) return loaded as ServerExtensionModule
   if (loaded.default?.activate) return loaded.default
   throw new Error('Server extension must export activate(ctx)')
@@ -448,6 +460,7 @@ export function createContext(
           moduleManifest.id,
           instance.instanceId,
           (input, context) => instance.scope.run(() => handler(input, {
+            ...context,
             signal: AbortSignal.any([context.signal, instance.scope.signal]),
           })),
         )

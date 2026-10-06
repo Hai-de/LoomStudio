@@ -5,6 +5,8 @@ export type {
   ExtensionAssetCapability,
   ExtensionEntityRef,
   ExtensionManifest,
+  ExtensionInstallationTarget,
+  ExtensionDownloadSource,
   ExtensionModuleManifest,
   ExtensionPromptResourceContribution,
   ExtensionTextExtractorContribution,

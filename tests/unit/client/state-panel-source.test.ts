@@ -37,12 +37,6 @@ function elements(value: unknown): Element[] {
   if (!isValidElement<Record<string, unknown>>(value)) return []
   return [value, ...Object.values(value.props).flatMap(elements)]
 }
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (error: Error) => void
-  const promise = new Promise<T>((accept, fail) => { resolve = accept; reject = fail })
-  return { promise, resolve, reject }
-}
 function snapshot(target: StateTarget, count: number) {
   return { snapshot: { target, scopeId: 'scope', revisionId: `rev-${count}`, value: { count }, createdAt: '2026-09-23' } }
 }
@@ -96,7 +90,7 @@ beforeEach(() => { hooks.cursor = 0; hooks.values = []; hooks.effects = [] })
 describe('State panel source isolation', () => {
   it('does not show or save an old Timeline snapshot after switching target', async () => {
     const f = fixture()
-    const old = deferred<ReturnType<typeof snapshot>>()
+    const old = Promise.withResolvers<ReturnType<typeof snapshot>>()
     f.get.mockImplementation(target => target.scope === 'timeline' && target.timelineId === 'a'
       ? old.promise : Promise.resolve(snapshot(target, 2)))
     f.render()
@@ -118,7 +112,7 @@ describe('State panel source isolation', () => {
     await f.settle()
     f.controls().edit(4)
     const oldControls = f.controls()
-    const pending = deferred<Awaited<ReturnType<typeof f.apply>>>()
+    const pending = Promise.withResolvers<Awaited<ReturnType<typeof f.apply>>>()
     f.apply.mockReturnValueOnce(pending.promise)
     oldControls.submit()
     oldControls.submit()

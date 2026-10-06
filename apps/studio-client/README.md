@@ -32,6 +32,8 @@ pnpm exec vitest run tests/unit/client
 
 开发预览入口 `/dev/preview/:id` 保留，当前可用样例以 [预览注册表](./src/dev/preview/index.tsx) 为准。入口在开发模式下先于认证启动分流，未知 ID 显示未找到。新增样例在该注册表接入，复用生产组件，不动态解析用户提供的模块路径。
 
+`/dev/preview/backgrounds` 复用正式背景选择组件，以内存状态覆盖长名称、不同图片比例、搜索空结果与原图／材质弹窗；不会修改用户背景偏好。
+
 消息 HTML 样例已于 2026-09-24 经用户验收后[归档](./src/dev/archive/message-html/README.md)，不再注册 `message-html` 预览。正式 Narrative 与 Agent 消息消费 `features/message-content`：安全片段直接进入消息 DOM，完整 HTML 文档使用隔离 iframe，Agent 流式未闭合 HTML 使用占位。Display 只影响显示，编辑与复制保留原文。外部图床与 ST／酒馆助手 API 桥尚未开放。
 
 普通应用仍走认证启动流程。预览设计与生产隔离验收要求见 [组件预览计划](../../docs/archive/plans/ui/component-preview-workbench-plan.md)；入口存在不代表生产构建、无副作用检查或人工视觉验收已经完成。
@@ -54,6 +56,8 @@ pnpm exec vitest run tests/unit/client
 Agent Preset 配置使用 Settings、正则 / 提取器、工具三个子 Tab，复用来源 FileTree、搜索和图标开关；Settings / 规则行点击跳转定义编辑，工具说明按行展开。当前角色 Settings 置顶并用星号标记，显示随 `useCardSettings` 草稿变化，不为展示增加 Mount；默认采用由角色世界书总开关控制，关闭后仍可显式采用。目录不显示实际触发结果，不提供额外编辑按钮或 Settings 上下移控件。详见[资源浏览与消费配置](../../docs/architecture/ui/navigation-and-routing.md#资源浏览与消费配置)。
 
 Session 不能中途改绑预设。“主写作”是 Narrative 输入接收 Session，与正在查看的 Session 分离；选择按 endpoint 存储范围和 Timeline 在本机持久化，不是后端全局主槽位。生成时禁止换主；暂停任务须先成功放弃，不能借切换恢复旧任务。具体合同见[Agent Runtime 与 Session](../../docs/architecture/application/agent/runtime-and-session.md#1-身份与绑定)。
+
+Agent Chat 使用独立 [`AgentSessionPicker`](./src/widgets/agent-chat-panel/agent-session-picker.tsx)：名称输入、可搜索弹窗、重命名和主写作星号选择分别复用现有操作；新建对话通过可搜索的预设列表创建固定绑定 Session。失败保留输入或弹窗，查看切换不改变主写作选择，见[会话选择](../../docs/architecture/ui/navigation-and-routing.md#agent-会话选择)。
 
 ```text
 Route / UI

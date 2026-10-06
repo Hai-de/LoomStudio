@@ -22,6 +22,12 @@ describe('studio layout store', () => {
 
   afterEach(() => vi.unstubAllGlobals())
 
+  it('pins the Composer by default without overriding an explicit immersive preference', () => {
+    expect(createDefaultStudioLayout().composerPinned).toBe(true)
+    expect(sanitizeStudioLayout({}).composerPinned).toBe(true)
+    expect(sanitizeStudioLayout({ composerPinned: false }).composerPinned).toBe(false)
+  })
+
   it('persists and rehydrates both Composer pin states', async () => {
     const key = useStudioLayoutStore.persist.getOptions().name
     if (!key) throw new Error('Layout persistence requires a storage key')
@@ -76,6 +82,8 @@ describe('studio layout store', () => {
 
     useStudioLayoutStore.getState().togglePanelWindowMode()
     expect(useStudioLayoutStore.getState().panelWindowMode).toBe('reference')
+    expect(useStudioLayoutStore.getState()).not.toHaveProperty('panelWindowModes')
+    expect(JSON.parse(storedValues.get('loom-studio-layout')!).state).not.toHaveProperty('panelWindowModes')
   })
 
   it('switches workspace panels without changing persisted layout data', () => {
@@ -98,7 +106,7 @@ describe('studio layout store', () => {
     store.setPanelWindowSize('preset', { width: 920, height: 700 })
     store.setRailWidth(224)
     store.setPanelWindowSize('character', { width: 1080, height: 760 })
-    store.togglePanelWindowMode('preset')
+    store.togglePanelWindowMode()
     store.setAssetExplorerWidth('preset', 260)
     store.setAssetExplorerWidth('resources', 340)
     store.setAssetViewMode('preset', 'card-a', 'master-detail')
@@ -126,7 +134,7 @@ describe('studio layout store', () => {
         preset: { width: 920, height: 700 },
         character: { width: 1080, height: 760 },
       },
-      panelWindowModes: { preset: 'immersive' },
+      panelWindowMode: 'immersive',
       railWidth: 224,
     })
   })
@@ -158,7 +166,7 @@ describe('studio layout store', () => {
     useStudioLayoutStore.getState().setAssetSelectedId('resources', 'card-a', 'resource-entry-a')
     useStudioLayoutStore.getState().setAssetExpandedIds('resources', 'card-a', ['resource-root', 'resource-folder'])
     useStudioLayoutStore.getState().setAssetViewMode('resources', 'card-a', 'master-detail')
-    useStudioLayoutStore.getState().togglePanelWindowMode('character')
+    useStudioLayoutStore.getState().togglePanelWindowMode()
     useStudioLayoutStore.getState().setRailWidth(208)
     const persisted = storedValues.get('loom-studio-layout')
     expect(persisted).toBeDefined()
@@ -182,7 +190,7 @@ describe('studio layout store', () => {
         },
       },
       dockOpen: true,
-      panelWindowModes: { character: 'immersive' },
+      panelWindowMode: 'immersive',
       railWidth: 208,
     })
   })
@@ -200,13 +208,16 @@ describe('studio layout store', () => {
       },
     })).toMatchObject({
       assetLayouts: { resources: { explorerWidth: 340, views: {} } },
-      panelWindowModes: { model: 'reference', character: 'immersive', resource: 'reference' },
+      panelWindowMode: 'immersive',
       panelWindowSizes: {
         model: { width: 720, height: 600 },
         character: { width: 1080, height: 760 },
         resource: { width: 900, height: 640 },
       },
     })
+    expect(sanitizeStudioLayout({
+      panelWindowModes: { character: 'reference', resources: 'immersive' },
+    }).panelWindowMode).toBe('reference')
   })
 })
 
@@ -239,25 +250,18 @@ describe('sanitizeStudioLayout', () => {
       textEditorMode: 'preview',
       uiScale: 100,
     })).toEqual({
+      ...createDefaultStudioLayout(),
       assetMetadataOpen: true,
-      assetPanes: { preset: {}, resources: {} },
       assetLayouts: {
         preset: { explorerWidth: 280, views: {} },
         resources: { explorerWidth: 300, views: {} },
       },
       contextCategory: 'history',
-      dockOpen: false,
-      dockPinned: true,
-      composerPinned: false,
       panelWindowMode: 'immersive',
-      panelWindowModes: { preset: 'immersive' },
       panelWindowSizes: {
         preset: { width: 900, height: 680 },
       },
-      presetView: 'order',
-      railWidth: 160,
       textEditorMode: 'preview',
-      uiScale: 100,
     })
   })
 

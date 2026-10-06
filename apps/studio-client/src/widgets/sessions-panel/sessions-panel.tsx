@@ -47,6 +47,7 @@ import type { Translator } from '../../shared/i18n/index.js'
 import { MasterDetailWorkbench } from '../../shared/ui/master-detail-workbench/master-detail-workbench.js'
 import { PanelTabs } from '../../shared/ui/panel-tabs/index.js'
 import { AgentToolGroupBlock, buildRenderItems } from '../agent-chat-panel/agent-chat-panel.js'
+import { AgentSessionCreateDialog } from '../agent-chat-panel/agent-session-create-dialog.js'
 import {
   areAllExpandablesExpanded,
   areAllSelected,
@@ -112,10 +113,6 @@ export function SessionsPanel(props: SessionsPanelProps) {
   }>()
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
-  const [createPresetId, setCreatePresetId] = useState('')
-  const [createAsMain, setCreateAsMain] = useState(false)
-  const [createBusy, setCreateBusy] = useState(false)
-  const [createError, setCreateError] = useState<string>()
   const [primaryError, setPrimaryError] = useState<string>()
 
   useEffect(() => { setPendingDelete(undefined) }, [props.api])
@@ -442,25 +439,6 @@ export function SessionsPanel(props: SessionsPanelProps) {
     )
   }
 
-  async function createSession() {
-    if (!props.onCreateAgentSession || !createPresetId || createBusy) return
-    setCreateBusy(true)
-    setCreateError(undefined)
-    try {
-      const session = await props.onCreateAgentSession(createPresetId, createAsMain)
-      if (!session) return
-      setCreateOpen(false)
-      setCreatePresetId('')
-      setCreateAsMain(false)
-      setSelectedItem({ kind: 'session', id: session.id })
-      handleOpenSessionInSidebar(session)
-    } catch (error) {
-      setCreateError(error instanceof Error ? error.message : String(error))
-    } finally {
-      setCreateBusy(false)
-    }
-  }
-
   async function choosePrimary(session: AgentSession) {
     setPrimaryError(undefined)
     try {
@@ -506,7 +484,6 @@ export function SessionsPanel(props: SessionsPanelProps) {
       </div>
 
       <MasterDetailWorkbench
-        masterWidth="minmax(260px, 340px)"
         mobilePane={mobilePane}
         onMobilePaneChange={setMobilePane}
         master={(
@@ -1098,31 +1075,16 @@ export function SessionsPanel(props: SessionsPanelProps) {
           )}
         </div>
       </MasterDetailWorkbench>
-      <Dialog
-        open={createOpen}
-        title="新建 Agent 对话"
-        dismissible={!createBusy}
-        onClose={() => { if (!createBusy) setCreateOpen(false) }}
-        actions={<>
-          <Button disabled={createBusy} onClick={() => setCreateOpen(false)}>取消</Button>
-          <Button disabled={!createPresetId || createBusy} onClick={() => void createSession()}>创建对话</Button>
-        </>}
-      >
-        <label>
-          Agent Preset
-          <select value={createPresetId} disabled={createBusy}
-            onChange={event => setCreatePresetId(event.target.value)}>
-            <option value="">选择预设</option>
-            {props.agentPresets.map(preset => <option key={preset.id} value={preset.id}>{preset.rootNode.label}</option>)}
-          </select>
-        </label>
-        <label>
-          <input type="checkbox" checked={createAsMain} disabled={createBusy}
-            onChange={event => setCreateAsMain(event.target.checked)} />
-          设为主写作对话
-        </label>
-        {createError ? <p role="alert">{createError}</p> : null}
-      </Dialog>
+      {createOpen && props.onCreateAgentSession ? <AgentSessionCreateDialog
+        presets={props.agentPresets}
+        canMakePrimary={Boolean(props.activeTimeline || props.selectedCardName)}
+        onCreate={props.onCreateAgentSession}
+        onClose={() => setCreateOpen(false)}
+        onCreated={session => {
+          setSelectedItem({ kind: 'session', id: session.id })
+          handleOpenSessionInSidebar(session)
+        }}
+      /> : null}
       <Dialog
         open={Boolean(pendingDelete)}
         role="alertdialog"

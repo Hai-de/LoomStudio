@@ -4,7 +4,8 @@
 
 - `starter/`：官方问答 Agent 预设与知识 Settings，不含模型凭据。
 - `extensions/loom-assistant/`：同仓维护的助手预设与配套资源，不要求独立仓库。
-- ST 数据兼容、The World 等独立发行扩展不纳入主仓库跟踪；本地开发副本由 `.gitignore` 排除。
+- ST 数据兼容、The World 等具有独立发布周期的扩展，在根目录 `extensions/` 安装和开发，不纳入主仓库跟踪；本地开发副本由 `.gitignore` 排除。
+- `official/extensions/` 只保留随主程序发行的轻量官方内容。“官方”表示维护来源，不决定独立扩展的安装目录。
 - 接口测试扩展位于 `tests/fixtures/extensions/`，正式 Server 默认不扫描该目录。开发者通过已有 dev-link 或显式 `extensionRootDirectory` 加载。
 
 ## 当前可用流程
@@ -31,8 +32,11 @@ Server 启动时自动安装缺失的默认预设/Setting；这属于内置基�
 
 基础内容版本由 `starter/catalog.json` 管理；独立官方扩展自行维护版本与发行，不要求与主应用同版本发布。
 
-尚未完成远程发布/安装：GitHub/NPM 发布主体、可信版本索引和首个来源仍待确定。内容摘要用于确认用户选中的包没有变化，不是独立签名或来源认证。
+扩展中心已有公开 HTTPS Git、远程 ZIP 与本地 ZIP 安装入口。独立扩展的安装来源必须包含可运行产物：
+源码分支可以忽略 dist，作者另行维护发行分支或上传 Release 成品 ZIP。
+当前 STBridge 与 The World 的远程仓库尚缺完整产物，官方安装仍受此阻塞。
+可信版本索引与 Release 最新版查询尚未实现；内容摘要和 Manifest ID 都不是独立签名或来源认证。
 
-ST 转换代码只由 Extension Host 加载，Server 不再静态依赖该包。导入入口通过现有 RPC 调用当前启用实例；需先启用 ST 的 server 模块，停用/卸载后不能再转换 ST 格式，重载后使用新实例。原生 Loom 格式不依赖该扩展。这里仍绑定已知转换 RPC 协议，不是通用转换器发现系统；Server 扩展仍为可信同进程代码，不是安全沙箱。远程安装与已有资源显式替换仍属后续工作。
+ST 转换代码只由 Extension Host 加载，Server 不再静态依赖该包。导入入口通过现有 RPC 调用当前启用实例；需先启用 ST 的 server 模块，停用/卸载后不能再转换 ST 格式，重载后使用新实例。原生 Loom 格式不依赖该扩展。这里仍绑定已知转换 RPC 协议，不是通用转换器发现系统；Server 扩展仍为可信同进程代码，不是安全沙箱。已有导入资源的显式替换不属于代码安装或更新。
 
 ST 导入的头像只保留图像/动画数据，不保留 PNG 文本块或尾部载荷；世界书只生成一份 Prompt Resource，不再同时复制到旧 settingLayer，也不再创建完整源卡 JSON 附件。未转换的 ST 私有字段不会通过这种原始备份随 Loom 卡分发。已有卡的历史源卡附件不会自动删除或解绑。

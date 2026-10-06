@@ -60,16 +60,6 @@ const extensionPackage: ManagedClientExtensionPackage = {
   }],
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (reason: unknown) => void
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise
-    reject = rejectPromise
-  })
-  return { promise, resolve, reject }
-}
-
 async function drainTasks(): Promise<void> {
   await new Promise<void>(resolve => setImmediate(resolve))
 }
@@ -86,7 +76,7 @@ function createHarness() {
   const rendererHost = createClientRendererHost()
   const clientLogs = createMemoryLogSink({ capacity: 50 })
   const logger = createRootLogger({ service: 'studio-client', instanceId: 'hook-test', sinks: [clientLogs] }).child('extension.loader')
-  const runtime = useClientExtensionRuntime({ api, rendererHost, logger, clientLogs })
+  const runtime = useClientExtensionRuntime({ api, rendererHost, logger, clientLogs, notify: vi.fn() })
   const setup = hooks.effects.at(-1)!
   return { runtime, rendererHost, list, listRules, setup }
 }
@@ -167,7 +157,7 @@ describe('Client Extension Runtime Effect lifecycle', () => {
   })
   it('loads only the current Card catalog and ignores late responses without restarting global modules', async () => {
     const { runtime, rendererHost, list, setup } = createHarness()
-    const a = deferred<{ items: ManagedClientExtensionPackage[] }>()
+    const a = Promise.withResolvers<{ items: ManagedClientExtensionPackage[] }>()
     const privatePackage = (cardId: string): ManagedClientExtensionPackage => ({
       ...extensionPackage, target: { kind: 'card', cardId },
       modules: extensionPackage.modules.map(module => ({ ...module, desired: { enabled: false } })),
@@ -206,8 +196,8 @@ describe('Client Extension Runtime Effect lifecycle', () => {
 
   it.each(['catalog', 'import state'])('does not reconcile a late %s response after cleanup', async phase => {
     const { runtime, rendererHost, list, listRules, setup } = createHarness()
-    const catalog = deferred<{ items: ManagedClientExtensionPackage[] }>()
-    const rules = deferred<{ rules: [] }>()
+    const catalog = Promise.withResolvers<{ items: ManagedClientExtensionPackage[] }>()
+    const rules = Promise.withResolvers<{ rules: [] }>()
     if (phase === 'catalog') list.mockReturnValueOnce(catalog.promise)
     else listRules.mockReturnValueOnce(rules.promise)
     const reconcile = vi.spyOn(runtime.host, 'reconcile')
@@ -226,7 +216,7 @@ describe('Client Extension Runtime Effect lifecycle', () => {
 
   it('ignores the previous Effect response while allowing the same Host to activate on setup replay', async () => {
     const { runtime, rendererHost, list, setup } = createHarness()
-    const previous = deferred<{ items: ManagedClientExtensionPackage[] }>()
+    const previous = Promise.withResolvers<{ items: ManagedClientExtensionPackage[] }>()
     list.mockReturnValueOnce(previous.promise)
     const reconcile = vi.spyOn(runtime.host, 'reconcile')
     const cleanupPrevious = setup() as () => void
@@ -250,7 +240,7 @@ describe('Client Extension Runtime Effect lifecycle', () => {
 
   it('does not publish an error from a request rejected after cleanup', async () => {
     const { runtime, list, setup } = createHarness()
-    const catalog = deferred<{ items: ManagedClientExtensionPackage[] }>()
+    const catalog = Promise.withResolvers<{ items: ManagedClientExtensionPackage[] }>()
     list.mockReturnValueOnce(catalog.promise)
     const cleanup = setup() as () => void
     cleanup()

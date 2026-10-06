@@ -3,7 +3,7 @@ import { extensionInstallationId } from '@loom-studio/extension-sdk'
 import type { ExtensionInstallationContent, TextTransformRuleContent } from '../types.js'
 import type { ApplicationRuntimeContext } from '../foundation/application-context.js'
 import { applicationDocumentTypes } from '../foundation/document-types.js'
-import { listDocuments, readDocument } from '../foundation/document-store.js'
+import { listDocuments } from '../foundation/document-store.js'
 import type {
   LoomScriptContent,
   LoomScriptOwner,
@@ -11,16 +11,26 @@ import type {
   LoomScriptMountTarget,
   LoomScriptRuntimeMountSnapshot,
   ResolvedLoomScriptRendererMount,
+  UnavailableLoomScriptMount,
 } from './loom-script-contracts.js'
 
 export async function snapshotLoomScriptMounts(
   ctx: Pick<ApplicationRuntimeContext, 'documents'>,
   target: LoomScriptMountTarget,
-): Promise<LoomScriptRuntimeMountSnapshot[]> {
+): Promise<{ snapshots: LoomScriptRuntimeMountSnapshot[]; unavailableMounts: UnavailableLoomScriptMount[] }> {
   const mounts = (await listDocuments<LoomScriptMountContent>(ctx.documents, applicationDocumentTypes.loomScriptMount))
     .filter(mount => sameTarget(mount.content.target, target))
-  return await Promise.all(mounts.map(async mount => {
+  const unavailableMounts: UnavailableLoomScriptMount[] = []
+  const snapshots = await Promise.all(mounts.map(async mount => {
     const script = await readLoomScriptRevision(ctx, mount.content.scriptDocumentId, mount.content.pinnedDocumentVersion)
+    if (!script) {
+      unavailableMounts.push({
+        mountId: mount.id, scriptDocumentId: mount.content.scriptDocumentId, enabled: mount.content.enabled,
+        available: false, severity: 'warning', reason: 'script-missing',
+        message: `Loom Script unavailable: ${mount.content.scriptDocumentId}${mount.content.pinnedDocumentVersion === undefined ? '' : `@${mount.content.pinnedDocumentVersion}`}`,
+      })
+      return undefined
+    }
     return {
       mountId: mount.id,
       enabled: mount.content.enabled,
@@ -33,6 +43,7 @@ export async function snapshotLoomScriptMounts(
       grantedCapabilities: [...mount.content.grantedCapabilities],
     }
   }))
+  return { snapshots: snapshots.filter((snapshot): snapshot is LoomScriptRuntimeMountSnapshot => snapshot !== undefined), unavailableMounts }
 }
 
 export async function resolveLoomScriptRendererMounts(
@@ -41,14 +52,32 @@ export async function resolveLoomScriptRendererMounts(
     currentTargets: LoomScriptMountTarget[]
     cardId?: string
   },
-): Promise<ResolvedLoomScriptRendererMount[]> {
+): Promise<{ mounts: ResolvedLoomScriptRendererMount[]; unavailableMounts: UnavailableLoomScriptMount[] }> {
   if (!ctx.blobs) throw new Error('Blob Store is not configured')
-  const current = (await Promise.all(input.currentTargets.map(target => snapshotLoomScriptMounts(ctx, target)))).flat()
+  const batches = await Promise.all(input.currentTargets.map(target => snapshotLoomScriptMounts(ctx, target)))
+  const current = batches.flatMap(batch => batch.snapshots)
+  const unavailableMounts = batches.flatMap(batch => batch.unavailableMounts)
   const snapshots = current.sort((left, right) => left.orderIndex - right.orderIndex || left.mountId.localeCompare(right.mountId))
   const resolved = await Promise.all(snapshots.map(async snapshot => {
     const script = await readLoomScriptRevision(ctx, snapshot.scriptDocumentId, snapshot.documentVersion)
+    if (!script) {
+      unavailableMounts.push({
+        mountId: snapshot.mountId, scriptDocumentId: snapshot.scriptDocumentId, enabled: snapshot.enabled,
+        available: false, severity: 'warning', reason: 'script-missing',
+        message: `Loom Script unavailable: ${snapshot.scriptDocumentId}@${snapshot.documentVersion}`,
+      })
+      return undefined
+    }
     if (script.content.owner.kind === 'extension') {
-      const target = await readLoomScriptInstallation(ctx.documents, script.content.owner)
+      const target = await readOptionalLoomScriptInstallation(ctx.documents, script.content.owner)
+      if (!target) {
+        unavailableMounts.push({
+          mountId: snapshot.mountId, scriptDocumentId: snapshot.scriptDocumentId, enabled: snapshot.enabled,
+          available: false, severity: 'warning', reason: 'installation-missing',
+          message: `Loom Script installation unavailable: ${script.content.owner.installationId}`,
+        })
+        return undefined
+      }
       if (target.kind === 'card' && target.cardId !== input.cardId) return undefined
     }
     assertSnapshotMatchesScript(snapshot, script)
@@ -81,14 +110,31 @@ export async function resolveLoomScriptRendererMounts(
       source: new TextDecoder('utf-8', { fatal: true }).decode(bytes),
     }
   }))
-  return resolved.filter((mount): mount is ResolvedLoomScriptRendererMount => mount !== undefined)
+  return {
+    mounts: resolved.filter((mount): mount is ResolvedLoomScriptRendererMount => mount !== undefined),
+    unavailableMounts: unavailableMounts.sort((left, right) => left.mountId.localeCompare(right.mountId)),
+  }
 }
 
 export async function readLoomScriptInstallation(
   documents: DocumentTransaction,
   owner: Extract<LoomScriptOwner, { kind: 'extension' }>,
 ) {
-  const installation = await readDocument<ExtensionInstallationContent>(documents, owner.installationId, applicationDocumentTypes.extensionInstallation)
+  const target = await readOptionalLoomScriptInstallation(documents, owner)
+  if (!target) throw new Error(`Document not found: ${owner.installationId}`)
+  return target
+}
+
+async function readOptionalLoomScriptInstallation(
+  documents: DocumentTransaction,
+  owner: Extract<LoomScriptOwner, { kind: 'extension' }>,
+) {
+  const document = await documents.get(owner.installationId)
+  if (!document) return undefined
+  if (document.type !== applicationDocumentTypes.extensionInstallation) {
+    throw new Error(`Unexpected document type for ${owner.installationId}: ${document.type}`)
+  }
+  const installation = document as DocumentRecord<ExtensionInstallationContent>
   if (installation.content.packageId !== owner.packageId
     || extensionInstallationId(owner.packageId, installation.content.target) !== owner.installationId) {
     throw new Error('Loom Script installation owner does not match')
@@ -100,9 +146,9 @@ async function readLoomScriptRevision(
   ctx: Pick<ApplicationRuntimeContext, 'documents'>,
   scriptDocumentId: string,
   version?: number,
-): Promise<DocumentRecord<LoomScriptContent>> {
+): Promise<DocumentRecord<LoomScriptContent> | undefined> {
   const script = await ctx.documents.get(scriptDocumentId, version === undefined ? undefined : { version })
-  if (!script) throw new Error(`Loom Script not found: ${scriptDocumentId}${version === undefined ? '' : `@${version}`}`)
+  if (!script) return undefined
   if (script.type !== applicationDocumentTypes.loomScript) throw new Error(`Unexpected document type for ${scriptDocumentId}: ${script.type}`)
   return script as DocumentRecord<LoomScriptContent>
 }

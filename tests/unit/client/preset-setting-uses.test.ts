@@ -76,12 +76,14 @@ describe('Preset Setting mounts', () => {
   })
 
   it('uses the shared tool tree with expandable descriptions and preserves configuration on enable', async () => {
-    const tool = { id: 'official/codeact_json', name: 'CodeAct JSON', description: 'Structured execution',
+    const tool: AgentToolDefinition = { id: 'official/codeact_json', name: 'CodeAct JSON', description: 'Structured execution',
+      version: 1, createdAt: '', updatedAt: '',
       owner: { namespace: 'official' }, input: { kind: 'structured', schema: { type: 'object' } },
-    } as AgentToolDefinition
-    const mount = { id: 'mount', presetResourceId: 'preset', toolId: tool.id, orderIndex: 3,
+    }
+    const mount: PresetToolMount = { id: 'mount', presetResourceId: 'preset', toolId: tool.id, orderIndex: 3,
+      origin: {}, createdAt: '',
       defaultEnabled: false, activation: { kind: 'always' }, provider: { order: 5 },
-    } as PresetToolMount
+    }
     const save = vi.fn(async () => {})
     const props = {
       preset: { id: 'preset', version: 1, resourceKind: 'preset', rootNode: { id: 'root', label: 'Writer' } },

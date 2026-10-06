@@ -12,58 +12,37 @@ export type StudioRoute = {
   search?: string
 }
 
-const PANEL_PATHS: Record<StudioPanelId, string> = {
-  model: 'models',
-  agent: 'agents',
-  user: 'user',
-  play: 'play',
-  recent: 'recent',
-  sessions: 'history',
-  character: 'characters',
-  preset: 'presets',
-  resource: 'resources',
-  state: 'state',
-  macro: 'macro',
-  'text-transform': 'text-transforms',
-  inspector: 'debug',
-  logs: 'logs',
-  extensions: 'extensions',
-  settings: 'settings',
-}
-
-export const STUDIO_ENTRY_PATHS = [
-  '/', '/studio', '/studio/chat/:timelineId?/branch/:branchId', '/studio/chat/:timelineId?',
-  '/studio/characters/:cardId?', '/studio/resources/reference/:resourceId/node/:nodeId',
-  '/studio/presets/reference/:resourceId/node/:nodeId',
-  '/studio/agents/reference/:resourceId/node/:nodeId',
-  '/studio/resources/:cardId?/:assetId?', '/studio/presets/:cardId?/:assetId?',
-  ...Object.values(PANEL_PATHS).map(segment => `/studio/${segment}`),
+type RouteParams = Readonly<Record<string, string | undefined>>
+const STUDIO_ROUTES: { path: string; read(params: RouteParams): StudioRoute }[] = [
+  ...([['resources', 'resource'], ['presets', 'agent'], ['agents', 'agent']] as const).map(([segment, panel]) => ({
+    path: `/studio/${segment}/reference/:resourceId/node/:nodeId`,
+    read: ({ resourceId, nodeId }: RouteParams) => ({ panel, resourceId, assetId: nodeId }),
+  })),
+  {
+    path: '/studio/chat/:timelineId?/branch/:branchId',
+    // Preserve the empty landing for the registered Branch URL without a Timeline.
+    read: ({ timelineId, branchId }) => timelineId ? { panel: null, timelineId, branchId } : { panel: null },
+  },
+  { path: '/studio/chat/:timelineId?', read: ({ timelineId }) => ({ panel: null, timelineId }) },
+  { path: '/studio/characters/:cardId?', read: ({ cardId }) => ({ panel: 'character', cardId }) },
+  { path: '/studio/resources/:cardId?/:assetId?', read: ({ cardId, assetId }) => ({ panel: 'resource', cardId, assetId }) },
+  { path: '/studio/presets/:cardId?/:assetId?', read: ({ cardId, assetId }) => ({ panel: 'agent', cardId, assetId }) },
+  ...([
+    ['models', 'model'], ['agents', 'agent'], ['user', 'user'], ['play', 'play'], ['recent', 'recent'],
+    ['history', 'sessions'], ['state', 'state'], ['macro', null], ['text-transforms', 'text-transform'],
+    ['debug', 'inspector'], ['logs', 'logs'], ['extensions', 'extensions'], ['settings', 'settings'],
+  ] as const).map(([segment, panel]) => ({ path: `/studio/${segment}`, read: () => ({ panel }) })),
+  { path: '/', read: () => ({ panel: null }) },
+  { path: '/studio', read: () => ({ panel: null }) },
 ]
 
+export const STUDIO_ENTRY_PATHS = STUDIO_ROUTES.map(route => route.path)
+
 export function readStudioRoute(pathname: string): StudioRoute {
-  for (const [segment, panel] of [['resources', 'resource'], ['presets', 'agent'], ['agents', 'agent']] as const) {
-    const reference = matchPath(`/studio/${segment}/reference/:resourceId/node/:nodeId`, pathname)
-    if (reference) return { panel, resourceId: reference.params.resourceId, assetId: reference.params.nodeId }
+  for (const route of STUDIO_ROUTES) {
+    const match = matchPath(route.path, pathname)
+    if (match) return route.read(match.params)
   }
-  const chatBranch = matchPath('/studio/chat/:timelineId/branch/:branchId', pathname)
-  if (chatBranch) return { panel: null, timelineId: chatBranch.params.timelineId, branchId: chatBranch.params.branchId }
-
-  const chat = matchPath('/studio/chat/:timelineId?', pathname)
-  if (chat) return { panel: null, timelineId: chat.params.timelineId }
-
-  const character = matchPath('/studio/characters/:cardId?', pathname)
-  if (character) return { panel: 'character', cardId: character.params.cardId }
-
-  const resource = matchPath('/studio/resources/:cardId?/:assetId?', pathname)
-  if (resource) return { panel: 'resource', cardId: resource.params.cardId, assetId: resource.params.assetId }
-
-  const preset = matchPath('/studio/presets/:cardId?/:assetId?', pathname)
-  if (preset) return { panel: 'agent', cardId: preset.params.cardId, assetId: preset.params.assetId }
-
-  for (const panel of ['model', 'agent', 'user', 'play', 'recent', 'sessions', 'state', 'text-transform', 'inspector', 'logs', 'extensions', 'settings'] as const) {
-    if (matchPath(`/studio/${PANEL_PATHS[panel]}`, pathname)) return { panel }
-  }
-
   return { panel: null }
 }
 

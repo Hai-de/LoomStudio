@@ -15,8 +15,9 @@ async function fixture(reply: () => Promise<GatewayChatResult>) {
   })
   const gateway = { invokeChat: vi.fn(reply) }
   const input = {
-    ctx: { gateway, createId, agentTools: createAgentToolRegistry([], []) },
+    ctx: { gateway, createId, dataEngine: engine, agentTools: createAgentToolRegistry([], []) },
     agents, session, runId: 'run',
+    recoveryRequest: { agentSessionId: session.id, input: 'Hello 世界' },
     model: { providerProfileId: 'provider', modelId: 'model' },
     initialMessages: [{ role: 'user' as const, content: 'Hello 世界' }],
     userInput: 'Hello 世界', branchId: 'agent-only', purpose: 'agent' as const, tokenMultiplier: 0.6,

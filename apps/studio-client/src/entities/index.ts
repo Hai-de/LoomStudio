@@ -1,7 +1,7 @@
 export type { JsonObject, MutationReceipt } from './common.js'
 export type { GetPromptResourceBindingsResult } from './workspace.js'
 export type { ListExtensionInstallationsResult } from './extension.js'
-export type { LoomScript, LoomScriptMount, LoomScriptOwner, ResolvedLoomScriptRendererMount } from './loom-script.js'
+export type { LoomScript, LoomScriptMount, LoomScriptOwner, ResolvedLoomScriptRendererMount, UnavailableLoomScriptMount } from './loom-script.js'
 export type { ExtensionPackageResourceImportResult, ExtensionPackageResourceRemovalResult, ManagedClientExtensionModule, ManagedClientExtensionPackage, ManagedExtensionModule, ManagedExtensionPackage } from './extension.js'
 export type {
   HistoryProjectionSnapshot,

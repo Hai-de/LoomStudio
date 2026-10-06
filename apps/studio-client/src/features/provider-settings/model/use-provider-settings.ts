@@ -28,7 +28,7 @@ export function useProviderSettings(input: UseProviderSettingsInput) {
   const [providerAccountDraft, setProviderAccountDraft] = useState(input.initialProviderAccountDraft)
   const [providerAccounts, setProviderAccounts] = useState<ProviderAccount[]>([])
   const [providerAccountsLoaded, setProviderAccountsLoaded] = useState(false)
-  const [modelProfiles, setModelProfiles] = useState<ModelProfile[]>([])
+  const modelProfiles = projectModelProfiles(providerAccounts)
   const [aiProviders, setAiProviders] = useState<RegisteredAiGatewayProvider[]>([])
   const [aiCapabilityProfiles, setAiCapabilityProfiles] = useState<AiCapabilityProfile[]>([])
   const modelQueueRef = useRef(Promise.resolve())
@@ -43,7 +43,6 @@ export function useProviderSettings(input: UseProviderSettingsInput) {
     if (request !== providerReads.current.request) return
     if (write !== providerReads.current.write) return refreshProviderAccounts()
     setProviderAccounts(profiles)
-    setModelProfiles(projectModelProfiles(profiles))
     setProviderAccountsLoaded(true)
   }
 
@@ -255,7 +254,6 @@ export function useProviderSettings(input: UseProviderSettingsInput) {
       await input.api.providerAccounts.delete(providerAccountId)
       providerReads.current.write += 1
       setProviderAccounts(current => current.filter(profile => profile.id !== providerAccountId))
-      setModelProfiles(current => current.filter(model => model.providerAccountId !== providerAccountId))
       await refreshProviderAccounts()
     })
   }
@@ -296,10 +294,6 @@ export function useProviderSettings(input: UseProviderSettingsInput) {
   function publishProviderAccount(profile: ProviderAccount) {
     providerReads.current.write += 1
     setProviderAccounts(current => [profile, ...current.filter(item => item.id !== profile.id)])
-    setModelProfiles(current => [
-      ...projectModelProfiles([profile]),
-      ...current.filter(model => model.providerAccountId !== profile.id),
-    ])
   }
 
   async function pingModelProfile(modelProfileId: string): Promise<string> {

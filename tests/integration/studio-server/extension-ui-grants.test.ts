@@ -16,6 +16,7 @@ it('requires declared client notifications, persists explicit grants and support
   const options = {
     localPaths: resolveLoomStudioLocalPaths({ home: join(root, 'home'), environment: {} }),
     extensionRootDirectory: join(root, 'repository'),
+    extensionInstalledDirectory: join(root, 'app/extensions'),
     secretBackend: createMemorySecretBackend(),
   }
   const first = createStudioServer(options)

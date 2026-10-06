@@ -163,12 +163,13 @@ export function createStudioPanels(input: {
         macroContext={state.macroContext}
         t={state.t}
         onCreateCard={state.createCard}
-        onCreateTimelineFromCard={async cardId => {
-          const activated = await state.createTimelineFromCard(cardId)
+        onCreateTimelineFromCard={async (cardId, choice, cardVersion) => {
+          const activated = await state.createTimelineFromCard(cardId, choice, cardVersion)
           if (activated) {
             state.setSelectedCardId(cardId)
             navigation.openNarrative(activated.timelineId, activated.branchId)
           }
+          return Boolean(activated)
         }}
         onDeleteCards={state.deleteCards}
         onPreviewCardDeletion={state.previewCardDeletion}
@@ -357,6 +358,10 @@ export function createStudioPanels(input: {
         onNavigate={path => { void navigation.openPath(path) }}
         configRevision={clientExtensions.configRevision}
         extensionRuntime={state.api.extensionRuntime}
+        extensionApi={state.api.extensions}
+        onRefreshExtensions={async () => {
+          await Promise.all([clientExtensions.refresh(), state.refreshResourceConsumers()])
+        }}
         extensionHost={clientExtensions.host}
         host={rendererHost}
         packages={clientExtensions.packages}
@@ -386,7 +391,6 @@ export function createStudioPanels(input: {
         }}
         onUpdateResources={state.updateExtensionPackageResources}
         onRemoveResources={state.removeExtensionPackageResources}
-        onInstallZip={state.installExtensionPackageZip}
         onReload={clientExtensions.reload}
         onUninstall={clientExtensions.uninstall}
       />
@@ -397,8 +401,6 @@ export function createStudioPanels(input: {
         customCss={state.customCss}
         locale={state.locale}
         networkSettings={state.networkSettings}
-        textTransformsApi={state.textTransformsApi}
-        onTextTransformsChanged={uiState.bumpLoomScriptRefreshToken}
         backgroundCardId={state.narrativeTimeline?.createdFrom?.cardId ?? state.selectedCardId}
         backgrounds={backgrounds.map(item => ({
           id: item.key, name: item.name, description: item.description, image: item.image, source: item.source ?? item.packageId,

@@ -57,7 +57,6 @@ describe('studio server persistence integration', () => {
       const firstServer = createStudioServer({ sqlitePath })
       const first = await firstServer.listen(0)
       const createdPreset = await callRpc<{ resource: { id: string } }>(first.port, 'application.createPromptResource', { resourceKind: 'preset', name: 'Persistent Preset' })
-      const presets = await callRpc<{ resources: Array<{ id: string }> }>(first.port, 'application.listPromptResources', { resourceKind: 'preset' })
       const presetId = createdPreset.resource.id
       const provider = await callRpc<{ providerProfile: { id: string } }>(first.port, 'application.createProviderProfile', {
         providerExtensionId: 'official.fake',
@@ -78,6 +77,9 @@ describe('studio server persistence integration', () => {
         agentSessionId: created.session.id,
         input: 'Remember this turn.',
       })
+      const beforeRestart = await callRpc<{ entries: unknown[] }>(first.port, 'application.getAgentTranscriptPage', {
+        agentSessionId: created.session.id,
+      })
       await firstServer.close()
 
       const secondServer = createStudioServer({ sqlitePath })
@@ -91,9 +93,11 @@ describe('studio server persistence integration', () => {
       await secondServer.close()
 
       expect(read.session).toMatchObject({ agentPresetId: agentPreset.agentPreset.id, title: 'Persistent Agent' })
+      expect(page).toEqual(beforeRestart)
       expect(page.entries).toMatchObject([
         { entry: { kind: 'message', role: 'user', content: 'Remember this turn.' } },
         { entry: { kind: 'run-state', state: 'running' } },
+        { entry: { kind: 'request-measurement' } },
         { entry: { kind: 'provider-observation', provider: 'fake', model: 'fake-echo-m0' } },
         { entry: { kind: 'message', role: 'assistant', content: 'Agent draft: Remember this turn.' } },
         { entry: { kind: 'run-state', state: 'completed' } },

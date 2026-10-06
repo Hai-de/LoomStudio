@@ -21,7 +21,10 @@ describe('Extension Host installation identity', () => {
         toolId,
         execute: async ({ invocation, signal }) => ({
           invocationId: invocation.id, toolId, status: 'completed',
-          content: [{ type: 'json', value: await handler({ arguments: {} }, { signal }) }],
+          content: [{ type: 'json', value: await handler({ arguments: {} }, {
+            signal, invocationId: invocation.id,
+            narrativeTarget: { scope: 'timeline', timelineId: 'timeline-1', branchId: 'branch-1' },
+          }) }],
         }),
       }),
     })
@@ -34,7 +37,12 @@ describe('Extension Host installation identity', () => {
           ...module, contributes: { agentToolHandlers: [{ toolId: authoredId }] },
         })),
       },
-      source: `export function activate(ctx) { ctx.agentTools.register('${authoredId}', () => ({ instanceId: ctx.extension.instanceId })) }`,
+      source: `export function activate(ctx) {
+        ctx.agentTools.register('${authoredId}', (_input, invocation) => {
+          invocation.signal.throwIfAborted()
+          return { instanceId: ctx.extension.instanceId, invocationId: invocation.invocationId, target: invocation.narrativeTarget }
+        })
+      }`,
     })
     try {
       const instanceIds = []
@@ -48,7 +56,10 @@ describe('Extension Host installation identity', () => {
         const result = await tools.execute({
           id: `invoke-${index}`, toolId, arguments: {}, transport: 'native-function',
         }, new AbortController().signal)
-        expect(result).toMatchObject({ status: 'completed', content: [{ type: 'json', value: { instanceId: instanceIds[index] } }] })
+        expect(result).toMatchObject({ status: 'completed', content: [{ type: 'json', value: {
+          instanceId: instanceIds[index], invocationId: `invoke-${index}`,
+          target: { scope: 'timeline', timelineId: 'timeline-1', branchId: 'branch-1' },
+        } }] })
       }
       await extensionHost.dispose(packageId, 'server', targets[1])
       expect(tools.getRegistration(toolIds[1]!)).toBeUndefined()
@@ -98,7 +109,7 @@ export function activate(ctx) {
       const global = { kind: 'global' as const }
       const a = { kind: 'card' as const, cardId: 'A' }
       const b = { kind: 'card' as const, cardId: 'B' }
-      const instances = []
+      const instances: Awaited<ReturnType<typeof host.activate>>[] = []
       for (const target of [global, a, b]) {
         await host.discover(directory, target)
         instances.push(await host.activate(packageId, 'server', target))

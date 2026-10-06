@@ -57,6 +57,7 @@ export type Card = {
   }
   opening: {
     entries: Array<{ role: 'user' | 'assistant'; content: string }>
+    alternatives?: Array<{ entries: Array<{ role: 'user' | 'assistant'; content: string }> }>
   }
   settingLayer: {
     entries: Array<{
@@ -88,6 +89,7 @@ export type CardPresetInput = {
 
 export type OpeningChatInput = {
   entries?: Array<{ role?: 'user' | 'assistant'; content: string }>
+  alternatives?: Array<{ entries: Array<{ role?: 'user' | 'assistant'; content: string }> }>
 }
 
 export type SettingLayerInput = {

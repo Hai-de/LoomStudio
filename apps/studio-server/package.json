@@ -26,6 +26,7 @@
     "@loom-studio/shared": "workspace:*",
     "@loom-studio/trace-audit": "workspace:*",
     "@loom-studio/transport": "workspace:*",
-    "fflate": "0.8.3"
+    "fflate": "0.8.3",
+    "semver": "7.8.5"
   }
 }

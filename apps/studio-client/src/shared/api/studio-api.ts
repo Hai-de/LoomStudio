@@ -108,6 +108,7 @@ import type {
   ReplacePresetToolMountsResult,
   RegisteredAiGatewayProvider,
   ResolvedLoomScriptRendererMount,
+  UnavailableLoomScriptMount,
   SettingLayerInput,
   SettingMountSource,
   StateTarget,
@@ -262,6 +263,8 @@ type CreateNarrativeTimelineInput = {
   cardId: string
   title?: string
   openingNodes?: Array<{ content: string; createdAt?: string }>
+  openingIndex?: number
+  expectedCardVersion?: number
 }
 
 type ForkNarrativeBranchInput = {
@@ -377,9 +380,28 @@ export type StudioApi = {
     createMount(input: { target: LoomScriptMountTarget; scriptDocumentId: string; orderIndex: number; pinnedDocumentVersion?: number; origin?: Record<string, ClientJsonValue> }): Promise<{ mount: LoomScriptMount; mutation: MutationReceipt }>
     updateMount(input: { mountId: string; expectedVersion: number; enabled: boolean; orderIndex: number; pinnedDocumentVersion?: number; grantedCapabilities: string[] }): Promise<{ mount: LoomScriptMount; mutation: MutationReceipt }>
     listMounts(target?: LoomScriptMountTarget): Promise<{ mounts: LoomScriptMount[] }>
-    resolveRendererMounts(input?: { workspaceId?: string; timelineId?: string; presetId?: string }): Promise<{ mounts: ResolvedLoomScriptRendererMount[] }>
+    resolveRendererMounts(input?: { workspaceId?: string; timelineId?: string; presetId?: string }): Promise<{ mounts: ResolvedLoomScriptRendererMount[]; unavailableMounts: UnavailableLoomScriptMount[] }>
   }
   extensions: {
+    previewRemoteInstall(sources: import('@loom-studio/extension-sdk').ExtensionDownloadSource[]): Promise<{
+      token: string
+      packages: Array<{ packageId: string; version: string; displayName: string; source?: import('@loom-studio/extension-sdk').ExtensionDownloadSource; commit?: string; replacing: boolean }>
+    }>
+    commitRemoteInstall(token: string): Promise<{
+      installed: Array<{ packageId: string; version: string }>
+      failed?: {
+        packageId: string
+        message: string
+        stage?: string
+        codeCommitted?: boolean
+        recovery?: { recordPath: string; backupDirectory: string; historyDirectory: string }
+      }
+    }>
+    previewPackageZip(base64: string): ReturnType<StudioApi['extensions']['previewRemoteInstall']>
+    checkRemoteUpdate(packageId: string): Promise<{ changed: boolean; commit?: string; locked: boolean }>
+    previewRemoteChange(input: { packageId: string; ref?: string; rollback?: boolean }): ReturnType<StudioApi['extensions']['previewRemoteInstall']>
+    officialSetup(): Promise<{ completed: boolean; items: Array<{ id: string; name: string; source: import('@loom-studio/extension-sdk').ExtensionDownloadSource }> }>
+    finishOfficialSetup(): Promise<{ completed: true }>
     list(target?: ExtensionInstallationTarget): Promise<{ items: ManagedExtensionPackage[] }>
     installCard(input: { cardId: string; packageId: string; expectedCardVersion: number }): Promise<{ package: ManagedExtensionPackage }>
     updateCard(input: { cardId: string; packageId: string; expectedCardVersion: number; packageVersion: string; expectedInstallationVersion: number }): Promise<{ package: ManagedExtensionPackage }>
@@ -388,7 +410,7 @@ export type StudioApi = {
     enable(packageId: string, moduleId: string, grants?: { ui?: Array<'ui.notify'>; 'events.subscribe'?: import('@loom-studio/extension-sdk').EventCapabilityCategory[]; assets?: Array<'assets.read' | 'assets.publish'> }, target?: ExtensionInstallationTarget): Promise<{ module: ManagedExtensionModule }>
     disable(packageId: string, moduleId: string, target?: ExtensionInstallationTarget): Promise<{ module: ManagedExtensionModule }>
     reload(packageId: string, moduleId: string, target?: ExtensionInstallationTarget): Promise<{ module: ManagedExtensionModule }>
-    uninstall(packageId: string, version?: string): Promise<{ package: ClientJsonValue }>
+    uninstall(packageId: string, version?: string, deleteData?: boolean): Promise<{ package: ClientJsonValue }>
     importResources(packageId: string): Promise<ExtensionPackageResourceImportResult>
     exportPackage(input: { packageId: string; version: string }): Promise<{ packageId: string; version: string; archiveBase64: string }>
     importCardResources(input: { cardId: string; packageId: string; expectedCardVersion: number }): Promise<ExtensionPackageResourceImportResult>
@@ -516,7 +538,7 @@ export type StudioApi = {
     listProviders(): Promise<RegisteredAiGatewayProvider[]>
     invoke(input: Omit<AiGatewayInvokeInput, 'signal' | 'caller'>): Promise<AiGatewayInvokeResult>
     createRun(input: Omit<AiGatewayInvokeInput, 'signal' | 'caller'>): Promise<{ runId: string }>
-    subscribe(runId: string, cursor?: number): Promise<{ events: AiGatewayEvent[]; nextCursor: number; state: AiGatewayRunState }>
+    subscribe(runId: string, cursor?: number): Promise<{ events: AiGatewayEvent<AiGatewayInvokeResult>[]; nextCursor: number; state: AiGatewayRunState }>
     cancel(runId: string, reason?: string): Promise<{ runId: string; state: AiGatewayRunState }>
     state(runId: string): Promise<{ runId: string; state: AiGatewayRunState }>
   }
@@ -620,6 +642,13 @@ export function createStudioApi(bridge: ClientBridge): StudioApi {
       export: input => rpc.call('official.exportContent', input),
     },
     extensions: {
+      previewRemoteInstall: sources => rpc.call('extensions.previewRemoteInstall', { sources }),
+      previewPackageZip: base64 => rpc.call('extensions.previewPackageZip', { base64 }),
+      commitRemoteInstall: token => rpc.call('extensions.commitRemoteInstall', { token }),
+      checkRemoteUpdate: packageId => rpc.call('extensions.checkRemoteUpdate', { packageId }),
+      previewRemoteChange: input => rpc.call('extensions.previewRemoteChange', input),
+      officialSetup: () => rpc.call('extensions.officialSetup', {}),
+      finishOfficialSetup: () => rpc.call('extensions.finishOfficialSetup', {}),
       list: target => rpc.call('extensions.listPackages', target ? { target } : {}),
       installCard: input => rpc.call('extensions.installCardPackage', input),
       updateCard: input => rpc.call('extensions.updateCardPackage', input),
@@ -628,7 +657,7 @@ export function createStudioApi(bridge: ClientBridge): StudioApi {
       enable: (packageId, moduleId, grants, target) => rpc.call('extensions.enableModule', { packageId, moduleId, ...(grants ? { grants } : {}), ...(target ? { target } : {}) }),
       disable: (packageId, moduleId, target) => rpc.call('extensions.disableModule', { packageId, moduleId, ...(target ? { target } : {}) }),
       reload: (packageId, moduleId, target) => rpc.call('extensions.reloadModule', { packageId, moduleId, ...(target ? { target } : {}) }),
-      uninstall: (packageId, version) => rpc.call('extensions.uninstallPackage', { packageId, ...(version ? { version } : {}) }),
+      uninstall: (packageId, version, deleteData) => rpc.call('extensions.uninstallPackage', { packageId, ...(version ? { version } : {}), ...(deleteData ? { deleteData } : {}) }),
       importResources: packageId => rpc.call('extensions.importPackageResources', { packageId }),
       exportPackage: input => rpc.call('extensions.exportPackage', input),
       importCardResources: input => rpc.call('extensions.importCardPackageResources', input),

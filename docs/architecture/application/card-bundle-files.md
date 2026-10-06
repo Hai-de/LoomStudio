@@ -29,6 +29,7 @@ manifest.json
 card.json
 card/description.md
 opening/0.md
+opening/alternatives/0/0.md
 preset/system.md
 macros/card.json
 macros/preset.json
@@ -54,6 +55,7 @@ assets/background.webp
 - `mediaTypes` 按媒体相对路径记录原 MIME。已知媒体使用对应后缀，未知 MIME 使用 `.bin` 而不是伪装成 PNG；未声明 MIME 的已有标准图片路径仍可按后缀读取。GIF、APNG、SVG 和视频等内部素材不改变 ZIP/PNG 外层协议，保存媒体不等于已提供播放器或允许执行内容。
 - `resources.metadata` 保存 Artifact 版本、身份和包说明，不嵌入 Card 主体或正文树。
 - `card.json` 的 `config` 保存名字、用户名字和其他 Card 配置；description、宏、preset system、opening 与旧 settingLayer 正文保存文件引用。
+- `opening.entries` 是默认开场的连续内容，`opening.alternatives[].entries` 是其他可选开场的内容序列。默认正文继续存于 `opening/<entry>.md`，备选正文存于 `opening/alternatives/<candidate>/<entry>.md`。旧包不含 alternatives 时仍只有默认开场；候选只在创建 Timeline 时选择，不导出运行时 Swipe 状态。
 - 每个 Prompt 根拥有一个 `index.json`。节点的 `metadata` 保存原有 ID、kind、label、capabilities、orderList 等；`body` 为 Markdown 路径，`children` 数组保留树结构与顺序。普通条目直接生成 `<名称>.md`；真正的 module / folder / 非空子树才使用目录，其自有正文为 `_content.md`。空正文与缺失正文区分，虚拟节点不强制生成正文文件。旧 `body.md` 路径仍按索引读取。
 - 旧 Card 内联 `settingLayer` 有独立内容时写入 `settings/<名称>.md`，不再生成 `settings/legacy`；与资源树同 ID、同正文时复用同一个 Markdown 文件，仍保留双方元数据，不静默修改已有数据库内容。
 - `state/index.json` 的 `artifact` 保存 State Artifact 头，`contribution` 保存贡献 ID 及实体类型、模板、实体、挂载、绑定的有序文件引用。读取时恢复并验证完整 `loom.state` Artifact；索引文件本身不是可单独导入的 State Artifact。
@@ -68,7 +70,7 @@ assets/background.webp
 
 移动或重命名文件时，要同步更新对应索引路径；不要为文件重命名改领域 ID。导入仍是现有的创建新 Card 操作，不是覆盖原 Card 的 Apply。Prompt 节点与已有数据发生冲突时继续使用既有导入重映射语义。
 
-PNG 的 ZIP 提取与包装已在同一 Codec 提供；用户级解包/重打包命令、GUI 目录打开、Checkout / Diff / Apply 和文件监听属于后续 CLI / Dev Workspace，尚未提供。现阶段可直接从 Studio 导出 `.loomcard.zip` 来进行目录编辑。
+PNG 的 ZIP 提取与包装已在同一 Codec 提供。Card Directory 已提供保存、差异预览及 `directories.previewApply` / `directories.apply`，通过 baseline token、领域版本检查与恢复日志显式更新原 Card；这不同于导入 ZIP 创建新 Card。通用用户级解包/重打包命令、GUI 目录打开、Checkout 和文件监听仍属于后续 CLI / Dev Workspace。目录 Apply 不承诺 IDE 全程锁或断电原子性。
 
 ## 校验与限制
 

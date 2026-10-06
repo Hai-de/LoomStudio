@@ -22,6 +22,7 @@ describe('Studio Server Extension state restart', () => {
     const options = {
       localPaths: resolveLoomStudioLocalPaths({ home: join(root, 'home'), environment: {} }),
       extensionRootDirectory: join(root, 'empty-repository'),
+      extensionInstalledDirectory: join(root, 'app/extensions'),
       secretBackend: createMemorySecretBackend(),
     }
     const packageId = 'example.card-lifecycle'
@@ -210,6 +211,7 @@ export function activate(ctx) {
     const options = {
       localPaths: resolveLoomStudioLocalPaths({ home: join(root, 'home'), environment: {} }),
       extensionRootDirectory: join(root, 'empty-repository'),
+      extensionInstalledDirectory: join(root, 'app/extensions'),
       secretBackend: createMemorySecretBackend(),
     }
     const first = createStudioServer(options)

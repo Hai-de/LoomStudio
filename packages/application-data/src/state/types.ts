@@ -72,6 +72,7 @@ export type CreateStateRevisionResult = {
 }
 
 export type StateTransaction = {
+  getGlobalSnapshot(ownerId?: string): StateSnapshot | null
   createScope(input: CreateStateScopeInput): StateScope
   createRevision(input: CreateStateRevisionInput): CreateStateRevisionResult
   setGlobalHead(input: SetGlobalStateHeadInput): StateScope

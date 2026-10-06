@@ -56,7 +56,7 @@ describe('context asset activation editor model', () => {
       kind: 'keyword',
       keywords: ['雨', '镜市', '地下', '暗巷'],
     })
-    expect(update.projection?.lifecycle).toBe('keyword')
+    expect(update.capabilities?.lifecycle).toEqual({ lifecycle: 'keyword' })
   })
 
   it('keeps custom activation untouched until the user switches modes', () => {

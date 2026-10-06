@@ -87,6 +87,7 @@ export type KernelPublicSurface = {
 export type ManagedExtensionPackage = Record<string, JsonValue> & {
   packageId: string
   version: string
+  fileRevision?: string
 }
 
 export type ManagedExtensionModule = Record<string, JsonValue> & {
@@ -110,13 +111,20 @@ export type RemovedExtensionPackageResources = Record<string, JsonValue> & {
 }
 
 export type ExtensionManagementService = {
+  previewRemoteInstall?(input: unknown): Promise<JsonValue>
+  previewPackageZip?(source: Uint8Array): Promise<JsonValue>
+  commitRemoteInstall?(token: string): Promise<JsonValue>
+  checkRemoteUpdate?(packageId: string): Promise<JsonValue>
+  previewRemoteChange?(input: unknown): Promise<JsonValue>
+  officialSetup?(): Promise<JsonValue>
+  finishOfficialSetup?(): Promise<JsonValue>
   listPackages(target?: ExtensionInstallationTarget): ManagedExtensionPackage[]
   installCardPackage(input: { cardId: string; packageId: string; expectedCardVersion: number }): Promise<ManagedExtensionPackage>
   updateCardPackage(input: { cardId: string; packageId: string; expectedCardVersion: number; packageVersion: string; expectedInstallationVersion: number }): Promise<ManagedExtensionPackage>
   uninstallCardPackage(input: { cardId: string; packageId: string; expectedInstallationVersion: number }): Promise<RemovedExtensionPackage>
   installPackage(sourceDirectory: string): Promise<ManagedExtensionPackage>
   installPackageZip(source: Uint8Array): Promise<ManagedExtensionPackage>
-  uninstallPackage(packageId: string, version?: string): Promise<RemovedExtensionPackage>
+  uninstallPackage(packageId: string, version?: string, deleteData?: boolean): Promise<RemovedExtensionPackage>
   enableModule(packageId: string, moduleId: string, grants?: ExtensionModuleCapabilityGrants, target?: ExtensionInstallationTarget): Promise<ManagedExtensionModule>
   disableModule(packageId: string, moduleId: string, target?: ExtensionInstallationTarget): Promise<ManagedExtensionModule>
   reloadModule(packageId: string, moduleId: string, target?: ExtensionInstallationTarget): Promise<ManagedExtensionModule>

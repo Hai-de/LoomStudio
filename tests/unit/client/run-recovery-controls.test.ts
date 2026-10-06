@@ -17,6 +17,17 @@ vi.mock('react', async importOriginal => ({
 }))
 
 type Element = ReactElement<Record<string, unknown>>
+vi.mock('../../../apps/studio-client/src/shared/ui/conversation-viewport/use-conversation-viewport.js', () => ({
+  useConversationViewport: ({ items }: { items: { id: string }[] }) => ({
+    scrollRef: { current: null }, listRef: { current: null }, headerRef: { current: null },
+    scrollMargin: 0, onScroll: vi.fn(),
+    virtualizer: {
+      getTotalSize: () => items.length * 280,
+      getVirtualItems: () => items.map((item, index) => ({ key: item.id, index, start: index * 280 })),
+      measureElement: vi.fn(),
+    },
+  }),
+}))
 function elements(value: unknown): Element[] {
   if (Array.isArray(value)) return value.flatMap(elements)
   if (!isValidElement<Record<string, unknown>>(value)) return []

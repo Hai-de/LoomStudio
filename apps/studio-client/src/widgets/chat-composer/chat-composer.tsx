@@ -20,7 +20,6 @@ type ChatComposerProps = {
   canPreviewPrompt: boolean
   canSend: boolean
   expanded?: boolean
-  expansion?: ReactNode
   input: string
   onChangeInput: (value: string) => void
   onHeightChange?: (height: number) => void
@@ -87,11 +86,6 @@ export function ChatComposer(props: ChatComposerProps) {
       <div className={styles.composerBody}>
         <div className={styles.inputSurface} data-loom-anchor="narrative-composer-surface">
           {props.sheet ? <div className={styles.sheet} data-loom-surface="composer.sheet">{props.sheet}</div> : null}
-          {props.expansion ? (
-            <div aria-hidden={!props.expanded} className={styles.expansionShell}>
-              <div className={styles.expansionContent}>{props.expansion}</div>
-            </div>
-          ) : null}
           <div ref={baseContentRef} className={styles.baseContent} data-loom-anchor="narrative-composer-base">
             <textarea
               aria-label={props.textareaLabel}

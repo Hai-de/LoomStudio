@@ -12,7 +12,7 @@ type CardFile = {
   description?: string
   macros?: string
   preset?: { system?: string; macros?: string; macroOptions?: string }
-  opening?: { text: string } | { entries?: Array<{ role?: 'user' | 'assistant'; content: string }> }
+  opening?: { text: string } | Exclude<Card['opening'], string | undefined>
   settingLayer?: { entries?: Array<Record<string, unknown> & { content: string }> }
 }
 
@@ -75,6 +75,12 @@ export function projectCardFiles(artifact: CardBundleArtifact, files: Record<str
       : { ...(opening.entries !== undefined ? {
         entries: opening.entries.map(({ content, ...entry }, index) => ({
           ...entry, content: text(`opening/${index}.md`, content),
+        })),
+      } : {}), ...(opening.alternatives !== undefined ? {
+        alternatives: opening.alternatives.map((alternative, candidateIndex) => ({
+          entries: alternative.entries.map(({ content, ...entry }, index) => ({
+            ...entry, content: text(`opening/alternatives/${candidateIndex}/${index}.md`, content),
+          })),
         })),
       } : {}) }
   }
@@ -166,6 +172,11 @@ export function restoreCardFiles(index: CardFilesIndex, files: Map<string, Uint8
       ...(stored.opening.entries !== undefined ? {
         entries: stored.opening.entries.map(entry => ({ ...entry, content: text(entry.content) })),
       } : {}),
+      ...(stored.opening.alternatives !== undefined ? {
+        alternatives: stored.opening.alternatives.map(alternative => ({
+          entries: alternative.entries.map(entry => ({ ...entry, content: text(entry.content) })),
+        })),
+      } : {}),
     }
   }
   if (stored.settingLayer !== undefined) {
@@ -233,7 +244,12 @@ export async function loadCardResourceFiles(index: CardFilesIndex, load: (path: 
   if (card.preset?.macroOptions !== undefined) await load(card.preset.macroOptions)
   if (card.opening !== undefined) {
     if ('text' in card.opening) await load(card.opening.text)
-    else for (const entry of card.opening.entries ?? []) await load(entry.content)
+    else {
+      for (const entry of card.opening.entries ?? []) await load(entry.content)
+      for (const alternative of card.opening.alternatives ?? []) {
+        for (const entry of alternative.entries) await load(entry.content)
+      }
+    }
   }
   for (const entry of card.settingLayer?.entries ?? []) await load(entry.content)
   if (!Array.isArray(index.contextAssets)) throw new Error('Expected a Card file reference list')

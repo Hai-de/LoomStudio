@@ -84,15 +84,24 @@ Agent 主动读取与 ToolResult 的生命周期由 Runtime 管理，不等于 P
 
 Server 的 Run 事件重放使用绝对游标、单 Run 1 MiB / Runtime 总计 8 MiB 的序列化预算；游标过期时显式重新同步 Transcript 和当前流式状态。完整完成结果包含 Inspector 的 Prompt Projection / Build Trace，不等同于可丢弃的事件历史：前端收到并发布 `lastRun` 后调用 `application.agent.run.acknowledge-completion`，释放独立的待交付引用；普通大小的结果仍可留在有界事件重放中。未确认的完成结果最多保留两分钟，期间不因事件预算或终态元数据淘汰而提前丢弃。此必要交付状态可能暂时超过重放字节预算；这些预算不是整个进程的硬 heap 上限，也不是历史 Trace 的持久化合同。
 
-但以下能力尚未完成：
+### 显式冷恢复
+
+Run 状态记录中的版本化 `recovery` 保存原请求、实际 Branch、Provider/Model 身份、用户 Entry、完整消息、工具合同和下一 Provider Step。首个运行状态与 user 同事务写入；工具组开始前记录不安全边界，完整工具组的最后结果与下一检查点同事务写入；最终 Assistant 与 completed 同事务提交。失败时已取得的 partial 文本和对应检查点也同事务保存。它不是 Provider 端 HTTP 请求或流的断点续传。
+
+`application.agent.run.resume` 在缺少内存实例时，通过 Runtime 分页读取完整工作记录，校验检查点后重建，不再用最近 100 条和一段提示词猜测原请求。原 user 和已完成工具结果保留，不重新执行已完成的工具组；原模型被停用或工具合同变化时明确失败，不换模型。下一 Step 编号与现有步数上限连续，不借恢复重置预算。
+
+接管前确认原执行者不再运行：当前进程使用实际执行登记，其他 PID 仅在探测明确返回不存在时允许恢复；进程仍存活或权限不足以判断时拒绝。没有分布式租约或跨机器接管。旧 Run 终结和新 Run 开始在同一事务完成，并校验读取检查点时的 entryCount；Store 的 Session busy 保护不移除。只有用户显式继续才会调用 Provider，初始化不自动续跑。
+
+缺少完整检查点的旧 Run、未确定结果的工具组或已被新输入/交接替代的检查点不能自动重建。错误明确区分缺失、损坏、执行者仍活跃、工具结果未知和上下文已改变。已发到 Provider 但尚未持久化的响应可能需要在显式恢复时重新请求；不承诺 Provider 端仅计费一次、任意崩溃点无损恢复或自动重做不确定工具。
+
+以下能力仍未完成：
 
 - 从历史 Transcript 自动重建未完成 Provider Replay；
-- Server 重启后的 Resume；
 - Permission 等待与恢复；
 - orphan Invocation / Result 自动修复；
 - Agent Session 的正式 fork、retry attempt tree 和 branch UI。
 
-`suspended`、parent Entry 和 synthetic reason 已进入 canonical 数据合同，不代表上述恢复流程已经实现。
+`suspended`、parent Entry 和 synthetic reason 不表示这些额外流程已经实现。
 
 ## 6. Narrative 边界
 
@@ -102,7 +111,7 @@ Agent Session 是工作树，Narrative Timeline 是故事权威树。两者互�
 
 Agent Loop 分阶段提交 Transcript，Agent 正文只能由授权工具写入 Timeline。Assistant 最终消息不会自动追加到正文；旧 `narrativeTarget.commit` 与 Turn 返回的自动 `narrative` 结果已移除。工具写入失败/Head 冲突通过 failed Tool Result 返回 Agent 并供用户查看，成功工具提交不因后续失败被回滚。Turn 的 mutation scope 仅描述 Session Transcript。
 
-客户端保留当前页面最近一次用户投递的节点身份，已有重试按钮显式重新投递到当前 Session；它不自动重跑，也不是完整的持久 retry attempt tree。Server 重启后的 Run 恢复仍属于上节未完成范围。
+客户端保留当前页面最近一次用户投递的节点身份，已有重试按钮显式重新投递到当前 Session；它不自动重跑，也不是完整的持久 retry attempt tree。Server 重启后的显式检查点恢复遵循上节合同，不重复追加用户正文。
 
 ## 7. Narrative Sampling（叙事采样读取）
 

@@ -6,8 +6,8 @@ import { createStudioApi } from '../../../apps/studio-client/src/shared/api/stud
 describe('releasePrimaryRun', () => {
   it('rejects running and failed cancellation without accepting a switch', async () => {
     const api = createStudioApi({ call: async () => { throw new Error('unexpected RPC') } })
-    api.agentSessions.getTranscript = vi.fn(async () => ({
-      session: { id: 'primary' } as any,
+    api.agentSessions.getTranscript = vi.fn<typeof api.agentSessions.getTranscript>(async () => ({
+      session: { id: 'primary', agentPresetId: 'preset', entryCount: 1, createdAt: '', updatedAt: '' },
       entries: [{ id: 'input', agentSessionId: 'primary', runId: 'run', sequence: 1,
         entry: { kind: 'message', role: 'user', content: 'draft' }, createdAt: '' }],
     }))

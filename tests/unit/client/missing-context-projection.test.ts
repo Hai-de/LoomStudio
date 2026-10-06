@@ -6,8 +6,12 @@ import { PresetWorkbench } from '../../../apps/studio-client/src/widgets/preset-
 import { ContextWorkbench } from '../../../apps/studio-client/src/widgets/context-workbench/context-workbench.js'
 import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/index.js'
 import type { AgentToolDefinition, PresetToolMount, PromptResource, SettingMount } from '../../../apps/studio-client/src/entities/index.js'
+import type { FileTreeNode } from '../../../apps/studio-client/src/shared/ui/file-tree/file-tree.js'
 
 const hooks = vi.hoisted(() => ({ cursor: 0, values: [] as unknown[], effects: [] as (() => void)[] }))
+vi.mock('../../../apps/studio-client/src/features/context-assets/model/use-resource-token-snapshot.js', () => ({
+  useResourceTokenSnapshot: () => ({ pending: false, refresh: vi.fn() }),
+}))
 vi.mock('react', async original => ({
   ...await original<typeof import('react')>(),
   useId: () => 'test-id',
@@ -71,6 +75,13 @@ function child(tree: unknown, name: string): Element {
 }
 function renderElement(element: Element) {
   return (element.type as (props: Record<string, unknown>) => unknown)(element.props)
+}
+function selectTool(tree: unknown, id: string) {
+  const directory = child(tree, 'FileTree')
+  const nodes = directory.props.nodes as FileTreeNode[]
+  const node = nodes.flatMap(node => [node, ...(node.children ?? [])]).find(node => node.id === id)
+  expect(node).toBeDefined()
+  ;(directory.props.onSelect as (node: FileTreeNode) => void)(node!)
 }
 function click(tree: unknown, label: string) {
   const button = elements(tree).find(item => item.type === 'button' && text(item) === label)
@@ -147,19 +158,19 @@ describe('missing context projections', () => {
     })).toEqual({ resources: [], unavailableResourceIds: ['gone'] })
   })
 
-  it('shows Setting and Tool IDs and removes unavailable Tool mounts only on an explicit action', async () => {
+  it('shows unavailable Tool IDs and removes their mounts only on an explicit action', async () => {
     const props = common() as unknown as ComponentProps<typeof PresetWorkbench>
     const root = instance(() => PresetWorkbench(props))
     root()
     let tree = root()
-    expect(elements(tree).filter(item => item.props.role === 'status').map(text)).toEqual([
-      t('context.bindings.unavailable', { id: 'missing-setting' }),
-      t('preset.tools.unavailable', { id: 'missing-tool' }),
-      t('preset.tools.unavailable', { id: 'disabled-missing' }),
-    ])
     let explorer = child(tree, 'PresetToolExplorer')
     const renderExplorer = instance(() => renderElement(explorer))
-    click(renderExplorer(), t('preset.tools.unavailable', { id: 'missing-tool' }))
+    const groups = child(renderExplorer(), 'FileTree').props.nodes as FileTreeNode[]
+    expect(groups.find(node => node.id === 'unavailable-tools')?.children).toMatchObject([
+      { id: 'missing-tool', label: t('preset.tools.unavailable', { id: 'missing-tool' }) },
+      { id: 'disabled-missing', label: t('preset.tools.unavailable', { id: 'disabled-missing' }) },
+    ])
+    selectTool(renderExplorer(), 'missing-tool')
     tree = root()
     const detail = child(tree, 'PresetToolDetail')
     const renderDetail = instance(() => renderElement(detail))
@@ -177,7 +188,7 @@ describe('missing context projections', () => {
     expect(props.toolMounts.map(item => item.toolId)).toEqual(['available', 'missing-tool', 'disabled-missing'])
 
     explorer = child(root(), 'PresetToolExplorer')
-    click(renderExplorer(), `USER TOOL${t('preset.tools.kind.provider')}${t('preset.tools.mounted')}`)
+    selectTool(renderExplorer(), 'available')
     root()
     props.tools = []
     root()
@@ -195,7 +206,7 @@ describe('missing context projections', () => {
     const root = instance(() => PresetWorkbench(props))
     root()
     const explorer = child(root(), 'PresetToolExplorer')
-    click(instance(() => renderElement(explorer))(), t('preset.tools.unavailable', { id: 'missing-tool' }))
+    selectTool(instance(() => renderElement(explorer))(), 'missing-tool')
     const detail = child(root(), 'PresetToolDetail')
     const missing = instance(() => renderElement(detail))() as Element
     const renderMissing = instance(() => renderElement(missing))
@@ -205,38 +216,15 @@ describe('missing context projections', () => {
     expect(props.toolMounts).toHaveLength(3)
   })
 
-  it('opens built-in content from the resource workbench without replacing the editor', () => {
-    const props = {
-      ...common(), view: 'settings', onViewChange: vi.fn(),
-      officialContentApi: { list: vi.fn(), install: vi.fn(), export: vi.fn() },
-      onOfficialContentInstalled: vi.fn(),
-    } as unknown as ComponentProps<typeof ContextWorkbench>
-    const render = instance(() => ContextWorkbench(props))
-    const button = elements(render()).find(element => element.props['aria-label'] === t('official.builtin'))!
-    expect(button).toBeDefined()
-    const onClick = button.props.onClick as () => void
-    onClick()
-    const tree = render()
-    const dialog = child(tree, 'OfficialContentDialog')
-    expect(dialog.props.api).toBe(props.officialContentApi)
-    expect(dialog.props.onInstalled).toBe(props.onOfficialContentInstalled)
-    expect(child(tree, 'ContextAssetEditor')).toBeDefined()
-    const close = dialog.props.onClose as () => void
-    close()
-    expect(child(render(), 'OfficialContentDialog')).toBeUndefined()
-  })
-
   it('keeps an in-collection Setting in its tree, replaces external targets, and restores the collection', () => {
     const sibling = { ...setting, id: 'sibling', rootNode: { ...setting.rootNode, id: 'sibling-root', label: 'SIBLING' } }
     const outside = { ...setting, id: 'outside', rootNode: { ...setting.rootNode, id: 'outside-root', label: 'OUTSIDE' } }
     const second = { ...setting, id: 'second', rootNode: { ...setting.rootNode, id: 'second-root', label: 'SECOND' } }
-    const onReturn = vi.fn()
     const onSelectResource = vi.fn()
     const props = {
       ...common(), resources: [preset, setting, sibling, outside, second],
       card: { id: 'card', promptResourceIds: ['setting', 'sibling'] }, routeResourceId: 'setting', routeAssetId: 'setting-root',
-      onReturn, onSelectResource, officialContentApi: { list: vi.fn(), install: vi.fn(), export: vi.fn() },
-      onOfficialContentInstalled: vi.fn(),
+      onSelectResource,
     } as unknown as ComponentProps<typeof ContextWorkbench>
     const root = instance(() => ContextWorkbench(props))
     const ids = () => (child(root(), 'ContextAssetExplorer').props.displayNodes as Array<{ id: string }>).map(item => item.id)
@@ -247,8 +235,6 @@ describe('missing context projections', () => {
     expect(ids()).toEqual(['outside-root'])
     ;(child(root(), 'PromptResourceToolbar').props.onSelect as (id: string) => void)('second')
     expect(onSelectResource).toHaveBeenCalledExactlyOnceWith('second', true)
-    click(root(), t('promptResource.returnToCollection'))
-    expect(onReturn).toHaveBeenCalledOnce()
     props.routeResourceId = 'second'
     props.routeAssetId = 'second-root'
     expect(ids()).toEqual(['second-root'])

@@ -91,26 +91,24 @@ export function createStateRuntimeMethods(ctx: StateRuntimeContext) {
         updatedAt: timestamp,
       }
       const globalDefinition = input.definition.kind === 'global' ? input.definition : undefined
-      const globalSnapshot = globalDefinition
-        ? await ctx.states.getGlobalSnapshot('workspace')
-        : null
-      if (globalDefinition && !globalSnapshot) {
-        throw new Error('Global state is not initialized')
-      }
-      const currentValue = globalDefinition
-        ? readDotPath(globalSnapshot!.revision.snapshot, globalDefinition.path.replace(/^global\./, ''))
-        : { found: false as const }
-      if (globalDefinition && currentValue.found) {
-        validateStateValue(currentValue.value, globalDefinition.schema, globalDefinition.path)
-      }
-      const shouldCreateDefault = globalDefinition !== undefined
-        && !currentValue.found
-        && globalDefinition.default !== undefined
       const documentParticipant = requireDocumentParticipant(ctx)
       let stateChange: StateChangeEvent | undefined
       const transaction = await ctx.dataEngine.transact({
         ...narrativeWriteContext(requestContext, 'application.upsertStateDefinition'),
       }, async dataTx => documentParticipant.participateTransaction(dataTx, async documents => {
+        const globalSnapshot = globalDefinition
+          ? ctx.states.transaction(dataTx).getGlobalSnapshot('workspace')
+          : null
+        if (globalDefinition && !globalSnapshot) throw new Error('Global state is not initialized')
+        const currentValue = globalDefinition
+          ? readDotPath(globalSnapshot!.revision.snapshot, globalDefinition.path.replace(/^global\./, ''))
+          : { found: false as const }
+        if (globalDefinition && currentValue.found) {
+          validateStateValue(currentValue.value, globalDefinition.schema, globalDefinition.path)
+        }
+        const shouldCreateDefault = globalDefinition !== undefined
+          && !currentValue.found
+          && globalDefinition.default !== undefined
         const written = await writeDocument<StateDefinitionContent>(documents, {
           id: input.definitionId,
           type: applicationDocumentTypes.stateDefinition,
@@ -152,7 +150,7 @@ export function createStateRuntimeMethods(ctx: StateRuntimeContext) {
 function readDotPath(root: JsonObject, path: string): { found: true; value: JsonValue } | { found: false } {
   let current: JsonValue = root
   for (const segment of path.split('.')) {
-    if (typeof current !== 'object' || current === null || Array.isArray(current) || !(segment in current)) {
+    if (typeof current !== 'object' || current === null || Array.isArray(current) || !Object.hasOwn(current, segment)) {
       return { found: false }
     }
     current = (current as Record<string, JsonValue>)[segment]!

@@ -57,7 +57,7 @@ describe('Character browsing versus playing', () => {
   it('starts a session for the explicitly browsed card, not the current playing card', async () => {
     const { props, state, navigation } = fixture()
     await props.onCreateTimelineFromCard('external-card')
-    expect(state.createTimelineFromCard).toHaveBeenCalledWith('external-card')
+    expect(state.createTimelineFromCard).toHaveBeenCalledWith('external-card', undefined, undefined)
     expect(state.setSelectedCardId).toHaveBeenCalledWith('external-card')
     expect(navigation.openNarrative).toHaveBeenCalledWith('new-timeline', 'new-branch')
   })

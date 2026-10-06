@@ -10,10 +10,10 @@ import {
   addContextAssetNode,
   deleteContextAssetNode,
   duplicateContextAssetNode,
-  moveContextAssetNode,
+  canMoveContextAssetNode,
   updateContextAssetNode,
 } from './tree-ops.js'
-import { normalizeContextAssets, writeProjectionCapability } from './context-asset-normalization.js'
+import { normalizeContextAssets } from './context-asset-normalization.js'
 import { findContextAssetNode } from './context-asset-tree.js'
 import { findRootContextModule, type ContextAssetUpdate } from './projection-workbench.js'
 
@@ -213,16 +213,20 @@ export function useContextAssets(input: UseContextAssetsInput) {
     })
   }
 
-  async function addContextAsset(parentId: string): Promise<string | undefined> {
+  async function createContextAsset(
+    parentId: string,
+    build: () => ReturnType<typeof addContextAssetNode>,
+    placement: () => { targetAssetId: string; position: 'before' | 'inside' | 'after' } = () => firstChildPlacement(parentId),
+  ): Promise<string | undefined> {
     let nextSelectedId: string | undefined
     await enqueueMutation(async () => {
-      const mutation = addContextAssetNode(scope.nodes, parentId)
+      const mutation = build()
       const asset = findContextAssetNode(mutation.nodes, mutation.selectedId)
       if (!asset || !mutation.selectedId) return
       const resourceId = readResourceId(parentId)
       const result = await input.api.promptResources.createAsset({
         resourceId,
-        ...firstChildPlacement(parentId),
+        ...placement(),
         asset,
       })
       applyResource(result.resource)
@@ -236,83 +240,29 @@ export function useContextAssets(input: UseContextAssetsInput) {
     return nextSelectedId
   }
 
-  async function addContextAssetFolder(parentId: string): Promise<string | undefined> {
-    let nextSelectedId: string | undefined
-    await enqueueMutation(async () => {
-      const mutation = addContextAssetFolderNode(scope.nodes, parentId)
-      const asset = findContextAssetNode(mutation.nodes, mutation.selectedId)
-      if (!asset || !mutation.selectedId) return
-      const resourceId = readResourceId(parentId)
-      const result = await input.api.promptResources.createAsset({
-        resourceId,
-        ...firstChildPlacement(parentId),
-        asset,
-      })
-      applyResource(result.resource)
-      nextSelectedId = mutation.selectedId
-      recordEdit({
-        label: input.t('history.context.create'),
-        changesetId: result.mutation.changesetId,
-        anchor: { documentId: resourceId, subjectId: mutation.selectedId },
-      })
-    })
-    return nextSelectedId
+  function addContextAsset(parentId: string): Promise<string | undefined> {
+    return createContextAsset(parentId, () => addContextAssetNode(scope.nodes, parentId))
   }
 
-  async function addContextAssetAnchor(parentId: string): Promise<string | undefined> {
-    let nextSelectedId: string | undefined
-    await enqueueMutation(async () => {
-      const mutation = addContextAssetAnchorNode(scope.nodes, parentId)
-      const asset = findContextAssetNode(mutation.nodes, mutation.selectedId)
-      if (!asset || !mutation.selectedId) return
-      const resourceId = readResourceId(parentId)
-      const result = await input.api.promptResources.createAsset({
-        resourceId,
-        ...firstChildPlacement(parentId),
-        asset,
-      })
-      applyResource(result.resource)
-      nextSelectedId = mutation.selectedId
-      recordEdit({
-        label: input.t('history.context.create'),
-        changesetId: result.mutation.changesetId,
-        anchor: { documentId: resourceId, subjectId: mutation.selectedId },
-      })
-    })
-    return nextSelectedId
+  function addContextAssetFolder(parentId: string): Promise<string | undefined> {
+    return createContextAsset(parentId, () => addContextAssetFolderNode(scope.nodes, parentId))
   }
 
-  async function addContextAssetMessageBlock(parentId: string, role: 'system' | 'user' | 'assistant' = 'system'): Promise<string | undefined> {
-    let nextSelectedId: string | undefined
-    await enqueueMutation(async () => {
+  function addContextAssetAnchor(parentId: string): Promise<string | undefined> {
+    return createContextAsset(parentId, () => addContextAssetAnchorNode(scope.nodes, parentId))
+  }
+
+  function addContextAssetMessageBlock(parentId: string, role: 'system' | 'user' | 'assistant' = 'system'): Promise<string | undefined> {
+    return createContextAsset(parentId, () => addContextAssetMessageBlockNode(scope.nodes, parentId, role), () => {
       const parentNode = findContextAssetNode(scope.nodes, parentId)
-      const mutation = addContextAssetMessageBlockNode(scope.nodes, parentId, role)
-      const asset = findContextAssetNode(mutation.nodes, mutation.selectedId)
-      if (!asset || !mutation.selectedId) return
-      const resourceId = readResourceId(parentId)
-
       const isMessageOrLeaf = parentNode?.kind === 'message' || parentNode?.kind === 'entry' || parentNode?.kind === 'virtual' || parentNode?.kind === 'slot'
-
-      const result = await input.api.promptResources.createAsset({
-        resourceId,
-        ...(isMessageOrLeaf ? { targetAssetId: parentId, position: 'after' as const } : firstChildPlacement(parentId)),
-        asset,
-      })
-      applyResource(result.resource)
-      nextSelectedId = mutation.selectedId
-      recordEdit({
-        label: input.t('history.context.create'),
-        changesetId: result.mutation.changesetId,
-        anchor: { documentId: resourceId, subjectId: mutation.selectedId },
-      })
+      return isMessageOrLeaf ? { targetAssetId: parentId, position: 'after' as const } : firstChildPlacement(parentId)
     })
-    return nextSelectedId
   }
 
   function moveContextAsset(draggedId: string, targetId: string, position: 'before' | 'inside' | 'after'): Promise<void> {
     return enqueueMutation(async () => {
-      const next = moveContextAssetNode(scope.nodes, draggedId, targetId, position)
-      if (next === scope.nodes) return
+      if (!canMoveContextAssetNode(scope.nodes, draggedId, targetId)) return
       const resourceId = readResourceId(draggedId)
       if (readResourceId(targetId) !== resourceId) throw new Error('Cross-resource prompt asset move is not supported')
       const result = await input.api.promptResources.moveAsset({
@@ -443,14 +393,10 @@ export async function commitContextAssetMutation(input: {
 }
 
 function readPromptAssetPatch(node: ContextAssetNode) {
-  const capabilities = node.projection
-    ? writeProjectionCapability(node.capabilities, node.projection)
-    : node.capabilities
-
   return {
     assetId: node.id,
     body: node.body,
-    capabilities,
+    capabilities: node.capabilities,
     enabled: node.enabled,
     label: node.label,
     meta: node.meta,

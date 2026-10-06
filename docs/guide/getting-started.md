@@ -48,7 +48,7 @@ Client 默认监听 `127.0.0.1:5173`。打开浏览器访问该地址即可；Vi
 
 若 Server 设置了不同的 `PORT`，启动 Client 时须同步设置 `STUDIO_SERVER_URL`（例如 `http://127.0.0.1:4174`）；代理目标不会自动跟随 Server 的端口环境变量。
 
-两个开发命令都会先构建内部 packages，再持续监听源码并更新产物。Server 命令还会构建 `official/extensions/the-world` 并监听其 Client bundle。修改 `packages/` 下的源码后无需手动重新构建；Server 还会在 package 产物变化时自动重启。
+两个开发命令都会先构建内部 packages，再持续监听源码并更新产物。具有独立发布周期的扩展在根目录 `extensions/` 开发，自行构建后通过扩展中心重载；Server 不代为构建扩展。修改 `packages/` 下的源码后无需手动重新构建；Server 还会在 package 产物变化时自动重启。
 
 开发脚本默认将持久数据放在仓库 `data/`，通过 `LOOM_STUDIO_DATA_ROOT` 指定；SQLite、Blob、Extension state/installed 等均使用这个根目录。运行日志（JSONL）与测试沙箱收拢在 `.loomstudio-dev/`。`/data/` 与 `.loomstudio-dev/` 均被主仓库 Git 忽略。
 

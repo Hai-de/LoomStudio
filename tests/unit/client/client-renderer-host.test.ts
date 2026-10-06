@@ -3,6 +3,18 @@ import { createClientRendererHost } from '../../../apps/studio-client/src/shared
 import { rendererContributionKey } from '../../../apps/studio-client/src/shared/extension-renderer-runtime/renderer-registry.js'
 
 describe('Client Renderer Host', () => {
+  it('rejects duplicate identities at registration rather than filtering them from lists', () => {
+    const host = createClientRendererHost()
+    const registration = {
+      owner: { kind: 'extension' as const, packageId: 'example', moduleId: 'client' },
+      definition: { id: 'tail', name: 'Tail', surface: 'narrative.timeline.tail' as const, instanceScope: 'timeline' as const },
+      mount: vi.fn(),
+    }
+    host.register(registration)
+    expect(() => host.register(registration)).toThrow('already registered')
+    expect(host.list('narrative.timeline.tail')).toHaveLength(1)
+    expect(host.list('agent.session.tail')).toEqual([])
+  })
   it('separates same-name installation renderers and releases private claims on Card changes', () => {
     const host = createClientRendererHost()
     const owners = [

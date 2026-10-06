@@ -24,14 +24,15 @@ function elements(value: unknown): Element[] {
 }
 
 describe('Agent model slot', () => {
-  it('retains unavailable binding and the edited version after a save conflict', async () => {
+  it('reports an autosave conflict without committing the rejected selection and retries with the latest version', async () => {
+    const pending = Promise.withResolvers<never>()
     const props: ComponentProps<typeof AgentModelEditor> = {
       preset: { id: 'preset', version: 2, resourceKind: 'preset',
         rootNode: { id: 'root', kind: 'module', label: 'Agent' },
         model: { providerProfileId: 'missing', modelId: 'missing-model' }, createdAt: '', updatedAt: '' },
       modelProfiles: [{ id: 'model', version: 1, displayName: 'Model', providerAccountId: 'provider', providerModelId: 'model' }],
       providerAccounts: [], t: createTranslator('en-US'),
-      onSave: vi.fn().mockRejectedValue(new Error('Version conflict')),
+      onSave: vi.fn().mockReturnValueOnce(pending.promise),
     }
     const render = () => { hooks.cursor = 0; return elements(AgentModelEditor(props)) }
     let tree = render()
@@ -41,14 +42,26 @@ describe('Agent model slot', () => {
     ;(tree.find(element => element.type === 'select')!.props.onChange as (event: unknown) => void)({ target: { value: 'model' } })
     props.preset = { ...props.preset, version: 3 }
     tree = render()
-    await (tree.find(element => element.type === 'form')!.props.onSubmit as (event: unknown) => Promise<void>)({ preventDefault() {} })
+    expect(tree.find(element => element.type === 'select')?.props.disabled).toBe(true)
     expect(props.onSave).toHaveBeenCalledWith({
       agentPresetId: 'preset', expectedVersion: 2,
       model: { providerProfileId: 'provider', modelId: 'model' }, delivery: 'stream',
     })
+    pending.reject(new Error('Version conflict'))
+    await vi.waitFor(() => expect(render().find(element => element.props.role === 'alert')?.props.children).toBe('Version conflict'))
     tree = render()
-    expect(tree.find(element => element.type === 'select')?.props.value).toBe('model')
+    expect(tree.find(element => element.type === 'select')?.props.value).toBe('__unavailable__')
     expect(tree.find(element => element.props.role === 'alert')?.props.children).toBe('Version conflict')
     expect(props.onSave).toHaveBeenCalledTimes(1)
+    vi.mocked(props.onSave).mockResolvedValueOnce({
+      ...props.preset, version: 4, model: { providerProfileId: 'provider', modelId: 'model' },
+    })
+    ;(tree.find(element => element.type === 'select')!.props.onChange as (event: unknown) => void)({ target: { value: 'model' } })
+    expect(props.onSave).toHaveBeenLastCalledWith({
+      agentPresetId: 'preset', expectedVersion: 3,
+      model: { providerProfileId: 'provider', modelId: 'model' }, delivery: 'stream',
+    })
+    await vi.waitFor(() => expect(render().find(element => element.type === 'select')?.props.value).toBe('model'))
+    expect(render().some(element => element.props.role === 'alert')).toBe(false)
   })
 })

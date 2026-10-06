@@ -53,6 +53,12 @@ export function createExtensionStorageContext(
 ): ExtensionActivationContext['storage'] {
   const packageId = record.packageManifest.id
   return {
+    ...(options.resolveFileDataDirectory ? {
+      files: { directory: async () => {
+        assertScopeActive(instance)
+        return options.resolveFileDataDirectory!(packageId, structuredClone(record.target))
+      } },
+    } : {}),
     configs: {
       list: async input => {
         assertScopeActive(instance)

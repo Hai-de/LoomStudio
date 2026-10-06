@@ -74,7 +74,7 @@ InMemory DocumentStore 的公开读写与 transaction 同样经过串行队列�
 - 不含正文的 `store / kind / entityId / entityType / version` operations；
 - 兼容 Document API 使用的 Changeset 与 Document summary。
 
-Studio Server 直接把共享 SQLite Data Engine 作为 Kernel 的 Data Commit Source。测试或外部调用如果注入非 Engine Document Store，仍可使用 `createDocumentDataCommitSource()` 兼容适配。
+Studio Server 直接把共享 SQLite Data Engine 作为 Kernel 的 Data Commit Source。测试或其他宿主组合如果使用非 Engine Document Store，可直接注入 Store；其 `subscribeCommits` 已满足同一订阅合同，不需要转发工厂。
 
 当前 Document Store 与 Narrative Store 已接入共享 Engine。Narrative Store 使用 `application.narrative` migration namespace，当前版本 3，拥有：
 

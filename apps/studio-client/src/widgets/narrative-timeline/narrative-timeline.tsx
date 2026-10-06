@@ -1,9 +1,11 @@
 import { Check, Copy, GitBranch, Link, Pencil, RefreshCw, Trash2, X } from 'lucide-react'
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useConversationViewport } from '../../shared/ui/conversation-viewport/use-conversation-viewport.js'
 import type { Translator } from '../../shared/i18n/index.js'
 import type { NarrativeNode } from '../../entities/index.js'
-import { tryWriteClipboardText } from '../../shared/browser/clipboard.js'
+import { useCopyFeedback } from '../../shared/hooks/use-copy-feedback.js'
+import { DisplayProjectionStatus } from '../../features/message-content/ui/display-projection-status.js'
+import { messageCodeBlockLabels } from '../../features/message-content/ui/message-code-block-labels.js'
 import {
   NarrativeTimelineNavigator,
   type NarrativeTimelineNavigatorItem,
@@ -41,6 +43,7 @@ type NarrativeTimelineProps = {
   composerHeight: number
   emptyTimelineText: string
   openingDraft?: { content: string; isPlaceholder: boolean }
+  openingControls?: ReactNode
   openingDisplay?: OpeningDisplayProjection
   getNodeLink: (nodeId: string) => string
   hasOlder: boolean
@@ -67,46 +70,25 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
   const [draft, setDraft] = useState('')
   const [editorMinHeight, setEditorMinHeight] = useState(0)
   const [messageMotion, setMessageMotion] = useState<{ id: string; direction: 'to-edit' | 'to-read' }>()
-  const [copyState, setCopyState] = useState<{ id: string; status: 'copied' | 'failed' }>()
-  const [linkCopyState, setLinkCopyState] = useState<{ id: string; status: 'copied' | 'failed' }>()
+  const { feedback: copyState, copy: copyText } = useCopyFeedback()
+  const { feedback: linkCopyState, copy: copyLink } = useCopyFeedback()
   const [activeEntryId, setActiveEntryId] = useState(props.anchorNodeId ? undefined : props.timeline[0]?.id)
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const linkCopyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const activeEntryFrameRef = useRef<number | undefined>(undefined)
-  const composerMotionActiveRef = useRef(false)
-  const composerMotionFrameRef = useRef<number | undefined>(undefined)
-  const followsComposerRef = useRef(true)
   const pendingAnchorScrollRef = useRef<{ timelineId?: string; nodeId: string } | undefined>(undefined)
   const messageSurfaceRefs = useRef(new Map<string, HTMLDivElement>())
-  const timelineRef = useRef<HTMLDivElement>(null)
-  const listRef = useRef<HTMLDivElement>(null)
-  const headerRef = useRef<HTMLDivElement>(null)
-  const [scrollMargin, setScrollMargin] = useState(32)
-  const editingIndex = props.timeline.findIndex(entry => entry.id === editingId)
-  const virtualizer = useVirtualizer({
-    count: props.timeline.length,
-    getScrollElement: () => timelineRef.current,
-    getItemKey: useCallback((index: number) => props.timeline[index].id, [props.timeline]),
-    estimateSize: () => 280,
+  const {
+    scrollRef: timelineRef, listRef, headerRef, scrollMargin, virtualizer,
+    followsBottomRef: followsComposerRef, motionActiveRef: composerMotionActiveRef,
+    onScroll: updateViewportFollow,
+  } = useConversationViewport({
+    items: props.timeline,
+    scopeId: props.timelineId,
+    pinnedId: editingId,
+    followInitially: !props.anchorNodeId,
+    composerHeight: props.composerHeight,
+    composerExpanded: props.composerExpanded,
     overscan: props.overscan ?? (Number.isInteger(storedOverscan) && storedOverscan >= 0 && storedOverscan <= 50 ? storedOverscan : 5),
-    scrollMargin,
-    anchorTo: 'end',
-    // Anchor navigation can scroll during a layout effect.
-    useFlushSync: false,
-    rangeExtractor: useCallback(range => {
-      const indices = defaultRangeExtractor(range)
-      if (editingIndex >= 0 && !indices.includes(editingIndex)) indices.push(editingIndex)
-      return indices.sort((a, b) => a - b)
-    }, [editingIndex]),
   })
-  useLayoutEffect(() => {
-    const update = () => setScrollMargin(listRef.current?.offsetTop ?? 32)
-    update()
-    const observer = new ResizeObserver(update)
-    if (headerRef.current) observer.observe(headerRef.current)
-    if (timelineRef.current) observer.observe(timelineRef.current)
-    return () => observer.disconnect()
-  }, [props.hasOlder, props.timeline.length > 0])
   const navigatorItems = useMemo<NarrativeTimelineNavigatorItem[]>(() => props.timeline.map((node, index) => ({
     id: node.id,
     meta: `#${index + 1} · ${formatConversationTimestamp(node.createdAt)}`,
@@ -138,10 +120,7 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
   })
 
   useEffect(() => () => {
-    if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
-    if (linkCopyTimerRef.current) clearTimeout(linkCopyTimerRef.current)
     if (activeEntryFrameRef.current) cancelAnimationFrame(activeEntryFrameRef.current)
-    if (composerMotionFrameRef.current) cancelAnimationFrame(composerMotionFrameRef.current)
   }, [])
 
   useEffect(() => {
@@ -152,41 +131,6 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
     if (activeEntryId && props.timeline.some(entry => entry.id === activeEntryId)) return
     setActiveEntryId(props.timeline[0]?.id)
   }, [activeEntryId, props.timeline, props.anchorNodeId, anchorStatus])
-
-  useLayoutEffect(() => {
-    const timeline = timelineRef.current
-    if (!timeline || !props.composerHeight || !followsComposerRef.current) return
-    timeline.scrollTop = timeline.scrollHeight
-  }, [props.composerHeight])
-
-  useLayoutEffect(() => {
-    const timeline = timelineRef.current
-    if (!timeline || !followsComposerRef.current) return
-    if (composerMotionFrameRef.current) cancelAnimationFrame(composerMotionFrameRef.current)
-    const reduceMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    if (reduceMotion) {
-      timeline.scrollTop = timeline.scrollHeight
-      return
-    }
-
-    composerMotionActiveRef.current = true
-    const startedAt = performance.now()
-    const followComposer = (timestamp: number) => {
-      timeline.scrollTop = timeline.scrollHeight
-      if (timestamp - startedAt < 200) {
-        composerMotionFrameRef.current = requestAnimationFrame(followComposer)
-        return
-      }
-      composerMotionFrameRef.current = undefined
-      composerMotionActiveRef.current = false
-    }
-    composerMotionFrameRef.current = requestAnimationFrame(followComposer)
-    return () => {
-      if (composerMotionFrameRef.current) cancelAnimationFrame(composerMotionFrameRef.current)
-      composerMotionFrameRef.current = undefined
-      composerMotionActiveRef.current = false
-    }
-  }, [props.composerExpanded])
 
   function beginEdit(node: NarrativeNodeView) {
     if (savingRef.current) return
@@ -235,24 +179,17 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
   }
 
   async function copyEntry(node: NarrativeNodeView) {
-    const copied = await tryWriteClipboardText(node.body.raw)
-    setCopyState({ id: node.id, status: copied ? 'copied' : 'failed' })
-    if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
-    copyTimerRef.current = setTimeout(() => setCopyState(undefined), 1600)
+    await copyText(node.body.raw, node.id)
   }
 
   async function copyEntryLink(node: NarrativeNodeView) {
-    const copied = await tryWriteClipboardText(props.getNodeLink(node.id))
-    setLinkCopyState({ id: node.id, status: copied ? 'copied' : 'failed' })
-    if (linkCopyTimerRef.current) clearTimeout(linkCopyTimerRef.current)
-    linkCopyTimerRef.current = setTimeout(() => setLinkCopyState(undefined), 1600)
+    await copyLink(props.getNodeLink(node.id), node.id)
   }
 
   function scheduleActiveEntryUpdate() {
     if (props.anchorNodeId && anchorStatus !== 'located') return
     if (composerMotionActiveRef.current) return
-    const timelineElement = timelineRef.current
-    if (timelineElement) followsComposerRef.current = isTimelineNearBottom(timelineElement)
+    updateViewportFollow()
     if (activeEntryFrameRef.current) return
     activeEntryFrameRef.current = requestAnimationFrame(() => {
       activeEntryFrameRef.current = undefined
@@ -300,12 +237,7 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
         onScroll={scheduleActiveEntryUpdate}
       >
         <div ref={headerRef} className={styles.timelineHeader}>
-          {props.displayProjection?.warning ? <p role="status">Display: {props.displayProjection.warning}</p> : null}
-          {props.displayProjection?.error ? <div role="alert">
-            <span>Display: {props.displayProjection.error}</span>
-            <button type="button" disabled={props.displayProjection.refreshing} onClick={props.displayProjection.retry}
-              title={props.t('textTransform.refresh')} aria-label={props.t('textTransform.refresh')}><RefreshCw size={16} aria-hidden="true" /></button>
-          </div> : null}
+          <DisplayProjectionStatus projection={props.displayProjection} retryLabel={props.t('textTransform.refresh')} />
           {anchorStatus === 'unavailable' ? <p role="status">{props.t('timeline.anchorUnavailable')}</p> : null}
           {anchorStatus === 'failed' ? <p role="alert">{props.t('timeline.anchorLoadFailed')}</p> : null}
           {props.hasOlder ? <button disabled={props.busy || anchorStatus === 'loading'} type="button" onClick={() => void props.onLoadOlder().catch(() => undefined)}>{props.t('timeline.loadOlder')}</button> : null}
@@ -327,6 +259,7 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
                   className={styles.messageSurface}
                   data-loom-slot="message-content"
                 >
+                  {props.openingControls}
                   {props.openingDisplay?.pending ? <div aria-busy="true"><SkeletonText lines={4} /></div>
                     : props.openingDisplay?.error ? <div role="alert">
                       <span>Display: {props.openingDisplay.error}</span>
@@ -335,13 +268,7 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
                   {props.openingDisplay?.warning ? <p role="status">Display: {props.openingDisplay.warning}</p> : null}
                   <ConversationMarkdown
                     className={`${styles.messageBody} ${props.openingDraft.isPlaceholder ? styles.placeholderBody : ''}`}
-                    codeBlockLabels={{
-                      copied: props.t('longTextEditor.copied'),
-                      copy: props.t('longTextEditor.copy'),
-                      copyFailed: props.t('longTextEditor.copyFailed'),
-                      disableWrap: props.t('markdown.code.disableWrap'),
-                      enableWrap: props.t('markdown.code.enableWrap'),
-                    }}
+                    codeBlockLabels={messageCodeBlockLabels(props.t)}
                     role="assistant"
                           value={props.openingDisplay?.text ?? props.openingDraft.content}
                           macroContext={props.macroContext}
@@ -505,13 +432,7 @@ function NarrativeMessageBody(props: {
   const content = (
     <ConversationMarkdown
       className={styles.messageBody}
-      codeBlockLabels={{
-        copied: props.t('longTextEditor.copied'),
-        copy: props.t('longTextEditor.copy'),
-        copyFailed: props.t('longTextEditor.copyFailed'),
-        disableWrap: props.t('markdown.code.disableWrap'),
-        enableWrap: props.t('markdown.code.enableWrap'),
-      }}
+      codeBlockLabels={messageCodeBlockLabels(props.t)}
       role={props.role}
       macroContext={props.macroContext}
       value={text}
@@ -545,6 +466,4 @@ export function readNarrativeNodeRole(nodes: NarrativeNode[], index: number): 'u
     : 'assistant'
 }
 
-export function isTimelineNearBottom(element: Pick<HTMLElement, 'clientHeight' | 'scrollHeight' | 'scrollTop'>): boolean {
-  return element.scrollHeight - element.scrollTop - element.clientHeight <= 48
-}
+export { isConversationNearBottom as isTimelineNearBottom } from '../../shared/ui/conversation-viewport/use-conversation-viewport.js'

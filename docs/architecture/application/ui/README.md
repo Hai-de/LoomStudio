@@ -29,7 +29,7 @@ Application / UI:
 游玩输入按顺序执行：
 
 ```text
-appendNarrativeInput -> 发布真实用户节点 -> 创建或选择 Session -> createRun(inputNodeId)
+预先显式建立当前 Timeline 的主写作 Session -> appendNarrativeInput -> 发布真实用户节点 -> 向主写作 Session createRun(inputNodeId)
 ```
 
 用户节点写入失败时不向 Session 投递；投递失败仍保留已提交节点。当前页面的显式重投递复用原节点 ID，可投递到新选定的 Session，不重复追加用户正文。Agent 的最终回复不自动成为 Timeline 正文，正文只能经授权工具写入；工具失败通过 Tool Result 表达。Run 已结束但后续读取失败时只重读，不自动重跑。跨刷新重试树不是当前能力。

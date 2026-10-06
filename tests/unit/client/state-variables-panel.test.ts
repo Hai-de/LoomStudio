@@ -74,19 +74,21 @@ describe('StateVariablesPanel', () => {
   it('keeps the save action available when the last macro is deleted', () => {
     const html = renderToStaticMarkup(createElement(MacroAuthoringDetail, {
       controller: {
-        input: {
-          ownerId: 'card-1',
-          ownerLabel: 'Alice',
+        sources: [{
+          id: 'card-1',
+          kind: 'card',
+          label: 'Alice',
           version: 2,
           macros: { greeting: 'Hello' },
           onSave: async () => ({ version: 3, macros: {} }),
-          t,
-        },
-        rows: [],
-        dirty: true,
-        saving: false,
+        }],
+        sourceRows: { 'card-1': [] },
+        draftVersions: { 'card-1': 2 },
+        selectedNodeId: 'card-1:loaded-0-greeting',
+        dirtySources: { 'card-1': true },
+        t,
         error: '',
-        selectRow: () => undefined,
+        selectNode: () => undefined,
         addRow: () => undefined,
         updateRow: () => undefined,
         removeRow: () => undefined,

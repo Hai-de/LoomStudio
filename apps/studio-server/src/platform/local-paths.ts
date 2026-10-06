@@ -6,7 +6,6 @@ export type LoomStudioLocalPaths = {
   databaseFile: string
   blobRoot: string
   extensionRoot: string
-  extensionInstalledRoot: string
   extensionStateFile: string
   extensionDevLinksFile: string
   configRoot: string
@@ -55,9 +54,8 @@ export function resolveLoomStudioLocalPaths(
     databaseFile: join(dataRoot, 'studio.sqlite'),
     blobRoot: join(dataRoot, 'blobs'),
     extensionRoot,
-    extensionInstalledRoot: join(extensionRoot, 'installed'),
-    extensionStateFile: join(extensionRoot, 'state.json'),
-    extensionDevLinksFile: join(extensionRoot, 'dev-links.json'),
+    extensionStateFile: join(dataRoot, 'config', 'extensions-state.json'),
+    extensionDevLinksFile: join(dataRoot, 'config', 'extensions-dev-links.json'),
     configRoot: join(dataRoot, 'config'),
     backupRoot: join(dataRoot, 'backups'),
     cacheRoot,

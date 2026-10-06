@@ -48,12 +48,28 @@ function render(mode: 'source' | 'preview', value = 'Original') {
     && isValidElement<Record<string, unknown>>(child.props.children)
     && 'labelledBy' in child.props.children.props)
   const boundary = children[editorSlot] as Element | undefined
-  return { editorSlot, boundary, editor: boundary?.props.children as Element | undefined }
+  return { tree, editorSlot, boundary, editor: boundary?.props.children as Element | undefined }
 }
 
 beforeEach(() => { hooks.cursor = 0; hooks.values = []; hooks.effects = [] })
 
 describe('LongTextEditor document session', () => {
+  it('prevents default mouse-down behavior on toolbar actions without committing', () => {
+    const collect = (value: unknown): Element[] => {
+      if (Array.isArray(value)) return value.flatMap(collect)
+      if (!isValidElement<Record<string, unknown>>(value)) return []
+      return [value, ...Object.values(value.props).flatMap(collect)]
+    }
+    const actions = collect(render('source').tree).filter(element => element.props.onMouseDown)
+    expect(actions.length).toBeGreaterThan(0)
+    for (const action of actions) {
+      const preventDefault = vi.fn()
+      ;(action.props.onMouseDown as (event: { preventDefault(): void }) => void)({ preventDefault })
+      expect(preventDefault).toHaveBeenCalledOnce()
+    }
+    expect(props.onCommit).not.toHaveBeenCalled()
+  })
+
   it('does not load source for a preview-only document, and retains its editor after visiting source', () => {
     expect(render('preview').editor).toBeUndefined()
     const source = render('source')

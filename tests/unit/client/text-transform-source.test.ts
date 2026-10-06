@@ -39,12 +39,6 @@ vi.mock('react', async importOriginal => ({
     hooks.effects.push(() => { previous?.cleanup?.(); entry.cleanup = effect() || undefined })
   },
 }))
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (error: Error) => void
-  const promise = new Promise<T>((accept, fail) => { resolve = accept; reject = fail })
-  return { promise, resolve, reject }
-}
 const a: HistorySource = { kind: 'narrative', timelineId: 'a', branchId: 'a-branch' }
 const b: HistorySource = { kind: 'agent-session', sessionId: 'b' }
 const baseOverride: TextPipelineOverride = {
@@ -153,8 +147,8 @@ describe('authoring search clear interactions', () => {
 describe('authoring source ownership regressions', () => {
   it.each([true, false])('binds script export and save to the latest selection (late A: %s)', async lateA => {
     const f = fixture()
-    const aRead = deferred<any>()
-    const bRead = deferred<any>()
+    const aRead = Promise.withResolvers<any>()
+    const bRead = Promise.withResolvers<any>()
     const update = vi.fn(async () => ({ script: { id: 'B', version: 2 } }))
     f.props.owner = { kind: 'workspace' }
     f.props.loomScriptsApi = {
@@ -174,7 +168,7 @@ describe('authoring source ownership regressions', () => {
     if (lateA) { await finishB(); await finishA() } else { await finishA(); await finishB() }
     await f.render().saveScript()
     expect(update).toHaveBeenCalledWith({ scriptDocumentId: 'B', expectedVersion: 1, source: 'source B', fileName: 'B.js' })
-    const pending = deferred<any>()
+    const pending = Promise.withResolvers<any>()
     f.props.loomScriptsApi.export = () => pending.promise
     const reading = f.render().selectScript('A')
     f.props.owner = { kind: 'card', cardId: 'other' }
@@ -238,7 +232,7 @@ describe('Text Transform rule saving', () => {
 
   it('publishes saved replacement once and retains committed version when refresh fails', async () => {
     const f = await editing()
-    const pending = deferred<Awaited<ReturnType<TextTransformProps['api']['upsertRule']>>>()
+    const pending = Promise.withResolvers<Awaited<ReturnType<TextTransformProps['api']['upsertRule']>>>()
     const upsert = vi.fn<TextTransformProps['api']['upsertRule']>(() => pending.promise)
     f.props.api.upsertRule = upsert
     const controller = f.render()
@@ -287,7 +281,7 @@ describe('Text Transform rule saving', () => {
 
   it('does not replace the selected editor after a late save for another card', async () => {
     const f = await editing()
-    const pending = deferred<Awaited<ReturnType<TextTransformProps['api']['upsertRule']>>>()
+    const pending = Promise.withResolvers<Awaited<ReturnType<TextTransformProps['api']['upsertRule']>>>()
     f.props.api.upsertRule = () => pending.promise
     const saving = f.render().saveRule()
     f.props.owner = { kind: 'card', cardId: 'other-card' }
@@ -303,7 +297,7 @@ describe('Text Transform rule saving', () => {
 describe('Text Transform source isolation', () => {
   it('ignores a stale first-stage response without starting its override request', async () => {
     const f = fixture()
-    const pending = deferred<TextPipelineInspection>()
+    const pending = Promise.withResolvers<TextPipelineInspection>()
     f.inspectTextPipeline.mockImplementationOnce(() => pending.promise)
     const old = f.render().inspect()
     f.props.source = b
@@ -321,8 +315,8 @@ describe('Text Transform source isolation', () => {
     initial.snapshot.entries = [{
       id: 'a-entry', text: 'A', originalText: 'A', depth: 0, appliedRuleIds: [], promotedReasoning: [],
     }]
-    const detail = deferred<TextPipelineInspection>()
-    const started = deferred<void>()
+    const detail = Promise.withResolvers<TextPipelineInspection>()
+    const started = Promise.withResolvers<void>()
     f.inspectTextPipeline.mockResolvedValueOnce(initial)
     f.inspectTextPipeline.mockImplementationOnce(() => { started.resolve(); return detail.promise })
     const old = f.render().inspect()
@@ -339,14 +333,14 @@ describe('Text Transform source isolation', () => {
 
   it.each(['resolve', 'reject'] as const)('isolates late override %s and loading state', async outcome => {
     const f = fixture()
-    const override = deferred<Awaited<ReturnType<typeof f.getOverride>>>()
-    const started = deferred<void>()
+    const override = Promise.withResolvers<Awaited<ReturnType<typeof f.getOverride>>>()
+    const started = Promise.withResolvers<void>()
     f.getOverride.mockImplementationOnce(() => { started.resolve(); return override.promise })
     const old = f.render().inspect()
     await started.promise
     expect(f.render().inspection).toBeUndefined()
     f.props.source = b
-    const currentResult = deferred<TextPipelineInspection>()
+    const currentResult = Promise.withResolvers<TextPipelineInspection>()
     f.inspectTextPipeline.mockImplementationOnce(() => currentResult.promise)
     const current = f.render().inspect()
     await f.settle()
@@ -383,7 +377,7 @@ describe('Text Transform source isolation', () => {
   it('does not let an old save re-inspect or clear a new source and suppresses duplicate saves', async () => {
     const f = fixture()
     await f.render().inspect()
-    const saved = deferred<Awaited<ReturnType<typeof f.upsertOverride>>>()
+    const saved = Promise.withResolvers<Awaited<ReturnType<typeof f.upsertOverride>>>()
     f.upsertOverride.mockImplementationOnce(() => saved.promise)
     const oldController = f.render()
     const old = oldController.saveOverride(['old-edit'], [])

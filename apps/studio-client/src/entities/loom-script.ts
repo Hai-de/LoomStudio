@@ -53,3 +53,13 @@ export type ResolvedLoomScriptRendererMount = {
   script: Pick<LoomScript, 'id' | 'version' | 'name' | 'metadataId' | 'scriptVersion' | 'requestedCapabilities' | 'contributions'>
   source: string
 }
+
+export type UnavailableLoomScriptMount = {
+  mountId: string
+  scriptDocumentId: string
+  enabled: boolean
+  available: false
+  severity: 'warning'
+  reason: 'script-missing' | 'installation-missing'
+  message: string
+}

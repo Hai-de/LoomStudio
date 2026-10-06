@@ -22,7 +22,26 @@ class TestWorker {
   }
 }
 
-afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); TestWorker.instances = [] })
+afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); vi.doUnmock('@loom-studio/tokenizer'); TestWorker.instances = [] })
+
+it('runs the Worker cache handler: reuses equal texts and evicts the oldest digest beyond 2048 entries', async () => {
+  const countText = vi.fn((text: string) => ({ baseTokens: text.length }))
+  vi.doMock('@loom-studio/tokenizer', () => ({ countText }))
+  const worker = {
+    postMessage: vi.fn(),
+    onmessage: undefined as unknown as (event: { data: { id: number; texts: string[] } }) => Promise<void>,
+  }
+  vi.stubGlobal('self', worker)
+  await import('../../../apps/studio-client/src/shared/tokenizer/tokenizer.worker.js')
+  await worker.onmessage({ data: { id: 1, texts: ['cached', 'cached', 'different'] } })
+  expect(countText.mock.calls).toEqual([['cached'], ['different']])
+  expect(worker.postMessage).toHaveBeenLastCalledWith({ id: 1, counts: [6, 6, 9] })
+  await worker.onmessage({ data: { id: 2, texts: Array.from({ length: 2047 }, (_, index) => `fill-${index}`) } })
+  await worker.onmessage({ data: { id: 3, texts: ['cached'] } })
+  expect(countText.mock.calls.filter(([text]) => text === 'cached')).toHaveLength(2)
+  expect(countText).toHaveBeenCalledTimes(2050)
+  expect(worker.postMessage).toHaveBeenLastCalledWith({ id: 3, counts: [6] })
+})
 
 describe('shared token Worker client', () => {
   it('is lazy, shares one Worker and applies a multiplier after receiving base counts', async () => {

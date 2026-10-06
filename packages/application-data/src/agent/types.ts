@@ -116,6 +116,7 @@ export type AgentTranscriptEntryData =
     }
   | {
       kind: 'run-state'
+      recovery?: JsonObject
       sourceRunId?: string
       state:
         | 'created'

@@ -5,12 +5,14 @@ import { RecentPlayRail } from '../widgets/play-panel/recent-play-rail.js'
 import { PresetWorkbenchHeader } from '../widgets/preset-workbench/preset-workbench-header.js'
 import { ContextWorkbenchHeader } from '../widgets/context-workbench/context-workbench-header.js'
 import { AgentComposer } from '../widgets/agent-composer/agent-composer.js'
+import { AgentChatPanel } from '../widgets/agent-chat-panel/agent-chat-panel.js'
 import { NarrativeTimeline } from '../widgets/narrative-timeline/narrative-timeline.js'
 import { CharacterPanelHeader } from '../widgets/character-panel/character-panel-header.js'
 import { createClientRendererHost } from '../shared/extension-renderer-runtime/client-renderer-host.js'
 import { RendererFocusSurface } from '../features/extension-renderers/ui/renderer-focus-surface.js'
 import { RendererSurfaceHost } from '../features/extension-renderers/ui/renderer-surface-host.js'
 import { useClientExtensionRuntime } from '../features/extension-renderers/model/use-client-extension-runtime.js'
+import { OfficialExtensionSetup } from '../features/extension-renderers/ui/remote-extension-install.js'
 import { resolveBackground } from '../features/extension-renderers/model/resolve-background.js'
 import { listClientActions } from '../features/extension-renderers/model/client-actions.js'
 import { ClientActionIcon } from '../features/extension-renderers/ui/client-action-icon.js'
@@ -244,7 +246,11 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
       ...(state.narrativeTimeline ? { timelineId: state.narrativeTimeline.id } : {}),
       ...(activePresetId ? { presetId: activePresetId } : {}),
     }).then(result => {
-      if (!disposed) runtime.reconcile(result.mounts)
+      if (disposed) return
+      runtime.reconcile(result.mounts)
+      for (const mount of result.unavailableMounts) {
+        if (mount.enabled) toast.warning(mount.message, { id: `loom-script-unavailable:${mount.mountId}` })
+      }
     }).catch(error => {
       if (!disposed) toast.error(error instanceof Error ? error.message : String(error))
     })
@@ -289,45 +295,55 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
       modelConfigured={state.providerAccountsLoaded ? hasCompleteProviderAccount(state.providerAccounts) : undefined}
       busy={mutationBusy}
       canRedo={state.canRedoEdit}
-      agentChatBusy={agentChatBusy}
-      agentActiveRun={state.agentActiveRun}
+      agentPanel={<AgentChatPanel
+      busy={agentChatBusy}
+      activeRun={state.agentActiveRun}
       runRecovery={state.runRecovery}
       runRecoveryBusy={state.runRecoveryBusy}
       canRestoreRunInput={state.canRestoreRunInput}
       reconnectAgentRun={state.reconnectAgentRun}
       restoreRunInput={state.restoreRunInput}
-      agentChatInput={state.agentChatInput}
-      agentChatMessages={state.agentChatMessages}
-      agentDisplay={agentDisplay}
-      agentChatSession={state.agentChatSession}
-      agentChatSessions={state.agentChatSessions}
-      agentChatSessionReady={state.agentChatSessionReady}
-      agentPanelOpen={uiState.agentPanelOpen}
-      agentPresets={state.agentPresets}
-      agentSessionTail={state.agentChatSession ? (
+      input={state.agentChatInput}
+      messages={state.agentChatMessages}
+      displayProjection={agentDisplay}
+      session={state.agentChatSession}
+      sessions={state.agentChatSessions}
+      sessionReady={state.agentChatSessionReady}
+      profiles={state.agentPresets}
+      sessionTail={state.agentChatSession ? (
         <RendererSurfaceHost
           host={rendererHost}
           scope={{ kind: 'agent-session', key: state.agentChatSession.id }}
           surface="agent.session.tail"
         />
       ) : undefined}
+      onChangeInput={state.setAgentChatInput}
+      onSelectProfile={state.selectAgentPreset}
+      onSelectSession={id => { void state.activateAgentSession(id) }}
+      onNewSession={state.newAgentSession}
+      onCreateSession={state.createAgentSession}
+      canMakePrimary={Boolean(state.narrativeTimeline || state.selectedCardId)}
+      primarySessionId={state.narrativeAgentSession?.id}
+      timelineId={state.narrativeTimeline?.id}
+      onSetPrimary={state.setPrimaryAgentSession}
+      onRenameSession={state.renameAgentSession}
+      onDeleteSession={id => { void state.deleteAgentSession(id) }}
+      onSubmit={state.submitAgentTurn}
+      onCancelRun={() => { void state.cancelAgentRun() }}
+      onPauseRun={() => { void state.pauseAgentRun() }}
+      onResumeRun={() => { void state.resumeAgentRun() }}
+      onApproveMutation={(allow, reason) => { void state.approveAgentMutation(allow, reason) }}
+      providerAccounts={state.providerAccounts}
+      rendererHost={rendererHost}
+      selectedProfileId={state.selectedAgentPresetId}
+      t={state.t}
+      />}
+      agentPanelOpen={uiState.agentPanelOpen}
       canUndo={state.canUndoEdit}
       characterAvatarUrl={narrativeCharacterAvatarUrl}
       characterName={narrativeCharacterName}
       customCss={state.customCss}
-      onChangeAgentChatInput={state.setAgentChatInput}
-      onRedo={() => {
-        void applyHistoryAction(state.redoEdit)
-      }}
-      onSelectAgentPreset={state.selectAgentPreset}
-      onSelectAgentSession={id => { void state.activateAgentSession(id) }}
-      onNewAgentSession={state.newAgentSession}
-      onDeleteAgentSession={id => { void state.deleteAgentSession(id) }}
-      onSubmitAgentChat={state.submitAgentTurn}
-      onCancelAgentRun={() => { void state.cancelAgentRun() }}
-      onPauseAgentRun={() => { void state.pauseAgentRun() }}
-      onResumeAgentRun={() => { void state.resumeAgentRun() }}
-      onApproveAgentMutation={(allow, reason) => { void state.approveAgentMutation(allow, reason) }}
+      onRedo={() => { void applyHistoryAction(state.redoEdit) }}
       onToggleAgentPanel={() => uiState.setAgentPanelOpen(prev => !prev)}
       onUndo={() => {
         void applyHistoryAction(state.undoEdit)
@@ -376,9 +392,6 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
       )}
       panels={panels}
       preloadPanel={preloadStudioPanel}
-      providerAccounts={state.providerAccounts}
-      rendererHost={rendererHost}
-      selectedAgentPresetId={state.selectedAgentPresetId}
       t={state.t}
       uiScale={uiScale}
       canvas={(
@@ -396,8 +409,12 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
             busy={sessionBusy || narrativeNavigating}
             composerHeight={uiState.composerHeight}
             emptyTimelineText={state.emptyTimelineText}
-            openingDraft={state.selectedCardDetails?.id === state.selectedCardId ? state.openingDraft : undefined}
+            openingDraft={!state.narrativeTimeline && state.selectedCardDetails?.id === state.selectedCardId ? state.openingDraft : undefined}
             openingDisplay={openingDisplay}
+            openingControls={!state.narrativeTimeline && state.selectedCardDetails && state.selectedCardDetails.id === state.selectedCardId
+              ? <OpeningPicker opening={state.selectedCardDetails.opening} choice={state.openingChoice}
+                onChange={state.setOpeningChoice} disabled={sessionBusy || narrativeNavigating} t={state.t} />
+              : undefined}
             getNodeLink={navigation.getNodeLink}
             hasOlder={state.hasOlderNarrativeNodes}
             onEditNode={state.editNarrativeNode}
@@ -469,6 +486,10 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
 
   return (
     <>
+      <OfficialExtensionSetup api={state.api.extensions} ready={state.bootstrapReady} t={state.t}
+        onInstalled={async () => {
+          await Promise.all([clientExtensions.refresh(), state.refreshResourceConsumers()])
+        }} />
       {navigation.targetError || navigationFailure?.target === narrativeTarget ? (
         <section role="alert">
           <p>{navigation.targetError ?? navigationFailure?.message}</p>
@@ -571,3 +592,4 @@ function resolveInspectionSource(input: {
   }
   return undefined
 }
+import { OpeningPicker } from '../features/cards/ui/opening-picker.js'

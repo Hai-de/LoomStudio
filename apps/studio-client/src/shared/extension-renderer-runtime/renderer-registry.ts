@@ -13,7 +13,6 @@ export type RegisteredRendererContribution = RendererContributionRef & {
 
 export type RendererRegistryDiagnostic = {
   code:
-    | 'renderer.duplicate'
     | 'renderer.surface_mismatch'
     | 'renderer.exclusive_occupied'
     | 'renderer.projection_failed'
@@ -55,38 +54,15 @@ export function rendererInstanceKey(identity: RendererInstanceIdentity): string 
   return `${rendererContributionKey(identity)}@${identity.scopeKey}`
 }
 
-export function orderRendererContributions(input: {
-  contributions: readonly RegisteredRendererContribution[]
+export function orderRendererContributions<T extends RegisteredRendererContribution>(input: {
+  contributions: readonly T[]
   surface: RendererSurface
   userOrder?: readonly string[]
-}): { contributions: RegisteredRendererContribution[]; diagnostics: RendererRegistryDiagnostic[] } {
+}): T[] {
   const userOrder = new Map((input.userOrder ?? []).map((key, index) => [key, index]))
-  const unique = new Map<string, RegisteredRendererContribution>()
-  const diagnostics: RendererRegistryDiagnostic[] = []
-
-  for (const contribution of input.contributions) {
-    const key = rendererContributionKey(contribution)
-    if (contribution.definition.surface !== input.surface) {
-      diagnostics.push({
-        code: 'renderer.surface_mismatch',
-        message: `Renderer ${key} does not belong to surface ${input.surface}`,
-        contributionKey: key,
-      })
-      continue
-    }
-    if (unique.has(key)) {
-      diagnostics.push({
-        code: 'renderer.duplicate',
-        message: `Renderer contribution is registered more than once: ${key}`,
-        contributionKey: key,
-      })
-      continue
-    }
-    unique.set(key, contribution)
-  }
-
-  return {
-    contributions: [...unique.values()].sort((left, right) => {
+  return input.contributions
+    .filter(contribution => contribution.definition.surface === input.surface)
+    .sort((left, right) => {
       const leftKey = rendererContributionKey(left)
       const rightKey = rendererContributionKey(right)
       const leftUserOrder = userOrder.get(leftKey)
@@ -98,9 +74,7 @@ export function orderRendererContributions(input: {
       }
       const suggested = (left.definition.suggestedOrder ?? 0) - (right.definition.suggestedOrder ?? 0)
       return suggested || leftKey.localeCompare(rightKey)
-    }),
-    diagnostics,
-  }
+    })
 }
 
 export function claimExclusiveRenderer(input: {

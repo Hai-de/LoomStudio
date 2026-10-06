@@ -306,22 +306,23 @@ importers:
       fflate:
         specifier: 0.8.3
         version: 0.8.3
+      semver:
+        specifier: 7.8.5
+        version: 7.8.5
 
-  official/extensions/loom-assistant: {}
-
-  official/extensions/st-data-compat:
+  extensions/st-data-compat:
     dependencies:
       '@loom-studio/application-runtime':
         specifier: workspace:*
-        version: link:../../../packages/application-runtime
+        version: link:../../packages/application-runtime
       '@loom-studio/extension-sdk':
         specifier: workspace:*
-        version: link:../../../packages/extension-sdk
+        version: link:../../packages/extension-sdk
       '@loom-studio/shared':
         specifier: workspace:*
-        version: link:../../../packages/shared
+        version: link:../../packages/shared
 
-  official/extensions/the-world:
+  extensions/the-world:
     dependencies:
       react:
         specifier: 19.2.8
@@ -339,6 +340,8 @@ importers:
       esbuild:
         specifier: 0.28.0
         version: 0.28.0
+
+  official/extensions/loom-assistant: {}
 
   packages/ai-gateway:
     dependencies:

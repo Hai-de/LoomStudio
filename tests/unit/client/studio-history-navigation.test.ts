@@ -54,7 +54,7 @@ vi.mock('../../../apps/studio-client/src/features/narrative-runtime/model/use-na
   useNarrativeRuntime: () => fixture.narrative,
 }))
 vi.mock('../../../apps/studio-client/src/features/prompt-build/model/use-macro-selection.js', () => ({
-  useMacroSelection: () => ({ targetKey: () => 'key', readSelections: () => ({}) }),
+  useMacroSelection: () => ({ targetKey: () => 'key', readSelections: () => ({}), readError: () => undefined }),
 }))
 vi.mock('../../../apps/studio-client/src/features/prompt-build/model/use-macro-preview.js', () => ({
   useMacroPreview: () => ({ preview: { key: 'key' } }),
@@ -68,12 +68,6 @@ vi.mock('../../../apps/studio-client/src/features/prompt-resources/model/use-pro
 vi.mock('../../../apps/studio-client/src/app/use-studio-derived-values.js', () => ({
   useStudioDerivedValues: () => ({}),
 }))
-
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>(accept => { resolve = accept })
-  return { promise, resolve }
-}
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -102,7 +96,7 @@ describe.each(['undoEdit', 'redoEdit'] as const)('%s navigation after refresh', 
   })
 
   it.each([true, false])('returns a resource target only while navigation is current: %s', async current => {
-    const read = deferred<typeof fixture.resource>()
+    const read = Promise.withResolvers<typeof fixture.resource>()
     fixture.undo.mockResolvedValue({ anchor: { documentId: 'resource', subjectId: 'root' } })
     fixture.redo.mockResolvedValue({ anchor: { documentId: 'resource', subjectId: 'root' } })
     fixture.refreshResource.mockReturnValue(read.promise)
@@ -117,7 +111,7 @@ describe.each(['undoEdit', 'redoEdit'] as const)('%s navigation after refresh', 
   })
 
   it.each([true, false])('selects a restored Card only while navigation is current: %s', async current => {
-    const read = deferred<Array<{ id: string }>>()
+    const read = Promise.withResolvers<Array<{ id: string }>>()
     fixture.undo.mockResolvedValue({ anchor: { documentId: 'restored-card' } })
     fixture.redo.mockResolvedValue({ anchor: { documentId: 'restored-card' } })
     fixture.refreshCards.mockReturnValue(read.promise)

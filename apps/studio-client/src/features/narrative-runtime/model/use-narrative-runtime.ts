@@ -14,6 +14,7 @@ import type { AgentMutationApproval, StudioApi } from '../../../shared/api/studi
 import { subscribeDataCommits } from '../../../shared/api/data-commit-events.js'
 import { safeLocalStorage } from '../../../shared/browser/safe-local-storage.js'
 import type { LatestOperationContext } from '../../../shared/hooks/use-async-operations.js'
+import { openingChoiceRequest, type OpeningChoice } from '../../cards/model/opening-choice.js'
 
 type AgentRunStatus = 'running' | 'suspended' | 'completed' | 'cancelled' | 'failed'
 export type ActiveAgentRun = { runId: string; status: AgentRunStatus; approval?: AgentMutationApproval }
@@ -115,6 +116,12 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
     cardSourceRef.current = { api: input.api, cardId: input.selectedCardId }
   }
   const [timeline, setTimeline] = useState<NarrativeTimeline>()
+  const [openingSelection, setOpeningSelection] = useState<{ source: CardSource; choice: OpeningChoice }>()
+  const openingChoice: OpeningChoice = openingSelection?.source === cardSourceRef.current
+    ? openingSelection.choice : { kind: 'card', index: 0 }
+  function setOpeningChoice(choice: OpeningChoice) {
+    setOpeningSelection({ source: cardSourceRef.current, choice })
+  }
   const [branch, setBranch] = useState<NarrativeBranch>()
   const [branches, setBranches] = useState<NarrativeBranch[]>([])
   const [nodes, setNodes] = useState<NarrativeNode[]>(() => input.initialNodes ?? [])
@@ -390,7 +397,7 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
     void refreshAgentSessions()
   }, [])
 
-  async function createTimelineFromCard(cardId = input.selectedCardId) {
+  async function createTimelineFromCard(cardId = input.selectedCardId, choice?: OpeningChoice, cardVersion?: number) {
     if (!cardId) return
 
     let activated: { branchId: string; timelineId: string } | undefined
@@ -398,7 +405,11 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
     const source = cardSourceRef.current
     const selection = beginAgentSelection()
     await input.runAction(async () => {
-      const result = await input.api.narratives.create({ cardId })
+      const selectedOpening = choice ?? (cardId === input.selectedCardId ? openingChoice : { kind: 'card' as const, index: 0 })
+      const result = await input.api.narratives.create({
+        cardId, ...openingChoiceRequest(selectedOpening),
+        expectedCardVersion: cardVersion ?? (input.selectedCard?.id === cardId ? input.selectedCard.version : undefined),
+      })
       if (source.disposed || cardSourceRef.current !== source || selection !== agentSelectionRef.current) return
       setTimeline(result.timeline)
       setAllTimelines(current => [result.timeline, ...current.filter(item => item.id !== result.timeline.id)])
@@ -1302,8 +1313,11 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
           ? await input.api.narratives.getPage({ timelineId, branchId: details?.timeline.activeBranchId, limit: 100 })
           : undefined
         const sessions = await listAgentSessions(timelineId)
-        if (selection !== agentSelectionRef.current) return
+        if (selection !== agentSelectionRef.current || input.api !== cardSourceRef.current.api) return
         if (!sameNarrative) {
+          publishPrimarySession(timelineId
+            ? sessions.find(item => item.id === safeLocalStorage.getItem(primaryStorageKey(timelineId)))
+            : undefined)
           setTimeline(page?.timeline)
           setBranch(page?.branch)
           setBranches(details?.branches ?? [])
@@ -1460,6 +1474,8 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
     selectCardTimeline,
     activateAgentSession,
     createTimelineFromCard,
+    openingChoice,
+    setOpeningChoice,
     deleteTimeline,
     renameTimeline,
     deleteAgentSession,

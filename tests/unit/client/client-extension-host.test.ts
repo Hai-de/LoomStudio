@@ -1,4 +1,4 @@
-import { extensionInstallationId, type ClientExtensionModule } from '@loom-studio/extension-sdk'
+import { extensionInstallationId, type ClientExtensionModule, type ExtensionConfigEntry } from '@loom-studio/extension-sdk'
 import { createMemoryLogSink, createRootLogger, queryExtensionLogs } from '@loom-studio/logging'
 import { describe, expect, it, vi } from 'vitest'
 import { createClientExtensionHost, type ClientExtensionDataApi, type ManagedClientExtensionPackage } from '../../../apps/studio-client/src/features/extension-renderers/model/client-extension-host.js'
@@ -28,6 +28,163 @@ function extensionPackage(enabled = true): ManagedClientExtensionPackage {
 }
 
 describe('Client Extension Host', () => {
+  it.each(['disable', 'reload', 'dispose'])('aborts pending activation immediately on %s and cleans up its late handle', async action => {
+    const entered = Promise.withResolvers<AbortSignal>()
+    const finish = Promise.withResolvers<void>()
+    const dispose = vi.fn()
+    let activations = 0
+    const host = createClientExtensionHost({
+      rendererHost: createClientRendererHost(),
+      loadModule: async () => ({ activate: async context => {
+        activations += 1
+        if (activations === 1) {
+          entered.resolve(context.signal)
+          await finish.promise
+          return { dispose }
+        }
+      } }),
+    })
+    const pending = host.reconcile([extensionPackage()])
+    const signal = await entered.promise
+    const cancellation = action === 'dispose' ? host.dispose()
+      : host.reconcile([extensionPackage(action !== 'disable')], action === 'reload' ? { reload: ['example.client/client'] } : undefined)
+    const immediatelyAborted = signal.aborted
+    finish.resolve()
+    await Promise.all([pending, cancellation])
+    expect(immediatelyAborted).toBe(true)
+    expect(dispose).toHaveBeenCalledOnce()
+    expect(host.diagnostics().some(item => item.code === 'client-extension.activation_failed')).toBe(false)
+    expect(activations).toBe(action === 'reload' ? 2 : 1)
+    if (action !== 'reload') expect(host.summaries()[0]?.state).toBe('inactive')
+    await host.dispose()
+  })
+
+  it('allows cooperative activation to reject on cancellation without reporting a failure', async () => {
+    const entered = Promise.withResolvers<void>()
+    const host = createClientExtensionHost({
+      rendererHost: createClientRendererHost(),
+      loadModule: async () => ({ activate: context => new Promise<void>((_resolve, reject) => {
+        context.signal.addEventListener('abort', () => reject(context.signal.reason), { once: true })
+        entered.resolve()
+      }) }),
+    })
+    const pending = host.reconcile([extensionPackage()])
+    await entered.promise
+    await Promise.all([pending, host.dispose()])
+    expect(host.summaries()[0]?.state).toBe('inactive')
+    expect(host.diagnostics()).toEqual([])
+  })
+
+  it('does not activate a module whose pending import was cancelled', async () => {
+    const loading = Promise.withResolvers<void>()
+    const loaded = Promise.withResolvers<ClientExtensionModule>()
+    const activate = vi.fn()
+    const host = createClientExtensionHost({
+      rendererHost: createClientRendererHost(),
+      loadModule: () => { loading.resolve(); return loaded.promise },
+    })
+    const pending = host.reconcile([extensionPackage()])
+    await loading.promise
+    const stopped = host.dispose()
+    loaded.resolve({ activate })
+    await Promise.all([pending, stopped])
+    expect(activate).not.toHaveBeenCalled()
+    expect(host.summaries()[0]?.state).toBe('inactive')
+  })
+
+  it('skips an activation queued before disposal', async () => {
+    const loadModule = vi.fn(async () => ({ activate: vi.fn() }))
+    const host = createClientExtensionHost({ rendererHost: createClientRendererHost(), loadModule })
+    await Promise.all([host.reconcile([extensionPackage()]), host.dispose()])
+    expect(loadModule).not.toHaveBeenCalled()
+  })
+
+  it('does not lazily activate a queued Command after disposal is requested', async () => {
+    const installed = extensionPackage()
+    installed.modules[0]!.contributions = {
+      commands: [{ id: 'run', title: 'Run' }],
+      actions: [{ commandId: 'run', surface: 'extension.workbench.actions' }],
+    }
+    const loadModule = vi.fn(async () => ({ activate: vi.fn() }))
+    const host = createClientExtensionHost({ rendererHost: createClientRendererHost(), loadModule })
+    await host.reconcile([installed])
+    const command = host.executeCommand({
+      packageId: installed.packageId, moduleId: 'client', commandId: 'run', sourceSurface: 'extension.workbench.actions',
+    })
+    const stopped = host.dispose()
+    expect(await command).toEqual(expect.objectContaining({ status: 'failed' }))
+    await stopped
+    expect(loadModule).not.toHaveBeenCalled()
+  })
+
+  it('ignores late Config refreshes and pending results after unsubscribe', async () => {
+    const requests: Array<ReturnType<typeof Promise.withResolvers<ExtensionConfigEntry[]>>> = []
+    const handler = vi.fn()
+    const host = createClientExtensionHost({
+      rendererHost: createClientRendererHost(),
+      data: {
+        configs: { list: () => {
+          const pending = Promise.withResolvers<ExtensionConfigEntry[]>()
+          requests.push(pending)
+          return pending.promise
+        } },
+      } as unknown as ClientExtensionDataApi,
+      loadModule: async () => ({ activate: context => {
+        context.configs.subscribe({}, handler)
+      } }),
+    })
+    const config = {
+      id: 'config', packageId: 'example.client', scope: { kind: 'global' as const },
+      key: 'color', value: 'old', version: 1,
+      createdAt: '2026-10-05T00:00:00Z', updatedAt: '2026-10-05T00:00:00Z',
+    }
+    try {
+      await host.reconcile([extensionPackage()])
+      const old = host.notifyConfigsChanged()
+      const latest = host.notifyConfigsChanged()
+      requests[1]!.resolve([{ ...config, version: 2, value: 'new' }])
+      await latest
+      requests[0]!.resolve([config])
+      await old
+      expect(handler.mock.calls).toEqual([[[{ ...config, version: 2, value: 'new' }]]])
+      const deleted = host.notifyConfigsChanged()
+      requests[2]!.resolve([])
+      await deleted
+      expect(handler).toHaveBeenLastCalledWith([])
+      const pending = host.notifyConfigsChanged()
+      await host.reconcile([extensionPackage(false)])
+      requests[3]!.resolve([config])
+      await pending
+      expect(handler).toHaveBeenCalledTimes(2)
+    } finally {
+      await host.dispose()
+    }
+  })
+
+  it('uses the installed file revision for package files without changing the manifest version', async () => {
+    let context!: Parameters<ClientExtensionModule['activate']>[0]
+    const host = createClientExtensionHost({
+      rendererHost: createClientRendererHost(),
+      loadModule: async () => ({ activate: ctx => { context = ctx } }),
+    })
+    const installed = extensionPackage()
+    installed.fileRevision = '1.0.0-install-one'
+    installed.modules[0]!.entryUrl = '/extensions/example.client/1.0.0-install-one/files/dist/client.js'
+    try {
+      await host.reconcile([installed])
+      expect(context.files.url('backgrounds.json')).toBe('/extensions/example.client/1.0.0-install-one/files/backgrounds.json')
+      expect(context.extension.version).toBe('1.0.0')
+      const reloaded = {
+        ...installed, fileRevision: '1.0.0-install-two',
+        modules: installed.modules.map(module => ({ ...module, entryUrl: '/extensions/example.client/1.0.0-install-two/files/dist/client.js' })),
+      }
+      await host.reconcile([reloaded])
+      expect(context.files.url('images/scene.png')).toBe('/extensions/example.client/1.0.0-install-two/files/images/scene.png')
+    } finally {
+      await host.dispose()
+    }
+  })
+
   it('provides local token counting and rejects captured contexts after disposal', async () => {
     let context!: Parameters<ClientExtensionModule['activate']>[0]
     const instances: Array<{

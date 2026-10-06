@@ -24,8 +24,10 @@ import { parseExtensionManifest } from '@loom-studio/extension-host'
 import { serializeError } from '@loom-studio/shared'
 import { createHash, randomUUID } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
-import { readFile, realpath, stat } from 'node:fs/promises'
-import { extname, isAbsolute, relative, resolve, sep } from 'node:path'
+import { cp, mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { acquireExtension, checkGitUpdate, createDownloadWorkspace, extensionGit, parseDownloadSource, readDownloadMetadata, satisfiesExtensionVersion, type ExtensionCandidate } from './extension-download.js'
+import { writeJsonAtomically } from '../platform/atomic-json.js'
 import { discoverExtensionSources, removeExtensionDevLink, type DiscoveredExtensionSource, type ExtensionSource } from './extension-sources.js'
 import {
   installExtensionPackageFromDirectory,
@@ -36,12 +38,25 @@ import {
 import type { ExtensionModuleDesiredState, ExtensionStateStore } from './extension-state-store.js'
 
 type PackageCatalogRecord = {
+  fileRevision?: string
+  remote?: { source: NonNullable<ExtensionCandidate['source']>; commit?: string; canRollback: boolean }
   reloadIds?: Record<string, string>
   archiveDigest?: string
   manifest: ExtensionManifest
   sources: ExtensionSource[]
   directory: string
   available: boolean
+}
+
+class ExtensionInstallFailure extends Error {
+  constructor(
+    readonly stage: string,
+    readonly codeCommitted: boolean,
+    readonly recovery: { recordPath: string; backupDirectory: string; historyDirectory: string } | undefined,
+    cause: unknown,
+  ) {
+    super(`${codeCommitted ? 'Package code installed; ' : ''}${stage} failed: ${cause instanceof Error ? cause.message : String(cause)}`, { cause })
+  }
 }
 
 export type ServerExtensionManager = ExtensionManagementService & {
@@ -67,6 +82,9 @@ export function createServerExtensionManager(options: {
   repositoryDirectory?: string
   installedDirectory: string
   devLinksFile: string
+  deleteData?(packageId: string, documentTypes: string[]): Promise<void>
+  officialSetupFile?: string
+  bundledDirectories?: string[]
   readCardPackage(input: { cardId: string; packageId: string; source?: 'installed' }): Promise<{ cardVersion: number; archive: { packageId: string; version: string; archiveBase64: string } }>
   listInstallations(): Promise<ListExtensionInstallationsResult>
   importPackageResources(input: {
@@ -98,6 +116,232 @@ export function createServerExtensionManager(options: {
   const catalog = new Map<string, PackageCatalogRecord>()
   const cardCatalog = new Map<string, { target: Extract<ExtensionInstallationTarget, { kind: 'card' }>; record: PackageCatalogRecord }>()
   let initialized = false
+  type PreparedInstall = { root: string; candidates: ExtensionCandidate[]; replacement?: string; expected: string; timer: ReturnType<typeof setTimeout> }
+  const prepared = new Map<string, PreparedInstall>()
+  let preparing = 0
+  const catalogFingerprint = () => JSON.stringify([...catalog].map(([id, entry]) => [id, entry.manifest.version, entry.directory, entry.fileRevision, entry.remote?.commit]))
+  async function readOfficialState(): Promise<{ completed?: boolean; bundled?: string[] }> {
+    if (!options.officialSetupFile) return {}
+    try { return JSON.parse(await readFile(options.officialSetupFile, 'utf8')) }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {}; throw error }
+  }
+
+  async function withPreparationSlot(operation: () => Promise<JsonValue>): Promise<JsonValue> {
+    if (prepared.size + preparing >= 4) throw new Error('Extension preparation limit exceeded')
+    preparing += 1
+    try {
+      return await operation()
+    } finally {
+      preparing -= 1
+    }
+  }
+
+  async function prepareSources(sources: unknown[], replacement?: string, snapshot?: ExtensionCandidate, workspace?: string): Promise<JsonValue> {
+    if (!sources.length || sources.length > 100) throw new Error('Extension preparation limit exceeded')
+    const expected = catalogFingerprint()
+    const root = workspace ?? await createDownloadWorkspace()
+    const candidates = new Map<string, ExtensionCandidate>()
+    const visiting = new Set<string>()
+    try {
+      async function visit(source: unknown, dependency?: { id: string; version: string }, depth = 0): Promise<void> {
+        if (depth > 32 || candidates.size >= 100) throw new Error('Extension dependency limit exceeded')
+        const candidate = snapshot && depth === 0 ? snapshot : await acquireExtension(parseDownloadSource(source), root)
+        const { manifest } = candidate
+        if (dependency && (manifest.id !== dependency.id || !satisfiesExtensionVersion(manifest.version, dependency.version))) throw new Error(`Downloaded dependency does not match ${dependency.id}@${dependency.version}`)
+        if (visiting.has(manifest.id)) throw new Error(`Extension dependency cycle: ${manifest.id}`)
+        const existingCandidate = candidates.get(manifest.id)
+        if (existingCandidate) {
+          if (existingCandidate.source?.url !== candidate.source?.url || existingCandidate.commit !== candidate.commit || existingCandidate.manifest.version !== manifest.version) throw new Error(`Conflicting dependency source: ${manifest.id}`)
+          return
+        }
+        if (catalog.has(manifest.id) && manifest.id !== replacement) {
+          const installed = catalog.get(manifest.id)!
+          const origin = await readDownloadMetadata(installed.directory)
+          if (depth !== 0 || sources.length !== 1 || replacement || !candidate.source || !origin
+            || origin.source.kind !== candidate.source.kind || origin.source.url !== candidate.source.url) throw new Error(`Extension already exists with a different or local source: ${manifest.id}`)
+          await assertClean(installed)
+          replacement = manifest.id
+        }
+        visiting.add(manifest.id)
+        for (const item of manifest.dependencies ?? []) {
+          if (visiting.has(item.id)) throw new Error(`Extension dependency cycle: ${item.id}`)
+          const known = candidates.get(item.id)
+          const installed = catalog.get(item.id)
+          const version = known?.manifest.version ?? installed?.manifest.version
+          if (version) {
+            if (installed && !installed.available) throw new Error(`Dependency is unavailable: ${item.id}`)
+            if (!satisfiesExtensionVersion(version, item.version)) throw new Error(`Dependency version conflict: ${item.id}@${item.version}`)
+            const origin = known ?? (installed ? await readDownloadMetadata(installed.directory) : undefined)
+            if (origin?.source && item.source && origin.source.url !== parseDownloadSource(item.source).url) throw new Error(`Dependency source conflict: ${item.id}`)
+            continue
+          }
+          if (!item.source) throw new Error(`Missing dependency ${item.id}; no download source declared`)
+          await visit(item.source, item, depth + 1)
+        }
+        visiting.delete(manifest.id)
+        candidates.set(manifest.id, candidate)
+      }
+      for (const source of sources) await visit(source)
+      const complete = new Set<string>()
+      const active = new Set<string>()
+      function checkGraph(id: string) {
+        if (active.has(id)) throw new Error(`Extension dependency cycle: ${id}`)
+        if (complete.has(id)) return
+        const manifest = candidates.get(id)?.manifest ?? catalog.get(id)?.manifest
+        if (!manifest) throw new Error(`Missing dependency: ${id}`)
+        active.add(id)
+        for (const dependency of manifest.dependencies ?? []) {
+          const resolved = candidates.get(dependency.id)?.manifest ?? catalog.get(dependency.id)?.manifest
+          if (!resolved || !satisfiesExtensionVersion(resolved.version, dependency.version)) throw new Error(`Dependency version conflict: ${dependency.id}@${dependency.version}`)
+          checkGraph(dependency.id)
+        }
+        active.delete(id)
+        complete.add(id)
+      }
+      for (const id of candidates.keys()) checkGraph(id)
+      if (replacement && !candidates.has(replacement)) throw new Error('Replacement Manifest ID does not match the installed extension')
+      const token = randomUUID()
+      const timer = setTimeout(() => {
+        prepared.delete(token)
+        void rm(root, { recursive: true, force: true }).catch(error => options.diagnostics.add({
+          severity: 'error', code: 'extension.download_cleanup_failed', message: String(error), source: 'extension-manager',
+        }))
+      }, 10 * 60_000)
+      timer.unref()
+      prepared.set(token, { root, candidates: [...candidates.values()], replacement, expected, timer })
+      return { token, packages: [...candidates.values()].map(item => ({
+        packageId: item.manifest.id, version: item.manifest.version, displayName: item.manifest.displayName,
+        ...(item.source ? { source: { ...item.source } } : {}), ...(item.commit ? { commit: item.commit } : {}),
+        replacing: item.manifest.id === replacement,
+        modules: (item.manifest.modules ?? []).map(module => ({ id: module.id, runtime: module.runtime, capabilities: module.capabilities ?? {} })),
+      })) } as JsonValue
+    } catch (error) {
+      await rm(root, { recursive: true, force: true })
+      throw error
+    }
+  }
+
+  async function assertClean(record: PackageCatalogRecord): Promise<void> {
+    const metadata = await readDownloadMetadata(record.directory)
+    if (!metadata) {
+      try {
+        if (await readFile(join(record.directory, '.loom-zip-install'), 'utf8') === 'installed\n') return
+      } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
+      throw new Error('Local development extensions are not remotely replaceable')
+    }
+    if (metadata.source.kind === 'git' && await extensionGit(['status', '--porcelain', '--untracked-files=all'], record.directory)) {
+      throw new Error('Extension has local changes. Commit or resolve them before updating.')
+    }
+    if (metadata.source.kind === 'git' && await extensionGit(['rev-parse', 'HEAD'], record.directory) !== metadata.commit) throw new Error('Extension Git HEAD changed locally. Resolve it before updating.')
+  }
+
+  async function commitCandidate(candidate: ExtensionCandidate, replacing: boolean): Promise<void> {
+    const id = candidate.manifest.id
+    const previous = replacing ? requirePackage(catalog, id) : undefined
+    if (previous) {
+      if (!previous.available || previous.sources.length !== 1 || previous.sources[0]?.kind !== 'installed') throw new Error('Only a single installed source can be replaced')
+      await assertClean(previous)
+    } else if (catalog.has(id)) throw new Error(`Extension already exists: ${id}`)
+    for (const [dependentId, dependent] of catalog) {
+      const dependency = dependent.manifest.dependencies?.find(item => item.id === id)
+      if (dependentId !== id && dependency && !satisfiesExtensionVersion(candidate.manifest.version, dependency.version)) throw new Error(`Update conflicts with dependency required by ${dependentId}: ${id}@${dependency.version}`)
+    }
+    const candidateRoot = join(options.installedDirectory, '.staging', randomUUID())
+    const next = await installExtensionPackageFromDirectory({ sourceDirectory: candidate.directory, installedDirectory: candidateRoot, flat: true })
+    const oldMetadata = previous ? await readDownloadMetadata(previous.directory) : undefined
+    let stage = 'prepare'
+    let codeCommitted = false
+    let recovery: { recordPath: string; backupDirectory: string; historyDirectory: string } | undefined
+    try {
+      if (candidate.source?.kind === 'git') {
+        await cp(join(candidate.directory, '.git'), join(next.directory, '.git'), { recursive: true })
+        await extensionGit(['config', '--local', 'core.excludesFile', '.git/loom-excludes'], next.directory)
+        await writeFile(join(next.directory, '.git', 'loom-excludes'), '.loom-source.json\n')
+      }
+      if (candidate.source) await writeFile(join(next.directory, '.loom-source.json'), JSON.stringify({
+        source: candidate.source, ...(candidate.commit ? { commit: candidate.commit } : {}),
+        ...(oldMetadata ? { previous: { source: oldMetadata.source, ...(oldMetadata.commit ? { commit: oldMetadata.commit } : {}) } } : {}),
+      }))
+      else await writeFile(join(next.directory, '.loom-zip-install'), 'installed\n')
+      const destination = previous?.directory ?? join(options.installedDirectory, id)
+      const historyRoot = join(options.installedDirectory, '.history')
+      await mkdir(historyRoot, { recursive: true })
+      const backup = join(historyRoot, `${id}-${randomUUID()}`)
+      const desired = new Map((previous?.manifest.modules ?? []).map(module => [module.id, readDesiredState(options.stateStore, id, module.id)]))
+      if (previous) {
+        stage = 'save-recovery'
+        recovery = { recordPath: `${backup}.recovery.json`, backupDirectory: backup, historyDirectory: join(historyRoot, id) }
+        await writeJsonAtomically(recovery.recordPath, {
+          version: 1, packageId: id, fromVersion: previous.manifest.version, toVersion: candidate.manifest.version,
+          destination, ...recovery, desired: Object.fromEntries(desired),
+        })
+        stage = 'disable-old-modules'
+        for (const module of previous.manifest.modules ?? []) {
+          const state = desired.get(module.id)!
+          await options.stateStore.set(id, module.id, { ...state, enabled: false })
+        }
+        stage = 'dispose-old-modules'
+        for (const module of serverModules(previous.manifest)) await options.host.dispose(id, module.id)
+        stage = 'backup-old-code'
+        await rename(previous.directory, backup)
+      }
+      stage = 'replace-code'
+      try {
+        await rename(next.directory, destination)
+        await options.host.discover(destination)
+      } catch (error) {
+        await rm(destination, { recursive: true, force: true })
+        if (previous) {
+          await rename(backup, destination)
+          await options.host.discover(destination)
+          for (const [moduleId, state] of desired) await options.stateStore.set(id, moduleId, state)
+          for (const module of serverModules(previous.manifest)) if (desired.get(module.id)?.enabled) await options.host.activate(id, module.id)
+        }
+        throw error
+      }
+      const record: PackageCatalogRecord = {
+        manifest: candidate.manifest, directory: destination,
+        fileRevision: `${candidate.manifest.version}-${randomUUID()}`,
+        sources: [{ kind: 'installed', directory: destination }], available: true,
+        ...(candidate.source ? { remote: { source: candidate.source, ...(candidate.commit ? { commit: candidate.commit } : {}), canRollback: !!previous } } : {}),
+      }
+      catalog.set(id, record)
+      codeCommitted = true
+      if (previous) {
+        stage = 'save-history'
+        const saved = join(historyRoot, id)
+        await rm(saved, { recursive: true, force: true })
+        await rename(backup, saved)
+        stage = 'forget-removed-modules'
+        for (const module of serverModules(previous.manifest)) {
+          if (!serverModules(candidate.manifest).some(next => next.id === module.id)) await options.host.forget(id, module.id)
+        }
+        for (const module of candidate.manifest.modules ?? []) {
+          const oldModule = previous.manifest.modules?.find(item => item.id === module.id)
+          const state = desired.get(module.id)
+          if (state && oldModule?.runtime === module.runtime && isDeepStrictEqual(oldModule.capabilities ?? {}, module.capabilities ?? {})) {
+            stage = 'restore-module-state'
+            await options.stateStore.set(id, module.id, state)
+            stage = 'activate-modules'
+            if (state.enabled && module.runtime === 'server') await options.host.activate(id, module.id)
+          }
+        }
+        stage = 'remove-recovery-record'
+        await rm(recovery!.recordPath)
+      }
+    } catch (error) {
+      throw new ExtensionInstallFailure(stage, codeCommitted, recovery, error)
+    } finally {
+      try {
+        await rm(candidateRoot, { recursive: true, force: true })
+      } catch (error) {
+        options.diagnostics.add({
+          severity: 'error', code: 'extension.install_cleanup_failed', source: 'extension-manager',
+          packageId: id, message: String(error), details: { directory: candidateRoot },
+        })
+      }
+    }
+  }
 
   function packageRecord(packageId: string, target?: ExtensionInstallationTarget): PackageCatalogRecord {
     if (target?.kind !== 'card') return requirePackage(catalog, packageId)
@@ -111,7 +355,7 @@ export function createServerExtensionManager(options: {
     if (input.expectedCardVersion !== undefined && source.cardVersion !== input.expectedCardVersion) throw new Error('Card archive changed before package installation')
     const bytes = Buffer.from(source.archive.archiveBase64, 'base64')
     const digest = createHash('sha256').update(bytes).digest('hex')
-    const root = resolve(options.installedDirectory, '..', 'card-installed', digest)
+    const root = resolve(options.installedDirectory, '.card-installed', digest)
     // The digest directory is outside global discovery and is shared only as immutable package bytes.
     const directory = resolve(root, source.archive.packageId, source.archive.version)
     if (relative(root, directory).startsWith('..') || directory === root) throw new Error('Invalid Card package archive identity')
@@ -186,6 +430,20 @@ export function createServerExtensionManager(options: {
     })
     return { packageId, version: record.manifest.version, ...imported }
   }
+
+  async function importNewGlobalResources(packageId: string): Promise<void> {
+    const record = requireAvailablePackage(catalog, packageId)
+    const resources = record.manifest.contributes
+    if (![resources?.promptResources, resources?.agentTools, resources?.transformRules, resources?.textExtractors, resources?.loomScripts]
+      .some(items => items?.length)) return
+    const { installations } = await options.listInstallations()
+    if (installations.some(item => item.packageId === packageId && item.target.kind === 'global')) return
+    try {
+      await importResources(packageId)
+    } catch (error) {
+      throw new Error(`Extension ${packageId} is installed, but resource import failed. Retry Import Resources: ${error instanceof Error ? error.message : String(error)}`, { cause: error })
+    }
+  }
   let operationQueue = Promise.resolve()
 
   function serialize<T>(operation: () => Promise<T>): Promise<T> {
@@ -195,6 +453,104 @@ export function createServerExtensionManager(options: {
   }
 
   return {
+    previewPackageZip: source => withPreparationSlot(async () => {
+      assertInitialized(initialized)
+      const root = await createDownloadWorkspace()
+      try {
+        const installed = await installExtensionPackageFromZip({ source, installedDirectory: root })
+        let replacement: string | undefined
+        const current = catalog.get(installed.manifest.id)
+        if (current) {
+          const origin = await readDownloadMetadata(current.directory)
+          if (origin?.source.kind === 'git') throw new Error('Git extension source conflicts with this ZIP. Uninstall the Git source before replacing it.')
+          await assertClean(current)
+          replacement = installed.manifest.id
+        }
+        return await prepareSources([undefined], replacement, installed, root)
+      } catch (error) {
+        await rm(root, { recursive: true, force: true })
+        throw error
+      }
+    }),
+    officialSetup: async () => {
+      if (!options.officialSetupFile) throw new Error('Official selection state is unavailable')
+      const completed = (await readOfficialState()).completed === true
+      return {
+        completed,
+        items: [
+          { id: 'sillytavern.importer', name: 'ST 数据导入', source: { kind: 'git', url: 'https://github.com/The-LoomStudio/LS_STBridge.git' } },
+          { id: 'official.the-world', name: 'The World', source: { kind: 'git', url: 'https://github.com/The-LoomStudio/LS_The_World.git' } },
+        ].filter(item => !catalog.has(item.id)),
+      }
+    },
+    finishOfficialSetup: () => serialize(async () => {
+      if (!options.officialSetupFile) throw new Error('Official selection state is unavailable')
+      await writeJsonAtomically(options.officialSetupFile, { ...await readOfficialState(), completed: true })
+      return { completed: true }
+    }),
+    previewRemoteInstall: input => withPreparationSlot(async () => {
+      assertInitialized(initialized)
+      if (!input || typeof input !== 'object' || !Array.isArray((input as { sources?: unknown }).sources)) throw new Error('Download sources are required')
+      return prepareSources((input as { sources: unknown[] }).sources)
+    }),
+    checkRemoteUpdate: async packageId => {
+      assertInitialized(initialized)
+      const record = requirePackage(catalog, packageId)
+      const metadata = await readDownloadMetadata(record.directory)
+      if (!metadata) throw new Error('This extension has no managed remote source')
+      return checkGitUpdate(metadata) as Promise<JsonValue>
+    },
+    previewRemoteChange: input => withPreparationSlot(async () => {
+      assertInitialized(initialized)
+      if (!input || typeof input !== 'object') throw new Error('Extension change is required')
+      const value = input as { packageId?: unknown; ref?: unknown; rollback?: unknown }
+      if (typeof value.packageId !== 'string') throw new Error('Package ID is required')
+      const record = requirePackage(catalog, value.packageId)
+      await assertClean(record)
+      const metadata = (await readDownloadMetadata(record.directory))!
+      const selected = value.rollback === true ? metadata.previous : metadata
+      if (!selected || selected.source.kind !== 'git') throw new Error('No previous Git version available')
+      if (value.rollback === true) {
+        const snapshot = await readDownloadMetadata(join(options.installedDirectory, '.history', value.packageId))
+        if (!snapshot || snapshot.manifest.id !== value.packageId) throw new Error('Previous code snapshot is unavailable')
+        return prepareSources([snapshot.source], value.packageId, snapshot)
+      }
+      const source = value.rollback === true
+        ? { ...selected.source, ref: selected.commit }
+        : { ...selected.source, ...(value.ref !== undefined ? { ref: value.ref } : {}) }
+      return prepareSources([source], value.packageId)
+    }),
+    commitRemoteInstall: token => serialize(async (): Promise<JsonValue> => {
+      const batch = prepared.get(token)
+      if (!batch) throw new Error('Install preview expired. Prepare the download again.')
+      prepared.delete(token)
+      clearTimeout(batch.timer)
+      const installed: JsonValue[] = []
+      try {
+        if (batch.expected !== catalogFingerprint()) throw new Error('Installed extensions changed; review the download again')
+        for (const candidate of batch.candidates) {
+          try {
+            await commitCandidate(candidate, candidate.manifest.id === batch.replacement)
+            installed.push({ packageId: candidate.manifest.id, version: candidate.manifest.version })
+            await importNewGlobalResources(candidate.manifest.id)
+          } catch (error) {
+            if (error instanceof ExtensionInstallFailure && error.codeCommitted) {
+              installed.push({ packageId: candidate.manifest.id, version: candidate.manifest.version })
+            }
+            return { installed, failed: {
+              packageId: candidate.manifest.id, message: error instanceof Error ? error.message : String(error),
+              ...(error instanceof ExtensionInstallFailure ? {
+                stage: error.stage, codeCommitted: error.codeCommitted,
+                ...(error.recovery ? { recovery: error.recovery } : {}),
+              } : {}),
+            } }
+          }
+        }
+        return { installed }
+      } finally {
+        await rm(batch.root, { recursive: true, force: true })
+      }
+    }),
     withCardDeletions: (cardIds, commit) => serialize(async () => {
       const entries = [...cardCatalog.values()].filter(entry => cardIds.includes(entry.target.cardId))
       for (const { record, target } of entries) await stopCardPackage(record, target)
@@ -205,6 +561,16 @@ export function createServerExtensionManager(options: {
     initialize: () => serialize(async () => {
       if (initialized) return
       await options.stateStore.load()
+      const setup = await readOfficialState()
+      for (const directory of options.bundledDirectories ?? []) {
+        const manifest = parseExtensionManifest(JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8')))
+        if (setup.bundled?.includes(manifest.id)) continue
+        try { await stat(join(options.installedDirectory, manifest.id)) }
+        catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+          await installExtensionPackageFromDirectory({ sourceDirectory: directory, installedDirectory: options.installedDirectory, flat: true })
+        }
+      }
       const result = await discoverExtensionSources(options)
       for (const failure of result.failures) reportDiscoveryFailure(options.diagnostics, failure.source, failure.error)
 
@@ -236,6 +602,11 @@ export function createServerExtensionManager(options: {
           directory: uniqueDirectories[0]!,
           available: true,
         }
+        const metadata = await readDownloadMetadata(record.directory)
+        if (metadata) {
+          record.remote = { source: metadata.source, ...(metadata.commit ? { commit: metadata.commit } : {}), canRollback: !!metadata.previous }
+          record.fileRevision = `${manifest.version}-${randomUUID()}`
+        }
         catalog.set(packageId, record)
         try {
           await options.host.discover(record.directory)
@@ -254,6 +625,16 @@ export function createServerExtensionManager(options: {
       }
 
       initialized = true
+      const installations = await options.listInstallations()
+      for (const directory of options.bundledDirectories ?? []) {
+        const manifest = parseExtensionManifest(JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8')))
+        if (setup.bundled?.includes(manifest.id)) continue
+        if (!installations.installations.some(item => item.packageId === manifest.id && item.target.kind === 'global')) await importResources(manifest.id)
+        if (options.officialSetupFile) {
+          setup.bundled = [...setup.bundled ?? [], manifest.id]
+          await writeJsonAtomically(options.officialSetupFile, setup)
+        }
+      }
       for (const installation of (await options.listInstallations()).installations) {
         if (installation.target.kind !== 'card' || !installation.archiveBlobId) continue
         try {
@@ -364,8 +745,10 @@ export function createServerExtensionManager(options: {
       const installed = await installExtensionPackageFromDirectory({
         sourceDirectory,
         installedDirectory: options.installedDirectory,
+        flat: true,
       })
       try {
+        validateInstalledDependencies(installed.manifest, catalog)
         if (catalog.has(installed.manifest.id)) {
           throw new Error(`Extension Package source already exists: ${installed.manifest.id}`)
         }
@@ -381,15 +764,16 @@ export function createServerExtensionManager(options: {
           if (!options.stateStore.get(installed.manifest.id, moduleManifest.id)?.enabled) continue
           await options.host.activate(installed.manifest.id, moduleManifest.id)
         }
-        const runtimeByKey = globalRuntimes(options.host)
-        return toManagedPackage(installed.manifest.id, record, options.stateStore, runtimeByKey)
       } catch (error) {
         await uninstallExtensionPackageDirectory({
           directory: installed.directory,
           installedDirectory: options.installedDirectory,
+          flat: true,
         }).catch(() => undefined)
         throw error
       }
+      await importNewGlobalResources(installed.manifest.id)
+      return toManagedPackage(installed.manifest.id, requireAvailablePackage(catalog, installed.manifest.id), options.stateStore, globalRuntimes(options.host))
     }),
 
     installPackageZip: source => serialize(async () => {
@@ -397,8 +781,11 @@ export function createServerExtensionManager(options: {
       const installed = await installExtensionPackageFromZip({
         source,
         installedDirectory: options.installedDirectory,
+        flat: true,
       })
       try {
+        validateInstalledDependencies(installed.manifest, catalog)
+        await writeFile(join(installed.directory, '.loom-zip-install'), 'installed\n')
         if (catalog.has(installed.manifest.id)) {
           throw new Error(`Extension Package source already exists: ${installed.manifest.id}`)
         }
@@ -414,20 +801,24 @@ export function createServerExtensionManager(options: {
           if (!options.stateStore.get(installed.manifest.id, moduleManifest.id)?.enabled) continue
           await options.host.activate(installed.manifest.id, moduleManifest.id)
         }
-        const runtimeByKey = globalRuntimes(options.host)
-        return toManagedPackage(installed.manifest.id, record, options.stateStore, runtimeByKey)
       } catch (error) {
         await uninstallExtensionPackageDirectory({
           directory: installed.directory,
           installedDirectory: options.installedDirectory,
+          flat: true,
         }).catch(() => undefined)
         throw error
       }
+      await importNewGlobalResources(installed.manifest.id)
+      return toManagedPackage(installed.manifest.id, requireAvailablePackage(catalog, installed.manifest.id), options.stateStore, globalRuntimes(options.host))
     }),
 
-    uninstallPackage: (packageId, version) => serialize(async () => {
+    uninstallPackage: (packageId, version, deleteData) => serialize(async () => {
       assertInitialized(initialized)
       const record = requirePackage(catalog, packageId)
+      if (deleteData && !options.deleteData) throw new Error('Extension data deletion is unavailable')
+      const dependents = [...catalog].filter(([id, entry]) => id !== packageId && entry.manifest.dependencies?.some(item => item.id === packageId)).map(([id]) => id)
+      if (dependents.length) throw new Error(`Extension is required by: ${dependents.join(', ')}. Uninstall dependent extensions first.`)
       if (version !== undefined && version !== record.manifest.version) {
         throw new Error(`Installed Extension Package version does not match: ${packageId}@${version}`)
       }
@@ -459,16 +850,19 @@ export function createServerExtensionManager(options: {
       for (const moduleManifest of modules) {
         await options.host.forget(packageId, moduleManifest.id)
       }
+      if (deleteData) await options.deleteData!(packageId, (record.manifest.modules ?? []).flatMap(module => module.contributes?.documentTypes?.map(item => item.type) ?? []))
       await options.stateStore.deletePackage(packageId)
       if (record.sources[0]?.kind === 'installed') {
         await uninstallExtensionPackageDirectory({
           directory: record.directory,
           installedDirectory: options.installedDirectory,
+          flat: true,
         })
       } else if (!await removeExtensionDevLink(options.devLinksFile, packageId)) {
         throw new Error(`Extension dev link not found: ${packageId}`)
       }
       catalog.delete(packageId)
+      await rm(join(options.installedDirectory, '.history', packageId), { recursive: true, force: true })
       return {
         packageId,
         version: record.manifest.version,
@@ -480,6 +874,7 @@ export function createServerExtensionManager(options: {
       assertInitialized(initialized)
       const record = packageRecord(packageId, target)
       if (!record.available) throw new Error(`Extension package is unavailable: ${packageId}`)
+      validateInstalledDependencies(record.manifest, catalog)
       const moduleManifest = requireModule(record.manifest, moduleId)
       if (target?.kind === 'card') await options.readCardPackage({ cardId: target.cardId, packageId, source: 'installed' })
       const previous = readDesiredState(options.stateStore, packageId, moduleId, target)
@@ -543,6 +938,7 @@ export function createServerExtensionManager(options: {
       if (!desired.enabled) throw new Error(`Extension module is not enabled: ${moduleKey(packageId, moduleId)}`)
       const runtime = moduleManifest.runtime === 'server' ? await options.host.reload(packageId, moduleId, target) : undefined
       moduleReloadIds(record)[moduleId] = randomUUID()
+      if (target?.kind !== 'card') record.fileRevision = `${record.manifest.version}-${randomUUID()}`
       return toManagedModule(packageId, record, moduleManifest, desired, runtime, target)
     }),
 
@@ -614,7 +1010,7 @@ export function createServerExtensionManager(options: {
     readPackageFile: async (packageId, version, path) => {
       assertInitialized(initialized)
       const record = requireAvailablePackage(catalog, packageId)
-      if (record.manifest.version !== version) throw new Error(`Extension Package version does not match: ${packageId}@${version}`)
+      if ((record.fileRevision ?? record.manifest.version) !== version) throw new Error(`Extension Package revision does not match: ${packageId}@${version}`)
       return readFileFromPackage(record, path)
     },
     readCardPackageFile: (cardId, packageId, version, archiveDigest, path) => serialize(async () => {
@@ -717,6 +1113,7 @@ function toManagedPackage(
     ...(target?.kind === 'card' ? { target, installationId: extensionInstallationId(packageId, target) } : {}),
     version: record.manifest.version,
     displayName: record.manifest.displayName,
+    ...(target?.kind !== 'card' && record.fileRevision ? { fileRevision: record.fileRevision } : {}),
     ...(record.manifest.description ? { description: record.manifest.description } : {}),
     ...(record.manifest.author ? { author: record.manifest.author } : {}),
     ...(record.manifest.homepage ? { homepage: record.manifest.homepage } : {}),
@@ -727,6 +1124,7 @@ function toManagedPackage(
         : `/extensions/${encodeURIComponent(packageId)}/${encodeURIComponent(record.manifest.version)}/icon`,
     } : {}),
     tags: record.manifest.tags ?? [],
+    ...(record.remote ? { remote: record.remote as unknown as JsonValue } : {}),
     available: record.available,
     sourceKinds: [...new Set(record.sources.map(source => source.kind))],
     modules: (record.manifest.modules ?? []).map(moduleManifest => toManagedModule(
@@ -807,7 +1205,7 @@ function toManagedModule(
       ...(desired.updatedAt ? { updatedAt: desired.updatedAt } : {}),
     },
     contributions: moduleManifest.contributes as unknown as JsonValue ?? {},
-    ...(moduleManifest.runtime === 'client' ? { entryUrl: packageFileUrl(packageId, record.manifest.version, moduleManifest.entry, target, record.archiveDigest) } : {}),
+    ...(moduleManifest.runtime === 'client' ? { entryUrl: packageFileUrl(packageId, target?.kind === 'card' ? record.manifest.version : record.fileRevision ?? record.manifest.version, moduleManifest.entry, target, record.archiveDigest) } : {}),
     ...(runtime ? { runtime: runtime as unknown as JsonValue } : {}),
   }
 }
@@ -828,6 +1226,15 @@ function packageFileMediaType(filename: string): string {
     case '.wasm': return 'application/wasm'
     case '.svg': return 'image/svg+xml'
     default: return iconMediaType(filename)
+  }
+}
+
+function validateInstalledDependencies(manifest: ExtensionManifest, catalog: Map<string, PackageCatalogRecord>): void {
+  for (const dependency of manifest.dependencies ?? []) {
+    const installed = catalog.get(dependency.id)
+    if (!installed?.available || !satisfiesExtensionVersion(installed.manifest.version, dependency.version)) {
+      throw new Error(`Dependency ${dependency.id}@${dependency.version} is missing or incompatible. Use the installation preview to review missing dependencies.`)
+    }
   }
 }
 

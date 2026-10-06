@@ -10,7 +10,7 @@ describe('studio server converter lifecycle contract', () => {
   it('uses the current installed converter after reload and stops using it after uninstall', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'loom-import-lifecycle-'))
     const localPaths = resolveLoomStudioLocalPaths({ home: dir })
-    const server = createStudioServer({ localPaths, extensionRootDirectory: join(dir, 'empty-repository') })
+    const server = createStudioServer({ localPaths, extensionRootDirectory: join(dir, 'empty-repository'), extensionInstalledDirectory: join(dir, 'app/extensions') })
     try {
       const { port } = await server.listen(0)
       const sourceDirectory = join(dir, 'converter')
@@ -34,7 +34,7 @@ describe('studio server converter lifecycle contract', () => {
       await callRpc(port, 'extensions.enableModule', module)
       const importResource = () => callRpc(port, 'application.importPromptResource', { artifact: { external: true } })
       await expect(importResource()).resolves.toMatchObject({ resource: { rootNode: { label: 'First instance' } } })
-      const installedEntry = join(localPaths.extensionInstalledRoot, 'sillytavern.importer', '1.0.0', 'index.js')
+      const installedEntry = join(dir, 'app/extensions/sillytavern.importer/index.js')
       await writeFile(installedEntry, entry('Reloaded instance'))
       await callRpc(port, 'extensions.reloadModule', module)
       await expect(importResource()).resolves.toMatchObject({ resource: { rootNode: { label: 'Reloaded instance' } } })

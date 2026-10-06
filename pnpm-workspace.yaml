@@ -3,4 +3,6 @@ packages:
   - packages/*
   - packages/extension-sdk/*
   - official/extensions/*
+  - extensions/st-data-compat
+  - extensions/the-world
   - tests/fixtures/extensions/*

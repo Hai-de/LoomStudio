@@ -9,7 +9,7 @@ import { createInMemoryDocumentStore } from '@loom-studio/document-store'
 import { createInMemoryDiagnosticsRegistry } from '@loom-studio/diagnostics'
 import type { ExtensionInstallationTarget, ExtensionRpcHandler } from '@loom-studio/extension-sdk'
 import * as instanceLoader from '../../../packages/extension-sdk/extension-host/src/instance.js'
-import { activate } from '../../../official/extensions/st-data-compat/src/index.js'
+import { activate } from '../../../extensions/st-data-compat/src/index.js'
 
 vi.mock('node:fs/promises', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs/promises')>()
@@ -53,7 +53,7 @@ async function withMigrationHost(run: (fixture: {
     await run({
       host, sourceDirectory, stagingDirectories,
       activateTarget: async (target = { kind: 'global' }) => {
-        await host.discover(resolve('official/extensions/st-data-compat'), target)
+        await host.discover(resolve('extensions/st-data-compat'), target)
         const active = await host.activate('sillytavern.importer', 'server', target)
         expect(active.state).toBe('active')
         return active.instance!.instanceId

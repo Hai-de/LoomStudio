@@ -1,8 +1,22 @@
 # 审查归档后的延期事项
 
-状态：Deferred / Backlog（2026-09-24）
+状态：Deferred / Backlog（更新：2026-10-06）
 
 本轮审查修复已收尾。本文只保留归档后仍需可发现的事项，不重新启动审查或扩大实施范围。历史证据见[修复实施记录](../../archive/plans/audit-issue-remediation-plan.md)。
+
+<a id="continuous-review-acceptance-2026-10-06"></a>
+
+## 持续代码审查：F-06 延期验收
+
+2026-10-06 用户明确同意延期并归档。[原审查与修复记录](../../archive/issues/continuous-code-review-2026-10-02.md)中的 CR-001～013、QA-001～003 与 DOC-001 本机修复已收尾；以下仅为未验收事项，不是待修缺陷，也不触发自动审查。
+
+- 真实 Provider 成功、流、取消和错误：需另行明确账户、模型、允许场景与费用上限。
+- 真实远程 ZIP/Git 安装更新：需指定可信来源和 ref，使用临时安装根。
+- 实际浏览器身份与生命周期：需明确测试实例及临时数据；主观视觉由用户验收。
+- 当前产物 build→prepare→smoke：需允许生成隔离产物及联网安装依赖，不含发布授权。
+- 三平台发行与远端 CI：需对应提交的远端结果或平台实测，不以本机 macOS 测试替代。
+
+以上全部保持延期、未验收；不自动跟进，不访问凭据或执行计费、远程安装、推送和发布。
 
 <a id="deferred-ci-acceptance"></a>
 
@@ -29,3 +43,31 @@
 | MessageBlock 第5项 provenance | 已有 fragmentIds/sourceRows 不等于多来源消息可以端到端定位；仍需验证回指真实资源且正文不夹带元数据。 |
 
 UI 细节和读屏验证按用户决定留待后续微调，不是当前阻塞项，也未记为已通过。The World State 订阅、热重载、State 资源与引用检查继续使用各自 Issue，不在本文重复排期。
+
+<a id="simplification-acceptance-2026-10-02"></a>
+
+## 代码精简后的独立验收与测试维护
+
+精简的 32 项已收口：Diff 复核后为 27 项实施、5 项按反证或已确认决定保留（UI-011 低收益抽取已撤回），没有未决精简施工项，见[归档实施记录](../../archive/plans/code-simplification-2026-10-02-plan.md)。以下仅承接尚未完成的独立工作，不是归档时假装已解决。
+
+| 事项 | 责任、触发条件与最小验收 |
+| --- | --- |
+| 双流真实 DOM 与交互 | 用户已明确自行验收且不急；在用户实际体验时核对长流可见行挂载、动态高度、浏览历史不强拉滚底、向前加载位置、编辑行保活、稳定 ID 展开留存及会话切换。整体观感由用户判断 |
+| Renderer 离屏生命周期 | 随双流 UI 验收检查离屏销毁、返回重建、主题更新和卸载保护；此前浏览器入口因鉴权失败，mock/SSR 不能代替实测 |
+| 4 个未改路径上的测试失败 | 保留为后续独立 Client 质量维护，不是精简目标；触及 State/Text/Macro 面板时先复现再修。`state-text-accessibility.test.ts` 的英文“折叠”1 例和 document ID aria-label 两语言2例、`state-variables-panel.test.ts` 的 translator fixture 1例。最终须执行这两个文件并如实归因，不因此前定向批次通过而忽略失败 |
+
+上述事项保持未验证/未解决；没有修改前基线复现，不将 4 项失败冒称为已验证的既有失败。没有自动跟进、浏览器重启或扩大修复范围的安排。
+
+<a id="implemented-plan-acceptance-2026-10-02"></a>
+
+## 已交付旧 Plan 的独立验收
+
+2026-10-02 用户要求顺路清理活跃目录；以下三份 Plan 已按既有交付记录归档，不重跑产品检查或将其余验收假装完成。
+
+| 已归档实施记录 | 尚未验证与接续条件 |
+| --- | --- |
+| [Extension Prompt/模型 API](../../archive/plans/extension-prompt-and-model-api-plan.md) | 真实计费网关未验证；仅在用户明确授权端点、样本与费用后进行，核对模型选择、权限、流与取消，不自动发送用户正文 |
+| [Token 计数与测量](../../archive/plans/token-counting-and-measurement-plan.md) | 用户实际使用时验收 IME、资源/角色/锚点/Narrative 页面交互及视觉。模型误差校准须另行授权，不冒称估算为实际 usage。旧记录的 Client 类型错误和提示词快照差异仅为当时结果，后续触及该路径时定向复现，不凭旧日志登记当前回归 |
+| [开场白 Display/HTML 修补](../../archive/plans/card-opening-display-and-html-layout.md) | 用户实际卡片与最新规则表单/消息页面验收；先核对有效规则和最终 Display，再判断解析或样式问题。第三方 ST API/作者 iframe 循环高度不在此交付承诺内 |
+
+State 订阅的 The World 接入、Shell 动画第二轮、记忆/CodeAct 等仍需实施或验收的路线，以及今天其他任务的新文档仍留在各自活跃入口；不借整理扩展代码修改或关闭其他任务。

@@ -714,6 +714,16 @@ export type ExtensionModuleManifest = {
   contributes?: ExtensionRuntimeContributions
 }
 
+export type ExtensionDownloadSource =
+  | { kind: 'git'; url: string; ref?: string }
+  | { kind: 'zip'; url: string }
+
+export type ExtensionDependency = {
+  id: string
+  version: string
+  source?: ExtensionDownloadSource
+}
+
 export type ExtensionManifest = {
   manifestVersion: 2
   id: string
@@ -724,6 +734,7 @@ export type ExtensionManifest = {
   author?: string
   homepage?: string
   repository?: string
+  dependencies?: ExtensionDependency[]
   tags?: string[]
   engines: {
     studio: string
@@ -1008,6 +1019,8 @@ export type ExtensionActivationContext = {
     replaceOwnCardBindings(input: { cardId: string; expectedVersion: number; payloadIds: string[] }): Promise<{ cardVersion: number }>
   }
   storage: {
+    /** Server-only persistent file directory, scoped by the host to this installation. */
+    files?: { directory(): Promise<string> }
     configs: {
       list(input?: { scope?: ExtensionStorageScope }): Promise<ExtensionConfigEntry[]>
       get(input: { scope: ExtensionStorageScope; key: string }): Promise<ExtensionConfigEntry | null>
@@ -1078,6 +1091,10 @@ export type ExtensionAgentToolHandlerInput = {
 
 export type ExtensionAgentToolHandlerContext = {
   signal: AbortSignal
+  /** Host-generated identity for this invocation, never supplied by the model. */
+  invocationId: string
+  /** Authorized Narrative target for this Turn; absent for unbound Sessions. */
+  narrativeTarget?: Readonly<{ scope: 'timeline'; timelineId: string; branchId: string }>
 }
 
 export type ExtensionAgentToolHandler = (

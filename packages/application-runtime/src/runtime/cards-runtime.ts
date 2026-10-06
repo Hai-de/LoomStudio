@@ -340,25 +340,20 @@ export function createCardsRuntimeMethods(ctx: CardsRuntimeContext) {
       const prepared = await ctx.blobs.prepareWrite({
         source: Buffer.from(input.archive.archiveBase64, 'base64'), mediaType: 'application/zip',
       })
-      try {
-        const result = await ctx.dataEngine.transact({
-          ...promptResourceWriteContext(requestContext), reason: 'application.attachCardExtensionPackage',
-        }, async dataTx => documents.participateTransaction(dataTx, async tx => {
-          const blob = ctx.blobs!.participateWrite(dataTx, prepared).blob
-          return await writeDocument<CardSourceContent>(tx, {
-            id: card.id, type: applicationDocumentTypes.cardSource, expectedVersion: input.expectedVersion,
-            content: {
-              ...card.content,
-              extensionPackages: [...archives, { packageId: input.archive.packageId, version: input.archive.version, blobId: blob.id }],
-              updatedAt: ctx.now(),
-            },
-          })
-        }))
-        return { card: toCardSource(result.value.value), mutation: { changesetId: result.commit.changesetId } }
-      } catch (error) {
-        await ctx.blobs.discardPreparedWrite(prepared)
-        throw error
-      }
+      const result = await ctx.dataEngine.transact({
+        ...promptResourceWriteContext(requestContext), reason: 'application.attachCardExtensionPackage',
+      }, async dataTx => documents.participateTransaction(dataTx, async tx => {
+        const blob = ctx.blobs!.participateWrite(dataTx, prepared).blob
+        return await writeDocument<CardSourceContent>(tx, {
+          id: card.id, type: applicationDocumentTypes.cardSource, expectedVersion: input.expectedVersion,
+          content: {
+            ...card.content,
+            extensionPackages: [...archives, { packageId: input.archive.packageId, version: input.archive.version, blobId: blob.id }],
+            updatedAt: ctx.now(),
+          },
+        })
+      }))
+      return { card: toCardSource(result.value.value), mutation: { changesetId: result.commit.changesetId } }
     },
 
     getCardExtensionPackage: async (input: { cardId: string; packageId: string; source?: 'installed' }) => {

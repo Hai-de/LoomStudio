@@ -15,8 +15,8 @@
 - Preset / Setting Prompt Resource ZIP 首切片。
 - Extension 本地 ZIP 安装、路径安全检查、临时解包与现有激活流程。
 - 官方 starter、显式安装、官方内容导出和完整 Character Status 样例。
-- Card Bundle、Prompt Resource 与 Card Directory 的脚本 Blob 写入已接入 prepared write 清理；并行准备阶段等待全部结果后，任一附件失败都会丢弃已成功准备的文件。
-- Asset / Blob 元数据与引用记录在同一 SQLite 事务中参与提交；事务回滚不会保留本次写入的未提交 Blob。
+- Card Bundle、Prompt Resource 与 Card Directory 的脚本 Blob 写入使用 prepared write；已 finalized 的 hash 文件可能被其他准备中的写入共享，附件失败不会删除这些共享字节。
+- Asset / Blob 元数据与引用记录在同一 SQLite 事务中参与提交；事务回滚不保留本次未提交的元数据，但可能留下尚无元数据引用的 hash 文件，当前没有物理 GC。
 
 ## 后续阶段
 
@@ -35,7 +35,7 @@
 - 平台不负责 Extension 作者自己的数据迁移。
 - 不执行包内安装脚本，不自动授予新权限；资源更新不重写已提交故事或已有 State，运行数据兼容由作者负责。
 - 文件目录、数据库、运行时 Session 和 Timeline State 保持不同职责。
-- 文件系统 Blob 与 SQLite 元数据不是跨进程单事务；正常准备/事务失败必须清理 prepared 文件，进程崩溃后的历史 orphan 文件仍由后续 GC 或运维策略处理。
+- 文件系统 Blob 与 SQLite 元数据不是跨进程单事务；未 finalized 的临时文件按写入流程清理，已 finalized 的共享 hash 字节不随单次失败删除。无引用字节留待具备所有权判断的 GC 或显式运维策略处理。
 
 ## 非目标
 

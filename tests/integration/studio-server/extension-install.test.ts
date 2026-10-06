@@ -20,7 +20,7 @@ describe('Studio Server Extension Package install lifecycle', () => {
     const sourceDirectory = await writeTestPackage(root)
     const localPaths = resolveLoomStudioLocalPaths({ home: join(root, 'home') })
 
-    const first = createStudioServer({ localPaths, extensionRootDirectory: join(root, 'empty-repository') })
+    const first = createStudioServer({ localPaths, extensionRootDirectory: join(root, 'empty-repository'), extensionInstalledDirectory: join(root, 'app/extensions') })
     const firstAddress = await first.listen(0)
     const eventResponse = await authenticatedFetch(firstAddress.port, '/extensions/events')
     expect(eventResponse.status).toBe(200)
@@ -87,7 +87,7 @@ describe('Studio Server Extension Package install lifecycle', () => {
       moduleId: 'client',
     })).resolves.toMatchObject({ module: { moduleId: 'client', desired: { enabled: true } } })
 
-    await expect(readFile(join(localPaths.extensionInstalledRoot, 'example.installed', '1.0.0', 'manifest.json'), 'utf8')).resolves.toContain('example.installed')
+    await expect(readFile(join(root, 'app/extensions/example.installed/manifest.json'), 'utf8')).resolves.toContain('example.installed')
 
     await callRpc(firstAddress.port, 'extensions.enableModule', {
       packageId: 'example.installed',
@@ -98,7 +98,7 @@ describe('Studio Server Extension Package install lifecycle', () => {
     await eventReader.cancel()
     await first.close()
 
-    const second = createStudioServer({ localPaths, extensionRootDirectory: join(root, 'empty-repository') })
+    const second = createStudioServer({ localPaths, extensionRootDirectory: join(root, 'empty-repository'), extensionInstalledDirectory: join(root, 'app/extensions') })
     const secondAddress = await second.listen(0)
     await expect(callRpc(secondAddress.port, 'example.installed.status', {})).resolves.toEqual({ active: true })
     await expect(callRpc(secondAddress.port, 'example.installed.publish', {})).resolves.toMatchObject({ assetId: expect.any(String) })
@@ -114,7 +114,7 @@ describe('Studio Server Extension Package install lifecycle', () => {
     await expect(callRpc(secondAddress.port, 'docs.get', { id: 'example.installed:data' })).resolves.toMatchObject({
       document: { content: { retained: true } },
     })
-    await expect(readFile(join(localPaths.extensionInstalledRoot, 'example.installed', '1.0.0', 'manifest.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readFile(join(root, 'app/extensions/example.installed/manifest.json'))).rejects.toMatchObject({ code: 'ENOENT' })
     await expect(readFile(localPaths.extensionStateFile, 'utf8')).resolves.not.toContain('example.installed')
     await second.close()
   })
@@ -124,12 +124,12 @@ describe('Studio Server Extension Package install lifecycle', () => {
     temporaryDirectories.push(root)
     const sourceDirectory = await writeTestPackage(root)
     const localPaths = resolveLoomStudioLocalPaths({ home: join(root, 'home') })
-    await mkdir(localPaths.extensionRoot, { recursive: true })
+    await mkdir(localPaths.configRoot, { recursive: true })
     await writeFile(localPaths.extensionDevLinksFile, `${JSON.stringify({
       extensions: [{ id: 'example.installed', path: sourceDirectory }],
     }, null, 2)}\n`)
 
-    const server = createStudioServer({ localPaths, extensionRootDirectory: join(root, 'empty-repository') })
+    const server = createStudioServer({ localPaths, extensionRootDirectory: join(root, 'empty-repository'), extensionInstalledDirectory: join(root, 'app/extensions') })
     const address = await server.listen(0)
     await callRpc(address.port, 'extensions.enableModule', {
       packageId: 'example.installed',
@@ -156,11 +156,18 @@ describe('Studio Server Extension Package install lifecycle', () => {
     temporaryDirectories.push(root)
     const sourceDirectory = await writeTestPackage(root)
     const localPaths = resolveLoomStudioLocalPaths({ home: join(root, 'home') })
-    const server = createStudioServer({ localPaths, extensionRootDirectory: join(root, 'empty-repository') })
+    const server = createStudioServer({ localPaths, extensionRootDirectory: join(root, 'empty-repository'), extensionInstalledDirectory: join(root, 'app/extensions') })
     const address = await server.listen(0)
     try {
       const archive = zipSync({
-        'manifest.json': await readFile(join(sourceDirectory, 'manifest.json')),
+        'manifest.json': new TextEncoder().encode(JSON.stringify({
+          ...JSON.parse(await readFile(join(sourceDirectory, 'manifest.json'), 'utf8')),
+          contributes: { promptResources: [{ id: 'welcome', resourceKind: 'setting', source: './welcome.json' }] },
+        })),
+        'welcome.json': new TextEncoder().encode(JSON.stringify({
+          format: 'loom.promptResource', schemaVersion: 2, resourceKind: 'setting',
+          rootNode: { id: 'example.installed.welcome', label: 'Installed welcome', category: 'setting', kind: 'module', children: [] },
+        })),
         'icon.png': await readFile(join(sourceDirectory, 'icon.png')),
         'dist/index.js': await readFile(join(sourceDirectory, 'dist/index.js')),
         'dist/client.js': await readFile(join(sourceDirectory, 'dist/client.js')),
@@ -170,12 +177,30 @@ describe('Studio Server Extension Package install lifecycle', () => {
         base64: Buffer.from(archive).toString('base64'),
       })
       expect(installed.package).toMatchObject({ packageId: 'example.installed', version: '1.0.0' })
+      const resources = await callRpc<{ resources: Array<{ rootNode: { label: string }; origin?: { packageId: string } }> }>(
+        address.port, 'application.listPromptResources', {},
+      )
+      expect(resources.resources.filter(resource => resource.origin?.packageId === 'example.installed'))
+        .toMatchObject([{ rootNode: { label: 'Installed welcome' } }])
       await expect(callRpc(address.port, 'extensions.listPackages', {})).resolves.toMatchObject({
         items: [{ packageId: 'example.installed', version: '1.0.0' }],
       })
       const nested = await authenticatedFetch(address.port, '/extensions/example.installed/1.0.0/files/assets/nested.txt')
       expect(nested.status).toBe(200)
       await expect(nested.text()).resolves.toBe('nested asset')
+      await callRpc(address.port, 'extensions.enableModule', { packageId: 'example.installed', moduleId: 'client' })
+      await callRpc(address.port, 'extensions.reloadModule', { packageId: 'example.installed', moduleId: 'client' })
+      const listed = await callRpc<{ items: Array<{ fileRevision: string; modules: Array<{ entryUrl?: string }> }> }>(
+        address.port, 'extensions.listPackages', {},
+      )
+      const reloaded = listed.items[0]!
+      expect(reloaded.fileRevision).toMatch(/^1\.0\.0-/)
+      expect(reloaded.modules.find(module => module.entryUrl)?.entryUrl)
+        .toBe(`/extensions/example.installed/${reloaded.fileRevision}/files/dist/client.js`)
+      const currentFile = await authenticatedFetch(address.port, `/extensions/example.installed/${reloaded.fileRevision}/files/assets/nested.txt`)
+      expect(currentFile.status).toBe(200)
+      await expect(currentFile.text()).resolves.toBe('nested asset')
+      expect((await authenticatedFetch(address.port, '/extensions/example.installed/1.0.0/files/assets/nested.txt')).status).toBe(404)
     } finally {
       await server.close()
     }

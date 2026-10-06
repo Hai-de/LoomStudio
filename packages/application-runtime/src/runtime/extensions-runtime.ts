@@ -927,7 +927,6 @@ async function importExtensionPackageResourcesInternal(
   const prepared = preparation.flatMap(result => result.status === 'fulfilled' ? [result.value] : [])
   const failed = preparation.find(result => result.status === 'rejected')
   if (failed?.status === 'rejected') {
-    await Promise.all(prepared.map(item => ctx.blobs!.discardPreparedWrite(item.blob)))
     throw failed.reason
   }
   const transaction = await ctx.dataEngine.transact({
@@ -1157,9 +1156,6 @@ async function importExtensionPackageResourcesInternal(
       }
       return undefined
     }, { allowEmpty: true })
-  }).catch(async error => {
-    await Promise.all(prepared.map(item => ctx.blobs!.discardPreparedWrite(item.blob)))
-    throw error
   })
   await refreshAgentToolRegistry(ctx)
   return {

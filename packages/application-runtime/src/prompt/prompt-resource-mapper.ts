@@ -13,7 +13,7 @@ import type {
 } from '../cards/workspace-types.js'
 import { normalizeMacros } from '../cards/card.js'
 
-const legacyNodeKeys = ['configRows', 'isSection', 'orderList', 'projection'] as const
+const legacyNodeKeys = ['configRows', 'isSection', 'orderList'] as const
 
 type PromptResourceMetadata = JsonObject & {
   historyPolicy?: PromptResourceContent['historyPolicy']
@@ -60,6 +60,10 @@ export function toStoredResourceInput(input: {
 
 export function toStoredNode(node: PromptResourceNode): StoredPromptResourceTreeNode {
   const extra: JsonObject = { ...(node.extra ?? {}) }
+  delete extra.projection
+  const capabilities = node.capabilities?.projection
+    ? node.capabilities
+    : readCompositionCapabilities(node.capabilities, node.projection)
   for (const key of legacyNodeKeys) {
     const value = node[key]
     if (value !== undefined) extra[key] = value
@@ -72,7 +76,7 @@ export function toStoredNode(node: PromptResourceNode): StoredPromptResourceTree
     ...(node.meta === undefined ? {} : { meta: node.meta }),
     ...(node.enabled === undefined ? {} : { enabled: node.enabled }),
     ...(node.body === undefined ? {} : { body: node.body }),
-    ...(node.capabilities === undefined ? {} : { capabilities: node.capabilities }),
+    ...(capabilities === undefined ? {} : { capabilities }),
     ...(Object.keys(extra).length === 0 ? {} : { extra }),
     ...(node.children?.length ? { children: node.children.map(toStoredNode) } : {}),
   }
@@ -102,13 +106,16 @@ export function fromStoredResource(resource: StoredPromptResource): PromptResour
 
 function fromStoredNode(node: StoredPromptResourceTreeNode): PromptResourceNode {
   const extra = node.extra ?? {}
-  const known = new Set<string>(legacyNodeKeys)
+  const known = new Set<string>([...legacyNodeKeys, 'projection'])
   const unknownExtra = Object.fromEntries(Object.entries(extra).filter(([key]) => !known.has(key))) as JsonObject
+  const capabilities = readCompositionCapabilities(
+    node.capabilities as PromptResourceNode['capabilities'],
+    extra.projection as PromptResourceNode['projection'],
+  )
   const result: PromptResourceNode = {
     ...(extra.configRows === undefined ? {} : { configRows: extra.configRows as PromptResourceNode['configRows'] }),
     ...(extra.isSection === undefined ? {} : { isSection: extra.isSection as boolean }),
     ...(extra.orderList === undefined ? {} : { orderList: extra.orderList as string[] }),
-    ...(extra.projection === undefined ? {} : { projection: extra.projection as PromptResourceNode['projection'] }),
     ...(Object.keys(unknownExtra).length === 0 ? {} : { extra: unknownExtra }),
     id: node.id,
     kind: node.kind,
@@ -117,10 +124,33 @@ function fromStoredNode(node: StoredPromptResourceTreeNode): PromptResourceNode 
     ...(node.meta === undefined ? {} : { meta: node.meta }),
     ...(node.enabled === undefined ? {} : { enabled: node.enabled }),
     ...(node.body === undefined ? {} : { body: node.body }),
-    ...(node.capabilities === undefined ? {} : { capabilities: node.capabilities as PromptResourceNode['capabilities'] }),
+    ...(capabilities === undefined ? {} : { capabilities }),
     ...(node.children?.length ? { children: node.children.map(fromStoredNode) } : {}),
   }
   return result
+}
+
+function readCompositionCapabilities(
+  capabilities: PromptResourceNode['capabilities'],
+  legacyProjection: PromptResourceNode['projection'],
+): PromptResourceNode['capabilities'] {
+  if (!legacyProjection) return capabilities
+  // Preserve the effective ordering of stored legacy resources at the read boundary.
+  const projection = Object.fromEntries(Object.entries({
+    ...capabilities?.projection,
+    entryOrderHint: legacyProjection.entryOrder,
+    zoneId: legacyProjection.zoneId,
+    order: legacyProjection.order,
+    reason: legacyProjection.reason,
+    slotKey: legacyProjection.slotKey,
+    slotOrderHint: legacyProjection.slotOrder,
+    sourceKind: legacyProjection.sourceKind,
+  }).filter(([, value]) => value !== undefined)) as NonNullable<PromptResourceNode['capabilities']>['projection']
+  return {
+    ...capabilities,
+    lifecycle: { lifecycle: legacyProjection.lifecycle ?? capabilities?.lifecycle?.lifecycle ?? 'always' },
+    projection,
+  }
 }
 
 export function toStoredNodeDraft(node: PromptResourceNode): StoredPromptResourceNodeDraft {

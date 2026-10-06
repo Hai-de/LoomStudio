@@ -4,7 +4,7 @@ import { createApplicationRuntime, createOfficialAgentToolRegistry, officialProm
 import { createSqliteDataEngine } from '@loom-studio/data-engine'
 import { createSqliteDocumentStore } from '@loom-studio/document-store'
 import { createPromptResourceStore } from '@loom-studio/application-data'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, onTestFinished } from 'vitest'
 
 const starterDirectory = join(process.cwd(), 'official/starter')
 
@@ -17,7 +17,7 @@ describe('official content installation', () => {
     await expect(fixture.promptResources.getResource(officialPromptResourceIds.knowledgeSetting, { includeTombstone: true })).resolves.toBeNull()
   })
 
-  it('installs missing resources once and preserves existing content and mounts', async () => {
+  it('restores missing tool mounts without enabling them or overwriting local content', async () => {
     const fixture = createFixture()
     await fixture.runtime.initialize()
     const input = await readStarterInput()
@@ -28,6 +28,8 @@ describe('official content installation', () => {
       { id: officialPromptResourceIds.knowledgeSetting, created: true },
     ])
     expect(first.mutation?.changesetId).toBeTruthy()
+    const initialTools = await fixture.runtime.listPresetToolMounts({ presetId: officialPromptResourceIds.assistantPreset })
+    expect(initialTools.mounts.length).toBeGreaterThan(0)
     await expect(fixture.promptResources.listSettingMounts({
       source: { kind: 'preset', id: officialPromptResourceIds.assistantPreset },
     })).resolves.toHaveLength(1)
@@ -45,30 +47,59 @@ describe('official content installation', () => {
     await fixture.runtime.replacePresetToolMounts({ presetId: preset.resource.id, mounts: [] })
 
     const second = await fixture.runtime.installOfficialContent(input)
-    expect(second).toEqual({ resources: input.resources.map(resource => ({ id: resource.id, created: false })) })
+    expect(second.resources).toEqual(input.resources.map(resource => ({ id: resource.id, created: false })))
+    expect(second.mutation?.changesetId).toBeTruthy()
     expect((await fixture.runtime.getPromptResource({ resourceId: preset.resource.id })).resource.rootNode.children?.[0]?.children?.[0]?.body).toBe('User edited instructions.')
     await expect(fixture.promptResources.listSettingMounts({ source: { kind: 'preset', id: preset.resource.id } })).resolves.toHaveLength(0)
-    await expect(fixture.runtime.listPresetToolMounts({ presetId: preset.resource.id })).resolves.toEqual({ mounts: [] })
+    const restoredTools = await fixture.runtime.listPresetToolMounts({ presetId: preset.resource.id })
+    expect(restoredTools.mounts.map(mount => mount.toolId)).toEqual(initialTools.mounts.map(mount => mount.toolId))
+    expect(restoredTools.mounts.every(mount => !mount.defaultEnabled)).toBe(true)
+    await expect(fixture.runtime.installOfficialContent(input)).resolves.toEqual({
+      resources: input.resources.map(resource => ({ id: resource.id, created: false })),
+    })
 
     await fixture.runtime.initialize()
     expect((await fixture.runtime.getPromptResource({ resourceId: preset.resource.id })).resource.rootNode.children?.[0]?.children?.[0]?.body).toBe('User edited instructions.')
     await expect(fixture.promptResources.listSettingMounts({ source: { kind: 'preset', id: preset.resource.id } })).resolves.toHaveLength(0)
-    await expect(fixture.runtime.listPresetToolMounts({ presetId: preset.resource.id })).resolves.toEqual({ mounts: [] })
+    await expect(fixture.runtime.listPresetToolMounts({ presetId: preset.resource.id })).resolves.toEqual(restoredTools)
   })
 
-  it('does not restore a deleted official resource on restart or reinstall', async () => {
+  it.each(['same', 'updated'] as const)('restores deleted official resources with stable IDs on explicit reinstall (%s source)', async source => {
     const fixture = createFixture()
     await fixture.runtime.initialize()
     const input = await readStarterInput()
     await fixture.runtime.installOfficialContent(input)
     const setting = await fixture.runtime.getPromptResource({ resourceId: officialPromptResourceIds.knowledgeSetting })
+    const preset = await fixture.runtime.getPromptResource({ resourceId: officialPromptResourceIds.assistantPreset })
+    const toolIds = (await fixture.runtime.listPresetToolMounts({ presetId: preset.resource.id })).mounts.map(mount => mount.toolId)
+    await fixture.runtime.updatePromptResourceAsset({
+      resourceId: preset.resource.id, assetId: 'official.loom-assistant.instructions', body: 'Local edit survives restoration.',
+    })
 
     await fixture.runtime.deletePromptResource({ resourceId: setting.resource.id })
+    await fixture.runtime.deletePromptResource({ resourceId: preset.resource.id })
     await fixture.runtime.initialize()
+    await expect(fixture.promptResources.getResource(setting.resource.id, { includeTombstone: true })).resolves.toMatchObject({ tombstoned: true })
+    if (source === 'updated') {
+      input.packageVersion = '2.0.0'
+      input.resources[0]!.artifact.rootNode.children![0]!.children![0]!.body = 'Updated source.'
+    }
     const result = await fixture.runtime.installOfficialContent(input)
 
-    expect(result.resources.find(resource => resource.id === setting.resource.id)?.created).toBe(false)
-    await expect(fixture.promptResources.getResource(setting.resource.id, { includeTombstone: true })).resolves.toMatchObject({ tombstoned: true })
+    expect(result.resources).toEqual(input.resources.map(resource => ({ id: resource.id, created: false })))
+    expect(result.mutation?.changesetId).toBeTruthy()
+    await expect(fixture.promptResources.getResource(setting.resource.id)).resolves.toMatchObject({
+      id: setting.resource.id, rootNode: setting.resource.rootNode,
+    })
+    const restoredPreset = (await fixture.runtime.getPromptResource({ resourceId: preset.resource.id })).resource
+    expect(restoredPreset.rootNode.children?.[0]?.children?.[0]?.body)
+      .toBe(source === 'updated' ? 'Updated source.' : 'Local edit survives restoration.')
+    await expect(fixture.promptResources.listSettingMounts({ source: { kind: 'preset', id: preset.resource.id } }))
+      .resolves.toMatchObject([{ settingResourceId: setting.resource.id }])
+    const restoredTools = (await fixture.runtime.listPresetToolMounts({ presetId: preset.resource.id })).mounts
+    expect(restoredTools.map(mount => mount.toolId)).toEqual(toolIds)
+    expect(restoredTools.every(mount => !mount.defaultEnabled)).toBe(true)
+    await expect(fixture.runtime.installOfficialContent(input)).resolves.toEqual({ resources: result.resources })
   })
 
   it('validates artifacts and references before writing anything', async () => {
@@ -94,6 +125,7 @@ function createFixture() {
   const createId = (prefix: string) => `${prefix}-${++sequence}`
   const now = () => '2026-09-12T00:00:00.000Z'
   const dataEngine = createSqliteDataEngine({ filename: ':memory:', createId, now })
+  onTestFinished(() => dataEngine.close())
   const promptResources = createPromptResourceStore({ engine: dataEngine, createId, now })
   const runtime = createApplicationRuntime({
     dataEngine,

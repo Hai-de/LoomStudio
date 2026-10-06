@@ -143,6 +143,11 @@ export function normalizeOpening(input: OpeningChatInput | string | undefined): 
         role: entry.role === 'user' || entry.role === 'assistant' ? entry.role : 'assistant',
         content: entry.content,
       })),
+    ...(input.alternatives?.length ? {
+      alternatives: input.alternatives.map(alternative => ({
+        entries: normalizeOpening({ entries: alternative.entries }).entries,
+      })),
+    } : {}),
   }
 }
 
@@ -185,6 +190,7 @@ export function normalizeSettingLayer(input: SettingLayerInput | undefined, lega
 export function readOpeningEntries(
   content: CardSourceContent,
   variables?: import('../prompt/variables.js').VariableRenderContext,
+  openingIndex = 0,
 ): OpeningChatEntryContent[] {
   const renderContext = variables ?? createVariableRenderContext({
     global: {
@@ -198,7 +204,10 @@ export function readOpeningEntries(
     },
   })
 
-  return content.opening.entries.map(entry => ({
+  if (!Number.isInteger(openingIndex) || openingIndex < 0) throw new Error('Invalid opening index')
+  const opening = openingIndex === 0 ? content.opening : content.opening.alternatives?.[openingIndex - 1]
+  if (!opening) throw new Error(`Opening not found: ${openingIndex}`)
+  return opening.entries.map(entry => ({
     role: entry.role,
     content: renderVariableMacros(entry.content, renderContext),
   }))

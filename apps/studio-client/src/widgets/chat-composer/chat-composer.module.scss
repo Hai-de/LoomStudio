@@ -38,29 +38,6 @@
   display: none;
 }
 
-.expansionShell {
-  height: 0;
-  min-height: 0;
-  overflow: hidden;
-  margin-bottom: -2px;
-  opacity: 0;
-  transition:
-    height var(--loom-agent-expansion-transition-duration, var(--loom-motion-duration-standard)) var(--loom-motion-easing-standard),
-    margin-bottom var(--loom-motion-duration-standard) var(--loom-motion-easing-standard),
-    opacity var(--loom-motion-duration-fast) ease;
-}
-
-.composerExpanded .expansionShell {
-  height: var(--loom-agent-expansion-height);
-  margin-bottom: 0;
-  opacity: 1;
-}
-
-.expansionContent {
-  height: 100%;
-  min-height: 0;
-}
-
 .baseContent {
   min-width: 0;
   display: grid;
@@ -237,7 +214,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .expansionShell,
   .expansionToggle svg {
     transition: none;
   }

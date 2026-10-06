@@ -7,6 +7,9 @@
     "lib": ["ES2024", "DOM"],
     "types": ["node"],
     "paths": {
+      "@loom-studio/tokenizer": ["../packages/tokenizer/src/index.ts"],
+      "@loom-studio/tokenizer/async": ["../packages/tokenizer/src/async-counter.ts"],
+      "@loom-studio/tokenizer/contracts": ["../packages/tokenizer/src/contracts.ts"],
       "@loom-studio/ai-gateway": ["../packages/ai-gateway/src/index.ts"],
       "@loom-studio/ai-gateway/contracts": ["../packages/ai-gateway/src/contracts.ts"],
       "@loom-studio/application-data": ["../packages/application-data/src/index.ts"],
@@ -29,7 +32,7 @@
       "@loom-studio/transport": ["../packages/transport/src/index.ts"],
       "@loom-studio/ui": ["../packages/loom-ui/src/index.ts"],
       "@loom-studio/shared/macros": ["../packages/shared/src/macros.ts"],
-      "@loom-studio/sillytavern-importer": ["../official/extensions/st-data-compat/src/index.ts"],
+      "@loom-studio/sillytavern-importer": ["../extensions/st-data-compat/src/index.ts"],
       "@loom/core": ["../packages/core/src/index.ts"]
     }
   },

@@ -4,18 +4,26 @@ import { useAgentPresets } from '../../../apps/studio-client/src/features/agent-
 import type { StudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
 import type { AgentPreset, AgentToolDefinition } from '../../../apps/studio-client/src/entities/index.js'
 
-const state = vi.hoisted(() => ({ setters: [] as ReturnType<typeof vi.fn>[] }))
+const state = vi.hoisted(() => ({ cursor: 0, values: [] as unknown[], setters: [] as ReturnType<typeof vi.fn>[] }))
 vi.mock('react', async importOriginal => ({
   ...await importOriginal<typeof import('react')>(),
   useRef: (current: unknown) => ({ current }),
   useState: (initial: unknown) => {
-    const setter = vi.fn()
-    state.setters.push(setter)
-    return [typeof initial === 'function' ? initial() : initial, setter]
+    const index = state.cursor++
+    if (!(index in state.values)) state.values[index] = typeof initial === 'function' ? initial() : initial
+    const setter = state.setters[index] ??= vi.fn(value => {
+      state.values[index] = typeof value === 'function' ? value(state.values[index]) : value
+    })
+    return [state.values[index], setter]
   },
 }))
 
-beforeEach(() => { state.setters.length = 0 })
+beforeEach(() => { state.cursor = 0; state.values = []; state.setters = [] })
+
+function agentPresets(api: StudioApi, runAction: (action: () => Promise<void>) => Promise<void> = action => action()) {
+  state.cursor = 0
+  return useAgentPresets({ api, runAction, refreshResources: async () => {} })
+}
 
 describe('profile list pagination consumers', () => {
   it('does not replace a later explicit Profile selection when creation completes', async () => {
@@ -29,15 +37,15 @@ describe('profile list pagination consumers', () => {
       promptResources: { list: async () => ({ resources: [] }) },
       agentTools: { list: async () => ({ tools: [] }) },
     } as unknown as StudioApi
-    const profiles = useAgentPresets({ api, runAction: action => action() })
-    const creation = profiles.updateAgentPreset({
-      name: 'New', agentPresetId: 'preset', expectedVersion: (await profiles.getPromptResource({ resourceId: 'preset' })).resource.version, model: { providerProfileId: 'provider', modelId: 'model' },
+    const profiles = agentPresets(api)
+    const creation = profiles.createAgentPreset({
+      name: 'New', model: { providerProfileId: 'provider', modelId: 'model' },
     })
     profiles.selectAgentPreset('other')
     pending.resolve()
     await expect(creation).resolves.toBe(true)
     let selected: string | undefined
-    for (const [value] of state.setters[3]!.mock.calls) selected = typeof value === 'function' ? value(selected) : value
+    for (const [value] of state.setters[2]!.mock.calls) selected = typeof value === 'function' ? value(selected) : value
     expect(selected).toBe('other')
     expect(state.setters[0]).toHaveBeenLastCalledWith([created, { id: 'other' }])
   })
@@ -54,7 +62,7 @@ describe('profile list pagination consumers', () => {
       promptResources: { list: async () => ({ resources: [] }) },
       agentTools: { list: async () => ({ tools: [] }) },
     } as unknown as StudioApi
-    const profiles = useAgentPresets({ api, runAction: action => action() })
+    const profiles = agentPresets(api)
     const old = profiles.refreshAgentPresets()
     await profiles.refreshAgentPresets()
     pending.resolve()
@@ -75,7 +83,7 @@ describe('profile list pagination consumers', () => {
       promptResources: { list: async () => ({ resources: [] }) },
       agentTools: { list: listTools, update: async () => ({ tool: saved }) },
     } as unknown as StudioApi
-    const profiles = useAgentPresets({ api, runAction: action => action() })
+    const profiles = agentPresets(api)
     await profiles.refreshAgentPresets()
     const pending = Promise.withResolvers<void>()
     list.mockImplementationOnce(async () => { await pending.promise; return { agentPresets: [] } })
@@ -85,15 +93,19 @@ describe('profile list pagination consumers', () => {
     pending.resolve()
     await stale
     let tools: AgentToolDefinition[] = []
-    for (const [value] of state.setters[2]!.mock.calls) tools = typeof value === 'function' ? value(tools) : value
+    for (const [value] of state.setters[1]!.mock.calls) tools = typeof value === 'function' ? value(tools) : value
     expect(tools).toEqual([saved])
     expect(listTools).toHaveBeenCalledTimes(3)
   })
 
   it.each(['create', 'update', 'delete'] as const)('publishes committed Agent %s before a failed refresh', async kind => {
-    const original = { id: 'profile', name: 'Original', version: 1 } as AgentPreset
-    const unrelated = { id: 'other', name: 'Other', version: 1 } as AgentPreset
-    const saved = { ...original, name: 'Saved', version: 2 }
+    const original: AgentPreset = {
+      id: 'profile', resourceKind: 'preset', version: 1,
+      rootNode: { id: 'root', kind: 'module', label: 'Original' },
+      createdAt: '', updatedAt: '',
+    }
+    const unrelated: AgentPreset = { ...original, id: 'other', rootNode: { ...original.rootNode, label: 'Other' } }
+    const saved: AgentPreset = { ...original, rootNode: { ...original.rootNode, label: 'Saved' }, version: 2 }
     const failure = new Error('Refresh failed')
     const api = {
       agentPresets: {
@@ -105,9 +117,13 @@ describe('profile list pagination consumers', () => {
       promptResources: { list: async () => ({ resources: [] }) },
       agentTools: { list: async () => ({ tools: [] }) },
     } as unknown as StudioApi
-    const profiles = useAgentPresets({ api, runAction: action => action() })
+    state.values[0] = kind === 'create' ? [unrelated] : [original, unrelated]
+    const report = vi.fn()
+    const profiles = agentPresets(api, async action => {
+      try { await action() } catch (error) { report(error); throw error }
+    })
     const operation = kind === 'create'
-      ? profiles.updateAgentPreset({ name: 'Saved', agentPresetId: 'preset', expectedVersion: (await profiles.getPromptResource({ resourceId: 'preset' })).resource.version, model: { providerProfileId: 'provider', modelId: 'model' } })
+      ? profiles.createAgentPreset({ name: 'Saved', model: { providerProfileId: 'provider', modelId: 'model' } })
       : kind === 'update'
         ? profiles.updateAgentPreset(original.id, { name: 'Saved' })
         : profiles.deleteAgentPreset(original.id)
@@ -116,7 +132,9 @@ describe('profile list pagination consumers', () => {
     let records = kind === 'create' ? [unrelated] : [original, unrelated]
     for (const [value] of state.setters[0]!.mock.calls) records = typeof value === 'function' ? value(records) : value
     expect(records).toEqual(kind === 'delete' ? [unrelated] : [saved, unrelated])
-    if (kind === 'delete') expect(state.setters[3]).not.toHaveBeenCalled()
+    expect(report).toHaveBeenCalledExactlyOnceWith(failure)
+    if (kind === 'delete') expect(state.setters[2]).not.toHaveBeenCalled()
+    if (kind === 'create') expect(state.setters[2]).toHaveBeenCalledWith(saved.id)
   })
 
   it.each(['provider', 'capability'] as const)('distinguishes failed %s creation from a committed creation with failed refresh', async kind => {
@@ -162,29 +180,6 @@ describe('profile list pagination consumers', () => {
     expect(update).toHaveBeenNthCalledWith(2, { providerProfileId: 'provider', enabledModelIds: ['second'] })
   })
 
-  it('does not report a committed Agent creation as failed when the subsequent refresh fails', async () => {
-    const failure = new Error('Refresh failed')
-    const api = {
-      agentPresets: {
-        create: async () => ({ agentPreset: { id: 'created' } }),
-        list: async () => { throw failure },
-      },
-      promptResources: { list: async () => ({ resources: [] }) },
-      agentTools: { list: async () => ({ tools: [] }) },
-    } as unknown as StudioApi
-    let reported: unknown
-    const profiles = useAgentPresets({
-      api, runAction: async action => {
-        try { await action() } catch (error) { reported = error; throw error }
-      },
-    })
-    await expect(profiles.updateAgentPreset({
-      name: 'Committed', agentPresetId: 'preset', expectedVersion: (await profiles.getPromptResource({ resourceId: 'preset' })).resource.version, model: { providerProfileId: 'provider', modelId: 'model' },
-    })).resolves.toBe(true)
-    expect(reported).toBe(failure)
-    expect(state.setters[3]).toHaveBeenCalledWith('created')
-  })
-
   it.each([true, false])('reports Agent creation success explicitly (success: %s)', async success => {
     const failure = new Error('Create failed')
     const api = {
@@ -199,14 +194,11 @@ describe('profile list pagination consumers', () => {
       agentTools: { list: async () => ({ tools: [] }) },
     } as unknown as StudioApi
     let reported: unknown
-    const profiles = useAgentPresets({
-      api,
-      runAction: async action => {
-        try { await action() } catch (error) { reported = error; throw error }
-      },
+    const profiles = agentPresets(api, async action => {
+      try { await action() } catch (error) { reported = error; throw error }
     })
-    const pending = profiles.updateAgentPreset({
-      name: 'Draft', agentPresetId: 'preset', expectedVersion: (await profiles.getPromptResource({ resourceId: 'preset' })).resource.version, model: { providerProfileId: 'provider', modelId: 'model' },
+    const pending = profiles.createAgentPreset({
+      name: 'Draft', model: { providerProfileId: 'provider', modelId: 'model' },
     })
     if (success) await expect(pending).resolves.toBe(true)
     else await expect(pending).rejects.toBe(failure)
@@ -231,7 +223,7 @@ describe('profile list pagination consumers', () => {
       agentTools: { list: async () => ({ tools: [] }) },
     } as unknown as StudioApi
     if (kind === 'agent') {
-      await useAgentPresets({ api, runAction: action => action() }).refreshAgentPresets()
+      await agentPresets(api).refreshAgentPresets()
     } else {
       await useProviderSettings({
         api, runAction: action => action(),

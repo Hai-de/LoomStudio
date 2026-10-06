@@ -33,7 +33,7 @@ describe('Agent preset resource', () => {
       await install(artifact)
       const { mounts } = await runtime.listPresetToolMounts({ presetId: id })
       await runtime.replacePresetToolMounts({
-        presetId: id, mounts: [{ ...mounts[0]!, defaultEnabled: true }],
+        presetId: id, mounts: [{ toolId: mounts[0]!.toolId, orderIndex: mounts[0]!.orderIndex, defaultEnabled: true }],
       })
       const before = (await runtime.getAgentPreset({ agentPresetId: id })).agentPreset
       await runtime.updatePromptResourceMacros({
@@ -75,7 +75,7 @@ describe('Agent preset resource', () => {
       expect(mounts.every(mount => !mount.defaultEnabled)).toBe(true)
       await runtime.replacePresetToolMounts({
         presetId: unbound.id,
-        mounts: [{ ...mounts[0]!, defaultEnabled: true }],
+        mounts: [{ toolId: mounts[0]!.toolId, orderIndex: mounts[0]!.orderIndex, defaultEnabled: true }],
       })
       const { resource: withMacros } = await runtime.updatePromptResourceMacros({
         resourceId: unbound.id, expectedVersion: unbound.version, macros: { tone: 'quiet' },

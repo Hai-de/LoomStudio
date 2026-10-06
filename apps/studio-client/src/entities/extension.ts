@@ -59,7 +59,9 @@ export type ManagedExtensionModule = {
 }
 
 export type ManagedExtensionPackage = {
+  remote?: { source: import('@loom-studio/extension-sdk').ExtensionDownloadSource; commit?: string; canRollback: boolean }
   archiveDigest?: string
+  fileRevision?: string
   target?: import('@loom-studio/extension-sdk').ExtensionInstallationTarget
   packageId: string
   version: string

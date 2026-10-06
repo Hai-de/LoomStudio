@@ -124,8 +124,8 @@ describe('log viewer model', () => {
 
   it('only commits and finishes the latest refresh when requests resolve out of order', async () => {
     const guard = createLatestRequestGuard()
-    const first = deferred<string>()
-    const second = deferred<string>()
+    const first = Promise.withResolvers<string>()
+    const second = Promise.withResolvers<string>()
     const committed: string[] = []
     const finished: string[] = []
 
@@ -170,9 +170,3 @@ describe('log viewer model', () => {
     expect(guard.isCurrent(nextRefresh)).toBe(true)
   })
 })
-
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>(resolvePromise => { resolve = resolvePromise })
-  return { promise, resolve }
-}

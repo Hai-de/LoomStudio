@@ -69,7 +69,6 @@ export {
   createDocumentBackedAiGateway,
   createDocumentBackedProfiledAiGateway,
   createFakeAiGateway,
-  createFakeProvider,
   createOpenAICompatibleGateway,
 } from './providers/gateway.js'
 export { officialFakeModelId } from './runtime/providers-runtime.js'

@@ -29,7 +29,7 @@ function rule(input: Partial<TextTransformRuleEntry> & Pick<TextTransformRuleEnt
   }
 }
 
-function entry(id: string, sequence: number, text: string): HistoryTextEntry {
+function entry(id: string, sequence: number, text: string): HistoryTextEntry<typeof source> {
   return { id, source, sequence, text, role: 'assistant' }
 }
 

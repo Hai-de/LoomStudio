@@ -1,5 +1,5 @@
 import { createInMemoryDiagnosticsRegistry } from '../../packages/diagnostics/src/index.js'
-import { createDocumentDataCommitSource, createInMemoryDocumentStore } from '../../packages/document-store/src/index.js'
+import { createInMemoryDocumentStore } from '../../packages/document-store/src/index.js'
 import { createExtensionHost } from '../../packages/extension-sdk/extension-host/src/index.js'
 import { createKernel, type Kernel } from '../../packages/kernel/src/index.js'
 import { createMemoryLogSink, createRootLogger } from '../../packages/logging/src/index.js'
@@ -57,7 +57,7 @@ const extensionHost = createExtensionHost({
 
 kernel = createKernel({
   documents,
-  dataCommits: createDocumentDataCommitSource(documents),
+  dataCommits: documents,
   diagnostics,
   traceAudit,
   extensionHost,

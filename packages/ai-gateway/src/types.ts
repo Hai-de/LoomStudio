@@ -57,22 +57,22 @@ export type AiGatewayError = {
   message: string
 }
 
-export type AiGatewayEvent =
+export type AiGatewayEvent<Result = AiGatewayResult> =
   | { type: 'started'; runId: string }
   | { type: 'text-delta'; runId: string; delta: string }
   | { type: 'tool-input-delta'; runId: string; toolCallId: string; toolName?: string; delta: string }
   | { type: 'usage'; runId: string; usage: AiGatewayUsage }
-  | { type: 'completed'; runId: string; result: AiGatewayResult }
+  | { type: 'completed'; runId: string; result: Result }
   | { type: 'failed'; runId: string; error: AiGatewayError }
   | { type: 'cancelled'; runId: string; reason?: string }
 
 export type AiGatewayRunState = 'running' | 'completed' | 'failed' | 'cancelled'
 
-export type AiGatewayRun = {
+export type AiGatewayRun<Result = AiGatewayResult> = {
   id: string
-  events: AsyncIterable<AiGatewayEvent>
-  readEvents(cursor?: number): { events: AiGatewayEvent[]; nextCursor: number; done: boolean }
-  result: Promise<AiGatewayResult>
+  events: AsyncIterable<AiGatewayEvent<Result>>
+  readEvents(cursor?: number): { events: AiGatewayEvent<Result>[]; nextCursor: number; done: boolean }
+  result: Promise<Result>
   getState(): AiGatewayRunState
   cancel(reason?: string): void
 }

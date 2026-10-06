@@ -1,6 +1,6 @@
 import type { ContextAssetNode } from '../../../entities/index.js'
 import { createDefaultProjection } from './context-asset-default-projection.js'
-import { normalizeContextAssets } from './context-asset-normalization.js'
+import { normalizeContextAssets, writeProjectionCapability } from './context-asset-normalization.js'
 import { findContextAssetNode, findContextAssetNodeInfo, flattenContextAssetNodes } from './context-asset-tree.js'
 
 type ContextAssetMutation = {
@@ -44,7 +44,7 @@ export function addContextAssetNode(
     kind: 'entry',
     enabled: true,
     body: '',
-    projection: createDefaultProjection(parentInfo.category, parentInfo.node.children ?? []),
+    capabilities: writeProjectionCapability(undefined, createDefaultProjection(parentInfo.category, parentInfo.node.children ?? [])),
   }
 
   return {
@@ -158,15 +158,6 @@ export function addContextAssetInZoneNode(
     enabled: true,
     body: '',
     category: rootNode.category,
-    projection: {
-      zoneId,
-      slotKey,
-      lifecycle: 'always',
-      order: 'entry: 100',
-      entryOrder: 100,
-      slotOrder: isPreset ? 100 : 200,
-      sourceKind: 'actual',
-    },
     capabilities: {
       lifecycle: { lifecycle: 'always' },
       projection: {
@@ -174,6 +165,8 @@ export function addContextAssetInZoneNode(
         slotKey,
         entryOrderHint: 100,
         slotOrderHint: isPreset ? 100 : 200,
+        order: 'entry: 100',
+        sourceKind: 'actual',
       },
     },
   }
@@ -192,7 +185,7 @@ export function duplicateContextAssetNode(
   const targetInfo = findContextAssetNodeInfo(nodes, id)
   if (!targetInfo || !canDuplicateNode(targetInfo.node, targetInfo.category)) return { nodes }
 
-  const copy = cloneContextAssetNode(targetInfo.node, makeId, true)
+  const copy = cloneContextAssetNode(normalizeContextAssets([targetInfo.node])[0]!, makeId, true)
   return {
     nodes: normalizeContextAssets(insertContextAssetSiblingAfter(nodes, id, copy)),
     selectedId: copy.id,
@@ -221,9 +214,7 @@ export function moveContextAssetNode(
   targetId: string,
   position: 'before' | 'inside' | 'after',
 ): ContextAssetNode[] {
-  const draggedInfo = findContextAssetNodeInfo(nodes, draggedId)
-  if (!draggedInfo || draggedInfo.node.kind === 'module' || draggedId === targetId) return nodes
-  if (findContextAssetNode(draggedInfo.node.children ?? [], targetId)) return nodes
+  if (!canMoveContextAssetNode(nodes, draggedId, targetId)) return nodes
 
   let draggedNode: ContextAssetNode | undefined
 
@@ -254,6 +245,13 @@ export function moveContextAssetNode(
   if (!draggedNode) return nodes
 
   return normalizeProjectionOrderNodes(normalizeContextAssets(insertNode(removed)))
+}
+
+export function canMoveContextAssetNode(nodes: ContextAssetNode[], draggedId: string, targetId: string): boolean {
+  const dragged = findContextAssetNode(nodes, draggedId)
+  return Boolean(dragged && dragged.kind !== 'module' && draggedId !== targetId
+    && !findContextAssetNode(dragged.children ?? [], targetId)
+    && findContextAssetNode(nodes, targetId))
 }
 
 function canAddChild(node: ContextAssetNode, inheritedCategory?: ContextAssetNode['category']): boolean {
@@ -301,14 +299,14 @@ function removeContextAssetNode(nodes: ContextAssetNode[], id: string): ContextA
 }
 
 function cloneContextAssetNode(node: ContextAssetNode, makeId: () => string, isRoot: boolean): ContextAssetNode {
-  const nextEntryOrder = typeof node.projection?.entryOrder === 'number'
-    ? node.projection.entryOrder + 1
-    : node.projection?.entryOrder
-  const projection = node.projection
+  const nextEntryOrder = typeof node.capabilities?.projection?.entryOrderHint === 'number'
+    ? node.capabilities.projection.entryOrderHint + 1
+    : node.capabilities?.projection?.entryOrderHint
+  const projection = node.capabilities?.projection
     ? {
-      ...node.projection,
-      entryOrder: nextEntryOrder,
-      order: typeof nextEntryOrder === 'number' ? `entry: ${nextEntryOrder}` : node.projection.order,
+      ...node.capabilities.projection,
+      entryOrderHint: nextEntryOrder,
+      order: typeof nextEntryOrder === 'number' ? `entry: ${nextEntryOrder}` : node.capabilities.projection.order,
     }
     : undefined
 
@@ -316,7 +314,7 @@ function cloneContextAssetNode(node: ContextAssetNode, makeId: () => string, isR
     ...node,
     id: makeId(),
     label: isRoot ? `${node.label} Copy` : node.label,
-    projection,
+    capabilities: projection ? { ...node.capabilities, projection } : node.capabilities,
     children: node.children?.map(child => cloneContextAssetNode(child, makeId, false)),
   }
 }

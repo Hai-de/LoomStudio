@@ -2,6 +2,23 @@ import { createAiGateway, type AiGatewayEvent } from '../../../packages/ai-gatew
 import { describe, expect, it } from 'vitest'
 
 describe('AI gateway run', () => {
+  it('replays the same sequence to simultaneous and late consumers with independent cursors', async () => {
+    const run = createAiGateway().createRun({
+      provider: provider(stubComplete('complete')),
+      modelId: 'test-model',
+      messages: [{ role: 'user', content: 'hello' }],
+    })
+    const [first, second] = await Promise.all([collect(run.events), collect(run.events)])
+    await run.result
+    expect(first).toEqual(second)
+    expect(await collect(run.events)).toEqual(first)
+    expect(run.readEvents(1)).toEqual({ events: first.slice(1), nextCursor: first.length, done: true })
+    expect(() => run.readEvents(-1)).toThrow('non-negative integer')
+    run.cancel('too late')
+    expect(run.getState()).toBe('completed')
+    expect(run.readEvents().events).toEqual(first)
+  })
+
   it('uses the same run contract for a complete response', async () => {
     const run = createAiGateway().createRun({
       provider: provider(stubComplete('complete')),

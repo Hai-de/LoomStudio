@@ -1,9 +1,10 @@
 import { useMemo } from 'react'
-import type { ContextAssetNode, PromptResource } from '../../entities/index.js'
-import { findContextAssetPath, resolveVirtualDisplayName } from '../../features/context-assets/model/context-asset-tree.js'
+import type { PromptResource } from '../../entities/index.js'
+import { findContextAssetPath } from '../../features/context-assets/model/context-asset-tree.js'
 import { readPromptResourceWorkbenchRoot } from '../../features/context-assets/model/prompt-resource-view.js'
 import { findContextNode } from '../../features/context-assets/model/projection-order.js'
-import { ContextAssetHeader, type ContextAssetPathSegment } from '../../features/context-assets/ui/context-asset-header/context-asset-header.js'
+import { ContextAssetHeader } from '../../features/context-assets/ui/context-asset-header/context-asset-header.js'
+import { buildContextPathSegments } from '../../features/context-assets/ui/context-asset-header/build-context-path-segments.js'
 import { useStudioLayoutStore } from '../../shared/studio-shell/studio-layout-store.js'
 import { STUDIO_PANEL_PRESENTATION } from '../../shared/studio-shell/studio-panel-presentation.js'
 import type { Translator } from '../../shared/i18n/index.js'
@@ -46,20 +47,4 @@ export function ContextWorkbenchHeader(props: {
       onSelectResource={resourceId => props.onSelectResource?.(resourceId)}
     />
   )
-}
-
-function buildContextPathSegments(pathNodes: ContextAssetNode[], onSelectNode: (id: string) => void): ContextAssetPathSegment[] {
-  return pathNodes.slice(1).map((node, index) => {
-    const parent = pathNodes[index]
-    const options = (parent?.children ?? []).map(sibling => ({
-      id: sibling.id,
-      label: resolveVirtualDisplayName(sibling.label, sibling.kind),
-    }))
-    return {
-      id: node.id,
-      label: resolveVirtualDisplayName(node.label, node.kind),
-      options,
-      onSelect: onSelectNode,
-    }
-  })
 }

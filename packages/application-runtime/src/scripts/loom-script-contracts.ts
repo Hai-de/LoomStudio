@@ -82,6 +82,16 @@ export type ResolvedLoomScriptRendererMount = {
   source: string
 }
 
+export type UnavailableLoomScriptMount = {
+  mountId: string
+  scriptDocumentId: string
+  enabled: boolean
+  available: false
+  severity: 'warning'
+  reason: 'script-missing' | 'installation-missing'
+  message: string
+}
+
 export type LoomScriptArtifact = {
   format: 'loom.script'
   schemaVersion: 1

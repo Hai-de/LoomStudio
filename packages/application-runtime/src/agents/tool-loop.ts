@@ -38,6 +38,7 @@ import type {
   GatewayChatResult,
   ProviderModelSelection,
   RuntimeRequestContext,
+  InvokeAgentTurnInput,
 } from '../types.js'
 import {
   projectHistoryEntries,
@@ -48,6 +49,7 @@ import { renderToolResult } from './tool-result-text.js'
 import { applicationDocumentTypes } from '../foundation/document-types.js'
 import { isExtensionResourceAvailable } from '../runtime/extension-resource-access.js'
 import type { AgentToolContent } from '../types.js'
+import { encodeRunRecovery, type AgentRunRecoveryCheckpoint } from './run-recovery.js'
 
 const maximumProviderSteps = 8
 const toolTimeoutMs = 30_000
@@ -85,7 +87,7 @@ export type ContentToolPromptRuntimeInputs = {
 }
 
 type AgentToolResolutionContext = Pick<ApplicationRuntimeContext, 'agentTools' | 'documents' | 'providerAdapters'>
-type NativeToolLoopContext = Pick<ApplicationRuntimeContext, 'agentTools' | 'createId' | 'gateway' | 'runtimeLogger'>
+type NativeToolLoopContext = Pick<ApplicationRuntimeContext, 'agentTools' | 'createId' | 'gateway' | 'runtimeLogger' | 'dataEngine'>
 
 export async function compileAgentToolSet(input: {
   ctx: AgentToolResolutionContext
@@ -253,6 +255,7 @@ export async function runNativeToolLoop(input: {
   model: ProviderModelSelection
   tokenMultiplier?: number
   initialMessages: ChatMessage[]
+  recoveryRequest: InvokeAgentTurnInput
   userInput: string
   compiledToolSet: CompiledAgentToolSet
   toolExecutionScope?: ToolExecutionScope
@@ -287,6 +290,23 @@ export async function runNativeToolLoop(input: {
   let checkpointMessages = [...input.initialMessages]
   let continuationAssistantEntryId = input.resumeAssistantEntryId
   const toolSpecs = createNativeToolSpecs(input.compiledToolSet)
+  const toolContract = createHash('sha256').update(JSON.stringify(input.compiledToolSet.tools.map(tool => ({
+    id: tool.definition.id, exposure: tool.exposure, transport: tool.transport,
+  })))).digest('hex')
+  const continuation = input.requestContext?.agentRun?.continuation
+  let nextRecoveryStep = continuation?.recovery?.nextProviderStep ?? 1
+  if (continuation?.recovery && continuation.recovery.toolContract !== toolContract) {
+    throw Object.assign(new Error('Agent tool contract changed since the checkpoint'), { code: 'agent.recovery_tools_changed' })
+  }
+  const userEntryId = input.resumeUserEntry?.id ?? input.ctx.createId('agent-entry')
+  function recovery(phase: AgentRunRecoveryCheckpoint['phase'], messages: ChatMessage[], nextProviderStep: number) {
+    return encodeRunRecovery({
+      version: 1, phase, executor: { pid: process.pid, id: input.runId },
+      request: input.recoveryRequest, model: input.model, toolContract,
+      messages, userEntryId, nextProviderStep,
+      ...(continuationAssistantEntryId ? { partialEntryId: continuationAssistantEntryId } : {}),
+    })
+  }
   const byExposedName = new Map(
     tools.map((tool) => [tool.definition.name, tool] as const),
   )
@@ -298,15 +318,17 @@ export async function runNativeToolLoop(input: {
     ? await append([{
         kind: 'run-state', state: 'running',
         sourceRunId: input.requestContext?.agentRun?.continuation?.sourceRunId,
-      }])
+        recovery: recovery('provider', providerMessages, continuation?.recovery?.nextProviderStep ?? 1),
+      }], undefined, continuation?.recovery ? continuation : undefined)
     : await append([
         { kind: 'message', role: 'user', content: input.userInput },
-        { kind: 'run-state', state: 'running' },
-      ])
+        { kind: 'run-state', state: 'running', recovery: recovery('provider', providerMessages, 1) },
+      ], userEntryId)
   const userEntry = input.resumeUserEntry ?? initial.entries[0]!
 
   try {
-    for (let step = 1; step <= maximumProviderSteps; step += 1) {
+    for (let step = continuation?.recovery?.nextProviderStep ?? 1; step <= maximumProviderSteps; step += 1) {
+      nextRecoveryStep = step
       progress.providerStep = step
       progress.stage = 'provider'
       stepStartedAt = performance.now()
@@ -491,6 +513,15 @@ export async function runNativeToolLoop(input: {
           status: 'proposed',
         })
       }
+      if (invocationPairs.length) stepEntries.push({
+        kind: 'run-state', state: 'running', recovery: recovery('tools', checkpointMessages, step),
+      })
+      const finalResponse = invocationPairs.length === 0 && providerResult.finishReason !== 'error'
+        && providerResult.finishReason !== 'length' && Boolean(providerResult.message.content) && Boolean(contentScan.text)
+      if (finalResponse) stepEntries.push({ kind: 'run-state', state: 'completed' })
+      if (invocationPairs.length === 0 && providerResult.finishReason === 'length') stepEntries.push({
+        kind: 'run-state', state: 'running', recovery: recovery('provider', checkpointMessages, step + 1),
+      })
       const persistedStep = await append(stepEntries)
       for (const pair of invocationPairs) {
         pendingTools.set(pair.invocation.id, {
@@ -520,6 +551,7 @@ export async function runNativeToolLoop(input: {
           )
           if (partialEntry) continuationAssistantEntryId = partialEntry.id
           providerMessages.push(providerResult.message)
+          nextRecoveryStep = step + 1
           completeStep('Output limit reached · continuing')
           continue
         }
@@ -532,9 +564,6 @@ export async function runNativeToolLoop(input: {
         )
         if (!assistantEntry)
           throw new Error('Final assistant transcript entry was not persisted')
-        const completed = await append([
-          { kind: 'run-state', state: 'completed' },
-        ])
         completeStep('Final assistant output accepted')
         return {
           session,
@@ -542,7 +571,7 @@ export async function runNativeToolLoop(input: {
           assistantEntry,
           providerResult,
           toolPromptBuildTrace: input.compiledToolSet.trace,
-          changesetId: completed.changesetId,
+          changesetId: persistedStep.changesetId,
         }
       }
 
@@ -590,10 +619,6 @@ export async function runNativeToolLoop(input: {
         })
         activeTool = undefined
         progress.stage = 'transcript'
-        await append([
-          toTranscriptResult(result, input.requestContext?.abortSignal),
-        ])
-        pendingTools.delete(pair.invocation.id)
         if (pair.transport === 'native-function') {
           checkpointMessages.push({
             role: 'tool',
@@ -612,6 +637,14 @@ export async function runNativeToolLoop(input: {
           })
         }
         freshContextMessages.push(...renderFreshContextMounts(result))
+        const resultEntries: AgentTranscriptEntryData[] = [toTranscriptResult(result, input.requestContext?.abortSignal)]
+        if (pair === invocationPairs.at(-1)) resultEntries.push({
+          kind: 'run-state', state: 'running',
+          recovery: recovery('provider', [...checkpointMessages, ...freshContextMessages], step + 1),
+        })
+        await append(resultEntries)
+        if (pair === invocationPairs.at(-1)) nextRecoveryStep = step + 1
+        pendingTools.delete(pair.invocation.id)
         if (input.requestContext?.abortSignal?.aborted)
           throw createAbortError(input.requestContext.abortSignal.reason)
         if (pair.transport === 'native-function') {
@@ -657,6 +690,7 @@ export async function runNativeToolLoop(input: {
       })
     }
     try {
+      const uncertainToolOutcome = pendingTools.size > 0
       if (pendingTools.size) {
         const results = [...pendingTools.values()].map(({ invocation }) => ({
           invocationId: invocation.id,
@@ -697,32 +731,37 @@ export async function runNativeToolLoop(input: {
             syntheticReason: 'interrupt',
           })
         }
-        const checkpointAppend = checkpointEntries.length ? await append(checkpointEntries) : undefined
-        const appendedPartial = checkpointAppend?.entries.find(entry =>
+        const partialEntryId = streamedText ? input.ctx.createId('agent-entry') : undefined
+        const resumeMessages: ChatMessage[] = [
+          ...checkpointMessages, ...freshContextMessages,
+          ...(streamedText ? [{
+            role: 'system' as const,
+            content: `The previous assistant response was interrupted. Continue from this partial response without repeating it:\n${streamedText}`,
+          }] : []),
+        ]
+        if (partialEntryId) continuationAssistantEntryId = partialEntryId
+        checkpointEntries.push({
+          kind: 'run-state', state: suspended ? 'suspended' : 'failed', reason: errorMessage(error),
+          ...(measurementId ? { measurementId } : {}),
+          recovery: recovery(uncertainToolOutcome ? 'tools' : 'provider', resumeMessages, nextRecoveryStep),
+        })
+        const checkpointAppend = await append(checkpointEntries, partialEntryId)
+        const appendedPartial = checkpointAppend.entries.find(entry =>
           entry.entry.kind === 'message' && entry.entry.role === 'assistant' && entry.entry.state === 'partial',
         )
         input.requestContext?.agentRun?.onSuspended?.({
           sourceRunId: input.requestContext.agentRun.runId,
-          messages: [
-            ...checkpointMessages,
-            ...(streamedText ? [{
-              role: 'system' as const,
-              content: `The previous assistant response was interrupted. Continue from this partial response without repeating it:\n${streamedText}`,
-            }] : []),
-          ],
+          messages: resumeMessages,
           userEntry,
           ...(appendedPartial ? { partialEntryId: appendedPartial.id } : {}),
         })
         progress.suspended = Boolean(input.requestContext?.agentRun?.onSuspended)
-      }
-      await append([
-        {
-          kind: 'run-state',
-          state: suspended ? 'suspended' : aborted ? 'aborted' : 'failed',
-          reason: errorMessage(error),
+      } else {
+        await append([{
+          kind: 'run-state', state: 'aborted', reason: errorMessage(error),
           ...(measurementId ? { measurementId } : {}),
-        },
-      ])
+        }])
+      }
     } catch {
       // Preserve the original failure if recording the terminal state also fails.
     }
@@ -737,8 +776,8 @@ export async function runNativeToolLoop(input: {
     stepStartedAt = undefined
   }
 
-  async function append(entries: AgentTranscriptEntryData[]) {
-    const result = await input.agents.appendEntries({
+  async function append(entries: AgentTranscriptEntryData[], firstId?: string, takeover?: NonNullable<RuntimeRequestContext['agentRun']>['continuation']) {
+    const write: Parameters<AgentStore['appendEntries']>[0] = {
       actor: input.requestContext?.actor ?? (input.requestContext?.clientId
         ? { kind: 'client', id: input.requestContext.clientId }
         : { kind: 'kernel', id: 'application-runtime' }),
@@ -748,8 +787,20 @@ export async function runNativeToolLoop(input: {
       parentCallId: input.requestContext?.parentCallId,
       agentSessionId: session.id,
       expectedEntryCount: session.entryCount,
-      entries: entries.map((entry) => ({ runId: input.runId, entry })),
-    })
+      entries: entries.map((entry, index) => ({ ...(index === 0 && firstId ? { id: firstId } : {}), runId: input.runId, entry })),
+    }
+    const result = takeover
+      ? await input.ctx.dataEngine.transact(write, async dataTx => {
+          const agents = input.agents.transaction(dataTx)
+          const stopped = agents.appendEntries({
+            agentSessionId: session.id, expectedEntryCount: takeover.expectedEntryCount!,
+            entries: [{ runId: takeover.sourceRunId, entry: {
+              kind: 'run-state', state: 'suspended', reason: `Execution transferred to ${input.runId}`,
+            } }],
+          })
+          return agents.appendEntries({ ...write, expectedEntryCount: stopped.session.entryCount })
+        }).then(result => ({ ...result.value, commit: result.commit }))
+      : await input.agents.appendEntries(write)
     session = result.session
     lastChangesetId = result.commit.changesetId
     input.requestContext?.agentRun?.onEvent({

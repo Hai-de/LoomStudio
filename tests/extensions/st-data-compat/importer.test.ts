@@ -9,7 +9,7 @@ import {
   isPngFile,
   sniffData,
 } from '@loom-studio/sillytavern-importer'
-import type { SillyTavernPresetData } from '../../../official/extensions/st-data-compat/src/types.js'
+import type { SillyTavernPresetData } from '../../../extensions/st-data-compat/src/types.js'
 import { createSqliteDataEngine } from '@loom-studio/data-engine'
 import { createSqliteDocumentStore } from '@loom-studio/document-store'
 import { createPromptResourceStore } from '@loom-studio/application-data'
@@ -296,7 +296,7 @@ describe('SillyTavern Importer Extension', () => {
   })
 
   it('correctly converts real character card 指针不再前进.png with embedded character_book', async () => {
-    const cardPath = join(__dirname, '../../../official/extensions/st-data-compat/指针不再前进.png')
+    const cardPath = join(__dirname, '../../../extensions/st-data-compat/指针不再前进.png')
     if (!existsSync(cardPath)) return
 
     const bytes = readFileSync(cardPath)
@@ -353,7 +353,7 @@ describe('SillyTavern Importer Extension', () => {
   })
 
   it('correctly normalizes real Xia Jin preset with prompt_order and role-based message blocks', () => {
-    const presetPath = join(__dirname, '../../../official/extensions/st-data-compat/夏瑾 双鱼座 Beta 0.40.json')
+    const presetPath = join(__dirname, '../../../extensions/st-data-compat/夏瑾 双鱼座 Beta 0.40.json')
     if (!existsSync(presetPath)) return
 
     const rawJson = readFileSync(presetPath, 'utf8')
@@ -420,7 +420,7 @@ describe('SillyTavern Importer Extension', () => {
   })
 
   it('reuses an embedded worldbook through an external card reference in an in-memory migration', async () => {
-    const fixtureRoot = join(__dirname, '../../../official/extensions/st-data-compat/fixtures/data')
+    const fixtureRoot = join(__dirname, '../../../extensions/st-data-compat/fixtures/data')
     const card = convertSillyTavernCard(JSON.parse(readFileSync(join(fixtureRoot, 'characters/Fixture Hero.json'), 'utf8')))
     const world = convertSillyTavernLorebook(readFileSync(join(fixtureRoot, 'worlds/Fixture World.json'), 'utf8'))
     let sequence = 0
@@ -458,7 +458,7 @@ describe('SillyTavern Importer Extension', () => {
   })
 
   it('correctly normalizes real Rimworld lorebook with natural order and non-at_depth anchors', () => {
-    const lorebookPath = join(__dirname, '../../../official/extensions/st-data-compat/-----rimworld_ 库.json')
+    const lorebookPath = join(__dirname, '../../../extensions/st-data-compat/-----rimworld_ 库.json')
     if (!existsSync(lorebookPath)) return
 
     const rawJson = readFileSync(lorebookPath, 'utf8')

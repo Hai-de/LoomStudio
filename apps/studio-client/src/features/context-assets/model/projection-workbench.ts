@@ -53,9 +53,14 @@ export function readProjectionOrderReorderUpdates(input: {
     return [{
       id: input.draggedId,
       partial: {
-        projection: {
-          ...draggedEntry.node.projection!,
-          entryOrder: readReorderedEntryOrder(input.orderedProjectionEntries, input.draggedId, input.targetId, draggedIndex < targetIndex ? 'after' : 'before'),
+        capabilities: {
+          ...draggedEntry.node.capabilities,
+          projection: {
+            ...draggedEntry.node.capabilities?.projection,
+            zoneId: draggedEntry.zoneId,
+            slotKey: draggedEntry.slotKey,
+            entryOrderHint: readReorderedEntryOrder(input.orderedProjectionEntries, input.draggedId, input.targetId, draggedIndex < targetIndex ? 'after' : 'before'),
+          },
         },
       },
     }]
@@ -74,10 +79,13 @@ export function readProjectionOrderReorderUpdates(input: {
     updates.push({
       id: input.draggedId,
       partial: {
-        projection: {
-          ...draggedEntry.node.projection!,
-          slotKey,
-          zoneId: targetEntry.zoneId,
+        capabilities: {
+          ...draggedEntry.node.capabilities,
+          projection: {
+            ...draggedEntry.node.capabilities?.projection,
+            slotKey,
+            zoneId: targetEntry.zoneId,
+          },
         },
       },
     })

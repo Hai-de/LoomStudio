@@ -198,7 +198,7 @@ async function activateRecord(
   })
 
   try {
-    const module = await loadServerModule(record, instanceId)
+    const module = await loadServerModule(record, instanceId, options)
     record.state = 'loaded'
     await instance.scope.run(() => module.activate(createContext(record, instance, options)))
     // Boundary: Compares runtime contribution registrations against manifest; degrades state on discrepancy.

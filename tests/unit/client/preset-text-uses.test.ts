@@ -34,8 +34,8 @@ function elements(value: unknown): Element[] {
 
 describe('Preset text use draft', () => {
   it('keeps rule and role Settings drafts across tabs and a pending CAS failure, then saves both fields', async () => {
-    const preset = { id: 'preset', version: 3, resourceKind: 'preset',
-      rootNode: { id: 'root', label: 'Writer' }, textUses: [] } as PromptResource
+    const preset: PromptResource = { id: 'preset', version: 3, resourceKind: 'preset', createdAt: '', updatedAt: '',
+      rootNode: { id: 'root', kind: 'module', label: 'Writer' }, textUses: [] }
     const api = {
       listRules: vi.fn(async () => ({ rules: [{ id: 'public-rule', name: 'Public', enabled: true, owner: { kind: 'workspace' } }] })),
       listExtractors: vi.fn(async () => ({ extractors: [{ id: 'extractor', name: 'Extract', enabled: false, owner: { kind: 'extension', packageId: 'example.memory' } }] })),

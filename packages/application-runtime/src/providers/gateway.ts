@@ -16,11 +16,9 @@ import { createId } from '@loom-studio/shared'
 import { fetch as undiciFetch, ProxyAgent } from 'undici'
 import { applicationDocumentTypes } from '../foundation/document-types.js'
 import { readDocument } from '../foundation/document-store.js'
-import { buildOpenAIChatPayload } from './provider-payload.js'
 import type {
   AiGateway,
   AiCapabilityProfileContent,
-  ApplicationProvider,
   OpenAICompatibleGatewayOptions,
   ProviderProfileContent,
 } from '../types.js'
@@ -77,10 +75,6 @@ export function createFakeAiGateway(): AiGateway {
   }
 }
 
-export function createFakeProvider(): ApplicationProvider {
-  return gatewayToProvider(createFakeAiGateway())
-}
-
 export function createDocumentBackedAiGateway(options: {
   documents: DocumentStore
   secrets?: SecretStore
@@ -109,7 +103,6 @@ export function createDocumentBackedAiGateway(options: {
     listModels: async input => {
       const providerProfile = await readDocument<ProviderProfileContent>(options.documents, input.providerProfileId, applicationDocumentTypes.providerProfile)
       const providerExtensionId = providerProfile.content.providerExtensionId
-      providerAdapters.validateAccountConfig(providerExtensionId, providerProfile.content.config)
       if (!providerProfile.content.secretRef) {
         const resolved = providerAdapters.resolve(providerExtensionId, { config: providerProfile.content.config })
         if (resolved.provider.kind !== 'fake') throw new Error('Provider credential is not configured')
@@ -162,11 +155,10 @@ export function createDocumentBackedAiGateway(options: {
             }
             return typeof message.content === 'string' && message.content.trim().length > 0
           })
-          const payload = buildOpenAIChatPayload({ messages: sanitizedMessages, modelId: input.model!.modelId })
           return await invokePlatformGateway(createAiGateway(), {
             provider: resolved.provider,
             modelId: input.model!.modelId,
-            messages: payload.messages,
+            messages: sanitizedMessages,
             ...(input.request.tools ? { tools: input.request.tools } : {}),
             ...(input.request.toolChoice ? { toolChoice: input.request.toolChoice } : {}),
             ...(input.request.providerOptions ? { providerOptions: input.request.providerOptions } : {}),
@@ -213,10 +205,6 @@ export function createOpenAICompatibleGateway(options: OpenAICompatibleGatewayOp
         throw new Error(`Provider model is not enabled: ${options.modelId}`)
       }
 
-      const payload = buildOpenAIChatPayload({
-        messages: input.request.messages,
-        modelId: options.modelId,
-      })
       return await invokePlatformGateway(platformGateway, {
           provider: {
             kind: 'openai-compatible',
@@ -225,7 +213,7 @@ export function createOpenAICompatibleGateway(options: OpenAICompatibleGatewayOp
             fetch: transport,
           },
           modelId: options.modelId,
-          messages: payload.messages,
+          messages: input.request.messages,
           ...(input.request.tools ? { tools: input.request.tools } : {}),
           ...(input.request.toolChoice ? { toolChoice: input.request.toolChoice } : {}),
           ...(input.request.providerOptions ? { providerOptions: input.request.providerOptions } : {}),
@@ -341,47 +329,4 @@ function readCauseCode(error: unknown): string | undefined {
     current = 'cause' in current ? Reflect.get(current, 'cause') : undefined
   }
   return undefined
-}
-
-export function providerToGateway(provider: ApplicationProvider): AiGateway {
-  return {
-    invokeChat: async input => {
-      const result = await provider.invoke({
-        messages: input.request.messages,
-        runId: input.runId,
-        sessionId: input.sessionId,
-        branchId: input.branchId,
-      })
-      const message = result.message ?? { role: 'assistant' as const, content: result.content }
-
-      return {
-        message,
-        text: message.content ?? '',
-        provider: result.provider,
-        model: result.model,
-        raw: result.raw,
-      }
-    },
-  }
-}
-
-function gatewayToProvider(gateway: AiGateway): ApplicationProvider {
-  return {
-    invoke: async input => {
-      const result = await gateway.invokeChat({
-        request: { messages: input.messages },
-        runId: input.runId,
-        sessionId: input.sessionId,
-        branchId: input.branchId,
-      })
-
-      return {
-        message: result.message,
-        content: result.text,
-        provider: result.provider,
-        model: result.model,
-        raw: result.raw,
-      }
-    },
-  }
 }

@@ -1,5 +1,4 @@
 import type { StudioApi } from '../../../shared/api/studio-api.js'
-import { encodeBase64 } from '../../../shared/browser/download.js'
 
 type UseExtensionResourceCommandsInput = {
   api: StudioApi
@@ -56,10 +55,6 @@ export function useExtensionResourceCommands(input: UseExtensionResourceCommands
     return result
   }
 
-  async function installExtensionPackageZip(file: File) {
-    return await input.api.extensions.installZip(encodeBase64(new Uint8Array(await file.arrayBuffer())))
-  }
-
   return {
     installCardPackage,
     updateCardPackage,
@@ -68,6 +63,5 @@ export function useExtensionResourceCommands(input: UseExtensionResourceCommands
     removeCardPackageResources,
     updateExtensionPackageResources,
     removeExtensionPackageResources,
-    installExtensionPackageZip,
   }
 }

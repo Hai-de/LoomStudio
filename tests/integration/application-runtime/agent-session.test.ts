@@ -473,8 +473,8 @@ describe('application agent session lifecycle', () => {
 
   it('persists editable Agent Tool entries and reloads them into the registry', async () => {
     const tool: ToolDefinition = {
-      id: 'official/read_context',
-      owner: { namespace: 'official' },
+      id: 'test/read_context',
+      owner: { namespace: 'test' },
       name: 'read_context',
       description: 'Read context for {{User}}.',
       input: { kind: 'structured', schema: { type: 'object' } },
@@ -714,11 +714,6 @@ describe('application agent session lifecycle', () => {
     engine.close()
   })
 
-  it('requires the shared Prompt Resource Store and Data Engine', async () => {
-    const { createInMemoryDocumentStore } = await import('@loom-studio/document-store')
-    expect(() => Reflect.apply(createApplicationRuntime, undefined, [{ documents: createInMemoryDocumentStore() }])).toThrow('Prompt Resource Store is required')
-  })
-
   it('runs an Agent-only turn without creating Narrative data', async () => {
     const { engine, runtime } = createTestRuntime()
     const { profile } = await createProfile(runtime, 'Discuss without committing narrative.')
@@ -733,7 +728,10 @@ describe('application agent session lifecycle', () => {
       assistant: { entry: { kind: 'message', role: 'assistant', content: 'Agent draft: Discuss the next scene without writing it.' } },
     })
     expect(result).not.toHaveProperty('narrative')
-    expect((await runtime.getAgentTranscriptPage({ agentSessionId: created.session.id })).entries).toHaveLength(5)
+    const transcript = await runtime.getAgentTranscriptPage({ agentSessionId: created.session.id })
+    expect(transcript.entries.filter(item => item.entry.kind === 'message')).toEqual([
+      result.entries.user, result.entries.assistant,
+    ])
     expect(engine.database.prepare('SELECT COUNT(*) AS count FROM narrative_nodes').get()).toEqual({ count: 0 })
     engine.close()
   })
@@ -1042,7 +1040,17 @@ describe('application agent session lifecycle', () => {
       { role: 'assistant', content: 'First reply.' },
       { role: 'user', content: 'Second.' },
     ])
-    expect((await runtime.getAgentTranscriptPage({ agentSessionId: session.session.id })).entries).toHaveLength(10)
+    const transcript = await runtime.getAgentTranscriptPage({ agentSessionId: session.session.id })
+    expect(transcript.entries.filter(item => item.entry.kind === 'message').map(item => item.entry)).toEqual([
+      { kind: 'message', role: 'user', content: 'First.' },
+      { kind: 'message', role: 'assistant', content: 'First reply.' },
+      { kind: 'message', role: 'user', content: 'Second.' },
+      { kind: 'message', role: 'assistant', content: 'Second reply.' },
+    ])
+    const measurements = transcript.entries.filter(item => item.entry.kind === 'request-measurement')
+    expect(measurements).toHaveLength(2)
+    expect(new Set(measurements.map(item => item.runId)).size).toBe(2)
+    expect(transcript.entries.filter(item => item.entry.kind === 'run-state' && item.entry.state === 'completed')).toHaveLength(2)
     expect(engine.database.prepare('SELECT COUNT(*) AS count FROM narrative_nodes').get()).toEqual({ count: 0 })
     engine.close()
   })
@@ -1147,7 +1155,17 @@ describe('application agent session lifecycle', () => {
       agentSessionId: session.session.id,
       input: 'Fail.',
     })).rejects.toThrow('provider failed')
-    expect((await runtime.getAgentTranscriptPage({ agentSessionId: session.session.id })).entries.map(entry => entry.entry)).toEqual([
+    const transcript = await runtime.getAgentTranscriptPage({ agentSessionId: session.session.id })
+    const measurements = transcript.entries.filter(item => item.entry.kind === 'request-measurement')
+    expect(measurements).toHaveLength(1)
+    const measurement = measurements[0]!
+    expect(measurement.entry).toMatchObject({ kind: 'request-measurement', providerStep: 1 })
+    expect(transcript.entries.filter(item => item.entry.kind === 'run-state' && item.entry.state === 'failed')).toMatchObject([{
+      runId: measurement.runId,
+      entry: { measurementId: measurement.entry.kind === 'request-measurement' ? measurement.entry.measurementId : undefined },
+    }])
+    expect(transcript.entries.map(item => item.entry)
+      .filter(entry => entry.kind === 'message' || entry.kind === 'run-state')).toMatchObject([
       { kind: 'message', role: 'user', content: 'Fail.' },
       { kind: 'run-state', state: 'running' },
       { kind: 'run-state', state: 'failed', reason: 'provider failed' },

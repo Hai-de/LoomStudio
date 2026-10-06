@@ -21,6 +21,7 @@ import {
 } from '../agents/tool-loop.js'
 import { composeAgentTurnPrompt } from '../agents/agent-turn.js'
 import { readSessionHistory } from '../agents/session-history.js'
+import { readAgentRunRecovery, registerAgentExecutor } from '../agents/run-recovery.js'
 import { assertNonEmpty, assertProviderModelExists } from '../agents/agent.js'
 import { buildOpenAIChatPayload, type OpenAIChatPayload } from '../providers/provider-payload.js'
 import { fromStoredResource, readMappedResource, toStoredResourceInput } from '../prompt/prompt-resource-mapper.js'
@@ -109,6 +110,7 @@ type AgentsRuntimeContext = Pick<ApplicationRuntimeContext,
 
 export function createAgentsRuntimeMethods(ctx: AgentsRuntimeContext) {
   return {
+    prepareAgentRunRecovery: (input: { agentSessionId: string; runId?: string }) => readAgentRunRecovery(requireAgents(ctx), input),
     createAgentPreset: async (input: CreateAgentPresetInput, requestContext?: RuntimeRequestContext): Promise<AgentPresetResult> => {
       assertNonEmpty(input.name, 'name')
       if (input.model !== undefined) await assertProviderModelExists(ctx.documents, input.model)
@@ -333,6 +335,7 @@ export function createAgentsRuntimeMethods(ctx: AgentsRuntimeContext) {
         throw Object.assign(new Error('Agent Session already has an executing Run'), { code: 'agent.session_busy' })
       executing.add(input.agentSessionId)
       const runId = requestContext?.agentRun?.runId ?? ctx.createId('run')
+      const releaseExecutor = registerAgentExecutor(runId)
       const startedAt = performance.now()
       const progress: AgentRunProgress = { stage: 'preparation', providerStep: 0, toolCount: 0, suspended: false }
       const logContext = {
@@ -371,6 +374,12 @@ export function createAgentsRuntimeMethods(ctx: AgentsRuntimeContext) {
           model,
           tokenMultiplier: prepared.tokenMultiplier,
           initialMessages: requestContext?.agentRun?.continuation?.messages ?? agentStepMessages,
+          recoveryRequest: {
+            ...input,
+            ...(narrativePage ? { narrativeTarget: {
+              ...input.narrativeTarget, timelineId: narrativePage.timeline.id, branchId: narrativePage.branch.id,
+            } } : {}),
+          },
           userInput: prepared.userInput,
           compiledToolSet,
           toolExecutionScope: prompt.toolExecutionScope,
@@ -430,6 +439,7 @@ export function createAgentsRuntimeMethods(ctx: AgentsRuntimeContext) {
         })
         throw error
       } finally {
+        releaseExecutor()
         executing.delete(input.agentSessionId)
       }
     },
@@ -671,7 +681,9 @@ async function prepareAgentTurn(
   if (!isExtensionResourceAvailable(preset.origin, availableInstallations)) {
     throw new Error(`Agent Preset is not available in this context: ${preset.id}`)
   }
-  if (!preset.model) throw new Error(`Agent Preset has no model binding: ${preset.id}`)
+  const model = requestContext?.agentRun?.continuation?.recovery?.model ?? preset.model
+  if (!model) throw new Error(`Agent Preset has no model binding: ${preset.id}`)
+  if (requestContext?.agentRun?.continuation?.recovery) await assertProviderModelExists(ctx.documents, model)
   const toolMounts = await ctx.promptResources.listPresetToolMounts({ presetResourceId: preset.id })
   const runId = invocationRunId ?? requestContext?.agentRun?.runId ?? ctx.createId('run')
   const buildId = ctx.createId('build')
@@ -758,7 +770,7 @@ async function prepareAgentTurn(
     compiledToolSet = await compileAgentToolSet({
       availableExtensionInstallations: availableInstallations,
       ctx,
-      model: preset.model,
+      model,
       toolMounts,
       variables: inspectedVariables,
       currentInput: userInput,
@@ -1118,10 +1130,10 @@ async function prepareAgentTurn(
   return {
     userInput,
     preset,
-    model: preset.model,
-    tokenMultiplier: preset.model
-      ? (await readDocument<ProviderProfileContent>(ctx.documents, preset.model.providerProfileId,
-          applicationDocumentTypes.providerProfile)).content.tokenMultipliers?.[preset.model.modelId] ?? 1
+    model,
+    tokenMultiplier: model
+      ? (await readDocument<ProviderProfileContent>(ctx.documents, model.providerProfileId,
+          applicationDocumentTypes.providerProfile)).content.tokenMultipliers?.[model.modelId] ?? 1
       : 1,
     narrativePage,
     narratives,

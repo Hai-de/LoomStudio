@@ -6,8 +6,8 @@ import {
   reduceLongTextEditorState,
   type LongTextEditorMode,
 } from './long-text-editor-model.js'
-import { SkeletonText } from '@loom-studio/ui'
-import { tryWriteClipboardText } from '../../browser/clipboard.js'
+import { IconButton, SkeletonText } from '@loom-studio/ui'
+import { useCopyFeedback } from '../../hooks/use-copy-feedback.js'
 import styles from './long-text-editor.module.scss'
 
 const CodeMirrorEditor = lazy(async () => {
@@ -68,6 +68,8 @@ export const LongTextEditor = forwardRef<LongTextEditorHandle, LongTextEditorPro
   const [hasOpenedSource, setHasOpenedSource] = useState(props.mode === 'source')
   const [state, dispatch] = useReducer(reduceLongTextEditorState, INITIAL_LONG_TEXT_EDITOR_STATE)
   const hasChanges = props.value !== initialValueRef.current
+  const { feedback, copy } = useCopyFeedback()
+  const copyStatus = feedback?.status ?? 'idle'
 
   useEffect(() => {
     if (props.mode === 'source') setHasOpenedSource(true)
@@ -79,21 +81,10 @@ export const LongTextEditor = forwardRef<LongTextEditorHandle, LongTextEditorPro
   }), [])
 
   useEffect(() => {
-    if (state.copyStatus === 'idle') return
-    const timeout = window.setTimeout(() => dispatch({ type: 'reset-copy' }), 1600)
-    return () => window.clearTimeout(timeout)
-  }, [state.copyStatus])
-
-  useEffect(() => {
     if (state.undoValue === undefined) return
     const timeout = window.setTimeout(() => dispatch({ type: 'expire-undo' }), 8000)
     return () => window.clearTimeout(timeout)
   }, [state.undoValue])
-
-  async function copyValue() {
-    const copied = await tryWriteClipboardText(props.value)
-    dispatch({ type: 'copy', status: copied ? 'copied' : 'failed' })
-  }
 
   function clearValue() {
     if (!props.value) return
@@ -117,9 +108,9 @@ export const LongTextEditor = forwardRef<LongTextEditorHandle, LongTextEditorPro
     props.onCommit(initialValueRef.current)
   }
 
-  const copyFeedback = state.copyStatus === 'copied'
+  const copyFeedback = copyStatus === 'copied'
     ? props.copiedLabel
-    : state.copyStatus === 'failed'
+    : copyStatus === 'failed'
       ? props.copyFailedLabel
       : ''
   const liveFeedback = copyFeedback || (state.undoValue === undefined ? '' : props.clearedLabel)
@@ -135,7 +126,7 @@ export const LongTextEditor = forwardRef<LongTextEditorHandle, LongTextEditorPro
   return (
     <section
       className={styles.editor}
-      data-copy-state={state.copyStatus}
+      data-copy-state={copyStatus}
       data-compact={props.compact ? 'true' : 'false'}
       data-disabled={props.disabled ? 'true' : 'false'}
       data-loom-component="long-text-editor"
@@ -151,76 +142,64 @@ export const LongTextEditor = forwardRef<LongTextEditorHandle, LongTextEditorPro
         </div>
         <div className={styles.actions}>
           {props.sourceOnly ? null : (
-            <button
+            <IconButton
               aria-label={props.mode === 'source' ? props.previewModeLabel : props.sourceModeLabel}
               aria-pressed={props.mode === 'preview'}
               className={`${styles.action} ${props.mode === 'preview' ? styles.modeActionActive : ''}`}
-              title={props.mode === 'source' ? props.previewModeLabel : props.sourceModeLabel}
-              type="button"
               onClick={() => props.onModeChange?.(props.mode === 'source' ? 'preview' : 'source')}
               onMouseDown={event => event.preventDefault()}
             >
               {props.mode === 'source' ? <Eye aria-hidden="true" /> : <Code2 aria-hidden="true" />}
-            </button>
+            </IconButton>
           )}
-          <button
+          <IconButton
             aria-label={props.undoEditLabel}
             className={styles.action}
             disabled={props.disabled || props.mode === 'preview' || !hasChanges}
-            title={props.undoEditLabel}
-            type="button"
             onClick={() => codeEditorRef.current?.undo()}
             onMouseDown={event => event.preventDefault()}
           >
             <Undo2 aria-hidden="true" />
-          </button>
-          <button
+          </IconButton>
+          <IconButton
             aria-label={props.restoreInitialLabel}
             className={styles.action}
             disabled={props.disabled || props.mode === 'preview' || !hasChanges}
-            title={props.restoreInitialLabel}
-            type="button"
             onClick={restoreInitialValue}
             onMouseDown={event => event.preventDefault()}
           >
             <History aria-hidden="true" />
-          </button>
+          </IconButton>
           {!props.compact ? (
-            <button
-              aria-label={state.copyStatus === 'idle' ? props.copyLabel : copyFeedback}
-              className={`${styles.action} ${state.copyStatus === 'failed' ? styles.actionFailed : ''}`}
+            <IconButton
+              aria-label={copyStatus === 'idle' ? props.copyLabel : copyFeedback}
+              className={`${styles.action} ${copyStatus === 'failed' ? styles.actionFailed : ''}`}
               disabled={!props.value}
-              title={state.copyStatus === 'idle' ? props.copyLabel : copyFeedback}
-              type="button"
-              onClick={() => void copyValue()}
+              onClick={() => void copy(props.value)}
               onMouseDown={event => event.preventDefault()}
             >
-              {state.copyStatus === 'copied' ? <Check aria-hidden="true" /> : state.copyStatus === 'failed' ? <X aria-hidden="true" /> : <Copy aria-hidden="true" />}
-            </button>
+              {copyStatus === 'copied' ? <Check aria-hidden="true" /> : copyStatus === 'failed' ? <X aria-hidden="true" /> : <Copy aria-hidden="true" />}
+            </IconButton>
           ) : null}
           {state.undoValue === undefined ? (
-            <button
+            <IconButton
               aria-label={props.clearLabel}
               className={styles.action}
               disabled={props.disabled || props.mode === 'preview' || !props.value}
-              title={props.clearLabel}
-              type="button"
               onClick={clearValue}
               onMouseDown={event => event.preventDefault()}
             >
               <Trash2 aria-hidden="true" />
-            </button>
+            </IconButton>
           ) : (
-            <button
+            <IconButton
               aria-label={props.undoLabel}
               className={`${styles.action} ${styles.undoAction}`}
-              title={props.undoLabel}
-              type="button"
               onClick={undoClear}
               onMouseDown={event => event.preventDefault()}
             >
               <RotateCcw aria-hidden="true" />
-            </button>
+            </IconButton>
           )}
         </div>
       </header>

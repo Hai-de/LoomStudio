@@ -3,6 +3,19 @@ import { createClientRendererHost } from '../../../apps/studio-client/src/shared
 import { listRuntimeRendererRegistrations, listRuntimeScriptItems } from '../../../apps/studio-client/src/features/text-transforms/ui/text-transform-panel.js'
 
 describe('text pipeline runtime catalog', () => {
+  it('shows an enabled unavailable reference as degraded without treating it as executable', () => {
+    const missing = {
+      mountId: 'mount-missing', scriptDocumentId: 'script-missing', enabled: true,
+      available: false as const, severity: 'warning' as const,
+      reason: 'script-missing' as const, message: 'Loom Script unavailable: script-missing',
+    }
+    expect(listRuntimeScriptItems([], [missing])).toEqual([{
+      id: 'unavailable-script:mount-missing', kind: 'script', label: 'script-missing',
+      description: missing.message, owner: missing.mountId, status: 'degraded',
+    }])
+    expect(listRuntimeScriptItems([], [{ ...missing, enabled: false }])).toEqual([])
+  })
+
   it('lists effective extension and Loom Script renderer registrations', () => {
     const host = createClientRendererHost()
     const definition = {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ApplicationRuntime } from '@loom-studio/application-runtime'
+import type { JsonObject } from '@loom-studio/shared'
 import { handleWorkspacesRpc } from '../../../apps/studio-server/src/rpc/handlers/application/workspaces.js'
 
 describe('Setting mount RPC input', () => {
@@ -7,7 +8,7 @@ describe('Setting mount RPC input', () => {
     const replaceSettingMounts = vi.fn(async () => ({ mounts: [], mutation: { changesetId: 'change' } }))
     const runtime = { replaceSettingMounts } as unknown as ApplicationRuntime
     const source = { kind: 'preset', id: 'preset' }
-    const input = { source, mounts: [{ id: 'missing-mount' }, { settingResourceId: 'new-setting' }] }
+    const input: JsonObject = { source, mounts: [{ id: 'missing-mount' }, { settingResourceId: 'new-setting' }] }
     await handleWorkspacesRpc(runtime, 'application.replaceSettingMounts', input)
     expect(replaceSettingMounts).toHaveBeenLastCalledWith(input, undefined)
     const legacy = { source, settingResourceIds: ['setting'] }
@@ -21,11 +22,12 @@ describe('Setting mount RPC input', () => {
     const replaceSettingMounts = vi.fn()
     const runtime = { replaceSettingMounts } as unknown as ApplicationRuntime
     const source = { kind: 'preset', id: 'preset' }
-    for (const params of [
+    const invalidInputs: JsonObject[] = [
       { source },
       { source, mounts: [], settingResourceIds: [] },
       { source, mounts: [{ id: 1 }] },
-    ]) {
+    ]
+    for (const params of invalidInputs) {
       await expect(handleWorkspacesRpc(runtime, 'application.replaceSettingMounts', params)).rejects.toThrow()
     }
     expect(replaceSettingMounts).not.toHaveBeenCalled()

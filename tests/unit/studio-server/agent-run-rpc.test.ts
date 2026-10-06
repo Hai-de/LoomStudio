@@ -211,6 +211,10 @@ describe('application Agent Run RPC', () => {
         })
       },
       getAgentTranscriptPage: async () => ({ session: { entryCount: entries.length }, entries }),
+      prepareAgentRunRecovery: async () => {
+        expect(entries.at(-1)?.entry.state).toBe('discarded')
+        return undefined
+      },
       appendAgentTranscriptEntries: async (input: { expectedEntryCount: number; entries: Array<{ runId: string; entry: { kind: string; state: string } }> }) => {
         expect(input.expectedEntryCount).toBe(entries.length)
         entries.push({ id: 'discarded', sequence: entries.length + 1, ...input.entries[0]! })
@@ -393,7 +397,7 @@ describe('application Agent Run RPC', () => {
             }, { once: true })
           })
         }
-        resumed = input.input === '' && Boolean(context?.agentRun?.continuation)
+        resumed = input.input === 'original request' && Boolean(context?.agentRun?.continuation?.userEntry)
         return Promise.resolve({ runId: context?.agentRun?.runId ?? 'run', agentSession: {}, entries: {}, mutation: {} } as never)
       },
     } as unknown as ApplicationRuntime
@@ -425,14 +429,16 @@ describe('application Agent Run RPC', () => {
     expect(resumed).toBe(true)
   })
 
-  it.each([false, true])('resumes from persisted transcript without repeating user message (partial: %s)', async partial => {
+  it.each([false, true])('forwards the durable recovery request and messages without rebuilding them (partial: %s)', async partial => {
     let resumedWithContinuation = false
     let invokedInput = 'not-called'
     let continuationMessages: unknown
     const runtime = {
-      getAgentTranscriptPage: async () => ({
-        entries: [
-          {
+      prepareAgentRunRecovery: async () => ({
+        request: { agentSessionId: 'session-persisted', input: 'Tell me a story.' },
+        continuation: {
+          sourceRunId: 'run-prev',
+          userEntry: {
             id: 'user-entry-floor-1',
             agentSessionId: 'session-persisted',
             sequence: 1,
@@ -440,40 +446,12 @@ describe('application Agent Run RPC', () => {
             entry: { kind: 'message', role: 'user', content: 'Tell me a story.' },
             createdAt: '2026-09-20T14:19:53.000Z',
           },
-          {
-            id: 'run-state-1',
-            agentSessionId: 'session-persisted',
-            sequence: 2,
-            runId: 'run-prev',
-            entry: { kind: 'run-state', state: 'running' },
-            createdAt: '2026-09-20T14:19:54.000Z',
-          },
-          {
-            id: 'observation',
-            agentSessionId: 'session-persisted',
-            sequence: 4,
-            runId: 'run-prev',
-            entry: { kind: 'provider-observation', provider: 'test', model: 'test-model' },
-            createdAt: '2026-09-20T14:19:55.000Z',
-          },
-          ...(partial ? [{
-            id: 'partial',
-            agentSessionId: 'session-persisted',
-            sequence: 5,
-            runId: 'run-prev',
-            entry: { kind: 'message', role: 'assistant', state: 'partial', content: 'Once upon a time' },
-            createdAt: '2026-09-20T14:19:55.000Z',
-          }] : []),
-          {
-            id: 'run-state-2',
-            agentSessionId: 'session-persisted',
-            sequence: 3,
-            runId: 'run-prev',
-            entry: { kind: 'run-state', state: 'failed', reason: '500 Internal Server Error' },
-            createdAt: '2026-09-20T14:19:55.000Z',
-          },
-        ],
-        nextCursor: undefined,
+          messages: [
+            { role: 'system', content: 'Original prompt.' },
+            { role: 'user', content: 'Tell me a story.' },
+            ...(partial ? [{ role: 'assistant', content: 'Once upon a time' }] : []),
+          ],
+        },
       }),
       invokeAgentTurn: (input: { input: string }, context?: RuntimeRequestContext) => {
         invokedInput = input.input
@@ -489,11 +467,12 @@ describe('application Agent Run RPC', () => {
 
     expect(resumeResult.accepted).toBe(true)
     expect(resumeResult.sourceRunId).toBe('run-prev')
-    expect(invokedInput).toBe('')
+    expect(invokedInput).toBe('Tell me a story.')
     expect(resumedWithContinuation).toBe(true)
-    expect(continuationMessages).toEqual(partial ? [{
-      role: 'system',
-      content: 'The previous assistant response was interrupted. Continue from this partial response without repeating it:\nOnce upon a time',
-    }] : [])
+    expect(continuationMessages).toEqual([
+      { role: 'system', content: 'Original prompt.' },
+      { role: 'user', content: 'Tell me a story.' },
+      ...(partial ? [{ role: 'assistant', content: 'Once upon a time' }] : []),
+    ])
   })
 })

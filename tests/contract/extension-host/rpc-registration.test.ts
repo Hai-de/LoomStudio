@@ -20,7 +20,7 @@ export function activate(ctx) {
 }
 `,
     })
-    const targets = [{ kind: 'global' as const }, { kind: 'card' as const, cardId: 'A' }, { kind: 'card' as const, cardId: 'B' }]
+    const targets = [{ kind: 'global' }, { kind: 'card', cardId: 'A' }, { kind: 'card', cardId: 'B' }] as const
     try {
       const instances = []
       for (const target of targets) {

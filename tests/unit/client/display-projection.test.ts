@@ -88,12 +88,12 @@ describe('Display projection lifecycle', () => {
     const { client, project, render } = setup()
     const original = render().query
     await original.fetch()
-    const observer = new QueryObserver(client, original.options)
+    const observer = new QueryObserver(client, { ...original.options, queryKey: original.queryKey })
     const unsubscribe = observer.subscribe(() => undefined)
     const pending = Promise.withResolvers<{ snapshot: HistoryProjectionSnapshot }>()
     project.mockImplementation(() => pending.promise)
     const refreshed = render({ refreshToken: 1 }).query
-    observer.setOptions(refreshed.options)
+    observer.setOptions({ ...refreshed.options, queryKey: refreshed.queryKey })
     expect(observer.getCurrentResult().data).toEqual(snapshot)
     expect(observer.getCurrentResult().isPlaceholderData).toBe(true)
     for (const overrides of [
@@ -103,7 +103,8 @@ describe('Display projection lifecycle', () => {
       { consumerAgentSessionId: 'different-consumer' },
       { revision: 'preset-b' },
     ]) {
-      observer.setOptions(render(overrides).query.options)
+      const query = render(overrides).query
+      observer.setOptions({ ...query.options, queryKey: query.queryKey })
       expect(observer.getCurrentResult().data).toBeUndefined()
     }
     pending.resolve({ snapshot })

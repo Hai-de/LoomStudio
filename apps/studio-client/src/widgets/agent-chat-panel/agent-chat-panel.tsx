@@ -18,10 +18,7 @@ import {
 import {
   lazy,
   Suspense,
-  useEffect,
-  useLayoutEffect,
   useMemo,
-  useRef,
   useState,
   type FormEvent,
   type ReactNode,
@@ -34,7 +31,10 @@ import type {
 } from '../../entities/index.js'
 import type { Translator } from '../../shared/i18n/index.js'
 import type { ActiveAgentRun } from '../../features/narrative-runtime/model/use-narrative-runtime.js'
-import { tryWriteClipboardText } from '../../shared/browser/clipboard.js'
+import { useCopyFeedback } from '../../shared/hooks/use-copy-feedback.js'
+import { DisplayProjectionStatus } from '../../features/message-content/ui/display-projection-status.js'
+import { messageCodeBlockLabels } from '../../features/message-content/ui/message-code-block-labels.js'
+import { useConversationViewport } from '../../shared/ui/conversation-viewport/use-conversation-viewport.js'
 import type { MarkdownCodeBlockLabels } from '../../shared/ui/markdown-content/markdown-code-block.js'
 import {
   DropdownMenu,
@@ -52,6 +52,8 @@ import { RunRecoveryControls, type RunRecoveryControlsProps } from '../../featur
 import type { ClientRendererHost } from '../../shared/extension-renderer-runtime/client-renderer-host.js'
 import { RendererNodeMountHost } from '../../features/extension-renderers/ui/renderer-node-mount-host.js'
 import styles from './agent-chat-panel.module.scss'
+import { AgentSessionCreateDialog } from './agent-session-create-dialog.js'
+import { AgentSessionPicker } from './agent-session-picker.js'
 import { displayText, isTransientAgentEntryId, type DisplayProjection } from '../../features/message-content/model/use-display-projection.js'
 
 const ConversationMarkdown = lazy(async () => {
@@ -89,9 +91,7 @@ type RenderItem =
   | {
       kind: 'reasoning'
       id: string
-      duration: string
       content: string
-      isThinking?: boolean
     }
 
 export function buildRenderItems(entries: AgentTranscriptEntryEntity[]): RenderItem[] {
@@ -185,9 +185,7 @@ export function buildRenderItems(entries: AgentTranscriptEntryEntity[]): RenderI
       items.push({
         kind: 'reasoning',
         id: msg.id,
-        duration: '',
         content: entry.content,
-        isThinking: false,
       })
     } else if (entry.kind === 'message' && typeof entry.content === 'string') {
       const isAssistant = entry.role === 'assistant'
@@ -237,6 +235,12 @@ export type AgentChatPanelProps = RunRecoveryControlsProps & {
   onSelectProfile(id: string): void
   onSelectSession?(id: string): void
   onNewSession?(): void
+  onCreateSession?(presetId: string, makePrimary: boolean): Promise<AgentSession | undefined>
+  canMakePrimary?: boolean
+  primarySessionId?: string
+  timelineId?: string
+  onSetPrimary?(session: AgentSession): Promise<void>
+  onRenameSession?(id: string, title: string): Promise<AgentSession | undefined>
   onDeleteSession?(id: string): void
   onSubmit(event: FormEvent): void
   onCancelRun?(): void
@@ -248,76 +252,44 @@ export type AgentChatPanelProps = RunRecoveryControlsProps & {
 export function AgentChatPanel(props: AgentChatPanelProps) {
   const recovery = props.runRecovery?.target === 'agent' ? props.runRecovery : undefined
   const disconnected = props.runRecovery?.status === 'disconnected'
-  const conversationRef = useRef<HTMLDivElement>(null)
-  const contentRef = useRef<HTMLDivElement>(null)
-  const followBottomRef = useRef(true)
   const [approvalReason, setApprovalReason] = useState('')
+  const [createOpen, setCreateOpen] = useState(false)
   const approval = props.activeRun?.approval
-  const [copyState, setCopyState] = useState<{ id: string; copied: boolean }>()
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const { feedback: copyState, copy: copyText } = useCopyFeedback()
 
   const effectiveMessages = props.messages
-  const renderItems = buildRenderItems(effectiveMessages)
-
-  useEffect(() => () => {
-    if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
-  }, [])
-
-  useLayoutEffect(() => {
-    followBottomRef.current = true
-    const conversation = conversationRef.current
-    if (conversation) conversation.scrollTop = conversation.scrollHeight
-  }, [props.session?.id])
-
-  useLayoutEffect(() => {
-    const conversation = conversationRef.current
-    if (conversation && followBottomRef.current) conversation.scrollTop = conversation.scrollHeight
-  }, [effectiveMessages])
-
-  useEffect(() => {
-    const content = contentRef.current
-    if (!content) return
-    const observer = new ResizeObserver(() => {
-      const conversation = conversationRef.current
-      if (conversation && followBottomRef.current) conversation.scrollTop = conversation.scrollHeight
-    })
-    observer.observe(content)
-    return () => observer.disconnect()
-  }, [])
+  const renderItems = useMemo(() => buildRenderItems(effectiveMessages), [effectiveMessages])
+  const { scrollRef: conversationRef, contentRef, listRef, headerRef, virtualizer, scrollMargin, onScroll } = useConversationViewport({
+    items: renderItems,
+    scopeId: props.session?.id,
+  })
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
+  const expansionKey = (id: string) => JSON.stringify([props.session?.id, id])
+  const expansion: RowExpansion = {
+    isOpen: (id, initial = false) => expandedRows[expansionKey(id)] ?? initial,
+    toggle: (id, initial = false) => setExpandedRows(previous => ({
+      ...previous, [expansionKey(id)]: !(previous[expansionKey(id)] ?? initial),
+    })),
+  }
 
   async function copyMessage(message: AgentTranscriptEntryEntity, content: string) {
-    setCopyState({ id: message.id, copied: await tryWriteClipboardText(content) })
-    if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
-    copyTimerRef.current = setTimeout(() => setCopyState(undefined), 1600)
+    await copyText(content, message.id)
   }
 
-  const codeBlockLabels: MarkdownCodeBlockLabels = {
-    copied: props.t('longTextEditor.copied'),
-    copy: props.t('longTextEditor.copy'),
-    copyFailed: props.t('longTextEditor.copyFailed'),
-    disableWrap: props.t('markdown.code.disableWrap'),
-    enableWrap: props.t('markdown.code.enableWrap'),
-  }
+  const codeBlockLabels = messageCodeBlockLabels(props.t)
 
   return (
     <div className={styles.panel} data-loom-component="agent-chat-panel">
       <header className={styles.sessionBar}>
-        <select
-          aria-label={props.t('agent.session')}
-          className={styles.sessionSelect}
+        <AgentSessionPicker session={props.session}
+          sessions={props.sessions ?? (props.session ? [props.session] : [])}
+          presets={props.profiles} t={props.t}
           disabled={props.busy}
-          value={props.session?.id ?? ''}
-          onChange={event => props.onSelectSession?.(event.target.value)}
-        >
-          <option disabled value="">{props.t('agent.sessionPending')}</option>
-          {(props.sessions ?? (props.session ? [props.session] : [])).map(session => (
-            <option key={session.id} value={session.id}>
-              {session.title ?? props.t('sessions.untitledAgentSession')} · {new Date(session.updatedAt).toLocaleString()}
-            </option>
-          ))}
-        </select>
-        <button className={styles.sessionAction} type="button" disabled={props.busy}
-          title={props.t('agent.sessionNew')} aria-label={props.t('agent.sessionNew')} onClick={props.onNewSession}>
+          sessionReady={props.sessionReady} primarySessionId={props.primarySessionId} timelineId={props.timelineId}
+          onSelect={props.onSelectSession} onRename={props.onRenameSession} onSetPrimary={props.onSetPrimary} />
+        <button className={styles.sessionAction} type="button" disabled={props.busy || (!props.onCreateSession && !props.onNewSession)}
+          title={props.t('agent.sessionNew')} aria-label={props.t('agent.sessionNew')}
+          onClick={() => props.onCreateSession ? setCreateOpen(true) : props.onNewSession?.()}>
           <Plus aria-hidden="true" />
         </button>
         <button className={styles.sessionAction} type="button"
@@ -334,55 +306,61 @@ export function AgentChatPanel(props: AgentChatPanelProps) {
           <Trash2 aria-hidden="true" />
         </button>
       </header>
+      {createOpen && props.onCreateSession ? <AgentSessionCreateDialog
+        presets={props.profiles}
+        initialPresetId={props.selectedProfileId}
+        canMakePrimary={props.canMakePrimary === true}
+        onCreate={props.onCreateSession}
+        onCreated={session => props.onSelectSession?.(session.id)}
+        onClose={() => setCreateOpen(false)}
+      /> : null}
 
       <div className={styles.conversation} ref={conversationRef} aria-busy={props.displayProjection?.refreshing}
-        onScroll={event => {
-          const element = event.currentTarget
-          followBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight <= 48
-        }}>
+        onScroll={onScroll}>
         <div className={styles.conversationContent} ref={contentRef}>
-        {props.displayProjection?.warning ? <p role="status">Display: {props.displayProjection.warning}</p> : null}
-        {props.displayProjection?.error ? <div role="alert">
-          <span>Display: {props.displayProjection.error}</span>
-          <button type="button" disabled={props.displayProjection.refreshing} onClick={props.displayProjection.retry}
-            title={props.t('textTransform.refresh')} aria-label={props.t('textTransform.refresh')}><RefreshCw size={16} aria-hidden="true" /></button>
-        </div> : null}
-        <Suspense fallback={<div aria-busy="true" className={styles.loading}><SkeletonText lines={5} /></div>}>
+        <div ref={headerRef}>
+        <DisplayProjectionStatus projection={props.displayProjection} retryLabel={props.t('textTransform.refresh')} />
           {!props.busy && props.sessionReady === false ? (
             <p className={styles.empty} role="alert">{props.t('agent.sessionLoadFailed')}</p>
           ) : effectiveMessages.length === 0 && !props.busy ? (
             <p className={styles.empty}>{props.t('agent.sessionEmpty')}</p>
           ) : null}
 
-          {renderItems.map((item) => {
+        </div>
+          <div ref={listRef} className={styles.virtualList} style={{ height: virtualizer.getTotalSize() }}>
+          {virtualizer.getVirtualItems().map(row => {
+            const item = renderItems[row.index]
+            let content: ReactNode
             if (item.kind === 'tool-group') {
-              return (
+              content = (
                 <AgentToolGroupBlock
                   key={item.id}
+                  id={item.id}
+                  expansion={expansion}
                   label={item.label}
                   tools={item.tools}
                 />
               )
             }
             if (item.kind === 'reasoning') {
-              return (
+              content = (
                 <AgentReasoningBlock
                   key={item.id}
-                  duration={item.duration}
+                  open={expansion.isOpen(item.id)}
+                  onToggle={() => expansion.toggle(item.id)}
                   content={item.content}
                   label={props.t('agent.reasoning')}
-                  isThinking={item.isThinking}
                 />
               )
             }
             if (item.kind === 'message') {
-              return (
+              content = (
                 <AgentTranscriptEntry
                   agentSessionId={props.session?.id}
                   codeBlockLabels={codeBlockLabels}
                   content={item.content}
                   displayContent={displayText(props.displayProjection, item.id, item.content, item.isStreaming || isTransientAgentEntryId(item.id))}
-                  copyState={copyState?.id === item.id ? copyState.copied : undefined}
+                  copyState={copyState?.id === item.id ? copyState.status === 'copied' : undefined}
                   index={item.index}
                   key={item.id}
                   message={item.message}
@@ -395,13 +373,16 @@ export function AgentChatPanel(props: AgentChatPanelProps) {
                 />
               )
             }
-            return null
+            return <div key={item.id} data-index={row.index} ref={virtualizer.measureElement}
+              className={styles.virtualRow} style={{ transform: `translateY(${row.start - scrollMargin}px)` }}>
+              <Suspense fallback={<div aria-busy="true"><SkeletonText lines={5} /></div>}>{content}</Suspense>
+            </div>
           })}
+          </div>
 
           {props.sessionTail ? (
             <div data-loom-surface="agent.session.tail">{props.sessionTail}</div>
           ) : null}
-        </Suspense>
         </div>
       </div>
 
@@ -544,21 +525,13 @@ function ToolCollapse(props: {
   )
 }
 
-/**
- * 独立 AI 思考块 (ThinkingReasoning - aicss 规范体系)
- * 思考时实时展开、秒数计时并展现微光 Shimmer；思考完成后自动收拢折叠进 summary
- */
 function AgentReasoningBlock(props: {
   label: string
-  duration?: string
   content: string
-  defaultOpen?: boolean
-  isThinking?: boolean
-  elapsedSeconds?: number
+  open: boolean
+  onToggle(): void
 }) {
-  const [open, setOpen] = useState(props.defaultOpen ?? false)
-  const isThinking = props.isThinking ?? false
-  const expanded = isThinking || open
+  const open = props.open
 
   const sentences = useMemo(() => {
     return props.content.split(/(?<=[。！？.!?\n])\s*/).filter(Boolean)
@@ -569,29 +542,20 @@ function AgentReasoningBlock(props: {
       <button
         type="button"
         className={styles.reasoningHeader}
-        onClick={() => {
-          if (!isThinking) setOpen(prev => !prev)
-        }}
-        aria-expanded={expanded}
+        onClick={props.onToggle}
+        aria-expanded={open}
       >
-        <span className={isThinking ? styles.shimmer : styles.reasoningLabel}>
+        <span className={styles.reasoningLabel}>
           {props.label}
         </span>
-        {!isThinking && (
-          <ChevronDown
+        <ChevronDown
             className={styles.reasoningChevron}
-            style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+            style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
             aria-hidden="true"
           />
-        )}
       </button>
 
-      <div
-        className={`${styles.trCollapsible} ${expanded ? '' : styles.isCollapsed}`}
-        aria-hidden={!expanded}
-        inert={!expanded}
-      >
-        <div className={styles.trInner}>
+      <ToolCollapse open={open} className={styles.reasoningCollapse}>
           <div className={styles.reasoningViewport}>
             {sentences.map((line, idx) => (
               <p key={idx} className={styles.reasoningSentence}>
@@ -599,8 +563,7 @@ function AgentReasoningBlock(props: {
               </p>
             ))}
           </div>
-        </div>
-      </div>
+      </ToolCollapse>
     </div>
   )
 }
@@ -609,8 +572,14 @@ function AgentReasoningBlock(props: {
  * 单个工具操作条目
  * 展开后严格符合图 3：单层深色全宽卡片，无套娃，纯净等宽代码输出，右下角成功/失败状态
  */
-function AgentToolActionItem(props: StepToolItem & { defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(props.defaultOpen ?? false)
+type RowExpansion = {
+  isOpen(id: string, initial?: boolean): boolean
+  toggle(id: string, initial?: boolean): void
+}
+
+function AgentToolActionItem(props: StepToolItem & { defaultOpen?: boolean; expansion?: RowExpansion }) {
+  const [localOpen, setLocalOpen] = useState(props.defaultOpen ?? false)
+  const open = props.expansion?.isOpen(props.id, props.defaultOpen) ?? localOpen
 
   const renderIcon = () => {
     switch (props.iconType) {
@@ -634,7 +603,7 @@ function AgentToolActionItem(props: StepToolItem & { defaultOpen?: boolean }) {
       <button
         type="button"
         className={styles.toolItemHeader}
-        onClick={() => setOpen(prev => !prev)}
+        onClick={() => props.expansion ? props.expansion.toggle(props.id, props.defaultOpen) : setLocalOpen(prev => !prev)}
         aria-expanded={open}
       >
         <span className={styles.toolItemIcon}>{renderIcon()}</span>
@@ -699,18 +668,21 @@ function AgentToolActionItem(props: StepToolItem & { defaultOpen?: boolean }) {
  * 若仅有单工具，直接展示单工具项，避免形式主义套壳
  */
 export function AgentToolGroupBlock(props: {
+  id?: string
   label: string
   tools: StepToolItem[]
   defaultOpen?: boolean
+  expansion?: RowExpansion
 }) {
-  const [open, setOpen] = useState(props.defaultOpen ?? false)
+  const [localOpen, setLocalOpen] = useState(props.defaultOpen ?? false)
+  const open = props.id && props.expansion ? props.expansion.isOpen(props.id, props.defaultOpen) : localOpen
 
   return (
     <div className={styles.toolGroupBlock}>
       {props.tools.length > 1 ? <button
         type="button"
         className={styles.toolGroupHeader}
-        onClick={() => setOpen(prev => !prev)}
+        onClick={() => props.id && props.expansion ? props.expansion.toggle(props.id, props.defaultOpen) : setLocalOpen(prev => !prev)}
         aria-expanded={open}
       >
         <span className={styles.toolItemIcon}>
@@ -730,6 +702,7 @@ export function AgentToolGroupBlock(props: {
             <AgentToolActionItem
               key={tool.id}
               {...tool}
+              expansion={props.expansion}
               defaultOpen={index === 0 && props.defaultOpen}
             />
           ))}
@@ -755,6 +728,13 @@ function AgentTranscriptEntry(props: {
   onCopy(): void
 }) {
   const displayContent = props.displayContent ?? ''
+  const body = <ConversationMarkdown
+    className={styles.messageBody}
+    codeBlockLabels={props.codeBlockLabels}
+    role={props.role}
+    value={displayContent}
+    streaming={props.isStreaming}
+  />
 
   return (
     <article aria-busy={props.displayContent === undefined} className={`${styles.message} ${styles[props.role]}`}>
@@ -768,22 +748,10 @@ function AgentTranscriptEntry(props: {
             displayText={displayContent}
             surface="agent-message"
           >
-            <ConversationMarkdown
-              className={styles.messageBody}
-              codeBlockLabels={props.codeBlockLabels}
-              role={props.role}
-              value={displayContent}
-              streaming={props.isStreaming}
-            />
+            {body}
           </RendererNodeMountHost>
         ) : (
-          <ConversationMarkdown
-            className={styles.messageBody}
-            codeBlockLabels={props.codeBlockLabels}
-            role={props.role}
-            value={displayContent}
-            streaming={props.isStreaming}
-          />
+          body
         )}
       </div>
       {props.showChrome !== false && (

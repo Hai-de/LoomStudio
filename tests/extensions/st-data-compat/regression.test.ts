@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { projectHistoryEntries, type TextTransformRuleEntry } from '../../../packages/application-runtime/src/transforms/history-text.js'
-import { convertSillyTavernRegexScripts, diagnoseSillyTavernRegexScripts } from '../../../official/extensions/st-data-compat/src/normalizer/regex.js'
-import { convertSillyTavernCard } from '../../../official/extensions/st-data-compat/src/normalizer/card.js'
-import { convertSillyTavernChat } from '../../../official/extensions/st-data-compat/src/parser/chat.js'
+import { convertSillyTavernRegexScripts, diagnoseSillyTavernRegexScripts } from '../../../extensions/st-data-compat/src/normalizer/regex.js'
+import { convertSillyTavernCard } from '../../../extensions/st-data-compat/src/normalizer/card.js'
+import { convertSillyTavernChat } from '../../../extensions/st-data-compat/src/parser/chat.js'
 import { MarkdownContent } from '../../../apps/studio-client/src/shared/ui/markdown-content/markdown-content.js'
-import { fingerprint } from '../../../official/extensions/st-data-compat/src/client/index.js'
-import { compatibleFileKind, normalizeScanPath } from '../../../official/extensions/st-data-compat/src/client/index.js'
+import { fingerprint } from '../../../extensions/st-data-compat/src/client/index.js'
+import { compatibleFileKind, normalizeScanPath } from '../../../extensions/st-data-compat/src/client/index.js'
 
 describe('SillyTavern compatibility', () => {
   it('maps native regex scripts without changing replacement semantics', () => {

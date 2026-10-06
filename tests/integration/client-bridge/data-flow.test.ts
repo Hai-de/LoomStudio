@@ -1,6 +1,6 @@
 import { createClientBridge, type ClientBridge } from '@loom-studio/client-bridge'
 import { createInMemoryDiagnosticsRegistry } from '@loom-studio/diagnostics'
-import { createDocumentDataCommitSource, createInMemoryDocumentStore } from '@loom-studio/document-store'
+import { createInMemoryDocumentStore } from '@loom-studio/document-store'
 import { createExtensionHost } from '@loom-studio/extension-host'
 import { createKernel, type Kernel } from '@loom-studio/kernel'
 import { createLoomRunner, createSamplePassFactories } from '@loom-studio/loom-runner'
@@ -35,7 +35,7 @@ function createHarness() {
 
   kernel = createKernel({
     documents,
-    dataCommits: createDocumentDataCommitSource(documents),
+    dataCommits: documents,
     diagnostics,
     traceAudit,
     extensionHost,

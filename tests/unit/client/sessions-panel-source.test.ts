@@ -1,6 +1,7 @@
 import { isValidElement, type ComponentProps, type ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SessionsPanel } from '../../../apps/studio-client/src/widgets/sessions-panel/sessions-panel.js'
+import { AgentSessionCreateDialog } from '../../../apps/studio-client/src/widgets/agent-chat-panel/agent-session-create-dialog.js'
 import { createStudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
 import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/index.js'
 import type { AgentSession, AgentTranscriptEntry, NarrativeNode, NarrativeTimeline } from '../../../apps/studio-client/src/entities/index.js'
@@ -38,6 +39,12 @@ function elements(value: unknown): Element[] {
   if (Array.isArray(value)) return value.flatMap(elements)
   if (!isValidElement<Record<string, unknown>>(value)) return []
   return [value, ...Object.values(value.props).flatMap(elements)]
+}
+
+function text(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) return value.map(text).join('')
+  return isValidElement<Record<string, unknown>>(value) ? text(value.props.children) : ''
 }
 
 const timestamp = '2026-09-23T00:00:00.000Z'
@@ -105,12 +112,12 @@ function confirmDeletion(f: ReturnType<typeof fixture>) {
 }
 
 describe('Session panel preview source isolation', () => {
-  it('keeps the creation choice on failure and opens the created Session only after success', async () => {
+  it('delegates creation to the shared dialog and opens its created Session', () => {
+    const dispatchEvent = vi.fn()
+    vi.stubGlobal('window', { dispatchEvent })
     const f = fixture('timeline')
     const created = { ...session, id: 'new-session' }
-    const create = vi.fn()
-      .mockRejectedValueOnce(new Error('create failed'))
-      .mockResolvedValueOnce(created)
+    const create = vi.fn(async () => created)
     const open = vi.fn()
     f.props.agentPresets = [{ id: 'profile', rootNode: { label: 'Writer' } } as typeof f.props.agentPresets[number]]
     f.props.onCreateAgentSession = create
@@ -121,27 +128,19 @@ describe('Session panel preview source isolation', () => {
       ;(button.props.onClick as () => void)()
     }
     click('新建 Agent 对话')
-    const createDialog = () => f.render().find(element => element.props.title === '新建 Agent 对话'
-      && 'actions' in element.props)!
-    let dialog = createDialog()
-    const controls = elements(dialog.props.children)
-    ;(controls.find(element => element.type === 'select')!.props.onChange as (event: { target: { value: string } }) => void)({ target: { value: 'profile' } })
-    ;(controls.find(element => element.type === 'input' && element.props.type === 'checkbox')!.props.onChange as (event: { target: { checked: boolean } }) => void)({ target: { checked: true } })
-    dialog = createDialog()
-    const submit = () => {
-      const button = elements(dialog.props.actions).find(element => element.props.children === '创建对话')!
-      ;(button.props.onClick as () => void)()
-    }
-    submit()
-    await vi.waitFor(() => expect(create).toHaveBeenCalledExactlyOnceWith('profile', true))
-    dialog = createDialog()
-    expect(dialog.props.open).toBe(true)
+    const createDialog = () => f.render().find(element => element.type === AgentSessionCreateDialog)
+    const dialog = createDialog()!
+    expect(dialog.props.presets).toBe(f.props.agentPresets)
+    expect(dialog.props.onCreate).toBe(create)
+    expect(create).not.toHaveBeenCalled()
     expect(open).not.toHaveBeenCalled()
-    expect(elements(dialog.props.children).some(element => element.props.role === 'alert'
-      && element.props.children === 'create failed')).toBe(true)
-    submit()
-    await vi.waitFor(() => expect(open).toHaveBeenCalledExactlyOnceWith(created))
-    expect(createDialog().props.open).toBe(false)
+    ;(dialog.props.onCreated as (session: AgentSession) => void)(created)
+    expect(open).toHaveBeenCalledExactlyOnceWith(created)
+    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'loom:open-agent-chat', detail: { sessionId: created.id },
+    }))
+    ;(dialog.props.onClose as () => void)()
+    expect(createDialog()).toBeUndefined()
   })
 
   it('uses the application dialog and does not delete a Timeline before confirmation', async () => {
@@ -196,7 +195,7 @@ describe('Session panel preview source isolation', () => {
     if (!detail) throw new Error('Missing Session detail')
     const content = elements((detail.type as (props: Record<string, unknown>) => Element)(detail.props))
     const group = content.find(element => Array.isArray(element.props.tools))
-    expect(group?.props.tools).toMatchObject([{ label: '已read', detailContent: 'Read complete' }])
+    expect(group?.props.tools).toMatchObject([{ label: '已read', resultContent: 'Read complete', status: 'success' }])
     expect(content.some(element => element.type === 'p' && element.props.children === 'Hello')).toBe(true)
     expect(content.some(element => element.key === 'state' || element.key === 'observation' || element.key === 'result')).toBe(false)
   })
@@ -209,7 +208,7 @@ describe('Session panel preview source isolation', () => {
     if (!tabs) throw new Error('Missing history filters')
     ;(tabs.props.onChange as (filter: string) => void)('sessions')
     const sessionButton = f.render().find(element => element.type === 'button'
-      && elements(element.props.children).some(child => child.type === 'strong' && child.props.children === session.title))
+      && elements(element.props.children).some(child => child.type === 'strong' && text(child).includes(session.title!)))
     expect(sessionButton).toBeDefined()
   })
 
@@ -242,7 +241,7 @@ describe('Session panel preview source isolation', () => {
     expect(remove.mock.calls.map(([id]) => id)).toEqual([session.id, failedSession.id])
     expect(f.props.allAgentSessions).toEqual([failedSession])
     const failedRow = f.render().find(element => element.props['data-selected'] === 'true'
-      && elements(element.props.children).some(child => child.type === 'strong' && child.props.children === failedSession.title))
+      && elements(element.props.children).some(child => child.type === 'strong' && text(child).includes(failedSession.title)))
     expect(failedRow).toBeDefined()
     remove.mockImplementation(async id => {
       f.props.allAgentSessions = f.props.allAgentSessions.filter(item => item.id !== id)

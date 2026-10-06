@@ -87,6 +87,15 @@ export function createStudioHttpServer(options: {
 
     if (request.method === 'POST' && request.url === '/auth/session') {
       if (!options.auth.bootstrap(request, response)) {
+        options.logger?.warn('Application session origin rejected', {
+          event: 'auth.origin_forbidden',
+          data: {
+            origin: request.headers.origin ?? null,
+            host: request.headers.host ?? null,
+            fetchSite: request.headers['sec-fetch-site'] ?? null,
+            userAgent: request.headers['user-agent'] ?? null,
+          },
+        })
         writeJson(response, 403, { error: { code: 'auth.origin_forbidden', message: 'Request origin is not allowed' } })
       }
       return

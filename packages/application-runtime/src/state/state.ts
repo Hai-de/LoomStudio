@@ -1,11 +1,13 @@
 import type { JsonObject, JsonValue } from '@loom-studio/shared'
-import type { Changeset, SqliteDocumentStore } from '@loom-studio/document-store'
+import type { Changeset, DocumentTransaction, SqliteDocumentStore } from '@loom-studio/document-store'
+import type { StateRevision } from '@loom-studio/application-data'
 import type { SqliteDataTransaction } from '@loom-studio/data-engine'
 import type { ApplicationRuntimeContext } from '../foundation/application-context.js'
 import { applicationDocumentTypes } from '../foundation/document-types.js'
 import { listDocuments } from '../foundation/document-store.js'
 import { validateStateValue } from './state-definition.js'
 import { readTimelineRuntimeContext } from '../narrative/timeline-runtime-context.js'
+import { narrativeWriteContext, requireDocumentParticipant } from '../runtime/context.js'
 import type {
   ApplyStateMutationInput,
   ApplyStateMutationResult,
@@ -20,6 +22,12 @@ import type {
 export type ApplicationStateContext = Pick<ApplicationRuntimeContext, 'dataEngine' | 'documents' | 'narratives' | 'states' | 'onStateChanged' | 'logger'>
 
 const globalOwnerId = 'workspace'
+
+class StateMutationReplay extends Error {
+  constructor(readonly revision: StateRevision) {
+    super('State mutation already committed')
+  }
+}
 
 export class ApplicationStateError extends Error {
   constructor(
@@ -91,7 +99,10 @@ export async function applyApplicationStateMutation(
     throw new ApplicationStateError('state.head_conflict', `State head conflict: ${current.scope.id}`)
   }
   const nextValue = applyStateOperations(current.revision.snapshot, input.operations)
-  await validateSnapshotAgainstDefinitions(ctx, input.target, current.revision.snapshot, nextValue)
+  if (input.target.scope !== 'global') {
+    await validateSnapshotAgainstDefinitions(ctx, input.target, current.revision.snapshot, nextValue)
+  }
+  let replayed = false
   const result = await ctx.dataEngine.transact({
     actor: requestContext?.actor ?? (requestContext?.clientId
       ? { kind: 'client', id: requestContext.clientId }
@@ -109,26 +120,34 @@ export async function applyApplicationStateMutation(
       operations: input.operations.map(operation => operation as unknown as JsonObject),
       idempotencyKey: input.idempotencyKey,
     })
-    if (!created.replayed) {
-      if (input.target.scope === 'global') {
-        stateTx.setGlobalHead({
-          scopeId: current.scope.id,
-          expectedRevisionId: current.revision.id,
-          revisionId: created.revision.id,
-        })
-      } else {
-        if (!ctx.narratives) throw new ApplicationStateError('state.timeline_not_initialized', 'Narrative Store is not configured')
-        ctx.narratives.transaction(dataTx).setBranchStateHead({
-          timelineId: input.target.timelineId,
-          branchId: input.target.branchId,
-          expectedStateHeadRevisionId: current.revision.id,
-          stateRevisionId: created.revision.id,
-        })
-      }
+    // Roll back the empty transaction and return the original receipt outside it.
+    if (created.replayed) throw new StateMutationReplay(created.revision)
+    if (input.target.scope === 'global') {
+      await requireDocumentParticipant(ctx).participateTransaction(dataTx, documents =>
+        validateGlobalSnapshotAgainstDefinitions(documents, current.revision.snapshot, nextValue), { allowEmpty: true })
+    }
+    if (input.target.scope === 'global') {
+      stateTx.setGlobalHead({
+        scopeId: current.scope.id,
+        expectedRevisionId: current.revision.id,
+        revisionId: created.revision.id,
+      })
+    } else {
+      if (!ctx.narratives) throw new ApplicationStateError('state.timeline_not_initialized', 'Narrative Store is not configured')
+      ctx.narratives.transaction(dataTx).setBranchStateHead({
+        timelineId: input.target.timelineId,
+        branchId: input.target.branchId,
+        expectedStateHeadRevisionId: current.revision.id,
+        stateRevisionId: created.revision.id,
+      })
     }
     return created.revision
+  }).catch(error => {
+    if (!(error instanceof StateMutationReplay)) throw error
+    replayed = true
+    return { value: error.revision, commit: { changesetId: error.revision.changesetId } }
   })
-  notifyStateChange(ctx, {
+  if (!replayed) notifyStateChange(ctx, {
     target: input.target,
     revisionId: result.value.id,
     changesetId: result.commit.changesetId,
@@ -219,6 +238,10 @@ export async function revertApplicationStateChangeset(
     if (documents && documents.changeset.operations.length > 0) {
       await revertDocumentsInTransaction(documents.participant, dataTx, documents.changeset)
     }
+    if (scope.kind === 'global') {
+      await requireDocumentParticipant(ctx).participateTransaction(dataTx, transaction =>
+        validateGlobalSnapshotAgainstDefinitions(transaction, revision.snapshot, parent.snapshot), { allowEmpty: true })
+    }
     const stateTx = ctx.states.transaction(dataTx)
     const compensation = stateTx.createRevision({
       scopeId: revision.scopeId,
@@ -244,6 +267,25 @@ export async function revertApplicationStateChangeset(
     changesetId: result.commit.changesetId,
     paths: [''],
   })
+  return { changesetId: result.commit.changesetId }
+}
+
+export async function revertApplicationStateDefinitionChangeset(
+  ctx: ApplicationStateContext,
+  changeset: Changeset,
+  requestContext?: RuntimeRequestContext,
+): Promise<{ changesetId: string }> {
+  const participant = requireDocumentParticipant(ctx)
+  const result = await ctx.dataEngine.transact(
+    narrativeWriteContext(requestContext, 'application.revertStateDefinitionChangeset'),
+    async dataTx => {
+      await revertDocumentsInTransaction(participant, dataTx, changeset)
+      const snapshot = ctx.states.transaction(dataTx).getGlobalSnapshot(globalOwnerId)
+      if (!snapshot) throw new ApplicationStateError('state.global_not_initialized', 'Global state is not initialized')
+      await participant.participateTransaction(dataTx, documents =>
+        validateGlobalSnapshotAgainstDefinitions(documents, snapshot.revision.snapshot, snapshot.revision.snapshot), { allowEmpty: true })
+    },
+  )
   return { changesetId: result.commit.changesetId }
 }
 
@@ -385,19 +427,10 @@ async function validateSnapshotAgainstDefinitions(
   previous: JsonObject,
   snapshot: JsonObject,
 ): Promise<void> {
-  const definitions = await listDocuments<StateDefinitionContent>(ctx.documents, applicationDocumentTypes.stateDefinition)
   if (target.scope === 'global') {
-    for (const definition of definitions) {
-      if (definition.content.kind !== 'global') continue
-      const value = readDotPath(snapshot, definition.content.path.replace(/^global\./, ''))
-      const previousValue = readDotPath(previous, definition.content.path.replace(/^global\./, ''))
-      if (definition.content.readOnly && JSON.stringify(value) !== JSON.stringify(previousValue)) {
-        throw new ApplicationStateError('state.read_only', `Read-only State value cannot be changed: ${definition.content.path}`)
-      }
-      if (value.found) validateStateValue(value.value, definition.content.schema, definition.content.path)
-    }
-    return
+    return validateGlobalSnapshotAgainstDefinitions(ctx.documents, previous, snapshot)
   }
+  const definitions = await listDocuments<StateDefinitionContent>(ctx.documents, applicationDocumentTypes.stateDefinition)
   const runtimeContext = await readTimelineRuntimeContext(ctx, target.timelineId)
   if (runtimeContext) {
     for (const binding of runtimeContext.stateBindings) {
@@ -419,6 +452,23 @@ async function validateSnapshotAgainstDefinitions(
     const value = readDotPath(snapshot, binding.path)
     if (!value.found) throw new ApplicationStateError('state.schema_required', `Bound Timeline State is missing: timeline.${binding.path}`)
     validateStateValue(value.value, definition.content.schema, `timeline.${binding.path}`)
+  }
+}
+
+async function validateGlobalSnapshotAgainstDefinitions(
+  documents: DocumentTransaction,
+  previous: JsonObject,
+  snapshot: JsonObject,
+): Promise<void> {
+  const definitions = await listDocuments<StateDefinitionContent>(documents, applicationDocumentTypes.stateDefinition)
+  for (const definition of definitions) {
+    if (definition.content.kind !== 'global') continue
+    const value = readDotPath(snapshot, definition.content.path.replace(/^global\./, ''))
+    const previousValue = readDotPath(previous, definition.content.path.replace(/^global\./, ''))
+    if (definition.content.readOnly && JSON.stringify(value) !== JSON.stringify(previousValue)) {
+      throw new ApplicationStateError('state.read_only', `Read-only State value cannot be changed: ${definition.content.path}`)
+    }
+    if (value.found) validateStateValue(value.value, definition.content.schema, definition.content.path)
   }
 }
 

@@ -178,6 +178,8 @@ export type ExtensionHostOptions = {
   validateStorageScope?(scope: ExtensionStorageScope, target: ExtensionInstallationTarget): Promise<void>
   validateEntityRef?(ref: ExtensionEntityRef, target: ExtensionInstallationTarget): Promise<void>
   assetScratchRoot?: string
+  resolveFileDataDirectory?(packageId: string, target: ExtensionInstallationTarget): Promise<string>
+  serverModuleSnapshotRoot?: string
   callRpc(method: string, params?: JsonValue, context?: ExtensionRpcContext): Promise<JsonValue>
   registerRpc(name: string, ownerPackageId: string, ownerModuleId: string, handler: ExtensionRpcHandler, ownerInstanceId: string, target: ExtensionInstallationTarget): ExtensionRpcRegistration
   registerEventDefinition?(definition: ExtensionEventDefinition & {

@@ -66,7 +66,8 @@ for (const [name, { path, pkg }] of selected) {
 }
 
 for (const path of [
-  'apps/studio-client/dist', 'official/starter', 'public/images/default-card.png',
+  'apps/studio-client/dist', 'official/starter', 'official/extensions/loom-assistant',
+  'official/cards/character-status', 'public/images/default-card.png',
   'scripts/start.mjs', 'start.sh', 'start.command', 'start.bat',
 ]) {
   await mkdir(dirname(join(destination, path)), { recursive: true })

@@ -5,14 +5,14 @@ import { aggregateTokenCounts, collectTokenEntries } from '../../../apps/studio-
 
 describe('Preset anchor token projection', () => {
   const preset: PromptResource = {
-    id: 'preset', version: 1, resourceKind: 'preset',
+    id: 'preset', version: 1, resourceKind: 'preset', createdAt: '', updatedAt: '',
     rootNode: { id: 'root', kind: 'module', label: '', children: [
       { id: 'prefix', kind: 'entry', label: '', body: 'prefix' },
       { id: 'anchor', kind: 'virtual', label: '常驻设定', capabilities: { targetAnchorId: '@setting.stable' } },
     ] },
   }
   const setting: PromptResource = {
-    id: 'setting', version: 1, resourceKind: 'setting',
+    id: 'setting', version: 1, resourceKind: 'setting', createdAt: '', updatedAt: '',
     rootNode: { id: 's-root', kind: 'module', label: '', children: [
       { id: 's-entry', kind: 'entry', label: '', body: 'world' },
       { id: 's-conditional', kind: 'folder', label: '', capabilities: { activation: { kind: 'keyword', keywords: ['hit'] } }, children: [

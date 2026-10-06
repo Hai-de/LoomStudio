@@ -13,9 +13,9 @@ import {
   type ToolSet,
 } from 'ai'
 import { parseProviderOptions } from './provider-options.js'
+import { GatewayEventStream } from './event-stream.js'
 import type {
   AiGatewayRequest,
-  AiGatewayEvent,
   AiGatewayRun,
   AiGatewayResult,
   AiProviderConfig,
@@ -34,10 +34,9 @@ function createGatewayRun(input: AiGatewayRequest): AiGatewayRun {
   const stream = new GatewayEventStream()
   const controller = new AbortController()
   let cancelReason: string | undefined
-  let terminal = false
   let state: AiGatewayRun['getState'] extends () => infer T ? T : never = 'running'
   const cancel = (reason?: string) => {
-    if (terminal || controller.signal.aborted) return
+    if (state !== 'running' || controller.signal.aborted) return
     cancelReason = reason
     controller.abort(reason)
   }
@@ -52,13 +51,11 @@ function createGatewayRun(input: AiGatewayRequest): AiGatewayRun {
         ? await executeStream(input, id, controller.signal, stream)
         : await executeComplete(input, controller.signal)
       if (value.usage) stream.push({ type: 'usage', runId: id, usage: value.usage })
-      terminal = true
       state = 'completed'
       stream.push({ type: 'completed', runId: id, result: value })
       stream.close()
       return value
     } catch (error) {
-      terminal = true
       if (controller.signal.aborted || isAbortError(error)) {
         state = 'cancelled'
         stream.push({ type: 'cancelled', runId: id, ...(cancelReason ? { reason: cancelReason } : {}) })
@@ -119,6 +116,7 @@ async function executeStream(input: AiGatewayRequest, runId: string, abortSignal
 }
 
 function prepareRequest(input: AiGatewayRequest, abortSignal: AbortSignal, delivery: 'complete' | 'stream', capture?: (body: JsonValue) => void) {
+  if (!input.modelId.trim()) throw new Error('Provider modelId cannot be empty')
   const tools = input.tools?.length ? createTools(input.tools) : undefined
   validateToolChoice(input.toolChoice, tools)
   const provider = {
@@ -199,38 +197,6 @@ function createRequestFetch(transport: typeof fetch, delivery: 'complete' | 'str
     }
     return response
   }) as typeof fetch
-}
-
-class GatewayEventStream implements AsyncIterable<AiGatewayEvent> {
-  // ponytail: A single Provider Step currently retains its event history so late and multiple consumers see the same sequence; replace with a bounded broadcast buffer before exposing long-lived runs.
-  private readonly values: AiGatewayEvent[] = []
-  private readonly waiters: Array<() => void> = []
-  private closed = false
-
-  push(event: AiGatewayEvent): void {
-    if (this.closed) return
-    this.values.push(event)
-    this.waiters.splice(0).forEach(resolve => resolve())
-  }
-
-  close(): void {
-    this.closed = true
-    this.waiters.splice(0).forEach(resolve => resolve())
-  }
-
-  readEvents(cursor = 0): { events: AiGatewayEvent[]; nextCursor: number; done: boolean } {
-    if (!Number.isSafeInteger(cursor) || cursor < 0) throw new Error('Gateway event cursor must be a non-negative integer')
-    return { events: this.values.slice(cursor), nextCursor: this.values.length, done: this.closed }
-  }
-
-  async *[Symbol.asyncIterator](): AsyncIterator<AiGatewayEvent> {
-    let index = 0
-    while (true) {
-      if (index < this.values.length) yield this.values[index++]!
-      else if (this.closed) return
-      else await new Promise<void>(resolve => this.waiters.push(resolve))
-    }
-  }
 }
 
 function isAbortError(error: unknown): boolean {
@@ -334,11 +300,17 @@ function toModelMessages(messages: ChatMessage[]): ModelMessage[] {
   const toolNames = new Map<string, string>()
   return messages.map((message, index) => {
     if (message.role === 'system' || message.role === 'developer') {
+      assertMessageContent(message.content, index)
       return { role: 'system', content: message.content }
     }
-    if (message.role === 'user')
+    if (message.role === 'user') {
+      assertMessageContent(message.content, index)
       return { role: 'user', content: message.content }
+    }
     if (message.role === 'assistant') {
+      if (!message.content && !message.tool_calls?.length) {
+        throw new Error(`Provider assistant message cannot be empty: messages[${index}]`)
+      }
       const content: Array<
         | { type: 'text'; text: string }
         | {
@@ -350,6 +322,9 @@ function toModelMessages(messages: ChatMessage[]): ModelMessage[] {
       > = []
       if (message.content) content.push({ type: 'text', text: message.content })
       for (const call of message.tool_calls ?? []) {
+        if (call.type !== 'function' || !call.id.trim() || !call.function.name.trim() || typeof call.function.arguments !== 'string') {
+          throw new Error(`Provider tool call is invalid: messages[${index}]`)
+        }
         toolNames.set(call.id, call.function.name)
         content.push({
           type: 'tool-call',
@@ -362,6 +337,8 @@ function toModelMessages(messages: ChatMessage[]): ModelMessage[] {
     }
     if (message.role !== 'tool')
       throw new Error(`Unsupported message role: messages[${index}]`)
+    assertMessageContent(message.content, index)
+    if (!message.tool_call_id.trim()) throw new Error(`Provider tool_call_id cannot be empty: messages[${index}]`)
     const toolName = toolNames.get(message.tool_call_id)
     if (!toolName)
       throw new Error(
@@ -379,6 +356,12 @@ function toModelMessages(messages: ChatMessage[]): ModelMessage[] {
       ],
     }
   })
+}
+
+function assertMessageContent(content: string, index: number): void {
+  if (typeof content !== 'string' || content.length === 0) {
+    throw new Error(`Provider message content cannot be empty: messages[${index}]`)
+  }
 }
 
 function parseToolInput(input: string, messageIndex: number): unknown {

@@ -85,7 +85,8 @@ describe.each(['en-US', 'zh-CN'] as const)('State/Text accessibility (%s)', loca
       ruleText: '{"name":"USER RULE","matcher":{"kind":"regex"}}',
       extractorText: '{"name":"USER EXTRACTOR","parser":"key-value-lines"}',
     })
-    expect(html).toContain(`aria-label="${t('textTransform.documentId')}"`)
+    if (kind === 'rule') expect(html).toContain('<small>document-1</small>')
+    else expect(html).toContain(`aria-label="${t('textTransform.documentId')}"`)
     expect(html).toContain(`aria-label="${t('textTransform.jsonEditor', { title })}"`)
     expect(html).toContain(kind === 'rule' ? 'USER RULE' : 'USER EXTRACTOR')
     expect(html).toContain(kind === 'rule' ? 'regex' : 'key-value-lines')

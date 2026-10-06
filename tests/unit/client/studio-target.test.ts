@@ -73,7 +73,7 @@ describe('Studio target URI entry', () => {
     result.resource.resourceKind = resourceKind
     f.resource.mockResolvedValue(result)
     f.resource.mockClear()
-    const panel = resourceKind === 'preset' ? 'preset' : 'resource'
+    const panel = resourceKind === 'preset' ? 'agent' : 'resource'
     await expect(resolveStudioTarget(f.api, uri({ type: 'resource', id: 'resource' })))
       .resolves.toEqual({ panel, resourceId: 'resource', assetId: 'root' })
     await expect(resolveStudioTarget(f.api, uri({ type: 'resource', id: 'resource', nodeId: 'nested' })))

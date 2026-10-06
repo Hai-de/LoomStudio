@@ -1,0 +1,306 @@
+import { describe, expect, it, vi } from 'vitest'
+import { fixture, primaryFixture } from '../../support/client/narrative-runtime.js'
+import type { StudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
+
+describe('Narrative Run recovery', () => {
+  it('publishes the Inspector result after expired replay and acknowledges only received completion', async () => {
+    const f = fixture()
+    await f.render().createAgentSession('profile', true)
+    const projection = { messages: [{ role: 'user', content: 'Large compiled prompt' }] }
+    const result = { ...f.result, projection, promptBuildTrace: { marker: 'original-trace' } }
+    f.subscribeRun.mockResolvedValueOnce({
+      events: [{ type: 'completed', runId: 'run', result }],
+      nextCursor: 100, done: true, state: 'completed',
+      replayExpired: true, partialText: '', pendingApprovals: [],
+    } as Awaited<ReturnType<StudioApi['agentSessions']['subscribeRun']>>)
+    f.render().setAgentInput('Draft')
+    await f.render().submitAgentTurn(f.event)
+    expect(f.render().lastRun).toBe(result)
+    expect(f.acknowledgeRunCompletion).toHaveBeenCalledExactlyOnceWith('run')
+    expect(f.reportFailure).not.toHaveBeenCalled()
+  })
+  it('resynchronizes expired replay before accepting new deltas and restores pending approval', async () => {
+    const f = fixture()
+    await f.render().createAgentSession('profile', true)
+    const user = { id: 'committed-user', agentSessionId: 'session', runId: 'run', sequence: 1,
+      entry: { kind: 'message' as const, role: 'user' as const, content: 'Draft' }, createdAt: '' }
+    const assistant = { ...user, id: 'committed-assistant', sequence: 2,
+      entry: { kind: 'message' as const, role: 'assistant' as const, content: 'Saved step' } }
+    f.getTranscript.mockResolvedValue({ session: f.result.agentSession, entries: [user, assistant] })
+    const expired = { events: [], nextCursor: 100, done: false, state: 'running' as const,
+      replayExpired: true, partialText: 'Recovered',
+      pendingApprovals: [{ type: 'mutation-approval-requested', runId: 'run', requestId: 'approval', preview: { value: 1 } }] }
+    let resolve!: (value: Awaited<ReturnType<StudioApi['agentSessions']['subscribeRun']>>) => void
+    f.subscribeRun.mockResolvedValueOnce({
+      events: [
+        { type: 'transcript-appended', runId: 'run', entries: [{ ...assistant, id: 'stale-step', entry: { ...assistant.entry, content: 'Stale' } }] },
+        { type: 'text-delta', runId: 'run', delta: 'OLD' },
+      ], nextCursor: 2, done: false, state: 'running',
+    } as Awaited<ReturnType<StudioApi['agentSessions']['subscribeRun']>>)
+      .mockResolvedValueOnce(expired)
+      .mockResolvedValueOnce({ events: [], nextCursor: 100, done: false, state: 'running' })
+      .mockImplementationOnce(() => new Promise(accept => { resolve = accept }))
+    f.render().setAgentInput('Draft')
+    const pending = f.render().submitAgentTurn(f.event)
+    await vi.waitFor(() => expect(f.subscribeRun).toHaveBeenCalledTimes(4))
+    expect(f.getTranscript).toHaveBeenCalledOnce()
+    expect(f.subscribeRun.mock.calls[3]).toEqual(['run', 100, 'session'])
+    expect(f.render().agentMessages.map(item => item.entry.content)).toEqual(['Draft', 'Saved step', 'Recovered'])
+    expect(f.render().activeAgentRun?.approval?.requestId).toBe('approval')
+    resolve({ events: [{ type: 'text-delta', runId: 'run', delta: ' tail' }], nextCursor: 101, done: false, state: 'running' })
+    let finish!: (value: Awaited<ReturnType<StudioApi['agentSessions']['subscribeRun']>>) => void
+    f.subscribeRun.mockImplementationOnce(() => new Promise(accept => { finish = accept }))
+    await vi.waitFor(() => expect(f.subscribeRun).toHaveBeenCalledTimes(5))
+    expect(f.render().agentMessages.at(-1)?.entry.content).toBe('Recovered tail')
+    finish({ events: [{ type: 'suspended', runId: 'run' }], nextCursor: 102, done: true, state: 'suspended' })
+    await pending
+  })
+
+  it('does not restore expired partial text already committed during the Transcript read', async () => {
+    const f = fixture()
+    f.render().setAgentInput('Draft')
+    const assistant = { id: 'saved', agentSessionId: 'session', runId: 'run', sequence: 2,
+      entry: { kind: 'message' as const, role: 'assistant' as const, content: 'Snapshot text' }, createdAt: '' }
+    let resolveRead!: (value: Awaited<ReturnType<StudioApi['agentSessions']['getTranscript']>>) => void
+    f.getTranscript.mockImplementationOnce(() => new Promise(accept => { resolveRead = accept }))
+    let finish!: (value: Awaited<ReturnType<StudioApi['agentSessions']['subscribeRun']>>) => void
+    f.subscribeRun.mockResolvedValueOnce({
+      events: [], nextCursor: 100, done: false, state: 'running', replayExpired: true,
+      partialText: 'Snapshot text', pendingApprovals: [],
+    } as Awaited<ReturnType<StudioApi['agentSessions']['subscribeRun']>>)
+      .mockResolvedValueOnce({
+        events: [{ type: 'transcript-appended', runId: 'run', entries: [assistant] }, { type: 'text-delta', runId: 'run', delta: 'Next step' }],
+        nextCursor: 102, done: false, state: 'running',
+      } as Awaited<ReturnType<StudioApi['agentSessions']['subscribeRun']>>)
+      .mockImplementationOnce(() => new Promise(accept => { finish = accept }))
+    const pending = f.render().submitAgentTurn(f.event)
+    await vi.waitFor(() => expect(f.getTranscript).toHaveBeenCalledOnce())
+    resolveRead({ session: f.result.agentSession, entries: [assistant] })
+    await vi.waitFor(() => expect(f.subscribeRun).toHaveBeenCalledTimes(3))
+    expect(f.subscribeRun.mock.calls[1]).toEqual(['run', 100, 'session'])
+    expect(f.render().agentMessages.filter(item => item.id === 'saved')).toHaveLength(1)
+    expect(f.render().agentMessages.at(-1)?.entry.content).toBe('Next step')
+    finish({ events: [{ type: 'suspended', runId: 'run' }], nextCursor: 103, done: true, state: 'suspended' })
+    await pending
+  })
+
+  it('finishes expired completed replay through authoritative refresh without a completed result', async () => {
+    const f = fixture()
+    await f.render().createAgentSession('profile', true)
+    f.subscribeRun.mockResolvedValueOnce({
+      events: [], nextCursor: 100, done: true, state: 'completed',
+      replayExpired: true, partialText: '', pendingApprovals: [],
+    } as Awaited<ReturnType<StudioApi['agentSessions']['subscribeRun']>>)
+    f.render().setAgentInput('Draft')
+    await f.render().submitAgentTurn(f.event)
+    expect(f.render().activeAgentRun?.status).toBe('completed')
+    expect(f.render().runRecovery).toBeUndefined()
+    expect(f.render().agentMessages).toEqual([f.result.entries.user, f.result.entries.assistant])
+    expect(f.getTranscript).toHaveBeenCalledTimes(2)
+    expect(f.reportFailure).not.toHaveBeenCalled()
+    expect(f.createRun).toHaveBeenCalledOnce()
+    expect(f.subscribeRun).toHaveBeenCalledWith('run', 0, 'session')
+    expect(f.acknowledgeRunCompletion).not.toHaveBeenCalled()
+  })
+
+  it.each(['selection', 'api'])('ignores expired Transcript reload after %s changes', async change => {
+    const f = fixture()
+    f.render().setAgentInput('Draft')
+    let resolveRead!: (value: Awaited<ReturnType<StudioApi['agentSessions']['getTranscript']>>) => void
+    f.getTranscript.mockImplementationOnce(() => new Promise(accept => { resolveRead = accept }))
+    f.subscribeRun.mockResolvedValueOnce({
+      events: [], nextCursor: 100, done: false, state: 'running', replayExpired: true,
+      partialText: 'OLD', pendingApprovals: [{ type: 'mutation-approval-requested', runId: 'run', requestId: 'old', preview: {} }],
+    } as Awaited<ReturnType<StudioApi['agentSessions']['subscribeRun']>>)
+    const pending = f.render().submitAgentTurn(f.event)
+    await vi.waitFor(() => expect(f.getTranscript).toHaveBeenCalledOnce())
+    if (change === 'selection') f.render().newAgentSession()
+    else f.input.api = { ...f.input.api }
+    const before = f.render().agentMessages
+    resolveRead({ session: f.result.agentSession, entries: [] })
+    await pending
+    expect(f.render().agentMessages).toEqual(before)
+    expect(f.render().activeAgentRun).toBeUndefined()
+    expect(f.subscribeRun).toHaveBeenCalledOnce()
+  })
+
+  it('refreshes tool-written nodes after completion and reports a refresh failure without rerunning', async () => {
+    const f = await primaryFixture()
+    f.getPage.mockRejectedValueOnce(new Error('Refresh unavailable'))
+    await f.render().submitTurn(f.event)
+    expect(f.render().activeAgentRun?.status).toBe('completed')
+    expect(f.render().runRecovery).toMatchObject({ status: 'refresh-failed', refreshFailed: true })
+    const toolNode = { id: 'tool-node', timelineId: 'timeline', stateRevisionId: 'state',
+      body: { format: 'loom-markdown.v1' as const, raw: 'Tool-written story' }, createdAt: 'now' }
+    f.getPage.mockResolvedValueOnce({ ...f.result.narrative, nodes: [...f.render().nodes, toolNode] })
+    await f.render().reconnectAgentRun()
+    expect(f.render().nodes.map(node => node.body.raw)).toEqual(['Draft', 'Tool-written story'])
+    expect(f.render().runRecovery).toBeUndefined()
+    expect(f.createRun).toHaveBeenCalledOnce()
+    expect(f.appendInput).toHaveBeenCalledOnce()
+  })
+
+  it('reconnects at the retained cursor without replaying text or creating/resuming a Run', async () => {
+    vi.useFakeTimers()
+    const f = await primaryFixture()
+    f.subscribeRun
+      .mockResolvedValueOnce({ events: [{ type: 'text-delta', runId: 'run', delta: 'Partial' }], nextCursor: 1, done: false, state: 'running' })
+      .mockRejectedValueOnce(new Error('Offline'))
+      .mockRejectedValueOnce(new Error('Offline'))
+      .mockRejectedValueOnce(new Error('Offline'))
+    const pending = f.render().submitTurn(f.event)
+    await vi.runAllTimersAsync()
+    expect(await pending).toBeUndefined()
+    expect(f.render().runRecovery?.status).toBe('disconnected')
+    expect(f.render().activeAgentRun?.status).toBe('running')
+    expect(f.render().agentMessages.at(-1)?.entry.content).toBe('Partial')
+    await f.render().submitTurn(f.event)
+    expect(f.createRun).toHaveBeenCalledOnce()
+
+    let release!: () => void
+    const reading = new Promise<void>(resolve => { release = resolve })
+    f.subscribeRun.mockImplementationOnce(async () => {
+      await reading
+      return { events: [{ type: 'completed', runId: 'run', result: f.result }], nextCursor: 2, done: true, state: 'completed' }
+    })
+    const reconnect = f.render().reconnectAgentRun()
+    await f.render().reconnectAgentRun()
+    expect(f.subscribeRun).toHaveBeenLastCalledWith('run', 1, 'session')
+    expect(f.subscribeRun).toHaveBeenCalledTimes(5)
+    release()
+    await reconnect
+    expect(f.render().runRecovery).toBeUndefined()
+    expect(f.render().activeAgentRun?.status).toBe('completed')
+    expect(f.render().agentMessages.map(entry => entry.id)).toEqual(['user', 'assistant'])
+    expect(f.createRun).toHaveBeenCalledOnce()
+    expect(f.resumeRun).not.toHaveBeenCalled()
+  })
+
+  it.each(['failed', 'cancelled'] as const)('retains the committed user node on %s and redelivers without appending again', async status => {
+    const f = await primaryFixture()
+    f.subscribeRun.mockResolvedValueOnce({
+      events: [{ type: status, runId: 'run', error: { message: 'Stopped' } }],
+      nextCursor: 1, done: true, state: status,
+    })
+    await f.render().submitTurn(f.event)
+    let state = f.render()
+    expect(state.activeAgentRun?.status).toBe(status)
+    expect(state.runRecovery?.status).toBe(status)
+    expect(state.composerInput).toBe('')
+    expect(state.nodes).toHaveLength(1)
+    expect(f.getPage).toHaveBeenCalledWith({ timelineId: 'timeline', branchId: 'branch', limit: 100 })
+    expect(state.agentMessages.map(entry => entry.id)).toEqual(['user', 'assistant'])
+    for (const newer of ['New draft', '  \n']) {
+      state.setInput(newer)
+      // The action itself guards a same-tick edit, before a new render.
+      state.restoreRunInput()
+      expect(f.render().composerInput).toBe(newer)
+      expect(f.render().canRestoreRunInput).toBe(false)
+    }
+    f.render().setInput('')
+    state = f.render()
+    expect(state.canRestoreRunInput).toBe(false)
+    state.restoreRunInput()
+    expect(f.render().composerInput).toBe('')
+    expect(f.render().runRecovery?.input).toBeUndefined()
+    expect(state.canRetryNarrativeInput).toBe(true)
+    await state.retryNarrativeInput()
+    expect(f.appendInput).toHaveBeenCalledOnce()
+    expect(f.createRun).toHaveBeenCalledTimes(2)
+    expect(f.resumeRun).not.toHaveBeenCalled()
+  })
+
+  it('retries a failed terminal refresh without restarting or resubscribing the Run', async () => {
+    const f = await primaryFixture()
+    f.subscribeRun.mockResolvedValueOnce({ events: [{ type: 'failed', runId: 'run' }], nextCursor: 1, done: true, state: 'failed' })
+    f.getPage.mockRejectedValueOnce(new Error('Read failed'))
+    await f.render().submitTurn(f.event)
+    expect(f.render().runRecovery).toMatchObject({ status: 'failed', refreshFailed: true })
+    expect(f.render().nodes).toHaveLength(1)
+    await f.render().reconnectAgentRun()
+    expect(f.render().runRecovery?.refreshFailed).toBeUndefined()
+    expect(f.getPage).toHaveBeenCalledTimes(2)
+    expect(f.subscribeRun).toHaveBeenCalledOnce()
+    expect(f.createRun).toHaveBeenCalledOnce()
+  })
+
+  it('does not publish a late reconnect or terminal refresh into a new Session', async () => {
+    vi.useFakeTimers()
+    const f = await primaryFixture()
+    f.subscribeRun.mockRejectedValueOnce(new Error('Offline')).mockRejectedValueOnce(new Error('Offline')).mockRejectedValueOnce(new Error('Offline'))
+    const pending = f.render().submitTurn(f.event)
+    await vi.runAllTimersAsync()
+    await pending
+    let release!: () => void
+    const reading = new Promise<void>(resolve => { release = resolve })
+    f.subscribeRun.mockImplementationOnce(async () => {
+      await reading
+      return { events: [{ type: 'completed', runId: 'run', result: f.result }], nextCursor: 1, done: true, state: 'completed' }
+    })
+    const reconnect = f.render().reconnectAgentRun()
+    f.render().newAgentSession()
+    release()
+    await reconnect
+    expect(f.createRun).toHaveBeenCalledOnce()
+    expect(f.subscribeRun).toHaveBeenCalledTimes(4)
+    expect(f.subscribeRun).toHaveBeenLastCalledWith('run', 0, 'session')
+    expect(f.render().agentMessages).toEqual([])
+    expect(f.render().activeAgentRun).toBeUndefined()
+    expect(f.render().runRecovery).toBeUndefined()
+  })
+
+  it('Agent chat uses the same failure contract rather than inventing a suspended Run', async () => {
+    const f = fixture()
+    f.render().setAgentInput('Agent draft')
+    f.createRun.mockRejectedValueOnce(new Error('Create rejected'))
+    await f.render().submitAgentTurn(f.event)
+    expect(f.render().agentInput).toBe('Agent draft')
+    expect(f.render().activeAgentRun).toBeUndefined()
+    f.subscribeRun.mockResolvedValueOnce({ events: [{ type: 'failed', runId: 'run' }], nextCursor: 1, done: true, state: 'failed' })
+    await f.render().submitAgentTurn(f.event)
+    expect(f.render().activeAgentRun?.status).toBe('failed')
+    expect(f.render().runRecovery?.target).toBe('agent')
+    expect(f.getPage).not.toHaveBeenCalled()
+    f.render().restoreRunInput()
+    expect(f.render().agentInput).toBe('Agent draft')
+    expect(f.resumeRun).not.toHaveBeenCalled()
+  })
+
+  it.each(['session', 'endpoint'] as const)('ignores a terminal refresh that finishes after changing %s', async destination => {
+    const f = await primaryFixture()
+    f.subscribeRun.mockResolvedValueOnce({ events: [{ type: 'failed', runId: 'run' }], nextCursor: 1, done: true, state: 'failed' })
+    let entered!: () => void
+    const refreshing = new Promise<void>(resolve => { entered = resolve })
+    let release!: () => void
+    const response = new Promise<void>(resolve => { release = resolve })
+    f.getPage.mockImplementationOnce(async () => { entered(); await response; return f.result.narrative })
+    const pending = f.render().submitTurn(f.event)
+    await refreshing
+    if (destination === 'session') f.render().newAgentSession()
+    else {
+      f.input.api = { ...f.input.api }
+      f.render()
+    }
+    release()
+    await pending
+    expect(f.render().agentMessages).toEqual([])
+    expect(f.render().runRecovery).toBeUndefined()
+    expect(f.render().runRecoveryBusy).toBe(false)
+    f.render().restoreRunInput()
+    expect(f.render().composerInput).toBe('')
+  })
+
+  it('keeps a resumed execution failure terminal rather than relabeling it as suspended', async () => {
+    const f = await primaryFixture()
+    f.subscribeRun.mockResolvedValueOnce({ events: [{ type: 'suspended', runId: 'run' }], nextCursor: 1, done: true, state: 'suspended' })
+    await f.render().submitTurn(f.event)
+    expect(f.render().activeAgentRun?.status).toBe('suspended')
+    f.subscribeRun.mockResolvedValueOnce({ events: [{ type: 'failed', runId: 'continued' }], nextCursor: 1, done: true, state: 'failed' })
+    await f.render().resumeAgentRun()
+    expect(f.render().activeAgentRun).toEqual({ runId: 'continued', status: 'failed' })
+    expect(f.render().runRecovery).toMatchObject({ target: 'narrative', status: 'failed' })
+    expect(f.render().runRecovery?.input).toBeUndefined()
+    expect(f.resumeRun).toHaveBeenCalledOnce()
+    expect(f.createRun).toHaveBeenCalledOnce()
+  })
+})

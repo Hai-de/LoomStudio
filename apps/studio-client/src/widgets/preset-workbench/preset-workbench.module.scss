@@ -227,107 +227,14 @@
   padding: 2px 6px 48px;
 }
 
-.toolGroup {
-  display: grid;
-}
-
-.toolGroupHeader {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: 14px 16px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 5px;
-  border: 0;
-  padding: 7px 6px;
-  color: var(--loom-color-text-subtle);
-  text-align: left;
-  background: transparent;
-}
-
-.toolGroupHeader:hover:not(:disabled) {
-  color: var(--loom-color-text);
-  background: transparent;
-}
-
-.toolGroupHeader svg {
-  width: var(--loom-icon-size-3);
-  height: var(--loom-icon-size-3);
-}
-
-.toolGroupHeader strong {
-  overflow: hidden;
-  color: var(--loom-color-text);
-  font-size: var(--loom-font-size-2);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.toolGroupHeader span {
-  font-family: var(--loom-font-family-mono);
-  font-size: var(--loom-font-size-1);
-}
-
-.toolGroupItems {
-  display: grid;
-  gap: 2px;
-  padding-left: 14px;
-}
-
-.toolExplorerItem,
-.toolExplorerActive {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 7px;
-  border: 0;
-  border-radius: var(--loom-radius-control);
-  padding: 7px 8px;
-  color: var(--loom-color-text-subtle);
-  text-align: left;
-  background: transparent;
-}
-
-.toolExplorerItem:hover:not(:disabled),
-.toolExplorerActive {
-  color: var(--loom-color-text);
-  background: var(--loom-color-surface-subtle);
-}
-
-.toolExplorerItem > svg,
-.toolExplorerActive > svg {
-  width: var(--loom-icon-size-4);
-  height: var(--loom-icon-size-4);
-}
-
-.toolExplorerText {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.toolExplorerText strong,
-.toolExplorerText small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.toolExplorerText small,
-.toolExplorerItem em,
-.toolExplorerActive em {
+.toolGroups em {
   color: var(--loom-color-text-subtle);
   font-size: var(--loom-font-size-1);
   font-style: normal;
 }
 
-.toolExplorerItem em,
-.toolExplorerActive em {
+.toolGroups em {
   white-space: nowrap;
-}
-
-.toolExplorerActive {
-  background: color-mix(in srgb, var(--loom-color-accent) 12%, var(--loom-color-surface-subtle));
 }
 
 .toolSearchEmpty {

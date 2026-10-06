@@ -51,6 +51,19 @@ describe('local Extension Package installer', () => {
     })).rejects.toThrow('escapes its root')
   })
 
+  it('explains missing release entries without exposing the staging path', async () => {
+    const root = await temporaryRoot()
+    const source = await writePackage(root, 'source', 'example.missing-dist', '1.0.0')
+    await rm(join(source, 'dist'), { recursive: true })
+    const installedRoot = join(root, 'installed')
+
+    await expect(installExtensionPackageFromDirectory({
+      sourceDirectory: source,
+      installedDirectory: installedRoot,
+    })).rejects.toThrow('扩展 example.missing-dist 的发行包缺少 Manifest 声明的文件：./dist/index.js')
+    await expect(readdir(join(installedRoot, '.staging'))).resolves.toEqual([])
+  })
+
   it('only uninstalls a versioned directory under the installed root', async () => {
     const root = await temporaryRoot()
     const source = await writePackage(root, 'source', 'example.remove', '1.0.0')

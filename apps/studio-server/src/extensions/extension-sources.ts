@@ -50,7 +50,7 @@ export async function discoverExtensionSources(options: {
   )
   await collectSources(
     { kind: 'installed', directory: options.installedDirectory },
-    () => scanInstalledDirectories(options.installedDirectory),
+    () => scanChildDirectories(options.installedDirectory, 'installed'),
     sources,
     failures,
   )
@@ -87,34 +87,6 @@ export async function discoverExtensionSources(options: {
   return { discovered, failures }
 }
 
-async function scanInstalledDirectories(parent: string): Promise<ExtensionSource[]> {
-  let packageEntries
-  try {
-    packageEntries = await readdir(parent, { withFileTypes: true })
-  } catch (error) {
-    if (isNodeError(error, 'ENOENT')) return []
-    throw error
-  }
-
-  const sources: ExtensionSource[] = []
-  for (const packageEntry of packageEntries) {
-    if (packageEntry.name === '.staging' || !packageEntry.isDirectory()) continue
-    const packageDirectory = resolve(parent, packageEntry.name)
-    const versionEntries = await readdir(packageDirectory, { withFileTypes: true })
-    for (const versionEntry of versionEntries) {
-      if (!versionEntry.isDirectory()) continue
-      const directory = resolve(packageDirectory, versionEntry.name)
-      try {
-        await access(resolve(directory, 'manifest.json'))
-        sources.push({ kind: 'installed', directory })
-      } catch (error) {
-        if (!isNodeError(error, 'ENOENT')) throw error
-      }
-    }
-  }
-  return sources
-}
-
 async function collectSources(
   boundary: ExtensionSource,
   read: () => Promise<ExtensionSource[]>,
@@ -139,6 +111,7 @@ async function scanChildDirectories(parent: string, kind: 'repository' | 'instal
 
   const sources: ExtensionSource[] = []
   for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue
     if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
     const directory = resolve(parent, entry.name)
     try {

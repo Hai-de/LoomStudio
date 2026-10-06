@@ -19,6 +19,8 @@ import { ExtensionSettingsForm } from './extension-settings-form.js'
 import { MasterDetailWorkbench } from '../../../shared/ui/master-detail-workbench/master-detail-workbench.js'
 import { FileTree, type FileTreeNode } from '../../../shared/ui/file-tree/file-tree.js'
 import { toggleExtensionPackage } from '../model/toggle-extension-package.js'
+import { ExtensionRemoteControls, RemoteExtensionInstall } from './remote-extension-install.js'
+import { Button, Dialog } from '@loom-studio/ui'
 import styles from './renderer-workspace-panel.module.scss'
 
 const WORKSPACE_SCOPE_KEY = 'workspace'
@@ -42,6 +44,8 @@ export function RendererWorkspacePanel(props: {
   sessionHost: RendererSessionHost
   t: Translator
   extensionRuntime: Pick<StudioApi['extensionRuntime'], 'getConfig' | 'listConfigs' | 'upsertConfig'>
+  extensionApi: StudioApi['extensions']
+  onRefreshExtensions(): Promise<unknown>
   configRevision: number
   settingScopeContext: { cardId?: string; timelineId?: string; agentSessionId?: string }
   searchParams: URLSearchParams
@@ -60,10 +64,9 @@ export function RendererWorkspacePanel(props: {
   promptResources: PromptResource[]
   onOpenPromptResource(resource: PromptResource): void
   onUpdateResources(input: Parameters<StudioApi['extensions']['updateResources']>[0]): Promise<unknown>
-  onInstallZip(file: File): Promise<unknown>
   onRemoveResources(packageId: string): Promise<unknown>
   onReload(packageId: string, moduleId: string, target?: ExtensionInstallationTarget): Promise<unknown>
-  onUninstall(packageId: string, version?: string): Promise<unknown>
+  onUninstall(packageId: string, version?: string, deleteData?: boolean): Promise<unknown>
 }) {
   useSyncExternalStore(props.host.subscribe, props.host.revision, props.host.revision)
   useSyncExternalStore(props.extensionHost.subscribe, props.extensionHost.revision, props.extensionHost.revision)
@@ -76,17 +79,14 @@ export function RendererWorkspacePanel(props: {
   }, [searchParams])
   const [mobilePane, setMobilePane] = useState<'master' | 'detail'>('master')
   const [busyKey, setBusyKey] = useState<string>()
+  const [removal, setRemoval] = useState<{ packageId: string; version: string }>()
+  const [deleteData, setDeleteData] = useState(false)
+  const [installOpen, setInstallOpen] = useState(false)
   const [expandedIds, setExpandedIds] = useState<string[]>(() => [...props.packages, ...props.cardPackages].flatMap(item => {
     const prefix = `${item.target?.kind === 'card' ? item.target.cardId : 'global'}:${item.packageId}:`
     return [`${prefix}resources`, `${prefix}modules`, ...['prompt', 'tool', 'rule', 'extractor'].map(kind => `${prefix}resources:${kind}`)]
   }))
   const [toggleReport, setToggleReport] = useState<{ key: string; completed: string[]; failed: Array<{ moduleId: string; message: string }> }>()
-  async function installZip(file: File) {
-    await run('install-zip', async () => {
-      await props.onInstallZip(file)
-      toast.success(props.t('renderer.installed'))
-    })
-  }
   const registrations = props.host.list('shell.workspace-panel')
   const activeKey = props.host.activeContributionKey('shell.workspace-panel', WORKSPACE_SCOPE_KEY)
   const active = registrations.find(registration => rendererContributionKey(registration) === activeKey)
@@ -191,12 +191,20 @@ export function RendererWorkspacePanel(props: {
   }
 
   async function uninstallPackage(packageId: string, version: string) {
-    if (!window.confirm(props.t('renderer.uninstallConfirm'))) return
+    setDeleteData(false)
+    setRemoval({ packageId, version })
+  }
+  async function confirmUninstall() {
+    if (!removal) return
+    setBusyKey('uninstall')
     try {
-      await props.onUninstall(packageId, version)
+      await props.onUninstall(removal.packageId, removal.version, deleteData)
+      setRemoval(undefined)
       toast.success(props.t('renderer.uninstalled'))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusyKey(undefined)
     }
   }
 
@@ -205,16 +213,18 @@ export function RendererWorkspacePanel(props: {
       <header className={styles.intro}>
         <div><h2>{props.t('renderer.workspaceTitle')}</h2>
           <small>{props.packages.length} · {instances.length} {props.t('renderer.activeInstances')}</small></div>
-        <label className={styles.installButton}>
-          <PackagePlus aria-hidden="true" />
-          <span>{props.t('renderer.installZip')}</span>
-          <input aria-label={props.t('renderer.installZip')} accept=".zip,application/zip" type="file" onChange={event => {
-            const file = event.target.files?.[0]
-            event.currentTarget.value = ''
-            if (file) void installZip(file)
-          }} />
-        </label>
+        <Button onClick={() => setInstallOpen(true)}><PackagePlus size={16} aria-hidden="true" />{props.t('renderer.install')}</Button>
       </header>
+      {installOpen ? <RemoteExtensionInstall api={props.extensionApi} t={props.t}
+        onClose={() => setInstallOpen(false)} onInstalled={props.onRefreshExtensions} /> : null}
+      {removal ? <Dialog open title={props.t('renderer.uninstall')} dismissible={!busyKey} onClose={() => setRemoval(undefined)}
+        actions={<>
+          <Button disabled={!!busyKey} onClick={() => setRemoval(undefined)}>{props.t('renderer.remote.cancel')}</Button>
+          <Button variant="danger" disabled={!!busyKey} onClick={() => void confirmUninstall()}><Trash2 size={16} aria-hidden="true" />{props.t('renderer.uninstall')}</Button>
+        </>}>
+        <p>{removal.packageId} · {removal.version}</p>
+        <label><input type="checkbox" checked={deleteData} disabled={!!busyKey} onChange={event => setDeleteData(event.target.checked)} /> {props.t('renderer.remote.deleteData')}</label>
+      </Dialog> : null}
       <MasterDetailWorkbench
         masterWidth="minmax(210px, 0.24fr)"
         mobilePane={mobilePane}
@@ -430,6 +440,8 @@ export function RendererWorkspacePanel(props: {
                   <span>{selected.available ? props.t('renderer.available') : props.t('renderer.unavailable')}</span>
                 </div>
               </header>
+              <ExtensionRemoteControls key={selected.packageId} api={props.extensionApi} t={props.t}
+                selected={selected} onInstalled={props.onRefreshExtensions} />
               {props.serverDiagnostics.length > 0 ? (
                 <details className={styles.diagnostics}>
                   <summary>{props.t('renderer.serverDiagnostics')} · {props.serverDiagnostics.length}</summary>

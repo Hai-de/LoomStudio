@@ -200,12 +200,51 @@ export function registerStageOneHandlers(
     return { package: extensionPackage }
   })
 
+  register('extensions.previewRemoteInstall', async params => {
+    const manager = requireExtensionManager(options)
+    if (!manager.previewRemoteInstall) throw new Error('Remote extension installation is unavailable')
+    return manager.previewRemoteInstall(params)
+  })
+  register('extensions.previewPackageZip', async params => {
+    const manager = requireExtensionManager(options)
+    if (!manager.previewPackageZip || !isRecord(params) || typeof params.base64 !== 'string') throw new Error('ZIP preview requires package bytes')
+    return manager.previewPackageZip(new Uint8Array(Buffer.from(params.base64, 'base64')))
+  })
+  register('extensions.officialSetup', async () => {
+    const manager = requireExtensionManager(options)
+    if (!manager.officialSetup) throw new Error('Official extension selection is unavailable')
+    return manager.officialSetup()
+  })
+  register('extensions.finishOfficialSetup', async () => {
+    const manager = requireExtensionManager(options)
+    if (!manager.finishOfficialSetup) throw new Error('Official extension selection is unavailable')
+    return manager.finishOfficialSetup()
+  })
+  register('extensions.previewRemoteChange', async params => {
+    const manager = requireExtensionManager(options)
+    if (!manager.previewRemoteChange) throw new Error('Remote extension replacement is unavailable')
+    return manager.previewRemoteChange(params)
+  })
+  register('extensions.checkRemoteUpdate', async params => {
+    const manager = requireExtensionManager(options)
+    if (!manager.checkRemoteUpdate) throw new Error('Remote extension updates are unavailable')
+    return manager.checkRemoteUpdate(readString(params, 'packageId'))
+  })
+  register('extensions.commitRemoteInstall', async (params, context) => {
+    const manager = requireExtensionManager(options)
+    if (!manager.commitRemoteInstall) throw new Error('Remote extension installation is unavailable')
+    const result = await manager.commitRemoteInstall(readString(params, 'token'))
+    eventBus.emit('extensions.changed', { action: 'installed' }, context)
+    return result
+  })
+
   register('extensions.uninstallPackage', async (params, context) => {
     if (readOptionalExtensionTarget(params)?.kind === 'card') throw new Error('Use extensions.uninstallCardPackage for a Card installation')
     const manager = requireExtensionManager(options)
     const packageId = readString(params, 'packageId')
     const version = isRecord(params) && typeof params.version === 'string' ? params.version : undefined
-    const extensionPackage = await manager.uninstallPackage(packageId, version)
+    if (isRecord(params) && params.deleteData !== undefined && typeof params.deleteData !== 'boolean') throw new Error('deleteData must be boolean')
+    const extensionPackage = await manager.uninstallPackage(packageId, version, isRecord(params) && params.deleteData === true)
     eventBus.emit('extensions.changed', {
       packageId,
       ...(version ? { version } : {}),

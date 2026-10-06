@@ -50,7 +50,7 @@ export default tseslint.config(
     files: ['**/*.{ts,tsx}'],
     languageOptions: {
       parserOptions: {
-        projectService: { allowDefaultProject: ['official/extensions/the-world/scripts/smoke.ts'] },
+        projectService: { allowDefaultProject: ['extensions/the-world/scripts/smoke.ts'] },
         tsconfigRootDir: import.meta.dirname,
       },
       globals: {

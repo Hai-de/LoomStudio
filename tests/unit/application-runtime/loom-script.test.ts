@@ -6,7 +6,8 @@ import { createNarrativeStore, createPromptResourceStore } from '@loom-studio/ap
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import assert from 'node:assert/strict'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parseLoomScriptSource, serializeLoomScriptMetadata } from '../../../packages/application-runtime/src/scripts/loom-script-codec.js'
 import { snapshotLoomScriptMounts } from '../../../packages/application-runtime/src/scripts/loom-script-resolution.js'
 
@@ -17,6 +18,86 @@ afterEach(async () => {
 })
 
 describe('Loom Script codec and store', () => {
+  it('resolves the same retained mount after its source is restored', async () => {
+    const fixture = await createFixture()
+    const runtime = createApplicationRuntime(fixture)
+    try {
+      const { script } = await runtime.importLoomScript({ owner: { kind: 'user' }, fileName: 'restored.loom.js', source: source() })
+      const { mount } = await runtime.createLoomScriptMount({ target: { kind: 'user' }, scriptDocumentId: script.id, orderIndex: 0 })
+      const enabled = await runtime.updateLoomScriptMount({
+        mountId: mount.id, expectedVersion: mount.version, enabled: true, orderIndex: 0, grantedCapabilities: ['state.read'],
+      })
+      const deleted = await fixture.documents.delete({ id: script.id, expectedVersion: script.version })
+      expect((await runtime.resolveLoomScriptRendererMounts()).unavailableMounts).toEqual([
+        expect.objectContaining({ mountId: mount.id, reason: 'script-missing', severity: 'warning' }),
+      ])
+      await fixture.documents.revertChangeset({ changesetId: deleted.changesetId, actor: { kind: 'system', id: 'test' } })
+      const restored = await runtime.resolveLoomScriptRendererMounts()
+      expect(restored.unavailableMounts).toEqual([])
+      expect(restored.mounts).toEqual([expect.objectContaining({
+        mountId: mount.id, enabled: true, grantedCapabilities: ['state.read'],
+        script: expect.objectContaining({ id: script.id }),
+      })])
+      expect((await runtime.listLoomScriptMounts()).mounts).toEqual([enabled.mount])
+    } finally {
+      await fixture.dataEngine.close()
+    }
+  })
+
+  it.each(['keep-play-data', 'delete-play-data', 'uninstall'] as const)('retains unavailable references without blocking healthy scripts after %s', async mode => {
+    const fixture = await createFixture()
+    const runtime = createApplicationRuntime(fixture)
+    try {
+      const { card } = await runtime.createCard({ name: 'Removed owner' })
+      const other = (await runtime.createCard({ name: 'Healthy owner' })).card
+      const { timeline } = await runtime.createNarrativeTimeline({ cardId: other.id })
+      const installation = await runtime.importExtensionPackageResources({
+        packageId: 'example.scripts', packageVersion: '1.0.0', target: { kind: 'card', cardId: card.id },
+        promptResources: [], agentTools: [], transformRules: [], textExtractors: [],
+      })
+      const imported = await runtime.importLoomScript({
+        owner: { kind: 'extension', packageId: 'example.scripts', installationId: installation.installationId },
+        fileName: 'private.loom.js', source: source(),
+      })
+      const healthy = await runtime.importLoomScript({ owner: { kind: 'user' }, fileName: 'healthy.loom.js', source: source() })
+      const enabledMounts = []
+      for (const script of [imported.script, healthy.script]) {
+        const { mount } = await runtime.createLoomScriptMount({ target: { kind: 'user' }, scriptDocumentId: script.id, orderIndex: enabledMounts.length })
+        const enabled = await runtime.updateLoomScriptMount({
+          mountId: mount.id, expectedVersion: mount.version, enabled: true, orderIndex: mount.orderIndex, grantedCapabilities: ['state.read'],
+        })
+        enabledMounts.push(enabled.mount)
+      }
+      if (mode === 'uninstall') {
+        await runtime.removeExtensionPackageResources({
+          packageId: 'example.scripts', target: { kind: 'card', cardId: card.id },
+          uninstall: true, expectedInstallationVersion: (await fixture.documents.get(installation.installationId))!.version,
+        })
+      } else {
+        await runtime.deleteCard({ cardId: card.id, includePlayData: mode === 'delete-play-data', includePromptResources: true })
+      }
+      for (const context of [undefined, { timelineId: timeline.id }]) {
+        const result = await runtime.resolveLoomScriptRendererMounts(context)
+        expect(result.mounts.map(mount => mount.script.id)).toEqual([healthy.script.id])
+        expect(result.unavailableMounts).toEqual([expect.objectContaining({
+          mountId: enabledMounts[0]!.id, scriptDocumentId: imported.script.id,
+          enabled: true, available: false, severity: 'warning',
+          reason: mode === 'uninstall' ? 'script-missing' : 'installation-missing',
+        })])
+      }
+      expect((await runtime.listLoomScriptMounts({ target: { kind: 'user' } })).mounts).toEqual(enabledMounts)
+      const failure = new Error('Document storage unavailable')
+      const read = vi.spyOn(fixture.documents, 'get').mockRejectedValueOnce(failure)
+      try {
+        await expect(runtime.resolveLoomScriptRendererMounts()).rejects.toBe(failure)
+      } finally {
+        read.mockRestore()
+      }
+    } finally {
+      await fixture.dataEngine.close()
+    }
+  })
+
   it('parses multiple contributions and serializes canonical Metadata', () => {
     const metadata = parseLoomScriptSource(source())
     expect(metadata.contributions.map(item => item.renderer.id)).toEqual(['status-panel', 'status-tail'])
@@ -139,9 +220,10 @@ describe('Loom Script codec and store', () => {
     })
     const { timeline, branch } = await runtime.createNarrativeTimeline({ cardId: card.id })
     const context = (await fixture.documents.get(`timeline-runtime-context:${timeline.id}`))!
+    assert.ok(context.content && typeof context.content === 'object' && !Array.isArray(context.content))
     await fixture.documents.write({
       id: context.id, type: context.type, expectedVersion: context.version,
-      content: { ...context.content, loomScriptMounts: await snapshotLoomScriptMounts(fixture, { kind: 'card', cardId: card.id }) },
+      content: { ...context.content, loomScriptMounts: (await snapshotLoomScriptMounts(fixture, { kind: 'card', cardId: card.id })).snapshots },
     })
     const target = { scope: 'timeline' as const, timelineId: timeline.id, branchId: branch.id }
     const state = await runtime.getStateSnapshot({ target })

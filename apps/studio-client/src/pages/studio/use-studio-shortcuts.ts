@@ -14,7 +14,7 @@ type UseStudioShortcutsOptions = {
   onRedo(): void
   onUndo(): void
   setAssetMetadataOpen(open: boolean): void
-  togglePanelWindowMode(panel?: StudioPanelId): void
+  togglePanelWindowMode(): void
 }
 
 export function useStudioShortcuts(options: UseStudioShortcutsOptions) {
@@ -36,7 +36,7 @@ export function useStudioShortcuts(options: UseStudioShortcutsOptions) {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.defaultPrevented) return
+      if (event.defaultPrevented || document.querySelector('dialog:modal')) return
       if (event.key === 'Escape' && isEditableTarget(event.target)) return
       if (event.key === 'Escape' && assetMetadataOpen && (activePanel === 'resource' || activePanel === 'preset' || activePanel === 'agent')) {
         event.preventDefault()
@@ -45,7 +45,7 @@ export function useStudioShortcuts(options: UseStudioShortcutsOptions) {
       }
       if (event.key === 'Escape' && activePanel !== null && isImmersive) {
         event.preventDefault()
-        togglePanelWindowMode(activePanel)
+        togglePanelWindowMode()
         return
       }
       if (event.key === 'Escape' && (activePanel !== null || dockOpen)) {

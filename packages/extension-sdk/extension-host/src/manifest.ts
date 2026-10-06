@@ -68,6 +68,23 @@ function validateManifest(manifest: Partial<ExtensionManifest>): void {
   if (studioReservedNamespaces.includes(manifest.id.split('.')[0] ?? '')) throw new Error(`Manifest id uses a reserved Studio namespace: ${manifest.id}`)
   if (!manifest.version) throw new Error('Manifest version is required')
   if (!manifest.displayName) throw new Error('Manifest displayName is required')
+  if (manifest.dependencies !== undefined) {
+    if (!Array.isArray(manifest.dependencies) || manifest.dependencies.length > 100) throw new Error('Manifest dependencies must be a bounded array')
+    const ids = new Set<string>()
+    for (const dependency of manifest.dependencies) {
+      if (!isRecord(dependency) || typeof dependency.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(dependency.id)
+        || dependency.id === manifest.id || ids.has(dependency.id)) throw new Error('Manifest dependency id is invalid or duplicated')
+      ids.add(dependency.id)
+      if (typeof dependency.version !== 'string' || !dependency.version.trim()) throw new Error('Manifest dependency version is required')
+      if (dependency.source !== undefined) {
+        const source = dependency.source
+        if (!isRecord(source) || !['git', 'zip'].includes(String(source.kind)) || typeof source.url !== 'string') throw new Error('Manifest dependency source is invalid')
+        const url = new URL(source.url)
+        if (url.protocol !== 'https:' || url.username || url.password || url.hash) throw new Error('Manifest dependency source must be public HTTPS without credentials')
+        if (source.kind === 'git' && source.ref !== undefined && (typeof source.ref !== 'string' || !source.ref.trim() || source.ref.startsWith('-'))) throw new Error('Manifest dependency Git ref is invalid')
+      }
+    }
+  }
   if ('roles' in manifest) throw new Error('Manifest roles is obsolete; use tags')
   assertOptionalManifestText(manifest.description, 'description', 4_096)
   assertOptionalManifestText(manifest.author, 'author', 255)

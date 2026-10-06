@@ -41,9 +41,11 @@ describe('projection workbench reorder updates', () => {
       {
         id: dragged.id,
         partial: {
-          projection: expect.objectContaining({
-            slotKey: 'preset:root@preset.system',
-            zoneId: 'preset.system',
+          capabilities: expect.objectContaining({
+            projection: expect.objectContaining({
+              slotKey: 'preset:root@preset.system',
+              zoneId: 'preset.system',
+            }),
           }),
         },
       },

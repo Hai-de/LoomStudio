@@ -15,16 +15,18 @@ Background:
   应用和默认聊天背景，使用 --loom-color-background。
 
 Surface:
-  Window、Panel、用户消息等主要内容表面，使用 --loom-color-surface。
+  Window、Panel、普通 Dialog、用户消息等主要内容表面，使用 --loom-color-surface。
 
 Subtle / Inset / Emphasis Surface:
   编辑器、代码块、元信息或需要与父表面区分的局部区域。
 
 Raised Surface:
-  Dialog、Popover、Context Menu 和 Toast 等 Top Layer 内容。
+  Popover、Context Menu 和 Toast 等需要较强表面区分的内容。
 ```
 
 颜色 Token 只表达视觉层级，不按 Window、Panel、Dialog 等 UI 对象命名。对象名称继续用于布局、尺寸和圆角等几何 Token。
+
+普通 Dialog 与工作台共用基础 Surface，浮起感由 backdrop 与阴影表达，不因进入 Top Layer 自动变浅。全屏媒体 Dialog 保留独立的媒体底色。
 
 聊天流默认直接铺在 Base Canvas 上，不额外制造聊天容器边框。用户消息可以使用浅色气泡，Assistant 正文保持接近文档流。
 

@@ -199,17 +199,15 @@ export function createLoomScriptsRuntimeMethods(ctx: LoomScriptsRuntimeContext) 
       const timeline = input?.timelineId ? await requireNarratives(ctx).getTimeline(input.timelineId) : undefined
       if (input?.timelineId && !timeline) throw new Error(`Narrative timeline not found: ${input.timelineId}`)
       const cardId = timeline?.createdFrom?.cardId
-      return {
-        mounts: await resolveLoomScriptRendererMounts(ctx, {
-          cardId,
-          currentTargets: [
-            { kind: 'user' },
-            ...(input?.workspaceId ? [{ kind: 'workspace' as const, workspaceId: input.workspaceId }] : []),
-            ...(input?.presetId ? [{ kind: 'preset' as const, presetId: input.presetId }] : []),
-            ...(cardId ? [{ kind: 'card' as const, cardId }] : []),
-          ],
-        }),
-      }
+      return await resolveLoomScriptRendererMounts(ctx, {
+        cardId,
+        currentTargets: [
+          { kind: 'user' },
+          ...(input?.workspaceId ? [{ kind: 'workspace' as const, workspaceId: input.workspaceId }] : []),
+          ...(input?.presetId ? [{ kind: 'preset' as const, presetId: input.presetId }] : []),
+          ...(cardId ? [{ kind: 'card' as const, cardId }] : []),
+        ],
+      })
     },
   }
 }

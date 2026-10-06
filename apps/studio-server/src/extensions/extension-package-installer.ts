@@ -16,6 +16,7 @@ export type InstalledExtensionPackage = {
 export async function installExtensionPackageFromDirectory(options: {
   sourceDirectory: string
   installedDirectory: string
+  flat?: boolean
 }): Promise<InstalledExtensionPackage> {
   const sourceDirectory = resolve(options.sourceDirectory)
   const sourceStat = await lstat(sourceDirectory)
@@ -30,8 +31,9 @@ export async function installExtensionPackageFromDirectory(options: {
 
   await mkdir(resolve(options.installedDirectory), { recursive: true, mode: 0o700 })
   const installedRoot = await realpath(resolve(options.installedDirectory))
-  const packageRoot = await ensureChildDirectory(installedRoot, manifest.id)
-  const targetDirectory = join(packageRoot, manifest.version)
+  const targetDirectory = options.flat
+    ? join(installedRoot, manifest.id)
+    : join(await ensureChildDirectory(installedRoot, manifest.id), manifest.version)
   const stagingRoot = await ensureChildDirectory(installedRoot, '.staging')
   const stagingDirectory = join(stagingRoot, `${manifest.id}-${manifest.version}-${randomUUID()}`)
   await assertMissing(targetDirectory, `Extension Package is already installed: ${manifest.id}@${manifest.version}`)
@@ -61,6 +63,7 @@ export async function installExtensionPackageFromDirectory(options: {
 export async function installExtensionPackageFromZip(options: {
   source: Uint8Array
   installedDirectory: string
+  flat?: boolean
 }): Promise<InstalledExtensionPackage> {
   if (options.source.byteLength > maxPackageBytes) {
     throw new Error('Extension Package exceeds the local install size limit')
@@ -101,6 +104,7 @@ export async function installExtensionPackageFromZip(options: {
     return await installExtensionPackageFromDirectory({
       sourceDirectory: stagingDirectory,
       installedDirectory: options.installedDirectory,
+      flat: options.flat,
     })
   } finally {
     await rm(stagingDirectory, { recursive: true, force: true }).catch(() => undefined)
@@ -126,15 +130,17 @@ async function ensureChildDirectory(parent: string, name: string): Promise<strin
 export async function uninstallExtensionPackageDirectory(options: {
   directory: string
   installedDirectory: string
+  flat?: boolean
 }): Promise<void> {
   const installedRoot = await realpath(resolve(options.installedDirectory))
   const directory = await realpath(resolve(options.directory))
   const pathFromInstalledRoot = relative(installedRoot, directory)
   const relativeParts = pathFromInstalledRoot.split(/[\\/]/)
-  if (pathFromInstalledRoot.startsWith('..') || isAbsolute(pathFromInstalledRoot) || relativeParts.length !== 2 || relativeParts.some(part => !part || part === '.staging')) {
+  if (pathFromInstalledRoot.startsWith('..') || isAbsolute(pathFromInstalledRoot) || relativeParts.length !== (options.flat ? 1 : 2) || relativeParts.some(part => !part || part.startsWith('.'))) {
     throw new Error('Only a versioned installed Extension Package may be removed')
   }
   await rm(directory, { recursive: true, force: false })
+  if (options.flat) return
   await rmdir(dirname(directory)).catch(error => {
     if (!isNodeError(error, 'ENOTEMPTY') && !isNodeError(error, 'EEXIST')) throw error
   })
@@ -182,6 +188,7 @@ async function visitPackageFiles(
 ): Promise<void> {
   const entries = await readdir(sourceDirectory, { withFileTypes: true })
   for (const entry of entries) {
+    if (!prefix && ['.git', '.loom-source.json', '.loom-zip-install'].includes(entry.name)) continue
     const source = join(sourceDirectory, entry.name)
     const path = `${prefix}${entry.name}`
     assertSafeZipEntryName(path)
@@ -223,7 +230,12 @@ async function validateInstalledPackage(directory: string, expected: ExtensionMa
     if (!pathFromPackage || pathFromPackage.startsWith('..') || isAbsolute(pathFromPackage)) {
       throw new Error(`Extension Package path escapes its root: ${entry}`)
     }
-    const stat = await lstat(candidate)
+    const stat = await lstat(candidate).catch((error: unknown) => {
+      if (isNodeError(error, 'ENOENT')) {
+        throw new Error(`扩展 ${copied.id} 的发行包缺少 Manifest 声明的文件：${entry}。请作者提供包含可运行产物的发行分支或成品 ZIP；宿主不会自动构建。`)
+      }
+      throw error
+    })
     if (!stat.isFile()) throw new Error(`Extension Package entry must be a file: ${entry}`)
   }
 }

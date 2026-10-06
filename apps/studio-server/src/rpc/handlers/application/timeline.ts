@@ -37,7 +37,9 @@ export async function handleTimelineRpc(
     case 'application.createNarrativeTimeline':
       return await runtime.createNarrativeTimeline({
         cardId: readString(params, 'cardId'),
+        expectedCardVersion: readOptionalNumber(params, 'expectedCardVersion'),
         title: readOptionalString(params, 'title'),
+        openingIndex: readOptionalNumber(params, 'openingIndex'),
         openingNodes: readOpeningNodes(params),
       }, context) as unknown as JsonValue
 
@@ -107,12 +109,14 @@ export async function handleTimelineRpc(
 function readOpeningNodes(params: JsonValue | undefined): Array<{ content: string; createdAt?: string }> | undefined {
   if (!params || typeof params !== 'object' || Array.isArray(params)) return undefined
   const value = (params as Record<string, unknown>).openingNodes
-  if (!Array.isArray(value)) return undefined
-  return value.flatMap(item => {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) throw new Error('Expected openingNodes array')
+  return value.map(item => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('Expected opening node object')
     const content = (item as Record<string, unknown>).content
-    if (typeof content !== 'string') return []
+    if (typeof content !== 'string') throw new Error('Expected opening node content')
     const createdAt = (item as Record<string, unknown>).createdAt
-    return [{ content, ...(typeof createdAt === 'string' ? { createdAt } : {}) }]
+    if (createdAt !== undefined && typeof createdAt !== 'string') throw new Error('Expected opening node createdAt string')
+    return { content, ...(createdAt !== undefined ? { createdAt } : {}) }
   })
 }

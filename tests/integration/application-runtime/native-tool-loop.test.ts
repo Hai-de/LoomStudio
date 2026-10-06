@@ -65,7 +65,9 @@ const testContentTool: ToolDefinition = {
 describe('Native Function Tool Loop', () => {
   it('delivers a completed prompt beyond the replay budget until the Client acknowledges it', async () => {
     const fixture = await createFixture({
-      execute: async () => ({ output: 'Unused.' }),
+      execute: async ({ invocation }) => ({
+        invocationId: invocation.id, toolId: invocation.toolId, status: 'completed', content: [],
+      }),
       invokeChat: async () => ({
         provider: 'test', model: 'test-model', text: 'Done.',
         finishReason: 'stop', message: { role: 'assistant', content: 'Done.' },
@@ -827,9 +829,10 @@ describe('Native Function Tool Loop', () => {
       ]))
       const page = await fixture.runtime.getAgentTranscriptPage({ agentSessionId: fixture.sessionId })
       expect(page.entries.filter(entry => entry.entry.kind === 'message' && entry.entry.role === 'user')).toHaveLength(1)
-      expect(page.entries.map(entry => entry.entry)).toContainEqual({
+      expect(page.entries.map(entry => entry.entry)).toContainEqual(expect.objectContaining({
         kind: 'run-state', state: 'running', sourceRunId: paused.runId,
-      })
+        recovery: expect.objectContaining({ version: 1, userEntryId: expect.any(String) }),
+      }))
       await fixture.runtime.appendAgentTranscriptEntries({
         agentSessionId: fixture.sessionId, expectedEntryCount: page.session.entryCount,
         entries: [{ entry: { kind: 'work-summary', content: 'Recovered without replaying old tools.' } }],

@@ -1,5 +1,5 @@
 import type { ClientDisplayPart, ClientRendererFrameHostMessage, RendererSurface } from '@loom-studio/extension-sdk'
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { rendererContributionKey, rendererSurfacePolicies } from '../../../shared/extension-renderer-runtime/renderer-registry.js'
 import type { ClientRendererContext, ClientRendererHost, ClientRendererRegistration, ClientRendererScope, ClientRendererInstanceHandle } from '../../../shared/extension-renderer-runtime/client-renderer-host.js'
 import { readClientThemeSnapshot, subscribeClientTheme } from '../model/client-theme.js'
@@ -80,6 +80,23 @@ export function RendererInstanceRoot(props: {
     } as ClientRendererContext & { controller: AbortController }
   }, [contributionKey, props.host, props.part, props.registration, stableScope])
 
+  const queueUpdate = useCallback((
+    update: ClientRendererRegistration['update'],
+    isDisposed: () => boolean,
+  ) => {
+    if (!update) return
+    void Promise.resolve().then(() => {
+      if (!isDisposed()) return update(context)
+    }).catch(error => {
+      if (isDisposed()) return
+      props.host.reportDiagnostic({
+        code: 'renderer.surface_mismatch',
+        message: error instanceof Error ? error.message : String(error),
+        contributionKey,
+      })
+    })
+  }, [context, contributionKey, props.host])
+
   useEffect(() => {
     const root = rootRef.current
     if (!root) return
@@ -110,16 +127,7 @@ export function RendererInstanceRoot(props: {
       sandboxRef.current = sandbox
       const unsubscribeTheme = subscribeClientTheme(snapshot => {
         context.host.themeSnapshot = snapshot
-        void Promise.resolve().then(() => {
-          if (!disposed) return sandbox.update?.(context)
-        }).catch(error => {
-          if (disposed) return
-          props.host.reportDiagnostic({
-            code: 'renderer.surface_mismatch',
-            message: error instanceof Error ? error.message : String(error),
-            contributionKey,
-          })
-        })
+        queueUpdate(next => sandbox.update?.(next), () => disposed)
       })
       return () => {
         disposed = true
@@ -217,16 +225,7 @@ export function RendererInstanceRoot(props: {
 
     const unsubscribeTheme = subscribeClientTheme(snapshot => {
       context.host.themeSnapshot = snapshot
-      void Promise.resolve().then(() => {
-        if (!disposed) return props.registration.update?.(context)
-      }).catch(error => {
-        if (disposed) return
-        props.host.reportDiagnostic({
-          code: 'renderer.surface_mismatch',
-          message: error instanceof Error ? error.message : String(error),
-          contributionKey,
-        })
-      })
+      queueUpdate(next => props.registration.update?.(next), () => disposed)
     })
 
     void Promise.resolve().then(() => {
@@ -252,24 +251,15 @@ export function RendererInstanceRoot(props: {
       if (root.shadowRoot) root.shadowRoot.replaceChildren()
       else root.replaceChildren()
     }
-  }, [context, contributionKey, props.host, props.registration])
+  }, [context, contributionKey, props.host, props.registration, queueUpdate])
 
   useEffect(() => {
-    const update = props.registration.sandboxMount ? sandboxRef.current?.update : props.registration.update
-    if (!update) return
+    const renderer = props.registration.sandboxMount ? sandboxRef.current : props.registration
+    if (!renderer?.update) return
     let disposed = false
-    void Promise.resolve().then(() => {
-      if (!disposed) return update(context)
-    }).catch(error => {
-      if (disposed) return
-      props.host.reportDiagnostic({
-        code: 'renderer.surface_mismatch',
-        message: error instanceof Error ? error.message : String(error),
-        contributionKey,
-      })
-    })
+    queueUpdate(next => renderer.update?.(next), () => disposed)
     return () => { disposed = true }
-  }, [context, contributionKey, props.host, props.registration, props.revision])
+  }, [props.registration, props.revision, queueUpdate])
 
   const rootProps = {
     'aria-live': failed ? 'polite' as const : undefined,

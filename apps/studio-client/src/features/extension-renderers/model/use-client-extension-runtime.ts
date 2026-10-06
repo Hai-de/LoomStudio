@@ -29,9 +29,7 @@ export function createClientExtensionDataApi(api: Pick<StudioApi, 'extensionRunt
       extract: async (query, extensionTarget) => await api.textTransforms.extract({ ...query, extensionTarget: extensionTarget ?? { kind: 'global' } }) as never,
     },
     rpc: {
-      call: (method, params, owner) => owner
-        ? api.extensionRuntime.callInstalled({ ...owner, method, params: params as never })
-        : api.extensionRuntime.call(method, params as never),
+      call: (method, params, owner) => api.extensionRuntime.callInstalled({ ...owner, method, params: params as never }),
     },
     assets: {
       url: (assetId, owner) => owner?.target.kind === 'card'
@@ -179,8 +177,8 @@ export function useClientExtensionRuntime(input: {
       await input.api.extensions.reload(packageId, moduleId, target)
       return await refresh()
     },
-    uninstall: async (packageId: string, version?: string) => {
-      await input.api.extensions.uninstall(packageId, version)
+    uninstall: async (packageId: string, version?: string, deleteData?: boolean) => {
+      await input.api.extensions.uninstall(packageId, version, deleteData)
       return await refresh()
     },
   }

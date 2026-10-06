@@ -1,14 +1,17 @@
 import { createInMemoryDiagnosticsRegistry } from '@loom-studio/diagnostics'
 import type { AiGatewayCapabilityRegistry, ProfiledAiGateway } from '@loom-studio/ai-gateway'
-import { createDocumentDataCommitSource, createInMemoryDocumentStore } from '@loom-studio/document-store'
+import { createInMemoryDocumentStore } from '@loom-studio/document-store'
 import { createExtensionHost } from '@loom-studio/extension-host'
 import type { ExtensionAssetCapability, ExtensionHostOptions } from '@loom-studio/extension-host'
 import { createKernel, type Kernel } from '@loom-studio/kernel'
 import type { Logger } from '@loom-studio/logging'
 import { createLoomRunner, createSamplePassFactories } from '@loom-studio/loom-runner'
 import { createInMemoryTraceAuditStore } from '@loom-studio/trace-audit'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { onTestFinished } from 'vitest'
 
 export function createExtensionHostHarness(options: {
   logger?: Logger
@@ -73,7 +76,7 @@ export function createExtensionHostHarness(options: {
 
   kernel = createKernel({
     documents,
-    dataCommits: createDocumentDataCommitSource(documents),
+    dataCommits: documents,
     diagnostics,
     traceAudit,
     extensionHost,
@@ -84,7 +87,8 @@ export function createExtensionHostHarness(options: {
 }
 
 export function createExtensionFixture(name: string, input: { manifest: unknown; source: string }): string {
-  const root = join(process.cwd(), '.loomstudio-dev/test-extensions', name)
+  const root = mkdtempSync(join(tmpdir(), `loom-test-extension-${name}-`))
+  onTestFinished(() => rm(root, { recursive: true, force: true }))
   mkdirSync(join(root, 'dist'), { recursive: true })
   writeFileSync(join(root, 'manifest.json'), JSON.stringify(input.manifest))
   writeFileSync(join(root, 'dist/index.js'), input.source)

@@ -2,6 +2,26 @@ import { createOfficialProviderAdapterRegistry } from '../../../packages/ai-gate
 import { describe, expect, it } from 'vitest'
 
 describe('official provider adapter registry', () => {
+  it('discovers models with parsed credentials and rejects invalid configuration before transport', async () => {
+    const requests: Array<{ url: string; authorization: string | null }> = []
+    const transport = (async (url, init) => {
+      requests.push({ url: String(url), authorization: new Headers(init?.headers).get('authorization') })
+      return Response.json({ data: [{ id: ' model-a ' }, { id: 'model-a' }] })
+    }) as typeof fetch
+    const registry = createOfficialProviderAdapterRegistry()
+    await expect(registry.listModels('openai-compatible', {
+      config: { baseUrl: 'https://example.test/v1' }, credential: { apiKey: ' key ' }, fetch: transport,
+    })).resolves.toEqual(['model-a'])
+    expect(requests).toEqual([{ url: 'https://example.test/v1/models', authorization: 'Bearer key' }])
+    await expect(registry.listModels('openai-compatible', {
+      config: { baseUrl: 'not-a-url' }, credential: { apiKey: 'key' }, fetch: transport,
+    })).rejects.toThrow()
+    await expect(registry.listModels('openai-compatible', {
+      config: {}, credential: { apiKey: ' ' }, fetch: transport,
+    })).rejects.toThrow()
+    expect(requests).toHaveLength(1)
+  })
+
   it.each([
     ['official.openai', 'openai'],
     ['official.anthropic', 'anthropic'],

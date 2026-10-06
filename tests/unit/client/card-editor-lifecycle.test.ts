@@ -95,6 +95,18 @@ function fixture() {
 beforeEach(() => { hooks.cursor = 0; hooks.values = []; hooks.effects = []; hooks.dirty = false })
 
 describe('Card editor effect lifecycle', () => {
+  it('saves opening messages through the profile editor with the original Card version', async () => {
+    const f = fixture()
+    await f.render().refreshCards()
+    const opening = { entries: [{ role: 'assistant' as const, content: 'Welcome, {{user}}.' }] }
+    await f.render().updateCardProfile({
+      cardId: 'a', expectedVersion: 1, name: 'Original', userName: '', description: '', opening,
+    })
+    expect(f.update).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      cardId: 'a', expectedVersion: 1, opening,
+    }))
+  })
+
   it.each(['resolve', 'reject'] as const)('retains a saved detail when an earlier background read later %s', async outcome => {
     const f = fixture()
     await f.render().refreshCards()

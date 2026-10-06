@@ -31,6 +31,7 @@ Metadata 必须从文件首行开始，并由 `// ==LoomScript==` 与 `// ==/Loo
 - User、Workspace 与当前 Preset 在解析时读取当前 Mount；
 - 已有 Narrative Timeline 通过来源 Card 读取当前 Mount 和 Script；角色更新后，下次解析使用新内容，移除的 Mount 不从旧 Timeline 快照恢复；
 - Mount 显式固定版本仍表示作者/用户当前选择；Timeline 本身不另加版本锁。Grant 仍取当前 Mount 的显式授权，代码更新不自动增加权限。旧 Runtime Context 中的 Script 快照不再参与运行解析。
+- Script 或所属 Extension Installation 缺失时保留 Mount 引用、启用选择及 Grant。Runtime 返回正常 `mounts` 和单独的 `unavailableMounts`；不可用项包含引用身份、原因和 warning，不执行，也不阻断其他正常项。原引用再次可解析后恢复正常解析，不自动寻找同名替代资源。文档类型/所有者不匹配、存储及源码 Blob 错误仍作为真实错误处理，不统一降级。
 
 Card v3 与 Preset v2 Artifact 可以携带 `.loom.js` Attachment。导入会建立 Script 与 Mount；导出不携带本机启用状态或 Grant。
 
@@ -62,7 +63,7 @@ Inline Mount 只替换渲染投影中的目标范围，不修改 Canonical Narra
 - Mount：`createLoomScriptMount`、`updateLoomScriptMount`、`listLoomScriptMounts`
 - Runtime：`resolveLoomScriptRendererMounts`
 
-资源工作台按 Card / Preset Owner 编辑 Script 与 Mount。Text Pipeline 专门面板只展示当前 Runtime Context 解析出的启用 Mount，以及 Client Renderer Host 中实际注册的 Extension / Loom Script Renderer。
+资源工作台按 Card / Preset Owner 编辑 Script 与 Mount。Text Pipeline 专门面板展示当前 Runtime Context 的启用 Mount、不可用引用警告，以及 Client Renderer Host 中实际注册的 Extension / Loom Script Renderer。Client 加载正常项时，对启用的不可用项显示 warning，而不是把整个解析当作失败。
 
 ## 当前边界
 

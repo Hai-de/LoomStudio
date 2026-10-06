@@ -16,11 +16,6 @@ const message = (owner: AgentSession, suffix = '', role: 'user' | 'assistant' = 
   id: `${owner.id}${suffix}`, agentSessionId: owner.id, sequence: 1, createdAt: timestamp,
   entry: { kind: 'message', role, content: owner.id + suffix },
 } satisfies AgentTranscriptEntry)
-function deferred() {
-  let resolve!: () => void
-  const promise = new Promise<void>(done => { resolve = done })
-  return { promise, resolve }
-}
 function assert(condition: unknown, message: string): void {
   if (!condition) throw new Error(message)
 }
@@ -32,10 +27,10 @@ async function runChecks() {
   const createInputs: Array<{ timelineId?: string; agentPresetId: string }> = []
   const invokeInputs: Parameters<StudioApi['agentSessions']['createRun']>[0][] = []
   const runs = new Map<string, typeof invokeInputs[number]>()
-  const delayed = new Map<string, ReturnType<typeof deferred>>()
+  const delayed = new Map<string, PromiseWithResolvers<void>>()
   let transcriptFailure: string | undefined
-  let creationDelay: ReturnType<typeof deferred> | undefined
-  let invokeDelay: ReturnType<typeof deferred> | undefined
+  let creationDelay: PromiseWithResolvers<void> | undefined
+  let invokeDelay: PromiseWithResolvers<void> | undefined
   let createdTimelines = 0
   let current!: ReturnType<typeof useNarrativeRuntime>
   let selectedProfile!: string
@@ -53,9 +48,16 @@ async function runChecks() {
       get: async (id: string) => ({ timeline: timeline(id), branches: [branch(id)] }),
       getPage: async ({ timelineId }: { timelineId: string }) => page(timelineId),
       create: async () => ({ ...page(`created-${++createdTimelines}`), mutation: { changesetId: 'create-timeline' } }),
+      appendInput: async input => ({
+        ...page(input.timelineId),
+        node: { id: input.nodeId, timelineId: input.timelineId, createdAt: timestamp,
+          body: { format: 'loom-markdown.v1', raw: input.content } },
+        mutation: { changesetId: 'append-input' },
+      }),
     },
     agentSessions: {
       ...baseApi.agentSessions,
+      acknowledgeRunCompletion: async runId => ({ runId, accepted: true }),
       list: async ({ timelineId, standalone } = {}) => ({
         sessions: sessions.filter(item => standalone ? !item.timelineId : item.timelineId === timelineId),
       }),
@@ -102,7 +104,7 @@ async function runChecks() {
     const [profileId, setProfileId] = useState('profile-a')
     selectedProfile = profileId
     current = useNarrativeRuntime({
-      api, initialInput: '', selectedCardId: 'card', selectedAgentPresetId: profileId,
+      api, storageScope: 'session-recovery-probe', initialInput: '', selectedCardId: 'card', selectedAgentPresetId: profileId,
       onSelectCard: () => undefined,
       onSelectAgentPreset: setProfileId, runAction,
       runAgentAction: async action => { await runAction(action) },
@@ -113,16 +115,26 @@ async function runChecks() {
   }
   const root = createRoot(document.getElementById('root')!)
   const event = { preventDefault() {} } as FormEvent
+  const storageDescriptor = Object.getOwnPropertyDescriptor(window, 'localStorage')!
+  const eventSource = window.EventSource
+  const storage = new Map<string, string>()
+  Object.defineProperty(window, 'localStorage', { configurable: true, value: {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => { storage.set(key, value) },
+    removeItem: (key: string) => { storage.delete(key) },
+  } })
+  Object.defineProperty(window, 'EventSource', { configurable: true, writable: true, value: undefined })
   try {
     await act(async () => { root.render(createElement(Harness)) })
     assert(current.agentSession?.id === 'standalone' && createInputs.length === 0, '浏览不应创建 Session')
     results.push('PASS 独立会话恢复，浏览不创建空会话')
 
     await act(async () => { await current.activateTimeline('a') })
-    assert(current.agentSession?.id === 'a-new' && selectedProfile === 'profile-b', '最新会话或 Profile 未恢复')
+    assert(current.agentSession?.id === 'a-new' && current.agentSession.agentPresetId === 'profile-b', '最新会话或预设绑定未恢复')
+    assert(selectedProfile === 'profile-a', '浏览已有会话不应改变新建会话的预设选择')
     assert(current.agentMessages.length === 2 && current.agentMessages[0].id === 'a-new', '分页历史未按顺序恢复')
     assert(current.agentSessions.length === 2 && current.agentSessionReady, '当前 Timeline 会话列表错误')
-    results.push('PASS Timeline 最近会话、Profile 与分页历史同步恢复')
+    results.push('PASS Timeline 最近会话、绑定预设与分页历史恢复，不改变新建预设选择')
 
     await act(async () => { await current.activateAgentSession('a-old') })
     assert(current.agentSession?.id === 'a-old' && selectedProfile === 'profile-a', '选择旧会话后被 Profile effect 清空')
@@ -136,15 +148,17 @@ async function runChecks() {
     results.push('PASS 新建草稿和无历史 Timeline 不写数据库')
 
     await act(async () => { current.resetToDraftTimeline() })
-    assert(!current.timeline && current.agentSession?.id === 'standalone', '退出 Timeline 未恢复独立上下文')
+    assert(!current.timeline && !current.agentSession && !current.primarySession, '退出 Timeline 未清空会话上下文')
+    await act(async () => { await current.createAgentSession('profile-a', true) })
+    assert(current.primarySession?.timelineId === 'created-1', '主会话未绑定刚创建的 Timeline')
     await act(async () => { current.setInput('第一轮') })
     await act(async () => { await current.submitTurn(event) })
     assert(createInputs.at(-1)?.timelineId === 'created-1', '首次发送绑定旧 Timeline')
     assert(invokeInputs.at(-1)?.narrativeTarget?.timelineId === 'created-1', '叙事 Target 错误')
     assert(invokeInputs.at(-1)?.macroSelections?.context === 'created-1:created-1-main', '宏上下文使用了旧闭包')
-    results.push('PASS 首次发送绑定刚创建的 Timeline 与宏上下文')
+    results.push('PASS 显式创建主会话后发送绑定新 Timeline 与宏上下文')
 
-    const slowRead = deferred()
+    const slowRead = Promise.withResolvers<void>()
     delayed.set('a-new', slowRead)
     let opening!: Promise<string | undefined>
     await act(async () => { opening = current.activateTimeline('a') })
@@ -157,18 +171,19 @@ async function runChecks() {
 
     transcriptFailure = 'a-old'
     await act(async () => { await current.activateAgentSession('a-old') })
-    assert(!current.agentSession && current.agentMessages.length === 0 && !current.agentSessionReady, '失败后保留旧消息或允许静默新建')
+    assert(current.agentSession?.id === 'b' && current.agentMessages.every(item => item.agentSessionId === 'b')
+      && !current.agentSessionReady, '切换失败后污染当前视图或允许静默新建')
     const beforeFailureSend = createInputs.length
     await act(async () => { current.setAgentInput('不应发送') })
     await act(async () => { await current.submitAgentTurn(event) })
     assert(createInputs.length === beforeFailureSend, '恢复失败后发送创建了重复会话')
     assert(errors.length === 1, '读取失败未上报')
     transcriptFailure = undefined
-    results.push('PASS 恢复失败清空旧消息、阻止发送并上报错误')
+    results.push('PASS 切换失败保持原视图、阻止发送并上报错误')
 
     await act(async () => { await current.activateTimeline('empty'); current.newAgentSession() })
     await act(async () => { current.setAgentInput('延迟创建') })
-    creationDelay = deferred()
+    creationDelay = Promise.withResolvers<void>()
     let sending!: Promise<void>
     await act(async () => { sending = current.submitAgentTurn(event) })
     await act(async () => { await current.activateTimeline('b') })
@@ -179,7 +194,7 @@ async function runChecks() {
     results.push('PASS 迟到的 Session 创建不会覆盖新选择或继续发送')
 
     await act(async () => { current.setAgentInput('延迟响应') })
-    invokeDelay = deferred()
+    invokeDelay = Promise.withResolvers<void>()
     await act(async () => { sending = current.submitAgentTurn(event) })
     await act(async () => { await current.activateAgentSession('standalone') })
     await act(async () => { invokeDelay!.resolve(); await sending })
@@ -190,12 +205,17 @@ async function runChecks() {
     return results.join('\n')
   } finally {
     await act(async () => { root.unmount() })
+    Object.defineProperty(window, 'localStorage', storageDescriptor)
+    Object.defineProperty(window, 'EventSource', { configurable: true, writable: true, value: eventSource })
   }
 }
 
-document.getElementById('run')!.addEventListener('click', async () => {
+const runButton = document.getElementById('run') as HTMLButtonElement
+runButton.addEventListener('click', async () => {
   const output = document.getElementById('result')!
+  runButton.disabled = true
   output.textContent = '检查中'
   try { output.textContent = await runChecks() }
   catch (error) { output.textContent = `FAIL ${error instanceof Error ? error.stack : error}` }
+  finally { runButton.disabled = false }
 })

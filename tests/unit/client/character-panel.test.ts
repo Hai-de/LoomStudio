@@ -1,7 +1,5 @@
-import { createElement } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { CharacterPanel } from '../../../apps/studio-client/src/widgets/character-panel/character-panel.js'
+import { characterPanelProps, renderCharacterPanel } from '../../support/client/character-panel.js'
 
 describe('CharacterPanel MasterDetail', () => {
   const dummyCards = [
@@ -24,29 +22,10 @@ describe('CharacterPanel MasterDetail', () => {
     },
   ]
 
-  const dummyProps = {
-    active: true,
-    busy: false,
-    cardDraft: { name: '', userName: '', description: '' },
-    cards: dummyCards,
-    onChangeCardDraft: () => undefined,
-    onCreateCard: async () => undefined,
-    onCreateTimelineFromCard: async () => undefined,
-    onExportCard: async () => undefined,
-    onImportCards: async () => undefined,
-    onDeleteCards: async () => undefined,
-    onPreviewCardDeletion: async () => ({ timelines: [] }),
-    onSelectCard: () => undefined,
-    onOpenTimeline: () => undefined,
-    onOpenStatePanel: () => undefined,
-    onUpdateCardMedia: async () => undefined,
-    onUpdateCard: async () => undefined,
-    timelines: [],
-    t: (key: string) => key,
-  }
+  const dummyProps = characterPanelProps({ cards: dummyCards })
 
   it('renders master-detail layout containing gallery cards and character profile simultaneously', () => {
-    const html = renderToStaticMarkup(createElement(CharacterPanel, dummyProps))
+    const html = renderCharacterPanel(dummyProps)
 
     // 包含 Master-Detail Workbench 容器
     expect(html).toContain('data-loom-component="character-panel"')
@@ -64,10 +43,10 @@ describe('CharacterPanel MasterDetail', () => {
     expect(html).toContain('你好，我是爱丽丝。')
     expect(html).toContain('character.resources')
     expect(html).toContain('character.expandOpening')
-    expect(html).toContain('character.stateVariables')
+    expect(html).toContain('directory.attachments')
   })
 
-  it('renders bound world book card and state variables card in character profile', () => {
+  it('renders the bound world book and state section in the attachment directory', () => {
     const dummyResources = [
       {
         id: 'res-world-1',
@@ -88,18 +67,20 @@ describe('CharacterPanel MasterDetail', () => {
     ]
 
     const cardWithWorldBook = {
-      ...dummyCards[0],
+      ...dummyCards[0]!,
       promptResourceIds: ['res-world-1'],
+      stateTemplates: [{ id: 'state-template', label: '角色状态', templateVersion: 1, schema: { type: 'object' }, initial: {} }],
     }
 
-    const html = renderToStaticMarkup(createElement(CharacterPanel, {
+    const html = renderCharacterPanel({
       ...dummyProps,
-      cards: [cardWithWorldBook, dummyCards[1]],
+      cards: [cardWithWorldBook, dummyCards[1]!],
       resources: dummyResources,
-    }))
+      resourceDirectoryOpen: true,
+      resourceDirectoryExpandedIds: ['references', 'settings', 'state'],
+    })
 
     expect(html).toContain('奇境世界书')
-    expect(html).toContain('character.worldBookCount')
     expect(html).toContain('character.stateVariables')
   })
 
@@ -119,11 +100,10 @@ describe('CharacterPanel MasterDetail', () => {
       },
     ]
 
-    const html = renderToStaticMarkup(createElement(CharacterPanel, {
+    const html = renderCharacterPanel({
       ...dummyProps,
-      timelines,
       timeline: timelines[0],
-    }))
+    }, timelines)
 
     // 包含排序按钮
     expect(html).toContain('character.sortLatest')

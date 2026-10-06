@@ -1,11 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { AlignLeft, ChevronDown, ImageOff, PanelRight, PanelRightClose } from 'lucide-react'
-import type { AgentPreset, AgentSession, AgentTranscriptEntry, ProviderAccount } from '../../entities/index.js'
-import type { ActiveAgentRun } from '../../features/narrative-runtime/model/use-narrative-runtime.js'
-import type { RunRecoveryControlsProps } from '../../features/narrative-runtime/ui/run-recovery-controls.js'
-import type { ClientRendererHost } from '../../shared/extension-renderer-runtime/client-renderer-host.js'
 import type { Translator } from '../../shared/i18n/index.js'
-import { AgentChatPanel } from '../../widgets/agent-chat-panel/agent-chat-panel.js'
 import { StudioPanelRight } from './studio-panel-right.js'
 import { useStudioLayoutStore, type StudioPanelId } from '../../shared/studio-shell/studio-layout-store.js'
 import type { useStudioNavigation } from '../../shared/studio-shell/use-studio-navigation.js'
@@ -20,21 +15,11 @@ import { useEffectiveMotion } from '../../shared/hooks/use-motion-preference.js'
 import { resolveRailPresentation } from './studio-shell-layout.js'
 import type { WindowResizeAxis } from '../../shared/studio-shell/window-resize.js'
 import styles from './studio-page.module.scss'
-import type { DisplayProjection } from '../../features/message-content/model/use-display-projection.js'
 
-type StudioPageProps = RunRecoveryControlsProps & {
+type StudioPageProps = {
   navigation: ReturnType<typeof useStudioNavigation>
-  agentChatBusy?: boolean
-  agentActiveRun?: ActiveAgentRun
-  agentChatInput?: string
-  agentChatMessages?: AgentTranscriptEntry[]
-  agentDisplay?: DisplayProjection
-  agentChatSession?: AgentSession
-  agentChatSessions?: AgentSession[]
-  agentChatSessionReady?: boolean
+  agentPanel: ReactNode
   agentPanelOpen?: boolean
-  agentPresets?: AgentPreset[]
-  agentSessionTail?: ReactNode
   assetWorkspaceId: string
   background?: ReactNode
   busy: boolean
@@ -50,23 +35,10 @@ type StudioPageProps = RunRecoveryControlsProps & {
   headerActions?: ReactNode
   panels: Record<StudioPanelId, (active: boolean) => ReactNode>
   preloadPanel?(panel: StudioPanelId): void
-  providerAccounts?: ProviderAccount[]
   recentSessions?: ReactNode
-  rendererHost?: ClientRendererHost
-  selectedAgentPresetId?: string
   t: Translator
   uiScale: number
-  onChangeAgentChatInput?(value: string): void
   onRedo(): void
-  onSelectAgentPreset?(id: string, keepSession?: boolean): void
-  onSelectAgentSession?(id: string): void
-  onNewAgentSession?(): void
-  onDeleteAgentSession?(id: string): void
-  onSubmitAgentChat?(event: FormEvent): void
-  onCancelAgentRun?(): void
-  onPauseAgentRun?(): void
-  onResumeAgentRun?(): void
-  onApproveAgentMutation?(allow: boolean, reason?: string): void
   onToggleAgentPanel?(): void
   onUndo(): void
 }
@@ -475,37 +447,7 @@ export function StudioPage(props: StudioPageProps) {
           onClose={toggleAgentPanel}
           onWidthChange={setAgentPanelWidth}
         >
-          <AgentChatPanel
-            displayProjection={props.agentDisplay}
-            runRecovery={props.runRecovery}
-            runRecoveryBusy={props.runRecoveryBusy}
-            canRestoreRunInput={props.canRestoreRunInput}
-            reconnectAgentRun={props.reconnectAgentRun}
-            restoreRunInput={props.restoreRunInput}
-            busy={props.agentChatBusy ?? false}
-            activeRun={props.agentActiveRun}
-            input={props.agentChatInput ?? ''}
-            messages={props.agentChatMessages ?? []}
-            profiles={props.agentPresets ?? []}
-            providerAccounts={props.providerAccounts ?? []}
-            rendererHost={props.rendererHost}
-            selectedProfileId={props.selectedAgentPresetId}
-            session={props.agentChatSession}
-            sessions={props.agentChatSessions}
-            sessionReady={props.agentChatSessionReady}
-            sessionTail={props.agentSessionTail}
-            t={props.t}
-            onChangeInput={props.onChangeAgentChatInput ?? (() => {})}
-            onSelectProfile={props.onSelectAgentPreset ?? (() => {})}
-            onSelectSession={props.onSelectAgentSession}
-            onNewSession={props.onNewAgentSession}
-            onDeleteSession={props.onDeleteAgentSession}
-            onSubmit={props.onSubmitAgentChat ?? (() => {})}
-            onCancelRun={props.onCancelAgentRun}
-            onPauseRun={props.onPauseAgentRun}
-            onResumeRun={props.onResumeAgentRun}
-            onApproveMutation={props.onApproveAgentMutation}
-          />
+          {props.agentPanel}
         </StudioPanelRight>
 
         {isMobile && (activePanel !== null || mobileDrawerOpen) ? (

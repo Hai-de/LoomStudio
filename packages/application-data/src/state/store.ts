@@ -79,6 +79,7 @@ export function createStateStore(options: CreateStateStoreOptions): StateStore {
     const { database } = tx
 
     return {
+      getGlobalSnapshot: (ownerId = 'workspace') => readGlobalSnapshot(database, ownerId),
       createScope: input => {
         validateScopeInput(input)
         const timestamp = now()

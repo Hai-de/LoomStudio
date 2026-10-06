@@ -69,7 +69,7 @@ export function createOfficialContentRuntimeMethods(ctx: OfficialContentRuntimeC
       }))
       const updated = resources.filter(item => {
         const stored = existing.get(item.id)
-        if (!stored || stored.tombstoned) return false
+        if (!stored) return false
         const origin = fromStoredResource(stored).origin
         const current = origins.get(item.id)!
         return origin?.kind === 'builtin'
@@ -77,7 +77,7 @@ export function createOfficialContentRuntimeMethods(ctx: OfficialContentRuntimeC
       })
       const presetMounts = new Map<string, Set<string>>()
       for (const item of resources) {
-        if (artifacts.get(item.id)?.resourceKind !== 'preset' || existing.get(item.id)?.tombstoned) continue
+        if (artifacts.get(item.id)?.resourceKind !== 'preset') continue
         presetMounts.set(item.id, new Set(
           (await ctx.promptResources.listPresetToolMounts({ presetResourceId: item.id })).map(mount => mount.toolId),
         ))
@@ -85,7 +85,8 @@ export function createOfficialContentRuntimeMethods(ctx: OfficialContentRuntimeC
       const tools = ctx.agentTools.list()
       const missingTools = [...presetMounts].some(([id, mounted]) =>
         !existing.get(id) || tools.some(tool => !mounted.has(tool.id)))
-      if (!resources.some(item => item.created) && updated.length === 0 && !missingTools) return { resources }
+      const needsRestore = resources.some(item => existing.get(item.id)?.tombstoned)
+      if (!resources.some(item => item.created) && updated.length === 0 && !missingTools && !needsRestore) return { resources }
 
       const timestamp = ctx.now()
       const transaction = await ctx.dataEngine.transact({
@@ -96,6 +97,9 @@ export function createOfficialContentRuntimeMethods(ctx: OfficialContentRuntimeC
         for (const item of resources) {
           const artifact = artifacts.get(item.id)!
           const stored = existing.get(item.id)
+          const restored = stored?.tombstoned
+            ? resourceTx.restoreResource({ resourceId: item.id, expectedVersion: stored.version })
+            : undefined
           if (!item.created && !updated.some(resource => resource.id === item.id)) continue
           const previous = stored ? fromStoredResource(stored) : undefined
           const replacement = toStoredResourceInput({
@@ -120,7 +124,7 @@ export function createOfficialContentRuntimeMethods(ctx: OfficialContentRuntimeC
           } else {
             resourceTx.mutateResource({
               resourceId: item.id,
-              expectedVersion: stored!.version,
+              expectedVersion: restored?.version ?? stored!.version,
               mutations: [
                 { kind: 'tree.replace', rootNode: replacement.rootNode },
                 { kind: 'resource.update', patch: { label: replacement.label, metadata: replacement.metadata } },
@@ -129,9 +133,8 @@ export function createOfficialContentRuntimeMethods(ctx: OfficialContentRuntimeC
           }
         }
         for (const mount of input.settingMounts) {
-          if (!resources.find(item => item.id === mount.presetResourceId)?.created) continue
-          const setting = existing.get(mount.settingResourceId)
-          if (setting?.tombstoned) continue
+          if (!resources.find(item => item.id === mount.presetResourceId)?.created
+            && !existing.get(mount.presetResourceId)?.tombstoned) continue
           resourceTx.addSettingMount({
             source: { kind: 'preset', id: mount.presetResourceId },
             settingResourceId: mount.settingResourceId,

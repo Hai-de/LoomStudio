@@ -29,14 +29,21 @@ function resolveScopedInclude(scope?: string): string[] {
       ]
     case 'real':
       return ['tests/integration/pipeline/**/*.test.ts']
+    case 'client':
+      return [
+        'tests/unit/client/**/*.test.ts',
+        'tests/integration/client/**/*.test.ts',
+      ]
     case 'stress':
-      return ['tests/stress/**/*.test.ts', 'tests/probes/**/*.test.ts']
+      return ['tests/stress/**/*.test.ts']
     case 'probes':
       return ['tests/probes/**/*.test.ts']
     case 'extensions':
       return ['tests/extensions/**/*.test.ts']
-    default:
+    case undefined:
       return defaultTestInclude
+    default:
+      throw new Error(`Unknown LOOM_TEST_SCOPE: ${scope}`)
   }
 }
 const scopedTestInclude = resolveScopedInclude(testScope)
@@ -71,7 +78,7 @@ export default defineConfig({
       '@loom-studio/shared': resolvePath('./packages/shared/src/index.ts'),
       '@loom-studio/trace-audit': resolvePath('./packages/trace-audit/src/index.ts'),
       '@loom-studio/transport': resolvePath('./packages/transport/src/index.ts'),
-      '@loom-studio/sillytavern-importer': resolvePath('./official/extensions/st-data-compat/src/index.ts'),
+      '@loom-studio/sillytavern-importer': resolvePath('./extensions/st-data-compat/src/index.ts'),
       '@loom/core': resolvePath('./packages/core/src/index.ts'),
     },
   },

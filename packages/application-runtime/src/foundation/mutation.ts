@@ -44,30 +44,25 @@ export async function executeBlobDocumentMutation<T>(
     mediaType: source.mediaType,
     maxBytes: source.maxBytes,
   })
-  try {
-    const result = await ctx.dataEngine.transact({
-      actor: context?.actor ?? (context?.clientId
-        ? { kind: 'client', id: context.clientId }
-        : { kind: 'kernel', id: 'application-runtime' }),
-      reason,
-      correlationId: context?.correlationId,
-      callId: context?.callId,
-      parentCallId: context?.parentCallId,
-    }, async tx => {
-      const stored = ctx.blobs!.participateWrite(tx, prepared).blob
-      const documentResult = await documents.participateTransaction(
-        tx,
-        transaction => mutate(transaction, stored),
-      )
-      return { value: documentResult.value, changesetId: documentResult.changeset.id }
-    })
-    return {
-      value: result.value.value,
-      mutation: { changesetId: result.value.changesetId },
-    }
-  } catch (error) {
-    await ctx.blobs.discardPreparedWrite(prepared)
-    throw error
+  const result = await ctx.dataEngine.transact({
+    actor: context?.actor ?? (context?.clientId
+      ? { kind: 'client', id: context.clientId }
+      : { kind: 'kernel', id: 'application-runtime' }),
+    reason,
+    correlationId: context?.correlationId,
+    callId: context?.callId,
+    parentCallId: context?.parentCallId,
+  }, async tx => {
+    const stored = ctx.blobs!.participateWrite(tx, prepared).blob
+    const documentResult = await documents.participateTransaction(
+      tx,
+      transaction => mutate(transaction, stored),
+    )
+    return { value: documentResult.value, changesetId: documentResult.changeset.id }
+  })
+  return {
+    value: result.value.value,
+    mutation: { changesetId: result.value.changesetId },
   }
 }
 

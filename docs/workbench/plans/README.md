@@ -9,18 +9,17 @@
 
 | 路线图 / 计划                                                                                | 当前状态     | 关注点                                                                  |
 | -------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------- |
-| [审查归档后续](../issues/audit-follow-ups.md) | Deferred / Backlog | 仅保留远端 CI 和旧计划接续去向，完整修复账目已移出活跃目录 |
+| [审查归档后续](../issues/audit-follow-ups.md) | Deferred / Backlog | 远端 CI、旧计划接续及精简后的用户 UI 验收/独立测试维护；完整修复账目已移出活跃目录 |
 | [扩展模块补全](./extension-module-completion-plan.md) | 待调研 / 未实施 | 远程安装与独立官方扩展发行接续；来源、构建脚本与权限合同待决定 |
+| [The World 世界状态与 AI 接入](./the-world-state-and-agent-plan.md) | In Progress / State v2 与工具接入已实现 | 显式升级、分支与幂等验证通过，dist 可跟踪；Client 自动目标与刷新仍待合同 |
 | [`agent-preset-resources-and-usage-plan.md`](./agent-preset-resources-and-usage-plan.md) | 阶段实施完成 / 待人工验收 | 使用配置与空引用、固定 Session、主接收方与临时编辑；官方助手资源实验通过，未做真实模型或浏览器验收 |
-| [`extension-prompt-and-model-api-plan.md`](./extension-prompt-and-model-api-plan.md) | 已实施 / 聚焦验证完成 | 逐次 Prompt 附加、独立编译与扩展显式模型调用 |
 | [`ui/README.md`](./ui/README.md) | UI 计划子索引 | Shell 动画、资源 Diff 与 Provider 展示等实施及延期入口 |
-| [`card-opening-display-and-html-layout.md`](./card-opening-display-and-html-layout.md) | 修补已实施 / Text 包裹待原文确认 | 开场白只读 Display、HTML 限高与间距、长代码宽度；保留实际消息输入的诊断缺口 |
+| [`opening-swipes-and-runtime-swipe-plan.md`](./opening-swipes-and-runtime-swipe-plan.md) | 多开场已实施 / 人工验收待办；运行时未实施 | 多开场初始化、ST 备选开场兼容；最新 Narrative Swipe 与 Session 工作历史隔离 |
 | [`workspace-resource-and-distribution-plan.md`](./workspace-resource-and-distribution-plan.md) | In Progress / 本地分发已实现，资源包改造转独立计划 | 用户自定义来源、Git 更新、开发模式；单资源附件旧方向已被替代 |
 | [`agent-runtime-session-and-workspace-plan.md`](./agent-runtime-session-and-workspace-plan.md) | In Progress / Agent 执行与流式基础已实现 | 统一写入结果、统计组件与 CodeAct 接入；工具细节归独立计划 |
 | [`codeact-vfs-tooling-plan.md`](./codeact-vfs-tooling-plan.md) | In Progress / 双通道与领域 VFS 读取已接入 | 实时源节点、State 子树、脚本 Blob、路径身份与版本；写入、Pin、Narrative 与通用资产待接续 |
 | [`agent-context-skeleton-and-memory-projection-plan.md`](./agent-context-skeleton-and-memory-projection-plan.md) | In Progress / 骨架已接线，生命周期未验收 | 投影、统一刷新与 Session 生命周期；摘要策略已拆至独立记忆 Plan |
 | [`narrative-memory-and-refresh-policy-plan.md`](./narrative-memory-and-refresh-policy-plan.md) | Open / 已确认方向，实施合同待收束 | 按剧情次数整理、Token 容量兜底、近期缓冲、记事板与 Card / Timeline 配置 |
-| [`token-counting-and-measurement-plan.md`](./token-counting-and-measurement-plan.md) | Implemented / 定向验证完成，人工验收待办 | 单一 tokenizer + 设置系数、手动列表快照与实时详情、逐 Step 测量与 usage；Preset 自身与锚点计数分离 |
 | [`application-capability-cli-mcp-adapters-plan.md`](./application-capability-cli-mcp-adapters-plan.md) | 待讨论 / 未授权实施 | 承接独立 CLI/MCP；在线连接、权限、首批命令及 Capability 抽取范围待确认 |
 | [持久 Agent Script / Script Mount 历史候选](../../archive/plans/file-backed-resource-agent-script-codeact-plan.md) | 延期 / 未授权实施 | 仅保留远期事项可发现入口；旧综合方案已归档，CodeAct 以独立计划为准 |
 | [`extension-developer-experience.md`](./extension-developer-experience.md)                   | Roadmap / UI 方向已确认 | SDK、工具链，以及扩展页面、声明式设置和组件使用；UI 具体合同待设计 |
@@ -33,6 +32,12 @@
 ---
 
 ## 历史已归档计划
+
+2026-10-06：[测试结构与可靠性改进](../../archive/plans/test-suite-maintenance-2026-10-05.md)已完成并归档。分类、重复夹具、过时合同与测试类型迁移收口；主应用 311 文件 / 2059 用例、测试类型检查及浏览器恢复探针 9 项通过，历史波动与未验收边界保留。
+
+2026-10-02 活跃目录清理：[扩展 Prompt/模型 API](../../archive/plans/extension-prompt-and-model-api-plan.md)、[Token 计数与测量](../../archive/plans/token-counting-and-measurement-plan.md)、[开场白 Display/HTML 修补](../../archive/plans/card-opening-display-and-html-layout.md)已实际移入归档。已交付基线不继续占用施工入口；真实模型、IME、页面/卡片交互与视觉验收保留在[独立后续清单](../issues/audit-follow-ups.md#implemented-plan-acceptance-2026-10-02)，未冒称通过。
+
+2026-10-02：[代码精简实施计划](../../archive/plans/code-simplification-2026-10-02-plan.md)及三份 Issue 已实际归档：28 项精简完成、4 项明确保留，数据侧补测 3 文件/31 用例通过。无未决精简施工项；UI 验收由用户实施，4 个未改路径上的测试失败保留在[活跃后续清单](../issues/audit-follow-ups.md#simplification-acceptance-2026-10-02)，未宣称通过。
 
 2026-10-02：[四份审查修复记录](../../archive/plans/audit-remediation-2026-10-02-plan.md)与[专题审查计划](../../archive/plans/specialized-audits-2026-10-02-plan.md)已完成并归档；OCT、API、内存预算及 17 个 UI 复用实例的本轮修复已收口，定向证据及未验收边界保留。
 

@@ -114,9 +114,9 @@ export function createOfficialProviderAdapterRegistry(options: {
     listModels: async (providerExtensionId, input) => {
       const adapter = requireAdapter(providerExtensionId)
       if (!adapter.listModels) throw new Error(`Provider does not support model discovery: ${providerExtensionId}`)
-      adapter.parseAccountConfig(input.config)
-      adapter.parseCredential(input.credential)
-      return await adapter.listModels(input)
+      const config = adapter.parseAccountConfig(input.config)
+      const credential = adapter.parseCredential(input.credential) as Record<string, string>
+      return await adapter.listModels({ ...input, config, credential })
     },
   }
 }
@@ -143,11 +143,9 @@ function fieldSchema(field: AiGatewayFieldDefinition): JsonObject {
 
 function createOfficialAdapters(): ProviderAdapter[] {
   const discoverModels = async (input: { config: JsonObject; credential: Record<string, string>; fetch?: typeof fetch }) => {
-    const config = baseUrlSchema.parse(input.config)
-    const credential = apiKeySchema.parse(input.credential)
     return await listOpenAICompatibleModels({
-      ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}),
-      apiKey: credential.apiKey,
+      ...(typeof input.config.baseUrl === 'string' ? { baseUrl: input.config.baseUrl } : {}),
+      apiKey: input.credential.apiKey!,
       ...(input.fetch ? { fetch: input.fetch } : {}),
     })
   }

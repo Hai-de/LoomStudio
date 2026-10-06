@@ -15,6 +15,7 @@ import type {
   LoomScriptMount,
   LoomScriptOwner,
   ResolvedLoomScriptRendererMount,
+  UnavailableLoomScriptMount,
 } from '../../../entities/index.js'
 import type { StudioApi } from '../../../shared/api/studio-api.js'
 import type { Translator } from '../../../shared/i18n/index.js'
@@ -72,6 +73,7 @@ export function useTextTransformController(props: TextTransformProps) {
   const [scripts, setScripts] = useState<LoomScript[]>([])
   const [mounts, setMounts] = useState<LoomScriptMount[]>([])
   const [resolvedMounts, setResolvedMounts] = useState<ResolvedLoomScriptRendererMount[]>([])
+  const [unavailableMounts, setUnavailableMounts] = useState<UnavailableLoomScriptMount[]>([])
   const [rendererRevision, setRendererRevision] = useState(0)
   const [scriptSource, setScriptSource] = useState('')
   const [scriptFileName, setScriptFileName] = useState('script.loom.js')
@@ -176,7 +178,7 @@ export function useTextTransformController(props: TextTransformProps) {
         props.api.listRules(), props.api.listExtractors(), authoring ? props.api.listRenderers() : Promise.resolve({ renderers: [] }),
         authoring ? (props.loomScriptsApi?.list(scriptOwner) ?? Promise.resolve({ scripts: [] })) : Promise.resolve({ scripts: [] }),
         authoring ? (props.loomScriptsApi?.listMounts(scriptOwner) ?? Promise.resolve({ mounts: [] })) : Promise.resolve({ mounts: [] }),
-        !authoring && props.loomScriptsApi ? props.loomScriptsApi.resolveRendererMounts(props.runtimeScriptContext) : Promise.resolve({ mounts: [] }),
+        !authoring && props.loomScriptsApi ? props.loomScriptsApi.resolveRendererMounts(props.runtimeScriptContext) : Promise.resolve({ mounts: [], unavailableMounts: [] }),
       ])
       if (!isCurrentCatalog() || requestId !== refreshRequest.current) return
       setRules(ruleResult.rules)
@@ -185,6 +187,7 @@ export function useTextTransformController(props: TextTransformProps) {
       setScripts(scriptResult.scripts)
       setMounts(mountResult.mounts)
       setResolvedMounts(resolvedResult.mounts)
+      setUnavailableMounts(resolvedResult.unavailableMounts)
       setError('')
     } catch (cause) {
       if (isCurrentCatalog() && requestId === refreshRequest.current) setError(readError(cause))
@@ -520,6 +523,7 @@ export function useTextTransformController(props: TextTransformProps) {
     visibleExtractors,
     visibleScripts,
     resolvedMounts,
+    unavailableMounts,
     runtimeRenderers,
     rendererRevision,
     traceEntryId: resultScope === inspectionScope ? traceEntryId : '',
@@ -855,9 +859,9 @@ function RuntimePipelinePanel({ controller, heading }: { controller: TextTransfo
       { id: 'matches', label: t('textTransform.matchesDiagnostics'), items: inspection.snapshot.matches.map(item => ({ id: `match:${item.matchId}`, kind: 'renderer', label: item.match || item.matchId, description: `${item.entryId} · ${item.inputRange.start}-${item.inputRange.end}`, owner: `${item.ruleId}@${item.ruleVersion}`, effect: 'match', status: item.displayRange ? 'active' : 'degraded' })) },
       { id: 'artifacts', label: t('textTransform.artifacts'), items: inspection.artifacts.map(item => ({ id: `artifact:${item.artifactId}`, kind: 'renderer', label: item.artifactType, description: `${item.values.length} · v${item.extractorVersion}`, owner: item.extractorId, effect: 'artifact', status: item.stale ? 'degraded' : 'active' })) },
       { id: 'renderers', label: t('textTransform.renderers'), items: controller.runtimeRenderers.map(item => ({ id: `renderer:${item.key}`, kind: 'renderer', label: item.registration.definition.name, description: `${item.registration.definition.surface} · ${item.registration.definition.instanceScope}${item.claims.length ? ` · claim:${item.claims.map(claim => claim.scopeKey).join(',')}` : ''}${item.diagnostics.length ? ` · ${item.diagnostics.map(diagnostic => diagnostic.code).join(',')}` : ''}`, owner: item.registration.owner.kind === 'extension' ? `extension:${item.registration.owner.packageId}/${item.registration.owner.moduleId}` : `script:${item.registration.owner.scriptDocumentId}@${item.registration.owner.documentVersion}`, effect: 'renderer', status: item.diagnostics.length ? 'degraded' : 'active' })) },
-      { id: 'scripts', label: t('textTransform.ownerScripts'), items: listRuntimeScriptItems(controller.resolvedMounts).map(item => ({ ...item, effect: 'script' })) },
+      { id: 'scripts', label: t('textTransform.ownerScripts'), items: listRuntimeScriptItems(controller.resolvedMounts, controller.unavailableMounts).map(item => ({ ...item, effect: 'script' })) },
     ]
-  }, [controller.disabledRuleIds, controller.inspection, controller.rendererRevision, controller.resolvedMounts, controller.runtimeRenderers, t])
+  }, [controller.disabledRuleIds, controller.inspection, controller.rendererRevision, controller.resolvedMounts, controller.unavailableMounts, controller.runtimeRenderers, t])
   const ownerOptions = useMemo(() => [...new Set(allGroups.flatMap(group => group.items.map(item => item.owner)))].sort(), [allGroups])
   const effectOptions = useMemo(() => [...new Set(allGroups.flatMap(group => group.items.map(item => item.effect).filter((value): value is string => Boolean(value))))].sort(), [allGroups])
   const groups = useMemo(() => {
@@ -1083,16 +1087,23 @@ export function listRuntimeRendererRegistrations(host: ClientRendererHost): Arra
     }
   })
 }
-export function listRuntimeScriptItems(mounts: readonly ResolvedLoomScriptRendererMount[]): PipelineWorkbenchGroup['items'] {
-  return mounts.filter(mount => mount.enabled).map(mount => ({
+export function listRuntimeScriptItems(mounts: readonly ResolvedLoomScriptRendererMount[], unavailableMounts: readonly UnavailableLoomScriptMount[] = []): PipelineWorkbenchGroup['items'] {
+  return [...mounts.filter(mount => mount.enabled).map(mount => ({
     id: `script:${mount.script.id}`,
-    kind: 'script',
+    kind: 'script' as const,
     label: mount.script.name,
     description: `${mount.script.metadataId} · ${mount.script.contributions.flatMap(item => item.inputs.map(input => input.kind === 'match' ? `match:${input.ruleId}` : `artifact:${input.artifactType}`)).join(', ')}`,
     owner: `resolved@${mount.script.version}`,
     order: mount.orderIndex,
-    status: 'active',
-  }))
+    status: 'active' as const,
+  })), ...unavailableMounts.filter(mount => mount.enabled).map(mount => ({
+    id: `unavailable-script:${mount.mountId}`,
+    kind: 'script' as const,
+    label: mount.scriptDocumentId,
+    description: mount.message,
+    owner: mount.mountId,
+    status: 'degraded' as const,
+  }))]
 }
 function ownerLabel(owner: TextRuleOwner | OwnerScope, t: Translator, getName?: (owner: TextRuleOwner | OwnerScope) => string | undefined): string {
   const name = getName?.(owner);

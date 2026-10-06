@@ -53,7 +53,7 @@
 | 正则已有 preset owner 匹配；扩展规则的 owner 与 origin 需要保留区分 | [文本管线](../../../packages/application-runtime/src/runtime/transforms-runtime.ts)、[规则类型](../../../packages/application-runtime/src/transforms/history-text.ts) |
 | 暂停前已移除 Session 改绑字段并在 Store/Runtime/RPC 拒绝额外字段；主接收方分离仍未完成 | [Session 类型](../../../packages/application-data/src/agent/types.ts)、[Agent Runtime](../../../packages/application-runtime/src/runtime/agents-runtime.ts) |
 | Extension Host 有模块作用域、取消与 dispose；这不是预设使用实例管理 | [Host 实例](../../../packages/extension-sdk/extension-host/src/instance.ts) |
-| 已有逐次 Prompt 附加、独立 build、显式 invokeModel | [已实施 API 计划](./extension-prompt-and-model-api-plan.md) |
+| 已有逐次 Prompt 附加、独立 build、显式 invokeModel | [已归档 API 计划](../../archive/plans/extension-prompt-and-model-api-plan.md) |
 | 正式导航支持资源引用目标，已有 Settings 临时打开入口；其他类别需逐项核实接线 | [导航](../../../apps/studio-client/src/shared/studio-shell/use-studio-navigation.ts)、[资源面板](../../../apps/studio-client/src/app/studio-resource-panels.tsx) |
 | VFS 是 ID/版本绑定的目录投影，不要求整包 JSON 存储 | [资源 VFS](../../../packages/application-runtime/src/vfs/resource-filesystem.ts) |
 
@@ -279,3 +279,5 @@ client 定向类型检查仍仅报既有 `preset.panel.views` 翻译键诊断；
 两文件聚焦 4 例通过，新增覆盖角色分组排序、星号标记、继承状态及草稿联动；client 类型检查仍仅有既有翻译键错误，未做浏览器人工验收。
 2026-10-02 文档收尾：按当前源码同步 Agent、PromptBuild、Data、文本管线、Extension 和导航 Architecture，以及 Client / Server / application-data / application-runtime / shared / extension-sdk README。
 移除“允许 Session 改绑”“预设 Settings 仅兼容”等过时描述，补齐消费配置与归属分离、空引用、导出边界及正式 FileTree 交互；现存旧正则 Preset Owner 按实际支持记录，不宣称已删除。本轮只改文档，核对相对链接与标题锚点及 Diff，不重跑代码测试或模型调用。
+2026-10-02 Agent Chat 会话选择后续改进：抽出 `AgentSessionPicker`，用名称输入框和搜索弹窗代替原生下拉，支持按名称/预设搜索、直接重命名和独立指定主写作。
+新建对话弹窗改为来源可搜索的预设列表，保留可选主写作及固定 Session 绑定；复用现有重命名/换主/创建操作，不新增 RPC 或生命周期。两个聚焦文件 7 例及 client 类型检查通过；未操作用户数据、未做浏览器视觉验收。

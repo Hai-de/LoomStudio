@@ -13,6 +13,8 @@
 - **图标原语（`src/icon`）**：合并了原 `loom-icons` 基础图标原语（如应用 Logo、工作区图标等），组件内部通用操作图标结合 Lucide；
 - **设计 Token 驱动**：组件样式严格消费全局 `--loom-*` CSS 变量（颜色、圆角、阴影、层级）。
 
+普通 `Dialog` 默认使用 `--loom-color-surface`，与工作台共用基础表面；backdrop 与阴影保持弹层区分，不改变菜单或 Toast 的 Raised 表面。`layout: media` 继续使用独立全屏媒体底色。
+
 ---
 
 ## 架构规约与红线约束 (Rules & Boundaries)

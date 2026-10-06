@@ -5,6 +5,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { resolveLoomStudioLocalPaths } from '../../apps/studio-server/dist/platform/local-paths.js'
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
 const require = createRequire(join(root, 'apps/studio-client/package.json'))
@@ -14,6 +15,17 @@ const source = resolve(process.argv[2] ?? join(root, '.artifacts', `loom-studio-
 const sandbox = await mkdtemp(join(tmpdir(), 'loom release smoke '))
 const directory = join(sandbox, 'application')
 const home = join(sandbox, 'user')
+const environment = {
+  ...process.env, NODE_ENV: 'production', PORT: '0',
+  HOME: home, USERPROFILE: home,
+  LOCALAPPDATA: join(home, 'AppData', 'Local'),
+  XDG_DATA_HOME: join(home, '.local', 'share'),
+  XDG_CACHE_HOME: join(home, '.cache'),
+  XDG_STATE_HOME: join(home, '.local', 'state'),
+}
+delete environment.LOOM_STUDIO_HOME
+delete environment.LOOM_STUDIO_DATA_ROOT
+const localPaths = resolveLoomStudioLocalPaths({ homeDirectory: home, environment })
 let running
 
 async function start() {
@@ -21,14 +33,11 @@ async function start() {
   const ready = Promise.withResolvers()
   const child = spawn(process.execPath, [join(directory, 'scripts/start.mjs')], {
     cwd: sandbox,
-    env: {
-      ...process.env, NODE_ENV: 'production', PORT: '0',
-      LOOM_STUDIO_HOME: home, LOOM_STUDIO_DATA_ROOT: join(home, 'data'),
-    },
+    env: environment,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   const exited = Promise.withResolvers()
-  running = { child, exited: exited.promise }
+  running = { child, exited: exited.promise, output: () => output }
   child.on('error', error => ready.reject(error))
   child.once('exit', (code, signal) => {
     exited.resolve({ code, signal })
@@ -51,7 +60,7 @@ async function start() {
 
 async function stop(validate = true) {
   if (!running) return
-  const { child, exited } = running
+  const { child, exited, output } = running
   if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM')
   const timeout = setTimeout(() => child.kill('SIGKILL'), 15000)
   try {
@@ -59,6 +68,8 @@ async function stop(validate = true) {
     if (validate) {
       assert.ok(result.code === 0 || (process.platform === 'win32' && result.signal === 'SIGTERM'),
         `Release shutdown failed: ${JSON.stringify(result)}`)
+      assert.ok(!output().includes('loom-raw]'), 'Development banner marker leaked into production output')
+      assert.ok(output().includes(localPaths.dataRoot), 'Startup did not report the data directory')
     }
   } finally {
     clearTimeout(timeout)
@@ -120,14 +131,21 @@ try {
   assert.equal((await rpc('system.ping', { echo: 'release-smoke' })).echo, 'release-smoke')
   const content = await rpc('official.listContent')
   assert.ok(content.packages[0].resources.every(resource => resource.available), 'Starter was not installed')
-  assert.deepEqual((await rpc('extensions.listPackages')).items, [], 'Development extensions leaked into release')
+  const bundled = (await rpc('extensions.listPackages')).items
+  assert.deepEqual(bundled.map(item => item.packageId), ['official.loom-assistant'], 'Unexpected development extensions leaked into release')
+  assert.ok(bundled.every(item => !item.modules.length), 'Bundled content unexpectedly contains executable modules')
+  const officialSetup = await rpc('extensions.officialSetup')
+  assert.equal(officialSetup.completed, false)
+  assert.deepEqual(officialSetup.items.map(item => item.id), ['sillytavern.importer', 'official.the-world'])
+  await rpc('extensions.finishOfficialSetup')
   await stop()
-  assert.ok((await stat(join(home, 'data/studio.sqlite'))).size > 0)
+  assert.ok((await stat(localPaths.databaseFile)).size > 0)
   origin = await start()
   cookie = await session()
   assert.deepEqual(await rpc('official.listContent'), content, 'Starter changed after restart')
+  assert.equal((await rpc('extensions.officialSetup')).completed, true, 'Official selection skip was not persisted')
   await stop()
-  console.log('Release smoke passed: external cwd, static files, deep links, auth, starter, no dev extensions, restart and shutdown.')
+  console.log('Release smoke passed: default user data paths without Loom overrides, external cwd, static files, deep links, auth, starter, no dev extensions, restart and shutdown.')
 } finally {
   try {
     await stop(false)

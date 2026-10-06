@@ -107,7 +107,6 @@ export async function importCardBundle(input: {
     (result): result is PromiseRejectedResult => result.status === 'rejected',
   )
   if (failedPreparation) {
-    await Promise.all(preparedScripts.map(item => input.blobs!.discardPreparedWrite(item.prepared)))
     throw failedPreparation.reason
   }
   const preparedPackageResults = await Promise.allSettled(extensionPackages.map(async archive => ({
@@ -119,15 +118,10 @@ export async function importCardBundle(input: {
   const preparedPackages = preparedPackageResults.flatMap(result => result.status === 'fulfilled' ? [result.value] : [])
   const failedPackagePreparation = preparedPackageResults.find((result): result is PromiseRejectedResult => result.status === 'rejected')
   if (failedPackagePreparation) {
-    await Promise.all([...preparedScripts, ...preparedPackages].map(item => input.blobs!.discardPreparedWrite(item.prepared)))
     throw failedPackagePreparation.reason
   }
 
-  let transaction: {
-    value: { value: { card: DocumentRecord<CardSourceContent>; importBundle: DocumentRecord<ImportBundleContent> } }
-  } | undefined
-  try {
-    transaction = await input.dataEngine.transact({
+  const transaction = await input.dataEngine.transact({
       actor: input.context?.actor
         ?? (input.context?.clientId ? { kind: 'client', id: input.context.clientId } : applicationActor),
       reason: 'application.importCardBundle',
@@ -324,10 +318,6 @@ export async function importCardBundle(input: {
       return { card, importBundle }
     })
     })
-  } catch (error) {
-    await Promise.all([...preparedScripts, ...preparedPackages].map(item => input.blobs?.discardPreparedWrite(item.prepared)))
-    throw error
-  }
 
   return {
     card: toVersioned(transaction.value.value.card),

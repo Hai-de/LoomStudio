@@ -68,7 +68,7 @@ async function fixture(mode: 'content' | 'json', finishReason: GatewayChatResult
     resourceId: setting.id, targetAssetId: setting.rootNode.id, position: 'inside',
     asset: { id: 'key-setting', kind: 'entry', label: 'Key', body: 'KEY_SENTINEL belongs to C.', capabilities: { targetAnchorId: '@setting.stable' } },
   })
-  await runtime.replaceSettingMounts({ source: { kind: 'manual', id: 'global' }, settingResourceIds: [setting.id] })
+  await runtime.replaceSettingMounts({ source: { kind: 'preset', id: preset.id }, settingResourceIds: [setting.id] })
   const { providerProfile } = await runtime.createProviderProfile({
     providerExtensionId: 'official.openai-compatible', displayName: 'Test', config: {}, enabledModelIds: ['test'],
   })
@@ -502,7 +502,7 @@ print(text);`
       expect(await f.runtime.listPresetToolMounts({ presetId: f.preset.id })).toEqual(before)
       const updated = (await f.runtime.listAgentTools()).tools.find(item => item.id === f.toolId)!
       expect(updated.prompt?.guidance).toContain('### ctx.appendNarrative')
-      expect(updated.description).toContain('Narrative append')
+      expect(updated.description).toBe(tool.description)
       const preview = await f.runtime.previewAgentTurn({ agentSessionId: f.session.id, input: 'Inspect.' })
       const text = preview.messages.map(message => message.content).join('\n')
       expect(text).not.toContain('CUSTOM_CODEACT_GUIDE')

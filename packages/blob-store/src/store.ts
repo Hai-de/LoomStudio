@@ -55,9 +55,6 @@ export function createBlobStore(options: {
       return { ...result.value, commit: result.commit }
     }),
     prepareWrite: input => enqueueWrite(() => prepareBlobWrite(options, input)),
-    discardPreparedWrite: async () => {
-      // ponytail: Finalized hash files may serve other prepared writes; retain orphan bytes until ownership-aware GC exists.
-    },
     participateWrite: (tx, prepared) => participateBlobWrite(tx, prepared),
     get: blobId => options.engine.read(database => readBlob(database, blobId)),
     getBySha256: sha256 => {
@@ -129,6 +126,7 @@ async function prepareBlobWrite(
   }
 
   const finalFilename = blobFilename(options.rootDirectory, measured.sha256)
+  // ponytail: Finalized hash files may serve other prepared writes; retain orphan bytes until ownership-aware GC exists.
   try {
     await mkdir(dirname(finalFilename), { recursive: true })
     try {

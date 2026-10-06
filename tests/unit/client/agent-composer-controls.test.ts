@@ -13,6 +13,13 @@ vi.mock('react', async importOriginal => ({
   useLayoutEffect: () => undefined,
   useMemo: (factory: () => unknown) => factory(),
 }))
+vi.mock('../../../apps/studio-client/src/shared/ui/conversation-viewport/use-conversation-viewport.js', () => ({
+  useConversationViewport: () => ({
+    scrollRef: { current: null }, listRef: { current: null }, headerRef: { current: null },
+    scrollMargin: 0, onScroll: vi.fn(),
+    virtualizer: { getTotalSize: () => 0, getVirtualItems: () => [], measureElement: vi.fn() },
+  }),
+}))
 
 type Element = ReactElement<Record<string, unknown>>
 function elements(value: unknown): Element[] {

@@ -124,7 +124,7 @@ Extension handler 获得的 context 由 Kernel 注入真实 `packageId`、`modul
 
 Kernel 将 `docs.write`、`docs.delete` 和 `docs.revertChangeset` 转交 Document Store。它负责补充可信调用元数据，不实现 Revision 或冲突算法。
 
-Kernel 启动后订阅注入的领域无关 Data Commit Source。当前 Studio Server 直接注入共享 SQLite Data Engine；测试或外部组合仍可用 `createDocumentDataCommitSource()` 适配普通 Document Store。未来其他权威 Store 复用同一 Engine 提交入口，而不是让 Kernel 依赖 Narrative 或 Agent 业务接口。
+Kernel 启动后订阅注入的领域无关 Data Commit Source。当前 Studio Server 直接注入共享 SQLite Data Engine；测试或其他宿主组合可直接注入普通 Document Store，其 `subscribeCommits` 已满足订阅合同。未来其他权威 Store 复用同一 Engine 提交入口，而不是让 Kernel 依赖 Narrative 或 Agent 业务接口。
 
 每次成功提交统一发布一次 `data.changed`。如果 Commit Fact 中包含 `store: documents` operation，Kernel 再投影一次兼容的 `docs.changed`：
 

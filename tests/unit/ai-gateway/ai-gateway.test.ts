@@ -5,6 +5,44 @@ import {
 import { describe, expect, it } from 'vitest'
 
 describe('platform AI gateway', () => {
+  it('maps developer messages once and preserves adjacent message boundaries on the wire', async () => {
+    const requests: Array<Record<string, unknown>> = []
+    await createAiGateway().invokeChat({
+      provider: { kind: 'openai-compatible', apiKey: 'key', fetch: stubFetch(requests, textResponse('done')) },
+      modelId: 'test-model',
+      messages: [
+        { role: 'developer', content: 'Agent' },
+        { role: 'system', content: 'Preset' },
+        { role: 'system', content: 'Knowledge' },
+        { role: 'user', content: 'Hello' },
+      ],
+    })
+    expect(requests[0]?.messages).toEqual([
+      { role: 'system', content: 'Agent' },
+      { role: 'system', content: 'Preset' },
+      { role: 'system', content: 'Knowledge' },
+      { role: 'user', content: 'Hello' },
+    ])
+  })
+
+  it('rejects malformed canonical input before issuing a provider request', async () => {
+    const requests: Array<Record<string, unknown>> = []
+    const base = {
+      provider: { kind: 'openai-compatible' as const, apiKey: 'key', fetch: stubFetch(requests, textResponse('unused')) },
+      modelId: 'test-model',
+      messages: [{ role: 'user' as const, content: 'Hello' }],
+    }
+    const gateway = createAiGateway()
+    await expect(gateway.invokeChat({ ...base, modelId: ' ' })).rejects.toThrow('modelId cannot be empty')
+    await expect(gateway.invokeChat({ ...base, messages: [{ role: 'user', content: '' }] })).rejects.toThrow('content cannot be empty')
+    await expect(gateway.invokeChat({ ...base, messages: [{ role: 'assistant' }] })).rejects.toThrow('assistant message cannot be empty')
+    await expect(gateway.invokeChat({ ...base, messages: [{ role: 'tool', tool_call_id: '', content: 'result' }] })).rejects.toThrow('tool_call_id cannot be empty')
+    await expect(gateway.invokeChat({ ...base, messages: [{
+      role: 'assistant', tool_calls: [{ id: '', type: 'function', function: { name: 'lookup', arguments: '{}' } }],
+    }] })).rejects.toThrow('tool call is invalid')
+    expect(requests).toEqual([])
+  })
+
   it('uses one SDK step and returns a function tool call without executing it', async () => {
     const requests: Array<Record<string, unknown>> = []
     const gateway = createAiGateway()

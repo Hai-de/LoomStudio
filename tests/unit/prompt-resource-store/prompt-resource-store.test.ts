@@ -137,7 +137,7 @@ describe('PromptResourceStore', () => {
     const setting = await store.createResource({ actor, id: 'setting-500', resourceKind: 'setting', rootNode: settingFixture })
     const preset = await store.createResource({ actor, id: 'preset-100', resourceKind: 'preset', rootNode: presetFixture })
 
-    expect(engine.database.prepare('SELECT version FROM schema_migrations WHERE namespace = ?').get('application.prompt-resource')).toEqual({ version: 4 })
+    expect(engine.database.prepare('SELECT version FROM schema_migrations WHERE namespace = ?').get('application.prompt-resource')).toEqual({ version: 5 })
     expect(engine.database.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND (name LIKE 'prompt_resource%' OR name IN ('global_setting_mounts', 'preset_tool_mounts'))`).all()).toEqual(expect.arrayContaining([
       { name: 'prompt_resources' },
       { name: 'prompt_resource_nodes' },
@@ -447,15 +447,20 @@ describe('PromptResourceStore', () => {
     const firstMount = await store.addSettingMount({ actor, settingResourceId: first.resource.id, source: { kind: 'manual' }, orderIndex: 4 })
     await expect(store.revertChangeset({ actor, changesetId: firstMount.commit.changesetId })).rejects.toMatchObject({ code: 'prompt_resource.mixed_changeset' })
 
-    const deleted = await store.deleteResource({ actor, resourceId: first.resource.id, expectedVersion: 1 })
+    const deleted = await store.deleteResource({ actor, resourceId: first.resource.id, expectedVersion: 1, reason: 'Contract test' })
     await expect(store.getResource(first.resource.id)).resolves.toBeNull()
-    await expect(store.getResource(first.resource.id, { includeTombstone: true })).resolves.toMatchObject({ tombstoned: true, version: 2 })
+    expect(deleted.resource).toMatchObject({ tombstoned: true, deletedBy: actor, deleteReason: 'Contract test', version: 2 })
+    await expect(store.getResource(first.resource.id, { includeTombstone: true })).resolves.toEqual(deleted.resource)
     expect(deleted.commit.operations).toEqual([
       { store: 'prompt-resources', kind: 'delete', entityId: first.resource.id, entityType: 'prompt-resource', fromVersion: 1, toVersion: 2 },
     ])
     expect(await store.listSettingMounts({ settingResourceId: first.resource.id })).toEqual(firstMount.mounts)
     const restored = await store.restoreResource({ actor, resourceId: first.resource.id, expectedVersion: 2 })
     expect(restored.resource).toMatchObject({ id: first.resource.id, version: 3 })
+    expect(restored.resource).not.toHaveProperty('deletedAt')
+    expect(restored.resource).not.toHaveProperty('deleteReason')
+    expect(restored.resource.rootNode).toEqual(first.resource.rootNode)
+    await expect(store.getResource(first.resource.id)).resolves.toEqual(restored.resource)
     expect(restored.commit.operations).toEqual([
       { store: 'prompt-resources', kind: 'restore', entityId: first.resource.id, entityType: 'prompt-resource', fromVersion: 2, toVersion: 3 },
     ])
@@ -481,8 +486,14 @@ describe('PromptResourceStore', () => {
     })
 
     expect(second.commit.operations).toEqual([
-      ...first.mounts.map(mount => ({ store: 'prompt-resources', kind: 'delete' as const, entityId: mount.id, entityType: 'prompt-resource.tool-mount' })).sort((left, right) => left.entityId.localeCompare(right.entityId)),
-      { store: 'prompt-resources', kind: 'create', entityId: second.mounts[0]!.id, entityType: 'prompt-resource.tool-mount' },
+      ...first.mounts.map(mount => ({
+        store: 'prompt-resources', kind: 'delete' as const, entityId: mount.id, entityType: 'prompt-resource.tool-mount',
+        scope: { store: 'prompt-resources', entityType: 'prompt-resource', entityId: preset.resource.id, version: 1 },
+      })).sort((left, right) => left.entityId.localeCompare(right.entityId)),
+      {
+        store: 'prompt-resources', kind: 'create', entityId: second.mounts[0]!.id, entityType: 'prompt-resource.tool-mount',
+        scope: { store: 'prompt-resources', entityType: 'prompt-resource', entityId: preset.resource.id, version: 1 },
+      },
     ])
     expect(await store.listPresetToolMounts({ presetResourceId: preset.resource.id })).toEqual([
       expect.objectContaining({ toolId: 'official/second', defaultEnabled: true, content: { targetAnchorId: 'tools', localDepth: 5 } }),
@@ -494,6 +505,7 @@ describe('PromptResourceStore', () => {
       kind: 'delete',
       entityId: second.mounts[0]!.id,
       entityType: 'prompt-resource.tool-mount',
+      scope: { store: 'prompt-resources', entityType: 'prompt-resource', entityId: preset.resource.id, version: 1 },
     })
     expect(await store.listPresetToolMounts({ presetResourceId: preset.resource.id })).toEqual([])
     engine.close()

@@ -11,6 +11,7 @@ import { createSqliteDocumentStore } from '@loom-studio/document-store'
 import { createId, nowIso } from '@loom-studio/shared'
 import { resolveEffectiveTextPipeline } from '../../../packages/application-runtime/src/runtime/transforms-runtime.js'
 import { readAvailableExtensionInstallations } from '../../../packages/application-runtime/src/runtime/extension-resource-access.js'
+import { isPromptResourceArtifact } from '../../../packages/application-runtime/src/cards/workspace-codec.js'
 
 function fixture() {
   const engine = createSqliteDataEngine({ filename: ':memory:', createId, now: nowIso })
@@ -229,12 +230,15 @@ describe('Extension prompt resource import', () => {
       const replacement = structuredClone(input)
       replacement.packageVersion = '2.0.0'
       replacement.promptResources = [replacement.promptResources[0]!]
-      replacement.promptResources[0]!.artifact.rootNode = {
+      const artifact = replacement.promptResources[0]!.artifact
+      if (!isPromptResourceArtifact(artifact)) throw new Error('Invalid fixture artifact')
+      artifact.rootNode = {
         id: 'example.writer.new.root', kind: 'module', label: 'New author version',
         children: [{ id: 'example.writer.new.entry', kind: 'entry', label: 'New', body: 'Updated prompt' }],
       }
-      delete replacement.promptResources[0]!.artifact.macros
-      delete replacement.promptResources[0]!.artifact.macroOptions
+      delete artifact.macros
+      delete artifact.macroOptions
+      replacement.promptResources[0]!.artifact = artifact
       await expect(runtime.importExtensionPackageResources(replacement)).rejects.toThrow('explicit migration')
       expect((await runtime.getPromptResource({ resourceId: id })).resource).toEqual(before)
 
@@ -254,7 +258,10 @@ describe('Extension prompt resource import', () => {
       const currentInstallation = (await runtime.listExtensionInstallations()).installations.find(item => item.id === installed.installationId)!
       const broken = structuredClone(replacement)
       broken.packageVersion = '3.0.0'
-      broken.promptResources[0]!.artifact.rootNode.kind = 'entry'
+      const brokenArtifact = broken.promptResources[0]!.artifact
+      if (!isPromptResourceArtifact(brokenArtifact)) throw new Error('Invalid fixture artifact')
+      brokenArtifact.rootNode.kind = 'entry'
+      broken.promptResources[0]!.artifact = brokenArtifact
       await expect(runtime.importExtensionPackageResources({
         ...broken, update: { expectedInstallationVersion: currentInstallation.version },
       })).rejects.toThrow()
@@ -346,7 +353,8 @@ describe('Extension prompt resource import', () => {
           preset.id, ...(card ? [ids[card.id === a.id ? 0 : 1]] : []),
         ])
         const unavailable = result.promptBuildTrace.diagnostics
-          .filter(item => item.code === 'prompt.resource_unavailable').map(item => item.resourceId)
+          .flatMap(item => typeof item === 'object' && item !== null && 'code' in item
+            && item.code === 'prompt.resource_unavailable' && 'resourceId' in item ? [item.resourceId] : [])
         expect(unavailable.sort()).toEqual(ids.filter((_, index) => card?.id !== [a.id, b.id][index]).sort())
       }
     } finally {
@@ -631,6 +639,14 @@ describe('Extension prompt resource import', () => {
       expect(restored.agentTools).toEqual(a.agentTools)
       expect(restored.transformRules).toEqual(a.transformRules)
       expect(restored.textExtractors).toEqual(a.textExtractors)
+      const presetId = restored.promptResources[0]!.resourceId
+      expect((await runtime.getAgentPreset({ agentPresetId: presetId })).agentPreset.rootNode)
+        .toEqual(snapshots[1]!.rootNode)
+      expect((await runtime.listSettingMounts({ source: { kind: 'preset', id: presetId } })).mounts)
+        .toMatchObject([{ settingResourceId: restored.promptResources[1]!.resourceId }])
+      expect((await runtime.listPresetToolMounts({ presetId })).mounts)
+        .toMatchObject([{ toolId: restored.agentTools[0]!.toolId }])
+      expect((await runtime.importExtensionPackageResources({ ...input, target: targetA })).mutation).toBeUndefined()
     } finally {
       await engine.close()
     }

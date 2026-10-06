@@ -29,12 +29,6 @@ vi.mock('react', async importOriginal => ({
     hooks.effects.push(() => { previous?.cleanup?.(); entry.cleanup = effect() || undefined })
   },
 }))
-
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>(accept => { resolve = accept })
-  return { promise, resolve }
-}
 function details(id: string) {
   const timeline: NarrativeTimeline = {
     id, promptResourceIds: [], activeBranchId: `${id}-branch`, createdAt: '2026-09-23', updatedAt: '2026-09-23',
@@ -48,10 +42,10 @@ function session(id: string, title = id): AgentSession {
   return { id, title, agentPresetId: 'profile', entryCount: 0, createdAt: '2026-09-23', updatedAt: '2026-09-23' }
 }
 function fixture() {
-  const requests = new Map<string, ReturnType<typeof deferred<{ timelines: NarrativeTimeline[] }>>>()
+  const requests = new Map<string, ReturnType<typeof Promise.withResolvers<{ timelines: NarrativeTimeline[] }>>>()
   const list = vi.fn(({ createdFromCardId }: { createdFromCardId?: string }) => {
     if (!createdFromCardId) return Promise.resolve({ timelines: [] })
-    const request = requests.get(createdFromCardId) ?? deferred<{ timelines: NarrativeTimeline[] }>()
+    const request = requests.get(createdFromCardId) ?? Promise.withResolvers<{ timelines: NarrativeTimeline[] }>()
     requests.set(createdFromCardId, request)
     return request.promise
   })
@@ -69,7 +63,7 @@ function fixture() {
       narratives: { list, get, getPage, create, delete: deleteTimeline },
       agentSessions: { list: listSessions, delete: deleteSession, update: updateSession },
     } as unknown as StudioApi,
-    initialInput: '', onSelectCard: id => { input.selectedCardId = id },
+    storageScope: 'test', initialInput: '', onSelectCard: id => { input.selectedCardId = id },
     onSelectAgentPreset: vi.fn(), runAgentAction: action => action(),
     runAction: async action => {
       try { await action(); return true } catch { return false }
@@ -112,7 +106,7 @@ describe('Card timeline selection', () => {
     expect(f.render().agentSession).toBeUndefined()
     expect(f.listSessions).toHaveBeenLastCalledWith({ timelineId: 'current', cursor: undefined, limit: 100 })
 
-    const stale = deferred<{ sessions: AgentSession[] }>()
+    const stale = Promise.withResolvers<{ sessions: AgentSession[] }>()
     f.listSessions.mockReturnValueOnce(stale.promise)
     emit()
     f.listSessions.mockResolvedValue({ sessions: [] })
@@ -132,7 +126,7 @@ describe('Card timeline selection', () => {
   it.each(['delete', 'rename'] as const)('does not replace the current Timeline after a late %s', async operation => {
     const f = fixture()
     await f.render().activateTimeline('old')
-    const pending = deferred<void>()
+    const pending = Promise.withResolvers<void>()
     f.input.api.narratives.delete = vi.fn<StudioApi['narratives']['delete']>(async () => {
       await pending.promise
       return { deleted: true, mutation: { changesetId: 'delete' } }
@@ -157,7 +151,7 @@ describe('Card timeline selection', () => {
   it('keeps the active branch when a rename returns an older Timeline snapshot', async () => {
     const f = fixture()
     await f.render().activateTimeline('current')
-    const pending = deferred<void>()
+    const pending = Promise.withResolvers<void>()
     f.input.api.narratives.update = vi.fn(async () => {
       await pending.promise
       return { timeline: { ...details('current').timeline, title: 'Renamed' }, mutation: { changesetId: 'rename' } }
@@ -199,8 +193,8 @@ describe('Card timeline selection', () => {
     const old = f.render()
     const target = { ...details('old').branch, id: 'target-branch' }
     const switched = { ...details('old').timeline, activeBranchId: target.id }
-    const pending = deferred<void>()
-    const pageStarted = deferred<void>()
+    const pending = Promise.withResolvers<void>()
+    const pageStarted = Promise.withResolvers<void>()
     f.input.api.narratives.fork = vi.fn().mockResolvedValue({ branch: target })
     f.input.api.narratives.switch = vi.fn().mockResolvedValue({ timeline: switched })
     f.getPage.mockImplementationOnce(async () => {
@@ -226,7 +220,7 @@ describe('Card timeline selection', () => {
   it.each(['timelines', 'sessions'] as const)('keeps the latest full %s refresh when an older read finishes last', async kind => {
     const f = fixture()
     const state = f.render()
-    const pending = deferred<void>()
+    const pending = Promise.withResolvers<void>()
     if (kind === 'timelines') {
       f.list.mockImplementationOnce(async () => { await pending.promise; return { timelines: [details('old').timeline] } })
     } else {
@@ -253,7 +247,7 @@ describe('Card timeline selection', () => {
     f.listSessions.mockResolvedValueOnce({ sessions: [session('same')] })
     await state.refreshAllTimelines()
     await state.refreshAllAgentSessions()
-    const pending = deferred<void>()
+    const pending = Promise.withResolvers<void>()
     if (kind === 'timelines') f.list.mockImplementationOnce(async () => { await pending.promise; return { timelines: [details('old-api').timeline] } })
     else f.listSessions.mockImplementationOnce(async () => { await pending.promise; return { sessions: [session('old-api')] } })
     const old = kind === 'timelines' ? state.refreshAllTimelines() : state.refreshAllAgentSessions()
@@ -277,7 +271,7 @@ describe('Card timeline selection', () => {
     const state = f.render()
     f.listSessions.mockResolvedValueOnce({ sessions: [session('same')] })
     await state.refreshAllAgentSessions()
-    const pending = deferred<void>()
+    const pending = Promise.withResolvers<void>()
     f.listSessions.mockImplementationOnce(async () => { await pending.promise; return { sessions: [session('same')] } })
     const old = state.refreshAllAgentSessions()
     if (action === 'delete') await state.deleteAgentSession('same')
@@ -291,7 +285,7 @@ describe('Card timeline selection', () => {
   it('finishes the initial full Session list after a concurrent deletion without losing other records', async () => {
     const f = fixture()
     const state = f.render()
-    const pending = deferred<void>()
+    const pending = Promise.withResolvers<void>()
     f.listSessions.mockImplementationOnce(async () => { await pending.promise; return { sessions: [session('deleted'), session('other')] } })
     const first = state.refreshAllAgentSessions()
     await state.deleteAgentSession('deleted')
@@ -304,7 +298,7 @@ describe('Card timeline selection', () => {
   it.each(['delete', 'rename'] as const)('does not publish a late Session %s into another API with the same ID', async action => {
     const f = fixture()
     const state = f.render()
-    const pending = deferred<void>()
+    const pending = Promise.withResolvers<void>()
     if (action === 'delete') f.deleteSession.mockImplementationOnce(async () => {
       await pending.promise
       return { deleted: true, mutation: { changesetId: 'delete' } }
@@ -344,7 +338,7 @@ describe('Card timeline selection', () => {
     f.input.api.narratives.delete = vi.fn(async () => { throw new Error('Delete rejected') })
     await expect(f.render().deleteTimeline('deleted')).resolves.toBe(false)
     expect(f.render().allAgentSessions).toEqual([bound, standalone])
-    f.input.api.narratives.delete = vi.fn(async () => ({ deleted: true, mutation: { changesetId: 'deleted' } }))
+    f.input.api.narratives.delete = vi.fn(async () => ({ deleted: true as const, mutation: { changesetId: 'deleted' } }))
     f.list.mockRejectedValueOnce(new Error('Refresh unavailable'))
     await expect(f.render().deleteTimeline('deleted')).resolves.toBe(true)
     expect(f.render().allAgentSessions).toEqual([standalone])
@@ -364,8 +358,8 @@ describe('Card timeline selection', () => {
   it('does not return a committed Timeline after selection changes during refresh', async () => {
     const f = fixture()
     const state = f.render()
-    const refresh = deferred<{ timelines: NarrativeTimeline[] }>()
-    const started = deferred<void>()
+    const refresh = Promise.withResolvers<{ timelines: NarrativeTimeline[] }>()
+    const started = Promise.withResolvers<void>()
     f.list.mockImplementationOnce(() => { started.resolve(); return refresh.promise })
     const created = state.createTimelineFromCard('a')
     await started.promise
@@ -379,7 +373,7 @@ describe('Card timeline selection', () => {
     const f = fixture()
     f.getPage.mockResolvedValueOnce({ ...details('a'), nextCursor: 'a-older' })
     await f.render().activateTimeline('a')
-    const pending = deferred<ReturnType<typeof details>>()
+    const pending = Promise.withResolvers<ReturnType<typeof details>>()
     f.getPage.mockImplementationOnce(() => pending.promise)
     const state = f.render()
     const first = state.loadOlderNodes()
@@ -426,8 +420,8 @@ describe('Card timeline selection', () => {
 
   it('ignores a Timeline page that resolves after another Card selection', async () => {
     const f = fixture()
-    const page = deferred<ReturnType<typeof details>>()
-    const pageStarted = deferred<void>()
+    const page = Promise.withResolvers<ReturnType<typeof details>>()
+    const pageStarted = Promise.withResolvers<void>()
     f.getPage.mockImplementationOnce(() => { pageStarted.resolve(); return page.promise })
     const a = f.render().selectCardTimeline('a')
     f.render()
@@ -445,8 +439,8 @@ describe('Card timeline selection', () => {
 
   it('does not activate a completed creation after switching Card', async () => {
     const f = fixture()
-    const created = deferred<ReturnType<typeof details>>()
-    const createStarted = deferred<void>()
+    const created = Promise.withResolvers<ReturnType<typeof details>>()
+    const createStarted = Promise.withResolvers<void>()
     f.create.mockImplementationOnce(() => { createStarted.resolve(); return created.promise })
     const a = f.render().selectCardTimeline('a', true)
     f.render()
@@ -486,8 +480,8 @@ describe('Card timeline selection', () => {
 
   it('does not cancel explicit Timeline navigation when bootstrap selects a default Card', async () => {
     const f = fixture()
-    const page = deferred<ReturnType<typeof details>>()
-    const started = deferred<void>()
+    const page = Promise.withResolvers<ReturnType<typeof details>>()
+    const started = Promise.withResolvers<void>()
     f.getPage.mockImplementationOnce(() => { started.resolve(); return page.promise })
     const navigation = f.render().activateTimeline('linked')
     await started.promise

@@ -11,10 +11,4 @@ describe('long text editor transient state', () => {
     expect(reduceLongTextEditorState(cleared, { type: 'expire-undo' }).undoValue).toBeUndefined()
   })
 
-  it('tracks and resets clipboard feedback', () => {
-    const copied = reduceLongTextEditorState(INITIAL_LONG_TEXT_EDITOR_STATE, { type: 'copy', status: 'copied' })
-
-    expect(copied.copyStatus).toBe('copied')
-    expect(reduceLongTextEditorState(copied, { type: 'reset-copy' }).copyStatus).toBe('idle')
-  })
 })

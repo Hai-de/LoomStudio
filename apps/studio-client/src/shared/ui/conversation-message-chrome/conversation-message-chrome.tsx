@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { IconButton } from '@loom-studio/ui'
 import styles from './conversation-message-chrome.module.scss'
 
 export function ConversationMessageChrome(props: { actions: ReactNode; createdAt: string; index: number; metadata?: ReactNode }) {
@@ -15,9 +16,9 @@ export function ConversationMessageChrome(props: { actions: ReactNode; createdAt
 
 export function ConversationMessageAction(props: { children: ReactNode; disabled?: boolean; label: string; onClick?: () => void }) {
   return (
-    <button aria-label={props.label} className={styles.action} disabled={props.disabled} title={props.label} type="button" onClick={props.onClick}>
+    <IconButton aria-label={props.label} className={styles.action} disabled={props.disabled} onClick={props.onClick}>
       {props.children}
-    </button>
+    </IconButton>
   )
 }
 

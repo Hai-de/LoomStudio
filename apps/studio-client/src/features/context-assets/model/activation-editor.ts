@@ -57,12 +57,6 @@ export function buildActivationUpdate(input: {
       activation,
       lifecycle: { lifecycle },
     },
-    ...(input.node.projection ? {
-      projection: {
-        ...input.node.projection,
-        lifecycle,
-      },
-    } : {}),
   }
 }
 

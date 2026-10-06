@@ -1,10 +1,10 @@
-import { createApplicationRuntime, type ApplicationRuntimeOptions, type StateChangeEvent } from '@loom-studio/application-runtime'
+import { createApplicationRuntime, type ApplicationRuntimeOptions, type StateChangeEvent, type StateTarget } from '@loom-studio/application-runtime'
 import { createSqliteDataEngine } from '@loom-studio/data-engine'
 import { createSqliteDocumentStore } from '@loom-studio/document-store'
-import { createPromptResourceStore } from '@loom-studio/application-data'
+import { createNarrativeStore, createPromptResourceStore } from '@loom-studio/application-data'
 import { describe, expect, it } from 'vitest'
 
-function createTestRuntime(onStateChanged?: ApplicationRuntimeOptions['onStateChanged']) {
+function createTestRuntime(onStateChanged?: ApplicationRuntimeOptions['onStateChanged'], withNarratives = false) {
   let nextId = 0
   let nextTime = 0
   const createId = (prefix: string) => `${prefix}-${++nextId}`
@@ -12,11 +12,162 @@ function createTestRuntime(onStateChanged?: ApplicationRuntimeOptions['onStateCh
   const engine = createSqliteDataEngine({ filename: ':memory:', createId, now })
   const documents = createSqliteDocumentStore({ engine })
   const promptResources = createPromptResourceStore({ engine, createId, now })
-  const runtime = createApplicationRuntime({ dataEngine: engine, documents, promptResources, onStateChanged })
+  const narratives = withNarratives ? createNarrativeStore({ engine, createId, now }) : undefined
+  const runtime = createApplicationRuntime({ dataEngine: engine, documents, narratives, promptResources, onStateChanged })
   return { engine, runtime }
 }
 
 describe('application state runtime', () => {
+  it.each(['schema', 'readOnly'])('rejects State compensation that violates the current %s without partial commits', async restriction => {
+    const { engine, runtime } = createTestRuntime()
+    try {
+      await runtime.initialize()
+      const definition = await runtime.upsertStateDefinition({
+        definitionId: 'state.counter',
+        definition: { kind: 'global', path: 'global.counter', schema: { type: 'number' }, default: 0 },
+      })
+      const before = await runtime.getStateSnapshot({ target: { scope: 'global' } })
+      const changed = await runtime.applyStateMutation({
+        target: { scope: 'global' }, expectedRevisionId: before.snapshot.revisionId,
+        operations: [{ op: 'set', path: '/counter', value: 1 }],
+      })
+      await runtime.upsertStateDefinition({
+        definitionId: 'state.counter', expectedVersion: definition.definition.version,
+        definition: {
+          kind: 'global', path: 'global.counter',
+          schema: restriction === 'schema' ? { type: 'number', minimum: 1 } : { type: 'number' },
+          ...(restriction === 'readOnly' ? { readOnly: true } : {}),
+        },
+      })
+      const count = countChangesets(engine)
+      await expect(runtime.revertChangeset({ changesetId: changed.mutation.changesetId })).rejects.toMatchObject({
+        code: restriction === 'schema' ? 'state.schema_minimum' : 'state.read_only',
+      })
+      expect(countChangesets(engine)).toBe(count)
+      expect((await runtime.getStateSnapshot({ target: { scope: 'global' } })).snapshot).toEqual(changed.snapshot)
+    } finally { engine.close() }
+  })
+
+  it('checks Definition undo against current State and preserves valid undo/redo', async () => {
+    const { engine, runtime } = createTestRuntime()
+    try {
+      await runtime.initialize()
+      const definition = await runtime.upsertStateDefinition({
+        definitionId: 'state.counter',
+        definition: { kind: 'global', path: 'global.counter', schema: { type: 'number', maximum: 0 }, default: 0 },
+      })
+      const relaxed = await runtime.upsertStateDefinition({
+        definitionId: 'state.counter', expectedVersion: definition.definition.version,
+        definition: { kind: 'global', path: 'global.counter', schema: { type: 'number' } },
+      })
+      const before = await runtime.getStateSnapshot({ target: { scope: 'global' } })
+      const changed = await runtime.applyStateMutation({
+        target: { scope: 'global' }, expectedRevisionId: before.snapshot.revisionId,
+        operations: [{ op: 'set', path: '/counter', value: 1 }],
+      })
+      const count = countChangesets(engine)
+      await expect(runtime.revertChangeset({ changesetId: relaxed.mutation.changesetId })).rejects.toMatchObject({ code: 'state.schema_maximum' })
+      expect(countChangesets(engine)).toBe(count)
+      expect((await runtime.getStateDefinition({ definitionId: 'state.counter' })).definition).toEqual(relaxed.definition)
+      expect((await runtime.getStateSnapshot({ target: { scope: 'global' } })).snapshot).toEqual(changed.snapshot)
+      const undoneState = await runtime.revertChangeset({ changesetId: changed.mutation.changesetId })
+      const undoneDefinition = await runtime.revertChangeset({ changesetId: relaxed.mutation.changesetId })
+      expect((await runtime.getStateDefinition({ definitionId: 'state.counter' })).definition.schema.maximum).toBe(0)
+      await runtime.revertChangeset({ changesetId: undoneDefinition.mutation.changesetId })
+      expect((await runtime.getStateDefinition({ definitionId: 'state.counter' })).definition.schema).toEqual({ type: 'number' })
+      await runtime.revertChangeset({ changesetId: undoneState.mutation.changesetId })
+      expect((await runtime.getStateSnapshot({ target: { scope: 'global' } })).snapshot.value.counter).toBe(1)
+    } finally { engine.close() }
+  })
+
+  it.each(['definition-first', 'mutation-first'])('validates Global Schema at commit time with %s', async order => {
+    const { engine, runtime } = createTestRuntime()
+    try {
+      await runtime.initialize()
+      const definition = await runtime.upsertStateDefinition({
+        definitionId: 'state.counter',
+        definition: { kind: 'global', path: 'global.counter', schema: { type: 'number' }, default: 0 },
+      })
+      const before = await runtime.getStateSnapshot({ target: { scope: 'global' } })
+      const update = () => runtime.upsertStateDefinition({
+        definitionId: 'state.counter', expectedVersion: definition.definition.version,
+        definition: { kind: 'global', path: 'global.counter', schema: { type: 'number', maximum: 0 } },
+      })
+      const mutate = () => runtime.applyStateMutation({
+        target: { scope: 'global' }, expectedRevisionId: before.snapshot.revisionId,
+        operations: [{ op: 'set', path: '/counter', value: 1 }],
+      })
+      const results = await Promise.allSettled(order === 'definition-first' ? [update(), mutate()] : [mutate(), update()])
+      expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1)
+      const rejected = results.find(result => result.status === 'rejected')
+      expect(rejected).toMatchObject({ reason: { code: 'state.schema_maximum' } })
+      const current = await runtime.getStateSnapshot({ target: { scope: 'global' } })
+      const currentDefinition = await runtime.getStateDefinition({ definitionId: 'state.counter' })
+      if (currentDefinition.definition.schema.maximum === 0) expect(current.snapshot.value.counter).toBe(0)
+      else expect(current.snapshot.value.counter).toBe(1)
+    } finally { engine.close() }
+  })
+
+  it('does not write through a concurrently committed read-only Definition', async () => {
+    const { engine, runtime } = createTestRuntime()
+    try {
+      await runtime.initialize()
+      const definition = await runtime.upsertStateDefinition({
+        definitionId: 'state.counter',
+        definition: { kind: 'global', path: 'global.counter', schema: { type: 'number' }, default: 0 },
+      })
+      const before = await runtime.getStateSnapshot({ target: { scope: 'global' } })
+      const [updated, changed] = await Promise.allSettled([
+        runtime.upsertStateDefinition({
+          definitionId: 'state.counter', expectedVersion: definition.definition.version,
+          definition: { kind: 'global', path: 'global.counter', schema: { type: 'number' }, readOnly: true },
+        }),
+        runtime.applyStateMutation({
+          target: { scope: 'global' }, expectedRevisionId: before.snapshot.revisionId,
+          operations: [{ op: 'set', path: '/counter', value: 1 }],
+        }),
+      ])
+      expect(updated.status).toBe('fulfilled')
+      if (changed.status === 'rejected') {
+        expect(changed.reason).toMatchObject({ code: 'state.read_only' })
+        expect((await runtime.getStateSnapshot({ target: { scope: 'global' } })).snapshot.value.counter).toBe(0)
+      } else if (updated.status === 'fulfilled') {
+        const commits = engine.database.prepare('SELECT id FROM changesets ORDER BY rowid').all().map(row => row.id)
+        expect(commits.indexOf(changed.value.mutation.changesetId)).toBeLessThan(commits.indexOf(updated.value.mutation.changesetId))
+      }
+    } finally { engine.close() }
+  })
+
+  it.each(['global', 'timeline'])('returns one receipt for concurrent identical %s requests and preserves undo/redo', async scope => {
+    const events: StateChangeEvent[] = []
+    const { engine, runtime } = createTestRuntime(event => { events.push(event) }, scope === 'timeline')
+    try {
+      await runtime.initialize()
+      let target: StateTarget = { scope: 'global' }
+      if (scope === 'timeline') {
+        const { card } = await runtime.createCard({ name: 'State replay' })
+        const { timeline, branch } = await runtime.createNarrativeTimeline({ cardId: card.id })
+        target = { scope: 'timeline', timelineId: timeline.id, branchId: branch.id }
+      }
+      const before = await runtime.getStateSnapshot({ target })
+      const count = countChangesets(engine)
+      const eventCount = events.length
+      const input = {
+        target, expectedRevisionId: before.snapshot.revisionId,
+        operations: [{ op: 'set' as const, path: '/counter', value: 1 }], idempotencyKey: 'concurrent',
+      }
+      const [first, replay] = await Promise.all([runtime.applyStateMutation(input), runtime.applyStateMutation(input)])
+      expect(replay).toEqual(first)
+      expect(countChangesets(engine)).toBe(count + 1)
+      expect(events).toHaveLength(eventCount + 1)
+      expect((await runtime.getStateSnapshot({ target: input.target })).snapshot).toEqual(first.snapshot)
+      const undone = await runtime.revertChangeset({ changesetId: first.mutation.changesetId })
+      expect((await runtime.getStateSnapshot({ target })).snapshot.value).toEqual(before.snapshot.value)
+      await runtime.revertChangeset({ changesetId: undone.mutation.changesetId })
+      expect((await runtime.getStateSnapshot({ target })).snapshot.value).toEqual(first.snapshot.value)
+    } finally { engine.close() }
+  })
+
   it('notifies only committed changes, including defaults and compensation but excluding replay and conflicts', async () => {
     const events: StateChangeEvent[] = []
     const { engine, runtime } = createTestRuntime(event => {
@@ -163,6 +314,26 @@ describe('application state runtime', () => {
       definitionId: 'state.gold', expectedVersion: created.definition.version,
     })).resolves.toMatchObject({ deleted: true })
     engine.close()
+  })
+
+  it.each(['constructor', 'toString', '__proto__'])('initializes a missing own Global State key named %s', async key => {
+    const { engine, runtime } = createTestRuntime()
+    try {
+      await runtime.initialize()
+      await runtime.upsertStateDefinition({
+        definitionId: 'state.own-key',
+        definition: { kind: 'global', path: `global.${key}`, schema: { type: 'number' }, default: 7 },
+      })
+      const value = (await runtime.getStateSnapshot({ target: { scope: 'global' } })).snapshot.value
+      expect(Object.hasOwn(value, key)).toBe(true)
+      expect(value[key]).toBe(7)
+      await expect(runtime.upsertStateDefinition({
+        definitionId: 'state.incompatible',
+        definition: { kind: 'global', path: `global.${key}`, schema: { type: 'string' } },
+      })).rejects.toMatchObject({ code: 'state.schema_type' })
+    } finally {
+      await engine.close()
+    }
   })
 
   it('stores prototype-like Global Definition paths as own State keys', async () => {

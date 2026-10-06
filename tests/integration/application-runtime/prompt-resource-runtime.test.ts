@@ -17,6 +17,105 @@ function createIds() {
 }
 
 describe('Prompt Resource Store application runtime', () => {
+  it('copies from one resource read and updates macros without losing metadata', async () => {
+    const createId = createIds()
+    const engine = createSqliteDataEngine({ filename: ':memory:', createId, now: () => '2026-10-02T00:00:00.000Z' })
+    try {
+      const promptResources = createPromptResourceStore({ engine, createId })
+      const runtime = createApplicationRuntime({ dataEngine: engine, documents: createSqliteDocumentStore({ engine }), promptResources })
+      const { resource: source } = await runtime.createPromptResource({ resourceKind: 'preset', name: 'Source' })
+      const { resource: setting } = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Setting' })
+      await runtime.replaceSettingMounts({ source: { kind: 'preset', id: source.id }, settingResourceIds: [setting.id] })
+      const updated = await promptResources.mutateResource({
+        resourceId: source.id, expectedVersion: source.version, actor: { kind: 'system', id: 'test' },
+        mutations: [{ kind: 'resource.update', patch: { metadata: { custom: { retained: true }, macros: { old: 'value' } } } }],
+      })
+      const reads = vi.spyOn(promptResources, 'getResource')
+      const copy = await runtime.duplicatePromptResource({ resourceId: source.id })
+      expect(reads).toHaveBeenCalledTimes(1)
+      expect(copy.resource.rootNode.id).not.toBe(source.rootNode.id)
+      expect(copy.resource.macros).toEqual({ old: 'value' })
+      expect(await promptResources.listSettingMounts({ source: { kind: 'preset', id: copy.resource.id } }))
+        .toEqual([expect.objectContaining({ settingResourceId: setting.id })])
+      reads.mockClear()
+      await runtime.updatePromptResourceMacros({ resourceId: source.id, expectedVersion: updated.resource.version, macros: { next: 'value' } })
+      expect(reads).toHaveBeenCalledTimes(1)
+      reads.mockRestore()
+      expect((await promptResources.getResource(source.id))?.metadata).toEqual({ custom: { retained: true }, macros: { next: 'value' } })
+    } finally { await engine.close() }
+  })
+
+  it('reorders only affected siblings and preserves cycle, noop and revert behavior', async () => {
+    const createId = createIds()
+    const engine = createSqliteDataEngine({ filename: ':memory:', createId, now: () => '2026-10-02T00:00:00.000Z' })
+    try {
+      const promptResources = createPromptResourceStore({ engine, createId })
+      const created = await promptResources.createResource({
+        actor: { kind: 'system', id: 'test' }, resourceKind: 'setting',
+        rootNode: { id: 'root', kind: 'module', label: 'Root', children: [
+          { id: 'left', kind: 'folder', label: 'Left', children: [
+            { id: 'a', kind: 'entry', label: 'A' }, { id: 'b', kind: 'entry', label: 'B' }, { id: 'c', kind: 'entry', label: 'C' },
+          ] },
+          { id: 'right', kind: 'folder', label: 'Right', children: [{ id: 'd', kind: 'entry', label: 'D' }] },
+          { id: 'other', kind: 'folder', label: 'Other', children: [{ id: 'untouched', kind: 'entry', label: 'Untouched' }] },
+        ] },
+      })
+      const runtime = createApplicationRuntime({ dataEngine: engine, documents: createSqliteDocumentStore({ engine }), promptResources })
+      const children = async (id: string) => (await runtime.getPromptResource({ resourceId: created.resource.id })).resource.rootNode.children!
+        .find(node => node.id === id)!.children!.map(node => node.id)
+      await runtime.movePromptResourceAsset({ resourceId: created.resource.id, assetId: 'c', targetAssetId: 'a', position: 'before' })
+      expect(await children('left')).toEqual(['c', 'a', 'b'])
+      await runtime.movePromptResourceAsset({ resourceId: created.resource.id, assetId: 'c', targetAssetId: 'b', position: 'after' })
+      expect(await children('left')).toEqual(['a', 'b', 'c'])
+      const mutations = vi.spyOn(promptResources, 'mutateResource')
+      const moved = await runtime.movePromptResourceAsset({ resourceId: created.resource.id, assetId: 'b', targetAssetId: 'd', position: 'before' })
+      expect(await children('left')).toEqual(['a', 'c'])
+      expect(await children('right')).toEqual(['b', 'd'])
+      expect(mutations.mock.calls[0]![0].mutations.every(mutation => mutation.kind === 'node.move' && mutation.parentId !== 'other')).toBe(true)
+      expect(moved.resource.version).toBe(4)
+      await runtime.revertPromptResourceChangeset({ changesetId: moved.mutation.changesetId, expectedVersion: moved.resource.version })
+      expect(await children('left')).toEqual(['a', 'b', 'c'])
+      expect(await children('right')).toEqual(['d'])
+      await expect(runtime.movePromptResourceAsset({ resourceId: created.resource.id, assetId: 'left', targetAssetId: 'a', position: 'inside' })).rejects.toThrow()
+      await expect(runtime.movePromptResourceAsset({ resourceId: created.resource.id, assetId: 'left', targetAssetId: 'left', position: 'inside' })).rejects.toThrow('own subtree')
+      await expect(runtime.movePromptResourceAsset({ resourceId: created.resource.id, assetId: 'root', targetAssetId: 'right', position: 'inside' })).rejects.toThrow('cannot be moved')
+      await expect(runtime.movePromptResourceAsset({ resourceId: created.resource.id, assetId: 'c', targetAssetId: 'left', position: 'inside' })).rejects.toMatchObject({ code: 'prompt_resource.noop' })
+      expect(await children('other')).toEqual(['untouched'])
+    } finally { await engine.close() }
+  })
+
+  it('clears legacy projection only on explicit projection edits and preserves other stored extras', async () => {
+    const createId = createIds()
+    const engine = createSqliteDataEngine({ filename: ':memory:', createId, now: () => '2026-10-02T00:00:00.000Z' })
+    try {
+      const promptResources = createPromptResourceStore({ engine, createId })
+      const legacy = { zoneId: '@chat.system', entryOrder: 10 }
+      const created = await promptResources.createResource({
+        actor: { kind: 'system', id: 'test' }, resourceKind: 'setting',
+        rootNode: { id: 'root', kind: 'module', label: 'Root', children: [
+          { id: 'entry', kind: 'entry', label: 'Entry', extra: { projection: legacy, custom: 'retained', orderList: ['a'] } },
+        ] },
+      })
+      const runtime = createApplicationRuntime({ dataEngine: engine, documents: createSqliteDocumentStore({ engine }), promptResources })
+      const activation = await runtime.updatePromptResourceAsset({
+        resourceId: created.resource.id, assetId: 'entry', expectedVersion: 1,
+        capabilities: { activation: { kind: 'always' } },
+      })
+      expect((await promptResources.getResource(created.resource.id))?.rootNode.children?.[0]?.extra?.projection).toEqual(legacy)
+      const projection = { zoneId: '@chat.input', entryOrderHint: 20 }
+      const edited = await runtime.updatePromptResourceAsset({
+        resourceId: created.resource.id, assetId: 'entry', expectedVersion: activation.resource.version,
+        capabilities: { projection }, orderList: ['b'],
+      })
+      const stored = await promptResources.getResource(created.resource.id)
+      expect(stored?.rootNode.children?.[0]?.extra).toEqual({ custom: 'retained', orderList: ['b'] })
+      expect(stored?.rootNode.children?.[0]?.capabilities).toEqual({ projection })
+      expect(edited.resource.version).toBe(3)
+      const refreshed = await runtime.getPromptResource({ resourceId: created.resource.id })
+      expect(refreshed.resource.rootNode.children?.[0]?.capabilities?.projection).toEqual(projection)
+    } finally { await engine.close() }
+  })
+
   it('reads only live Card binding summaries and filtered Mounts without reading resource trees', async () => {
     const createId = createIds()
     const now = () => '2026-10-02T00:00:00.000Z'

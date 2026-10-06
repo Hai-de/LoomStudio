@@ -307,7 +307,7 @@ input[type='checkbox'][data-loom-ui-checkbox]:disabled { opacity: 0.5; cursor: n
   border-radius: var(--loom-radius-dialog);
   padding: 0;
   color: var(--loom-color-text);
-  background: var(--loom-color-surface-raised);
+  background: var(--loom-color-surface);
   box-shadow: 0 18px 48px rgb(0 0 0 / 38%);
 }
 [data-loom-ui-dialog]::backdrop { background: rgb(11 11 18 / 52%); animation: loom-ui-dialog-backdrop-enter 140ms ease-out both; }

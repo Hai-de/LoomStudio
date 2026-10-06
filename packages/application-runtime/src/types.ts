@@ -130,6 +130,7 @@ import type {
   LoomScriptMountTarget,
   LoomScriptOwner,
   ResolvedLoomScriptRendererMount,
+  UnavailableLoomScriptMount,
 } from './scripts/loom-script-contracts.js'
 import type {
   CardBundleArtifact,
@@ -212,7 +213,7 @@ export type ApplicationRuntime = {
   createLoomScriptMount(input: { target: LoomScriptMountTarget; scriptDocumentId: string; orderIndex: number; pinnedDocumentVersion?: number; origin?: JsonObject }, context?: RuntimeRequestContext): Promise<{ mount: LoomScriptMountEntry; mutation: MutationReceipt }>
   updateLoomScriptMount(input: { mountId: string; expectedVersion: number; enabled: boolean; orderIndex: number; pinnedDocumentVersion?: number; grantedCapabilities: string[] }, context?: RuntimeRequestContext): Promise<{ mount: LoomScriptMountEntry; mutation: MutationReceipt }>
   listLoomScriptMounts(input?: { target?: LoomScriptMountTarget; scriptDocumentId?: string }): Promise<{ mounts: LoomScriptMountEntry[] }>
-  resolveLoomScriptRendererMounts(input?: { workspaceId?: string; timelineId?: string; presetId?: string }): Promise<{ mounts: ResolvedLoomScriptRendererMount[] }>
+  resolveLoomScriptRendererMounts(input?: { workspaceId?: string; timelineId?: string; presetId?: string }): Promise<{ mounts: ResolvedLoomScriptRendererMount[]; unavailableMounts: UnavailableLoomScriptMount[] }>
   listExtensionRecords(input: { packageId: string; target?: ExtensionInstallationTarget; scope?: ExtensionStorageScope; recordType?: string; binding?: ExtensionEntityRef }): Promise<{ records: ExtensionRecordEntry[] }>
   getExtensionRecord(input: { packageId: string; target?: ExtensionInstallationTarget; recordId: string }): Promise<{ record: ExtensionRecordEntry | null }>
   listExtensionConfigs(input: { packageId: string; target?: ExtensionInstallationTarget; scope?: ExtensionStorageScope }): Promise<{ configs: ExtensionConfigEntry[] }>
@@ -268,6 +269,7 @@ export type ApplicationRuntime = {
   deleteAgentSession(input: DeleteAgentSessionInput, context?: RuntimeRequestContext): Promise<DeleteAgentSessionResult>
   updateAgentSession(input: UpdateAgentSessionInput, context?: RuntimeRequestContext): Promise<UpdateAgentSessionResult>
   invokeAgentTurn(input: InvokeAgentTurnInput, context?: RuntimeRequestContext): Promise<InvokeAgentTurnResult>
+  prepareAgentRunRecovery(input: { agentSessionId: string; runId?: string }): Promise<import('./agents/run-recovery.js').AgentRunRecovery | undefined>
   previewAgentTurn(input: PreviewAgentTurnInput, context?: RuntimeRequestContext): Promise<PreviewAgentTurnResult>
   buildExtensionPrompt(input: import('@loom-studio/extension-sdk').ExtensionPromptBuildInput, target: import('@loom-studio/extension-sdk').ExtensionInstallationTarget, packageId: string): Promise<import('@loom-studio/extension-sdk').ExtensionPromptBuildResult>
   inspectMacros(input: InspectMacrosInput): Promise<InspectMacrosResult>
@@ -321,6 +323,8 @@ export type RuntimeRequestContext = {
       messages: ChatMessage[]
       userEntry: import('@loom-studio/application-data').AgentTranscriptEntry
       partialEntryId?: string
+      recovery?: import('./agents/run-recovery.js').AgentRunRecoveryCheckpoint
+      expectedEntryCount?: number
     }
     onSuspended?: (checkpoint: {
       sourceRunId: string
@@ -570,7 +574,9 @@ export type AppendNarrativeInputResult = {
 
 export type CreateNarrativeTimelineInput = {
   cardId: string
+  expectedCardVersion?: number
   title?: string
+  openingIndex?: number
   openingNodes?: Array<{
     content: string
     createdAt?: string
@@ -813,7 +819,6 @@ export type ApplicationRuntimeOptions = {
   logger?: Logger
   runtimeLogger?: Logger
   gateway?: AiGateway
-  provider?: ApplicationProvider
   clock?: { now(): Date }
   sourceArtifacts?: SourceArtifactStorage
   mediaAssets?: MediaAssetLookup
@@ -872,7 +877,6 @@ export type PreparedBlobStorageWrite = {
 
 export type BlobStorage = {
   prepareWrite(input: { source: Uint8Array; mediaType?: string; maxBytes?: number }): Promise<PreparedBlobStorageWrite>
-  discardPreparedWrite(prepared: PreparedBlobStorageWrite): Promise<void>
   participateWrite(tx: SqliteDataTransaction, prepared: PreparedBlobStorageWrite): {
     blob: PreparedBlobStorageWrite['blob']
     created: boolean
@@ -894,26 +898,7 @@ export type GatewayListModelsResult = {
   modelIds: string[]
 }
 
-export type ApplicationProvider = {
-  invoke(input: ProviderInvokeInput): Promise<ProviderInvokeResult>
-}
-
 export type ProviderMessage = ChatMessage
-
-export type ProviderInvokeInput = {
-  messages: ProviderMessage[]
-  runId: string
-  sessionId: string
-  branchId: string
-}
-
-export type ProviderInvokeResult = {
-  message?: AssistantChatMessage
-  content: string
-  model: string
-  provider: string
-  raw?: JsonValue
-}
 
 export type ProviderModelSelection = {
   providerProfileId: string
@@ -1683,10 +1668,12 @@ export type CardPresetContent = {
 
 export type OpeningChatInput = {
   entries?: OpeningChatEntryInput[]
+  alternatives?: Array<{ entries: OpeningChatEntryInput[] }>
 }
 
 export type OpeningChatContent = {
   entries: OpeningChatEntryContent[]
+  alternatives?: Array<{ entries: OpeningChatEntryContent[] }>
 }
 
 export type OpeningChatEntryInput = {

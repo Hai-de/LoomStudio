@@ -1,5 +1,5 @@
 import type { ClientJsonValue } from '@loom-studio/client-bridge'
-import { BookOpen, Braces, ChevronDown, ChevronRight, Copy, Download, Folder, FolderOpen, Package, Regex, Star, ToggleLeft, ToggleRight, Trash2, Wrench } from 'lucide-react'
+import { BookOpen, Braces, Copy, Download, Folder, FolderOpen, Package, Regex, Star, ToggleLeft, ToggleRight, Trash2, Wrench } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { Button, IconButton, SearchField } from '@loom-studio/ui'
 import { DEFAULT_ASSET_VIEW_STATE, useStudioLayoutStore } from '../../shared/studio-shell/studio-layout-store.js'
@@ -994,14 +994,31 @@ function PresetToolExplorer(props: {
       }))
   }, [props.tools, query])
 
-  function toggleNamespace(namespace: string) {
-    setCollapsedNamespaces(current => {
-      const next = new Set(current)
-      if (next.has(namespace)) next.delete(namespace)
-      else next.add(namespace)
-      return next
-    })
-  }
+  const nodes: FileTreeNode[] = [
+    ...(unavailableMounts.length ? [{
+      id: 'unavailable-tools',
+      label: props.t('preset.tools.unavailableGroup'),
+      isSection: true,
+      children: unavailableMounts.map(mount => ({
+        id: mount.toolId,
+        kind: 'unavailable',
+        label: props.t('preset.tools.unavailable', { id: mount.toolId }),
+      })),
+    }] : []),
+    ...toolGroups.map(group => ({
+      id: `tool-group:${group.namespace}`,
+      kind: 'folder',
+      label: group.namespace === 'official.codeact' ? 'CodeAct（Freeform / JSON）'
+        : group.namespace === 'official.fixed' ? '官方固定功能工具' : group.namespace,
+      children: group.tools.map(tool => ({
+        id: tool.id,
+        kind: 'tool',
+        label: tool.name,
+        meta: props.t(tool.input.kind === 'structured' ? 'preset.tools.kind.provider' : 'preset.tools.kind.custom'),
+      })),
+    })),
+  ]
+  const groupIds = nodes.filter(node => node.kind === 'folder').map(node => node.id)
 
   return (
     <div className={styles.toolExplorer}>
@@ -1018,58 +1035,28 @@ function PresetToolExplorer(props: {
         }}
       />
       <div className={styles.toolGroups}>
-        {unavailableMounts.length > 0 ? <section className={styles.toolGroup}>
-          <h3>{props.t('preset.tools.unavailableGroup')}</h3>
-          {unavailableMounts.map(mount => <button
-            className={mount.toolId === props.selectedToolId ? styles.toolExplorerActive : styles.toolExplorerItem}
-            key={mount.id}
-            type="button"
-            onClick={() => props.onSelect(mount.toolId)}
-          >
-            <Wrench aria-hidden="true" />
-            <span className={styles.toolExplorerText}>{props.t('preset.tools.unavailable', { id: mount.toolId })}</span>
-          </button>)}
-        </section> : null}
-        {toolGroups.length ? toolGroups.map(group => {
-          const collapsed = collapsedNamespaces.has(group.namespace)
-          const groupId = `tool-group-${group.namespace.replace(/[^a-zA-Z0-9_-]/g, '-')}`
-          return (
-            <section className={styles.toolGroup} key={group.namespace}>
-              <button
-                aria-controls={groupId}
-                aria-expanded={!collapsed}
-                aria-label={props.t(collapsed ? 'context.tree.expand' : 'context.tree.collapse', { label: group.namespace })}
-                className={styles.toolGroupHeader}
-                type="button"
-                onClick={() => toggleNamespace(group.namespace)}
-              >
-                {collapsed ? <ChevronRight aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
-                <Package aria-hidden="true" />
-                <strong>{group.namespace === 'official.codeact' ? 'CodeAct（Freeform / JSON）' : group.namespace === 'official.fixed' ? '官方固定功能工具' : group.namespace}</strong>
-                <span>{group.tools.length}</span>
-              </button>
-              {!collapsed ? (
-                <div className={styles.toolGroupItems} id={groupId}>
-                  {group.tools.map(tool => (
-                    <button
-                      className={tool.id === props.selectedToolId ? styles.toolExplorerActive : styles.toolExplorerItem}
-                      key={tool.id}
-                      type="button"
-                      onClick={() => props.onSelect(tool.id)}
-                    >
-                      <Wrench aria-hidden="true" />
-                      <span className={styles.toolExplorerText}>
-                        <strong>{tool.name}</strong>
-                        <small>{props.t(tool.input.kind === 'structured' ? 'preset.tools.kind.provider' : 'preset.tools.kind.custom')}</small>
-                      </span>
-                      <em>{props.t(mountedIds.has(tool.id) ? 'preset.tools.mounted' : 'preset.tools.notMounted')}</em>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </section>
-          )
-        }) : unavailableMounts.length === 0 ? <div className={styles.toolSearchEmpty}>{props.t('preset.tools.searchEmpty')}</div> : null}
+        {nodes.length ? <FileTree ariaLabel={props.t('preset.tools.searchLabel')} nodes={nodes}
+          expandedIds={groupIds.filter(id => !collapsedNamespaces.has(id))}
+          onExpandedIdsChange={ids => setCollapsedNamespaces(new Set(groupIds.filter(id => !ids.includes(id))))}
+          selectedId={props.selectedToolId}
+          getDisclosureLabel={(node, expanded) => props.t(expanded ? 'context.tree.collapse' : 'context.tree.expand', { label: node.label })}
+          getDragLabel={node => node.label}
+          moreActionsLabel={props.t('preset.tools.searchLabel')}
+          renderIcon={node => node.kind === 'folder' ? <Package aria-hidden="true" /> : <Wrench aria-hidden="true" />}
+          renderTrailing={node => node.kind === 'tool'
+            ? <em>{props.t(mountedIds.has(node.id) ? 'preset.tools.mounted' : 'preset.tools.notMounted')}</em>
+            : null}
+          onSelect={node => {
+            if (node.kind === 'folder') {
+              setCollapsedNamespaces(current => {
+                const next = new Set(current)
+                if (next.has(node.id)) next.delete(node.id)
+                else next.add(node.id)
+                return next
+              })
+            } else props.onSelect(node.id)
+          }}
+        /> : <div className={styles.toolSearchEmpty}>{props.t('preset.tools.searchEmpty')}</div>}
       </div>
     </div>
   )

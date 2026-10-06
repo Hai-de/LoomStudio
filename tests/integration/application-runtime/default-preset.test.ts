@@ -128,7 +128,7 @@ describe('bundled default preset', () => {
           asset: { id, kind: 'entry', label: id, body: id, capabilities: { targetAnchorId: anchor, activation } },
         })
       }
-      await runtime.replaceSettingMounts({ source: { kind: 'manual', id: 'global' }, settingResourceIds: [setting.id] })
+      await runtime.replaceSettingMounts({ source: { kind: 'preset', id: preset.id }, settingResourceIds: [setting.id] })
       const { card } = await runtime.createCard({ name: 'Story', opening: 'NARRATIVE_RAW' })
       const { timeline } = await runtime.createNarrativeTimeline({ cardId: card.id })
       await runtime.upsertTextTransformRule({

@@ -3,7 +3,7 @@ import { createInMemoryDiagnosticsRegistry } from '@loom-studio/diagnostics'
 import { createApplicationRuntime } from '@loom-studio/application-runtime'
 import { createPromptResourceStore } from '@loom-studio/application-data'
 import { createSqliteDataEngine } from '@loom-studio/data-engine'
-import { createDocumentDataCommitSource, createInMemoryDocumentStore } from '@loom-studio/document-store'
+import { createInMemoryDocumentStore } from '@loom-studio/document-store'
 import { createExtensionHost } from '@loom-studio/extension-host'
 import { createKernel, type Kernel } from '@loom-studio/kernel'
 import { createLoomRunner, createSamplePassFactories } from '@loom-studio/loom-runner'
@@ -36,7 +36,7 @@ function createHarness() {
 
   kernel = createKernel({
     documents,
-    dataCommits: createDocumentDataCommitSource(documents),
+    dataCommits: documents,
     diagnostics,
     traceAudit,
     extensionHost,

@@ -134,9 +134,15 @@ Client Module 由 Studio Client 根据 Catalog 与 desired state 独立编排。
 
 Manifest declaration 是静态合同，Runtime registration 是当前事实。开发/测试模式下，未声明的 RPC/Event 产生 warning 并使实例 degraded；生产模式拒绝未声明注册。声明但未注册也会产生 Diagnostic。
 
+全局包替换不是文件、状态和 Host 的跨系统原子事务。停用旧模块前，Manager 在 `.history` 保存本次 `*.recovery.json`，记录原模块 desired/grants、版本及旧包位置。新代码与 catalog 提交后，先保存规范历史，再恢复未变更 runtime/capabilities 的模块状态；能力变化维持禁用并走既有启用授权入口，不自动扩大授权。
+
+代码提交后的失败同时返回 `installed` 与 `failed`，后者包含 `stage`、`codeCommitted` 和 `recovery` 路径。正常完成删除本次恢复记录；失败保留记录，不在启动时自动重放。恢复时先处理文件系统/状态存储故障并核对当前包版本，再按记录通过已有 enable/disable 接口恢复仍适用的授权和启用选择。若 `save-history` 失败，旧包仍在记录中的随机 `backupDirectory`，应先恢复到 `historyDirectory`；Git 包随后可走既有 rollback 预览，ZIP 包用旧包重新显式预览安装。修复并确认后才移除遗留恢复记录，不能盲目整份覆盖现有 State 文件。
+
 ### 3.1 Package Prompt Resource 与 Agent Tool
 
-`contributes.promptResources` 和 `contributes.agentTools` 只把 Package 内 JSON 文件声明为候选资源。安装或发现 Package 不会自动把它们注入 Agent；用户通过 `extensions.importPackageResources` 显式实例化后：
+`contributes.promptResources` 和 `contributes.agentTools` 声明 Package 携带的静态资源。全局 Git / ZIP / 目录安装完成后，若该包尚无全局资源 installation，宿主自动调用现有资源导入链；仅预览下载、目录发现或启用代码模块不导入。自动导入不会为用户已有 Preset 采用 Setting 或启用工具，也不代表模块已获授权。
+
+已有资源 installation 在代码更新、回退或重装时保留，不自动覆盖用户编辑；资源替换仍需显式更新。历史安装、开发目录或自动导入失败时，可通过 `extensions.importPackageResources` / “导入资源”补入。文件安装与数据库导入不是跨系统原子事务：导入失败会明确报告包文件已安装，保留包以便修复并重试；批量远程安装同时返回已安装项与失败原因。导入后：
 
 - Prompt Resource 进入现有 Prompt Resource Store，保留 `packageId + version + contributionId` provenance；
 - Preset 声明的 Setting Mount 与 Tool Mount 进入现有 Mount 表；
@@ -145,8 +151,13 @@ Manifest declaration 是静态合同，Runtime registration 是当前事实。�
 - 普通重复导入同一 Package 版本保持幂等，不覆盖用户编辑；显式更新通过当前 installation 版本校验，可替换包贡献及移除旧贡献，不是普通导入的静默覆盖；
 - Package 文件卸载不自动删除已实例化资源；`extensions.removePackageResources` 可按 provenance 显式移除该 Package 的 Prompt Resource、Tool Definition 与关联 Mount；
 - 资源移除保留外部 Card、Timeline、Session 与其他预设的引用，只清理被删资源自身拥有的挂载；缺失必要资源时执行明确失败。Agent Preset 直接承载配置，不再存在 Profile Tool Override 或阻止删除的 Profile 引用。
+- 资源移除使用墓碑，不删除 Package 源文件。来源仍声明该贡献时，显式重新导入可恢复原资源 ID 和预设声明的挂载；不把重复导入当成重新授权或自动启用模块。来源文件被删不触发数据库自动清理，普通重启也不新增隐式恢复流程。
+
+官方 starter 的显式安装采用同样的可恢复资源原则：恢复墓碑资源的原 ID，补回缺失工具挂载且默认不启用工具；同版本、同内容来源不覆盖本地编辑。既有活跃预设的 Setting 挂载选择保持不变，恢复被删除的预设时重建其来源声明的 Setting 挂载。来源版本或内容变化仍走既有资源更新语义。
 
 Tool Definition 与执行器分离。Server Module 在 `modules[*].contributes.agentToolHandlers` 声明 Handler，并通过 `ctx.agentTools.register(toolId, handler)` 注册执行逻辑。Module disable/reload 会释放旧 Handler，但不会删除 Definition 或 Preset Mount；Handler 缺失时 Agent Tool Loop 返回明确的未注册执行器错误。
+
+Handler 的第二参数包含 `signal`、宿主生成的 `invocationId`，以及可选的只读 `narrativeTarget: { scope: 'timeline', timelineId, branchId }`。后者仅在当前 Tool Execution Scope 的默认 State target 为已授权 Timeline 目标时提供，不从模型参数或全局当前聊天推导。需要 Narrative 的工具必须自行拒绝未绑定调用；通用工具可以不使用该字段。Host 保留调用身份与目标，并将调用取消信号和实例生命周期信号合并。State 权限仍由安装范围与 State API 检查，提供 target 不绕过权限。
 
 预设是能力与消费配置，不是第三种包或独立代码实例。扩展可无 Module，仅分发资源；也可由同一模块编排多个预设。引用不改变归属，单独导出预设不递归携带资源内容，切换 Session 不停用扩展。Settings、正则默认参与与显式采用的差异见[资源归属与使用配置](../application/prompt-build/README.md#资源归属与使用配置)。
 

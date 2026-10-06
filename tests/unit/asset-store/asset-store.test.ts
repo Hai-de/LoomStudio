@@ -13,6 +13,24 @@ afterEach(async () => {
 })
 
 describe('AssetStore', () => {
+  it.each(['artifact', 'media'] as const)('rolls back failed %s metadata while preserving shared prepared bytes', async kind => {
+    const fixture = await createFixture()
+    try {
+      const shared = await fixture.blobs.prepareWrite({ source: Buffer.from('shared rollback bytes') })
+      const table = kind === 'artifact' ? 'source_artifacts' : 'media_assets'
+      fixture.engine.database.exec(`CREATE TRIGGER reject_asset BEFORE INSERT ON ${table} BEGIN SELECT RAISE(ABORT, 'injected asset failure'); END;`)
+      const actor = { kind: 'system', id: 'test' } as const
+      const operation = kind === 'artifact'
+        ? fixture.assets.preserveSourceArtifact({ source: Buffer.from('shared rollback bytes'), format: 'test', actor })
+        : fixture.assets.createMediaAsset({ source: Buffer.from('shared rollback bytes'), kind: 'test', actor })
+      await expect(operation).rejects.toThrow('injected asset failure')
+      expect(fixture.engine.database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get()).toEqual({ count: 0 })
+      expect(await fixture.blobs.getBySha256(shared.blob.sha256)).toBeUndefined()
+      const committed = await fixture.engine.transact({ actor }, tx => Promise.resolve(fixture.blobs.participateWrite(tx, shared)))
+      expect(Buffer.from(await fixture.blobs.read(committed.value.blob.id)).toString()).toBe('shared rollback bytes')
+    } finally { await fixture.engine.close() }
+  })
+
   it('keeps Source Artifact identity separate from shared Blob bytes', async () => {
     const fixture = await createFixture()
     const first = await fixture.assets.preserveSourceArtifact({

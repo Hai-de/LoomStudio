@@ -327,7 +327,7 @@ function AuthoringMaster(props: { config: DraftConfig; selection: Selection; sel
           if (node.kind === 'folder') {
             return (
               <button
-                aria-label={`添加 ${node.label}`}
+                aria-label={t('stateAuthoring.addItem', { label: node.label })}
                 className={styles.navAddBtn}
                 type="button"
                 onClick={event => handleAdd(node.id, event)}
@@ -338,9 +338,9 @@ function AuthoringMaster(props: { config: DraftConfig; selection: Selection; sel
           }
           return null
         }}
-        getDisclosureLabel={(node, expanded) => `${expanded ? '折叠' : '展开'} ${node.label}`}
-        getDragLabel={node => `移动 ${node.label}`}
-        moreActionsLabel="更多操作"
+        getDisclosureLabel={(node, expanded) => t(expanded ? 'context.tree.collapse' : 'context.tree.expand', { label: node.label })}
+        getDragLabel={node => t('context.tree.drag', { label: node.label })}
+        moreActionsLabel={t('stateVariables.actions')}
       />
     </div>
   )

@@ -1,8 +1,9 @@
 import { useMemo } from 'react'
 import type { PromptResource } from '../../entities/index.js'
-import { findContextAssetPath, resolveVirtualDisplayName } from '../../features/context-assets/model/context-asset-tree.js'
+import { findContextAssetPath } from '../../features/context-assets/model/context-asset-tree.js'
 import { readPromptResourceWorkbenchRoot } from '../../features/context-assets/model/prompt-resource-view.js'
-import { ContextAssetHeader, type ContextAssetPathSegment } from '../../features/context-assets/ui/context-asset-header/context-asset-header.js'
+import { ContextAssetHeader } from '../../features/context-assets/ui/context-asset-header/context-asset-header.js'
+import { buildContextPathSegments } from '../../features/context-assets/ui/context-asset-header/build-context-path-segments.js'
 import { useStudioLayoutStore } from '../../shared/studio-shell/studio-layout-store.js'
 import { STUDIO_PANEL_PRESENTATION } from '../../shared/studio-shell/studio-panel-presentation.js'
 import type { Translator } from '../../shared/i18n/index.js'
@@ -25,29 +26,15 @@ export function PresetWorkbenchHeader(props: {
   const setAssetPane = useStudioLayoutStore(state => state.setAssetPane)
 
   // 工具视图下不显示资产路径面包屑
-  const selectedPath: ContextAssetPathSegment[] = activePresetView === 'tools' || !selectedResource || !selectedId
+  const breadcrumbs = activePresetView === 'tools' || !selectedResource || !selectedId
     ? []
-    : findContextAssetPath([readPromptResourceWorkbenchRoot(selectedResource)], selectedId)
-      .slice(1)
-      .map((node, index, pathNodes) => {
-        const parent = [readPromptResourceWorkbenchRoot(selectedResource), ...pathNodes][index]
-        return {
-          id: node.id,
-          label: resolveVirtualDisplayName(node.label, node.kind),
-          options: (parent?.children ?? []).map(sibling => ({
-            id: sibling.id,
-            label: resolveVirtualDisplayName(sibling.label, sibling.kind),
-          })),
-        }
-      })
-
-  const breadcrumbs: ContextAssetPathSegment[] = selectedPath.map(segment => ({
-    ...segment,
-    onSelect: (id: string) => {
+    : buildContextPathSegments(
+      findContextAssetPath([readPromptResourceWorkbenchRoot(selectedResource)], selectedId),
+      (id: string) => {
       setAssetPane('preset', props.workspaceId, 'detail')
       openAssetDetail('preset', props.workspaceId, id)
-    },
-  }))
+      },
+    )
 
   return (
     <ContextAssetHeader

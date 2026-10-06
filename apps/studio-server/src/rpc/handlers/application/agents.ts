@@ -39,12 +39,7 @@ type AgentRun = {
   sourceRunId?: string
   continuationRunId?: string
   abandoned?: boolean
-  checkpoint?: {
-    sourceRunId: string
-    messages: import('@loom-studio/shared').ChatMessage[]
-    userEntry: import('@loom-studio/application-data').AgentTranscriptEntry
-    partialEntryId?: string
-  }
+  checkpoint?: NonNullable<RuntimeRequestContext['agentRun']>['continuation']
   mutationApprovals: Map<string, {
     kind: 'mutation' | 'history-read'
     event: AgentRunEvent
@@ -315,7 +310,7 @@ export async function handleAgentsRpc(
         if (source.abandoned) return { runId: source.id, accepted: false, state: source.state }
         if (source.continuationRunId) return { runId: source.continuationRunId, sourceRunId: source.id, accepted: true }
         if (source.checkpoint && source.request) {
-          const run = startAgentRun(runtime, context, { ...source.request, input: '' }, source.id, source.checkpoint, source)
+          const run = startAgentRun(runtime, context, source.request, source.id, source.checkpoint, source)
           runs.set(run.id, run)
           pruneCompletedRuns(runs)
           void run.promise!.catch(() => undefined).finally(() => pruneCompletedRuns(runs))
@@ -328,49 +323,16 @@ export async function handleAgentsRpc(
         ? params.agentSessionId
         : source?.sessionId
       if (sessionId) {
-        const transcript = await runtime.getAgentTranscriptPage({ agentSessionId: sessionId, limit: 100 })
-        const summary = [...transcript.entries].reverse().find(entry => entry.entry.kind === 'work-summary')
-        const entries = summary
-          ? transcript.entries.filter(entry => entry.sequence > summary.sequence)
-          : transcript.entries
-        const lastUser = entries.slice().reverse().find(e => e.entry.kind === 'message' && e.entry.role === 'user')
-        if (lastUser) {
-          const userIdx = entries.indexOf(lastUser)
-          const laterEntries = entries.slice(userIdx + 1)
-          const hasCompletedReply = laterEntries.some(
-            e => e.entry.kind === 'message' && e.entry.role === 'assistant' && e.entry.state !== 'partial' && e.entry.content.trim()
-          )
-          const hasCompletedRun = laterEntries.some(
-            e => e.entry.kind === 'run-state' && e.entry.state === 'completed'
-          )
-          if (laterEntries.some(e => e.entry.kind === 'run-state' && e.entry.state === 'discarded')) {
-            return { runId: source?.id ?? '', accepted: false }
-          }
-          if (!hasCompletedReply || !hasCompletedRun) {
-            const partialAssistant = laterEntries.find(
-              e => e.entry.kind === 'message' && e.entry.role === 'assistant' && e.entry.state === 'partial'
-            )
-            const checkpoint = {
-              sourceRunId: String(lastUser.runId || lastUser.id),
-              messages: partialAssistant?.entry.kind === 'message' ? [{
-                role: 'system' as const,
-                content: `The previous assistant response was interrupted. Continue from this partial response without repeating it:\n${partialAssistant.entry.content}`,
-              }] : [],
-              userEntry: lastUser,
-              ...(partialAssistant ? { partialEntryId: partialAssistant.id } : {}),
-            }
-            const run = startAgentRun(
-              runtime,
-              context,
-              { agentSessionId: sessionId, input: '' },
-              String(lastUser.runId || lastUser.id),
-              checkpoint,
-            )
-            runs.set(run.id, run)
-            pruneCompletedRuns(runs)
-            void run.promise!.catch(() => undefined).finally(() => pruneCompletedRuns(runs))
-            return { runId: run.id, sourceRunId: String(lastUser.runId || lastUser.id), accepted: true, state: run.state }
-          }
+        const recovered = await runtime.prepareAgentRunRecovery({
+          agentSessionId: sessionId,
+          ...(isRecord(params) && typeof params.runId === 'string' ? { runId: params.runId } : {}),
+        })
+        if (recovered) {
+          const run = startAgentRun(runtime, context, recovered.request, recovered.continuation.sourceRunId, recovered.continuation)
+          runs.set(run.id, run)
+          pruneCompletedRuns(runs)
+          void run.promise!.catch(() => undefined).finally(() => pruneCompletedRuns(runs))
+          return { runId: run.id, sourceRunId: recovered.continuation.sourceRunId, accepted: true, state: run.state }
         }
       }
 
@@ -447,10 +409,12 @@ function startAgentRun(
   const controller = new AbortController()
   const run: AgentRun = {
     id, controller, request, sourceRunId, sessionId: request.agentSessionId,
+    ...(continuation ? { checkpoint: continuation } : {}),
     events: [], eventSizes: [], eventBytes: 0, firstCursor: 0, nextCursor: 0, partialText: '',
     state: 'running', promise: Promise.resolve(), mutationApprovals: new Map(),
   }
   const transferCheckpoint = () => {
+    run.checkpoint = undefined
     if (!source) return
     source.checkpoint = undefined
     source.request = undefined
@@ -474,7 +438,7 @@ function startAgentRun(
       runId: id,
       onEvent: emit,
       ...(continuation ? { continuation } : {}),
-      onSuspended: checkpoint => { run.checkpoint = checkpoint; transferCheckpoint() },
+      onSuspended: checkpoint => { transferCheckpoint(); run.checkpoint = checkpoint },
       onHistoryReadApproval: (action, signal) => new Promise((resolve, reject) => {
         const approvalSignal = signal ?? controller.signal
         approvalSignal.throwIfAborted()
@@ -531,7 +495,7 @@ function startAgentRun(
   }).catch(error => {
     for (const pending of run.mutationApprovals.values()) pending.reject(new Error('Agent run ended before mutation approval.'))
     run.mutationApprovals.clear()
-    const suspended = controller.signal.reason === 'user-pause' || Boolean(run.checkpoint)
+    const suspended = controller.signal.reason === 'user-pause' || Boolean(run.checkpoint && run.checkpoint !== continuation)
     run.state = suspended ? 'suspended' : controller.signal.aborted ? 'cancelled' : 'failed'
     if (source?.checkpoint && source.continuationRunId === run.id) source.continuationRunId = undefined
     const reason = error instanceof Error ? error.message : String(error)
@@ -544,7 +508,8 @@ function startAgentRun(
     run.controller = undefined
     run.promise = undefined
     run.partialText = ''
-    if (run.state !== 'suspended' || !run.checkpoint && source?.checkpoint) {
+    const retainedColdCheckpoint = !source && continuation !== undefined && run.checkpoint === continuation
+    if (run.state !== 'suspended' && !retainedColdCheckpoint || !run.checkpoint && source?.checkpoint) {
       run.request = undefined
       run.checkpoint = undefined
     }

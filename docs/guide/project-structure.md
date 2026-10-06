@@ -141,7 +141,7 @@ Loom Studio 使用 `pnpm` workspace 构建了一个 Monorepo。本项目主要�
    - 完全被 `.gitignore` 忽略，作为开发者的纯本地草稿纸（原 `Playground/`）。
    - 适用于单次脚本验证、快速对比与临时转储分析。
    - **治理生命周期底线**：
-     - **及时转正**：原型成熟后须按架构权责归位（交互实验升格入 `apps/playground/`，测试夹具沉淀至对应扩展如 `official/extensions/st-data-compat/fixtures/`，静态资源进入 `public/`，生产算法合入对应包）。
+     - **及时转正**：原型成熟后须按架构权责归位（交互实验升格入 `apps/playground/`，测试夹具沉淀至对应扩展如 `extensions/st-data-compat/fixtures/`，静态资源进入 `public/`，生产算法合入对应包）。
      - **即时清理**：验证完毕或已转正的测试脚本、动辄数十兆的历史转储目录（如 `storage-*`、`diff-recovery-*`），应及时删除，不作为常态资产滞留工作区。
 
 ---
@@ -197,7 +197,10 @@ Loom Studio 使用 `pnpm` workspace 构建了一个 Monorepo。本项目主要�
 
 ## 🧩 扩展内容
 
-- `official/extensions/st-data-compat/`: 官方 SillyTavern 数据兼容扩展（专属测试夹具位于其 `fixtures/data/` 下）。
+- `official/extensions/`: 随主程序发行的轻量官方内容。
+- `extensions/`: 独立发行扩展的安装和本地开发目录，官方与第三方使用同一位置；主仓库忽略此目录。
+- `extensions/st-data-compat/`: 官方 SillyTavern 数据兼容扩展（专属测试夹具位于其 `fixtures/data/` 下）。
+- `extensions/the-world/`: 独立发行的官方 The World 扩展。
 - `tests/fixtures/extensions/echo/`: 测试扩展，覆盖 RPC、Macro、State、Text Pipeline 与 Renderer 贡献。
 - `tests/fixtures/extensions/weather-station/`: Server Extension 生命周期、事件与文档能力测试样本。
 

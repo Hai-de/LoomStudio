@@ -6,8 +6,10 @@ export function normalizeContextAssets(nodes: ContextAssetNode[]): ContextAssetN
 
 function normalizeContextAssetNode(node: ContextAssetNode): ContextAssetNode {
   const children = node.children ? normalizeContextAssets(node.children) : undefined
-  const projection = node.projection ?? readProjectionFromCapabilities(node.capabilities)
-  const capabilities = projection ? writeProjectionCapability(node.capabilities, projection) : node.capabilities
+  const capabilities = node.capabilities?.projection
+    ? node.capabilities
+    : node.projection ? writeProjectionCapability(node.capabilities, node.projection) : node.capabilities
+  const projection = readProjectionFromCapabilities(capabilities)
 
   return {
     ...node,
@@ -39,7 +41,7 @@ export function writeProjectionCapability(
 ): ContextAssetNode['capabilities'] {
   return {
     ...capabilities,
-    lifecycle: { lifecycle: projection.lifecycle },
+    lifecycle: { lifecycle: projection.lifecycle ?? capabilities?.lifecycle?.lifecycle ?? 'always' },
     projection: {
       ...capabilities?.projection,
       entryOrderHint: projection.entryOrder,

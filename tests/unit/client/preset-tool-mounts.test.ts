@@ -11,10 +11,11 @@ const freeform = { id: 'official/codeact', input: { kind: 'freeform' } } as Agen
 
 describe('Preset tool mounting', () => {
   it('preserves mount configuration when toggling default availability', () => {
-    const mount = {
+    const mount: PresetToolMount = {
+      id: 'mount', presetResourceId: 'preset', origin: {}, createdAt: '',
       toolId: structured.id, orderIndex: 3, defaultEnabled: false,
       activation: { kind: 'always' }, provider: { order: 5 },
-    } as PresetToolMount
+    }
     expect(togglePresetToolMount([mount], structured)).toEqual([{
       toolId: structured.id, orderIndex: 3, defaultEnabled: true,
       activation: { kind: 'always' }, provider: { order: 5 },

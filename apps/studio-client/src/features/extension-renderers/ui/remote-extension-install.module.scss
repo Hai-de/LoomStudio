@@ -1,0 +1,84 @@
+.body {
+  display: grid;
+  gap: 16px;
+  width: min(520px, 100%);
+  min-width: 0;
+
+  label:not(.choice) {
+    display: grid;
+    gap: 6px;
+  }
+
+  input:not([type='checkbox']), select {
+    width: 100%;
+    min-width: 0;
+    padding: 8px;
+    font: inherit;
+  }
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fields {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-height: 168px;
+  min-width: 0;
+
+  p {
+    margin: 0;
+  }
+}
+
+.source {
+  overflow-wrap: anywhere;
+}
+
+.list {
+  display: grid;
+  gap: 16px;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 0;
+
+  p {
+    flex-basis: 100%;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.branch {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+
+  input {
+    width: 180px;
+    max-width: 100%;
+    min-width: 0;
+    padding: 6px;
+    font: inherit;
+  }
+}

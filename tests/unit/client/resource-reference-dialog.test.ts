@@ -1,6 +1,7 @@
 import { isValidElement, type ComponentProps, type ReactElement } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { formatEntityReference, formatResourceReference } from '@loom-studio/shared'
+import { Dialog } from '@loom-studio/ui'
 import { ResourceReferenceDialog } from '../../../apps/studio-client/src/features/resource-references/resource-reference-dialog.js'
 import type { StudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
 
@@ -32,12 +33,6 @@ function elements(value: unknown): Element[] {
   if (Array.isArray(value)) return value.flatMap(elements)
   if (!isValidElement<Record<string, unknown>>(value)) return []
   return [value, ...Object.values(value.props).flatMap(elements)]
-}
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (error: Error) => void
-  const promise = new Promise<T>((accept, fail) => { resolve = accept; reject = fail })
-  return { promise, resolve, reject }
 }
 const resourceUri = formatResourceReference({
   kind: 'prompt-resource', resourceId: 'r', nodeId: 'n', version: 1, startLine: 1, endLine: 1,
@@ -78,7 +73,7 @@ describe('controlled resource reference dialog', () => {
     expect(f.props.onClose).not.toHaveBeenCalled()
   })
 
-  it('delegates Close and Escape but editor navigation calls only onOpenEditor', async () => {
+  it('delegates dismissal to the shared Dialog but editor navigation calls only onOpenEditor', async () => {
     const f = fixture(resourceUri)
     expect(elements(f.render()).find(item => item.props.role === 'status')?.props.children).toBe('正在读取…')
     const tree = await f.settle()
@@ -90,9 +85,9 @@ describe('controlled resource reference dialog', () => {
     const close = elements(tree).find(item => item.props['aria-label'] === '关闭')!
     ;(close.props.onClick as () => void)()
     expect(f.props.onClose).toHaveBeenCalledTimes(1)
-    const preventDefault = vi.fn()
-    ;(tree!.props.onCancel as (event: unknown) => void)({ preventDefault })
-    expect(preventDefault).toHaveBeenCalledOnce()
+    expect(tree!.type).toBe(Dialog)
+    expect(tree!.props.open).toBe(true)
+    ;(tree!.props.onClose as () => void)()
     expect(f.props.onClose).toHaveBeenCalledTimes(2)
     f.props.uri = undefined
     expect(f.render()).toBeNull()
@@ -112,7 +107,7 @@ describe('controlled resource reference dialog', () => {
 
   it.each(['resolve', 'reject'] as const)('ignores stale entity %s after changing to a resource URI', async outcome => {
     const f = fixture(cardUri)
-    const pending = deferred<{ card: { id: string; name: string; version: number } }>()
+    const pending = Promise.withResolvers<{ card: { id: string; name: string; version: number } }>()
     f.getCard.mockReturnValueOnce(pending.promise)
     f.render()
     f.props.uri = resourceUri
@@ -121,7 +116,7 @@ describe('controlled resource reference dialog', () => {
     if (outcome === 'resolve') pending.resolve({ card: { id: 'card/1', name: 'Stale card', version: 1 } })
     else pending.reject(new Error('Stale error'))
     const tree = await f.settle()
-    expect(elements(tree).find(item => item.type === 'strong')?.props.children).toBe('User text')
+    expect(tree!.props.title).toBe('User text')
     expect(elements(tree).some(item => item.props.role === 'alert')).toBe(false)
     expect(elements(tree).some(item => item.props['aria-label'] === '打开编辑器')).toBe(true)
   })
@@ -131,7 +126,7 @@ describe('controlled resource reference dialog', () => {
     f.getResource.mockRejectedValueOnce(new Error('Access denied'))
     f.render()
     expect(elements(await f.settle()).find(item => item.props.role === 'alert')?.props.children).toBe('Access denied')
-    const pending = deferred<{ card: { id: string; name: string; version: number } }>()
+    const pending = Promise.withResolvers<{ card: { id: string; name: string; version: number } }>()
     f.getCard.mockReturnValueOnce(pending.promise)
     f.props.uri = cardUri
     f.render()

@@ -36,7 +36,6 @@ type StudioLayoutData = {
   dockPinned: boolean
   composerPinned: boolean
   panelWindowMode: PanelWindowMode
-  panelWindowModes: Partial<Record<StudioPanelId, PanelWindowMode>>
   panelWindowSizes: Partial<Record<StudioPanelId, WindowSize>>
   presetView: PresetView
   playTab: 'character' | 'sessions'
@@ -66,7 +65,7 @@ type StudioLayoutStore = StudioLayoutData & {
   toggleDock(): void
   toggleDockPinned(): void
   toggleComposerPinned(): void
-  togglePanelWindowMode(panel?: StudioPanelId): void
+  togglePanelWindowMode(): void
   setPlayTab(tab: 'character' | 'sessions'): void
   setPlayCalendarOpen(open: boolean): void
   setPlaySelectedDate(date: string | undefined): void
@@ -125,9 +124,8 @@ export function createDefaultStudioLayout(): StudioLayoutData {
     contextCategory: 'setting',
     dockOpen: false,
     dockPinned: true,
-    composerPinned: false,
+    composerPinned: true,
     panelWindowMode: 'reference',
-    panelWindowModes: {},
     panelWindowSizes: {},
     presetView: 'assets',
     railWidth: DEFAULT_RAIL_WIDTH,
@@ -144,9 +142,8 @@ export function sanitizeStudioLayout(value: unknown): StudioLayoutData {
   const defaults = createDefaultStudioLayout()
   if (!isRecord(value)) return defaults
 
-  const panelWindowModes = readPanelWindowModes(value.panelWindowModes)
   const panelWindowMode: PanelWindowMode = value.panelWindowMode === 'immersive' ||
-    Object.values(panelWindowModes).some(mode => mode === 'immersive')
+    hasLegacyImmersiveMode(value.panelWindowModes)
       ? 'immersive'
       : 'reference'
 
@@ -160,9 +157,8 @@ export function sanitizeStudioLayout(value: unknown): StudioLayoutData {
     contextCategory: isContextCategory(value.contextCategory) ? value.contextCategory : defaults.contextCategory,
     dockOpen: value.dockOpen === true || readPanelId(value.activePanel) !== null,
     dockPinned: value.dockPinned === undefined ? defaults.dockPinned : value.dockPinned === true,
-    composerPinned: value.composerPinned === true,
+    composerPinned: value.composerPinned === undefined ? defaults.composerPinned : value.composerPinned === true,
     panelWindowMode,
-    panelWindowModes,
     panelWindowSizes: readPanelWindowSizes(value.panelWindowSizes),
     presetView: value.presetView === 'tools' ? 'tools' : defaults.presetView,
     railWidth: readRailWidth(value.railWidth),
@@ -242,18 +238,9 @@ export const useStudioLayoutStore = create<StudioLayoutStore>()(
       toggleDock: () => set(state => ({ dockOpen: !state.dockOpen })),
       toggleDockPinned: () => set(state => ({ dockPinned: !state.dockPinned })),
       toggleComposerPinned: () => set(state => ({ composerPinned: !state.composerPinned })),
-      togglePanelWindowMode: (panel?: StudioPanelId) => set(state => {
-        const nextMode: PanelWindowMode = (state.panelWindowMode === 'immersive' || (panel && state.panelWindowModes[panel] === 'immersive'))
-          ? 'reference'
-          : 'immersive'
-        const nextModes: Partial<Record<StudioPanelId, PanelWindowMode>> = nextMode === 'immersive'
-          ? Object.fromEntries(STUDIO_PANEL_IDS.map(id => [id, 'immersive']))
-          : {}
-        return {
-          panelWindowMode: nextMode,
-          panelWindowModes: nextModes,
-        }
-      }),
+      togglePanelWindowMode: () => set(state => ({
+        panelWindowMode: state.panelWindowMode === 'immersive' ? 'reference' : 'immersive',
+      })),
     }),
     {
       name: STORAGE_KEY,
@@ -269,7 +256,6 @@ export const useStudioLayoutStore = create<StudioLayoutStore>()(
         dockOpen: state.dockOpen,
         dockPinned: state.dockPinned,
         panelWindowMode: state.panelWindowMode,
-        panelWindowModes: state.panelWindowModes,
         panelWindowSizes: state.panelWindowSizes,
         presetView: state.presetView,
         railWidth: state.railWidth,
@@ -328,12 +314,9 @@ function readPanelWindowSizes(value: unknown): Partial<Record<StudioPanelId, Win
   }))
 }
 
-function readPanelWindowModes(value: unknown): Partial<Record<StudioPanelId, PanelWindowMode>> {
-  if (!isRecord(value)) return {}
-  return Object.fromEntries(STUDIO_PANEL_IDS.flatMap(panel => {
-    const mode = value[panel] ?? value[legacyPanelId(panel)]
-    return mode === 'reference' || mode === 'immersive' ? [[panel, mode]] : []
-  }))
+function hasLegacyImmersiveMode(value: unknown): boolean {
+  return isRecord(value) && STUDIO_PANEL_IDS.some(panel =>
+    (value[panel] ?? value[legacyPanelId(panel)]) === 'immersive')
 }
 
 function readPanelId(value: unknown): StudioPanelId | null {

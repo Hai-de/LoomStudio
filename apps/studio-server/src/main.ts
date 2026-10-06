@@ -12,6 +12,7 @@ import {
   type ExtensionInstallationContent,
 } from '@loom-studio/application-runtime'
 import { canAccessExtensionAsset } from './extensions/extension-asset-access.js'
+import { createExtensionFileData } from './extensions/extension-file-data.js'
 import {
   createAiGatewayCapabilityRegistry,
   createOfficialProviderAdapterRegistry,
@@ -22,7 +23,7 @@ import { createAssetStore, type AssetStore } from '@loom-studio/asset-store'
 import { createBlobStore } from '@loom-studio/blob-store'
 import { createSqliteDataEngine, type SqliteDataEngine } from '@loom-studio/data-engine'
 import { createInMemoryDiagnosticsRegistry } from '@loom-studio/diagnostics'
-import { createDocumentDataCommitSource, createSqliteDocumentStore, type DocumentStore } from '@loom-studio/document-store'
+import { createSqliteDocumentStore, type DocumentStore } from '@loom-studio/document-store'
 import { createExtensionHost } from '@loom-studio/extension-host'
 import { createKernel } from '@loom-studio/kernel'
 import { createConsoleLogSink, createMemoryLogSink, createRootLogger, queryExtensionLogs, readLogFailure, type Logger, type LogReader, type LogRecord, type LogHistoryReader } from '@loom-studio/logging'
@@ -92,6 +93,7 @@ export type CreateStudioServerOptions = {
   providerLogger?: Logger
   extensionLogger?: Logger
   extensionRootDirectory?: string
+  extensionInstalledDirectory?: string
   extensionStateDirectory?: string
   officialContentDirectory?: string
   secretBackend?: SecretBackend
@@ -234,7 +236,10 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
     logger: options.promptBuildLogger,
     runtimeLogger: options.runtimeLogger,
   })
+  const extensionFileData = createExtensionFileData(localPaths.dataRoot, documents)
   const extensionHost = createExtensionHost({
+    resolveFileDataDirectory: extensionFileData.directory,
+    serverModuleSnapshotRoot: join(options.extensionInstalledDirectory ?? join(installationRoot, 'extensions'), '.runtime'),
     documents,
     diagnostics,
     logger: options.extensionLogger,
@@ -383,12 +388,16 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
     },
     registerAgentToolHandler: (toolId, _ownerPackageId, _ownerModuleId, _ownerInstanceId, handler) => agentTools.registerRuntime({
       toolId,
-      execute: async ({ invocation, signal }) => {
+      execute: async ({ invocation, signal, scope }) => {
+        const target = scope?.state?.defaultTarget
+        const narrativeTarget = target?.scope === 'timeline' && scope?.state?.canAccess(target)
+          ? Object.freeze({ ...target })
+          : undefined
         const output = await handler({
           ...(invocation.arguments ? { arguments: structuredClone(invocation.arguments) } : {}),
           ...(invocation.rawInput !== undefined ? { rawInput: invocation.rawInput } : {}),
           ...(invocation.transport ? { transport: invocation.transport } : {}),
-        }, { signal })
+        }, { signal, invocationId: invocation.id, ...(narrativeTarget ? { narrativeTarget } : {}) })
         return {
           invocationId: invocation.id,
           toolId: invocation.toolId,
@@ -471,7 +480,6 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
     ),
   })
   const extensionRootDirectory = options.extensionRootDirectory
-    ?? (options.runtimeMode === 'production' ? undefined : join(installationRoot, 'official/extensions'))
   const extensionStateDirectory = resolve(options.extensionStateDirectory ?? localPaths.extensionRoot)
   const extensionManager = createServerExtensionManager({
     host: extensionHost,
@@ -481,8 +489,12 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
       now: nowIso,
     }),
     repositoryDirectory: extensionRootDirectory,
-    installedDirectory: options.extensionStateDirectory ? join(extensionStateDirectory, 'installed') : localPaths.extensionInstalledRoot,
+    installedDirectory: options.extensionInstalledDirectory ?? join(installationRoot, 'extensions'),
     devLinksFile: options.extensionStateDirectory ? join(extensionStateDirectory, 'dev-links.json') : localPaths.extensionDevLinksFile,
+    deleteData: extensionFileData.removeGlobal,
+    officialSetupFile: join(localPaths.configRoot, 'official-extension-setup.json'),
+    bundledDirectories: options.runtimeMode === 'production' && !options.extensionInstalledDirectory
+      ? [join(installationRoot, 'official/extensions/loom-assistant')] : [],
     readCardPackage: input => applicationRuntime.getCardExtensionPackage(input),
     listInstallations: () => applicationRuntime.listExtensionInstallations(),
     importPackageResources: input => applicationRuntime.importExtensionPackageResources(input, {
@@ -494,7 +506,7 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
   })
   const kernel = createKernel({
     documents,
-    dataCommits: dataEngine ?? createDocumentDataCommitSource(documents),
+    dataCommits: dataEngine ?? documents,
     diagnostics,
     traceAudit,
     extensionHost,
@@ -856,6 +868,7 @@ export async function main(): Promise<void> {
     const { port: actualPort } = await server.listen(port)
     console.log(`Loom Studio: http://127.0.0.1:${actualPort}`)
     printStudioServerBanner(actualPort, development)
+    console.log(`Loom Studio 数据目录: ${localPaths.dataRoot}`)
   } catch (error) {
     process.off('SIGINT', handleSigint)
     process.off('SIGTERM', handleSigterm)
@@ -876,7 +889,7 @@ function printStudioServerBanner(port: number, development: boolean): void {
 
     const raw = readFileSync(bannerPath, 'utf8')
     const lines = raw.split('\n')
-    const rawTag = '\x1b[?loom-raw]'
+    const rawTag = development ? '\x1b[?loom-raw]' : ''
 
     // 每次打印前先通过 ANSI 转义码软清屏，防止热重启时出现两个 Banner 重叠
     const isInteractive = typeof process !== 'undefined' && process.stdout?.isTTY

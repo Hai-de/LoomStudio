@@ -204,7 +204,7 @@ export function createClientRendererHost(): ClientRendererHost {
       contributions: [...registrations.values()].filter(isAvailable),
       surface,
       userOrder: userOrders.get(surface),
-    }).contributions.map(contribution => registrations.get(rendererContributionKey(contribution))!),
+    }),
     setUserOrder: (surface, contributionKeys) => {
       userOrders.set(surface, [...new Set(contributionKeys)])
       emit()

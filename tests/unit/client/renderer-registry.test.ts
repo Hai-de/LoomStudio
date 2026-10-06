@@ -27,25 +27,24 @@ describe('Renderer Registry conflict model', () => {
       contributions: [contribution('example.b', 'tail', 10), contribution('example.a', 'tail', -10)],
       surface: 'narrative.timeline.tail',
     })
-    expect(result.contributions.map(rendererContributionKey)).toEqual([
+    expect(result.map(rendererContributionKey)).toEqual([
       'extension:example.a/client/tail',
       'extension:example.b/client/tail',
     ])
   })
 
-  it('lets user order override author suggestions and reports duplicates', () => {
+  it('lets user order override author suggestions', () => {
     const first = contribution('example.a', 'tail', -10)
     const second = contribution('example.b', 'tail', 10)
     const result = orderRendererContributions({
-      contributions: [first, second, first],
+      contributions: [first, second],
       surface: 'narrative.timeline.tail',
       userOrder: ['extension:example.b/client/tail', 'extension:example.a/client/tail'],
     })
-    expect(result.contributions.map(rendererContributionKey)).toEqual([
+    expect(result.map(rendererContributionKey)).toEqual([
       'extension:example.b/client/tail',
       'extension:example.a/client/tail',
     ])
-    expect(result.diagnostics).toEqual([expect.objectContaining({ code: 'renderer.duplicate' })])
   })
 
   it('rejects implicit exclusive replacement and supports explicit replacement', () => {

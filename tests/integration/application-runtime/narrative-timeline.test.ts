@@ -20,6 +20,28 @@ function createTestRuntime(options?: { stateContributions?: StateContributionReg
 }
 
 describe('application narrative timeline lifecycle', () => {
+  it('creates a Timeline without opening messages and keeps existing openings unchanged after Card edits', async () => {
+    const { engine, runtime } = createTestRuntime()
+    try {
+      const { card } = await runtime.createCard({ name: 'No opening' })
+      const empty = await runtime.createNarrativeTimeline({ cardId: card.id })
+      expect(empty.nodes).toEqual([])
+      const updated = await runtime.updateCard({
+        cardId: card.id, expectedVersion: card.version,
+        opening: { entries: [{ role: 'assistant', content: 'Original opening' }] },
+      })
+      const story = await runtime.createNarrativeTimeline({ cardId: card.id })
+      expect(story.nodes.map(node => node.body.raw)).toEqual(['Original opening'])
+      await runtime.updateCard({
+        cardId: card.id, expectedVersion: updated.card.version, opening: { entries: [] },
+      })
+      const withoutOpening = await runtime.createNarrativeTimeline({ cardId: card.id })
+      expect(withoutOpening.nodes).toEqual([])
+      const existing = await runtime.getNarrativePage({ timelineId: story.timeline.id })
+      expect(existing.nodes.map(node => node.body.raw)).toEqual(['Original opening'])
+    } finally { await engine.close() }
+  })
+
   it('resolves installed State contributions without sharing registrations or reinitializing existing State', async () => {
     const registry = createStateContributionRegistry()
     const { engine, runtime } = createTestRuntime({ stateContributions: registry })
@@ -593,8 +615,4 @@ describe('application narrative timeline lifecycle', () => {
     }
   })
 
-  it('requires the shared Prompt Resource Store and Data Engine', async () => {
-    const { createInMemoryDocumentStore } = await import('@loom-studio/document-store')
-    expect(() => Reflect.apply(createApplicationRuntime, undefined, [{ documents: createInMemoryDocumentStore() }])).toThrow('Prompt Resource Store is required')
-  })
 })

@@ -103,6 +103,7 @@ async function simulateLifecycle() {
     const entries = flatten(preset.rootNode)
     const entryBodies = new Map([
       ['身份与工作原则', 'ROLE:WRITER'],
+      ['剧情写入 SOP', 'SOP:WRITE_WITH_TOOLS'],
       ['文风、推演与输出', 'STYLE:{{writing.style}}'],
       ['资料开始', '<world>'], ['资料结束', '</world>'],
     ])
@@ -144,7 +145,7 @@ async function simulateLifecycle() {
       })
     }
     await runtime.replaceSettingMounts({
-      source: { kind: 'manual', id: 'global' }, settingResourceIds: settings.map(resource => resource.id),
+      source: { kind: 'preset', id: preset.id }, settingResourceIds: settings.map(resource => resource.id),
     })
     const { card } = await runtime.createCard({ name: 'Branching Story', opening: 'RAW:N001' })
     const created = await runtime.createNarrativeTimeline({ cardId: card.id })
@@ -263,7 +264,8 @@ describe('Default preset: simulated Agent lifecycle', () => {
     expect(observations).toHaveLength(requests.length - 1)
     for (const observation of observations) {
       if (observation.entry.kind !== 'provider-observation') throw new Error('Unexpected entry')
-      expect(measurements.some(item => item.entry.kind === 'request-measurement' && item.entry.measurementId === observation.entry.measurementId)).toBe(true)
+      const measurementId = observation.entry.measurementId
+      expect(measurements.some(item => item.entry.kind === 'request-measurement' && item.entry.measurementId === measurementId)).toBe(true)
     }
     expect(failedTranscript.entries.at(-1)?.entry).toMatchObject({ kind: 'run-state', state: 'failed', measurementId: expect.any(String) })
   })
@@ -280,7 +282,7 @@ describe('Default preset: simulated Agent lifecycle', () => {
       inputSchema: { type: 'object', properties: {} },
     }])
     expect(visible(requests[0]!.messages)).toEqual([
-      { role: 'system', content: 'ROLE:WRITER\n\nSTYLE:清晰自然，人物言行符合已有设定。' },
+      { role: 'system', content: 'ROLE:WRITER\n\nSOP:WRITE_WITH_TOOLS\n\nSTYLE:清晰自然，人物言行符合已有设定。' },
       { role: 'system', content: toolInstructions },
       { role: 'system', content: '<world>\n\nSTABLE_B\n\nSTABLE_A\n\n</world>' },
       { role: 'developer', content: ['<history>', 'MEMORY:EARLIER_EVENTS', ...initialWindow.map(project), '</history>'].join('\n\n') },
@@ -331,8 +333,10 @@ describe('Default preset: simulated Agent lifecycle', () => {
 
   it('preserves committed writes and terminal states after a Provider failure, then reopens SQLite and continues', () => {
     const { requests, failedTranscript, completedTranscript, firstTranscript, afterFailure, toolEvents } = scenario
-    expect(firstTranscript.entries.filter(entry => entry.entry.kind === 'run-state').map(entry => entry.entry))
-      .toEqual([{ kind: 'run-state', state: 'running' }, { kind: 'run-state', state: 'completed' }])
+    const states = firstTranscript.entries.flatMap(entry => entry.entry.kind === 'run-state' ? [entry.entry.state] : [])
+    expect(states[0]).toBe('running')
+    expect(states.at(-1)).toBe('completed')
+    expect(states.slice(0, -1).every(state => state === 'running')).toBe(true)
     expect(firstTranscript.entries.filter(entry => entry.entry.kind === 'tool-invocation')).toHaveLength(3)
     expect(firstTranscript.entries.filter(entry => entry.entry.kind === 'tool-result')).toHaveLength(3)
     expect(failedTranscript.entries.at(-1)?.entry).toMatchObject({ kind: 'run-state', state: 'failed' })

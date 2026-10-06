@@ -502,15 +502,24 @@ function assertCardBundleCard(value: unknown): asserts value is CardBundleArtifa
 
   if (value.opening !== undefined && typeof value.opening !== 'string') {
     if (!isObject(value.opening)) throw new Error('Card bundle card.opening must be a string or object')
-    if (value.opening.entries !== undefined && !Array.isArray(value.opening.entries)) {
-      throw new Error('Card bundle card.opening.entries must be an array')
+    if (value.opening.alternatives !== undefined && !Array.isArray(value.opening.alternatives)) {
+      throw new Error('Card bundle opening alternatives must be an array')
     }
-    for (const [index, entry] of (value.opening.entries ?? []).entries()) {
-      if (!isObject(entry) || typeof entry.content !== 'string') {
-        throw new Error(`Card bundle opening entry must contain string content: ${index}`)
+    const openings = [value.opening, ...(value.opening.alternatives ?? [])]
+    for (const opening of openings) {
+      if (!isObject(opening) || (opening !== value.opening && !Array.isArray(opening.entries))) {
+        throw new Error('Card bundle opening alternative must contain entries')
       }
-      if (entry.role !== undefined && entry.role !== 'user' && entry.role !== 'assistant') {
-        throw new Error(`Card bundle opening entry role is invalid: ${index}`)
+      if (opening.entries !== undefined && !Array.isArray(opening.entries)) {
+        throw new Error('Card bundle card.opening.entries must be an array')
+      }
+      for (const [index, entry] of (opening.entries ?? []).entries()) {
+        if (!isObject(entry) || typeof entry.content !== 'string') {
+          throw new Error(`Card bundle opening entry must contain string content: ${index}`)
+        }
+        if (entry.role !== undefined && entry.role !== 'user' && entry.role !== 'assistant') {
+          throw new Error(`Card bundle opening entry role is invalid: ${index}`)
+        }
       }
     }
   }

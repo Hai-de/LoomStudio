@@ -145,7 +145,6 @@ export function createCardDirectoryRuntimeMethods(ctx: CardDirectoryRuntimeConte
           sourceChanged: boolean
           prepared: PreparedBlobStorageWrite | undefined
         }> = []
-        try {
         for (const [id, item] of scripts) {
           const attachment = attachments.get(id)!
           const previous = old.scriptAttachments!.find(value => parseLoomScriptSource(value.script.source).metadataId === id)!
@@ -227,12 +226,6 @@ export function createCardDirectoryRuntimeMethods(ctx: CardDirectoryRuntimeConte
           })
           })
           return { mutation: { changesetId: result.commit.changesetId } }
-        } catch (error) {
-          await Promise.all(preparedScripts.map(item => item.prepared
-            ? ctx.blobs!.discardPreparedWrite(item.prepared)
-            : undefined))
-          throw error
-        }
       } finally { subscription.dispose() }
     },
   }

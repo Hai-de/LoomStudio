@@ -1,25 +1,23 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { useAppearanceStore } from '../../shared/studio-shell/appearance-store.js'
-import { ChevronLeft, Globe, Info, Network, Palette, Regex } from 'lucide-react'
-import { TextTransformDetail, TextTransformExplorer, useTextTransformController } from '../../features/text-transforms/ui/text-transform-panel.js'
-import type { NetworkSettings, StudioApi } from '../../shared/api/studio-api.js'
+import { ExternalLink, Globe, Info, Network, Palette, Save } from 'lucide-react'
+import { Button } from '@loom-studio/ui'
+import type { NetworkSettings } from '../../shared/api/studio-api.js'
 import type { Locale, Translator } from '../../shared/i18n/index.js'
 import { localeLabels, supportedLocales } from '../../shared/i18n/index.js'
 import { MasterDetailWorkbench } from '../../shared/ui/master-detail-workbench/master-detail-workbench.js'
 import { useMotionPreferenceStore, type MotionPreference } from '../../shared/hooks/use-motion-preference.js'
+import { useAppearanceStore } from '../../shared/studio-shell/appearance-store.js'
+import { useTokenDisplaySettings } from '../../shared/tokenizer/settings.js'
 import { BackgroundMaterialsView, type BackgroundOption } from './background-materials-view.js'
 import styles from './settings-panel.module.scss'
-import { useTokenDisplaySettings } from '../../shared/tokenizer/settings.js'
 
-type SettingsCategory = 'general' | 'network' | 'appearance' | 'text-pipeline' | 'about'
+type SettingsCategory = 'general' | 'network' | 'appearance' | 'about'
 
 export function SettingsPanel(props: {
   busy: boolean
   customCss: string
   locale: Locale
   networkSettings: NetworkSettings
-  textTransformsApi: StudioApi['textTransforms']
-  onTextTransformsChanged?(): void
   backgrounds?: readonly BackgroundOption[]
   backgroundCardId?: string
   uiScale: number
@@ -30,11 +28,11 @@ export function SettingsPanel(props: {
   t: Translator
 }) {
   const [category, setCategory] = useState<SettingsCategory>('general')
-  const tokenMultiplier = useTokenDisplaySettings(state => state.multiplier)
-  const setTokenMultiplier = useTokenDisplaySettings(state => state.setMultiplier)
   const [mobilePane, setMobilePane] = useState<'master' | 'detail'>('master')
   const [proxyMode, setProxyMode] = useState(props.networkSettings.proxyMode)
   const [proxyUrl, setProxyUrl] = useState(props.networkSettings.proxyUrl ?? '')
+  const tokenMultiplier = useTokenDisplaySettings(state => state.multiplier)
+  const setTokenMultiplier = useTokenDisplaySettings(state => state.setMultiplier)
   const previewBackgroundId = useAppearanceStore(state => state.scopedBackground && state.scopedBackground.cardId === props.backgroundCardId
     ? state.scopedBackground.id : state.background?.id ?? null)
   const previewFollowState = useAppearanceStore(state => state.followAI)
@@ -50,14 +48,12 @@ export function SettingsPanel(props: {
   const motionPreference = useMotionPreferenceStore(state => state.preference)
   const setMotionPreference = useMotionPreferenceStore(state => state.setPreference)
   const backgrounds = props.backgrounds ?? []
-  const textController = useTextTransformController({
-    api: props.textTransformsApi,
-    onRuntimeChanged: props.onTextTransformsChanged,
-    owner: { kind: 'workspace' },
-    t: props.t,
-    mobilePane,
-    onMobilePaneChange: setMobilePane,
-  })
+  const categories = [
+    { id: 'general', label: props.t('settings.general'), icon: Globe },
+    { id: 'network', label: props.t('settings.network'), icon: Network },
+    { id: 'appearance', label: props.t('settings.appearance'), icon: Palette },
+    { id: 'about', label: '关于', icon: Info },
+  ] as const
 
   useEffect(() => {
     setProxyMode(props.networkSettings.proxyMode)
@@ -74,145 +70,45 @@ export function SettingsPanel(props: {
 
   return (
     <section className={styles.settingsPanel} data-loom-component="settings-panel">
-      <header className={styles.intro}>
-        <div>
-          <h2>系统设置 (Settings)</h2>
-          <p>定制 Loom Studio 客户端环境、代理与外观表现。</p>
-        </div>
-      </header>
-
       <MasterDetailWorkbench
-        masterWidth="minmax(220px, 260px)"
+        className={styles.workbench}
+        defaultMasterWidth={200}
+        masterMinWidth={160}
+        backLabel="返回设置"
         mobilePane={mobilePane}
         onMobilePaneChange={setMobilePane}
-        master={category === 'text-pipeline' ? (
-          <div className={styles.masterNav}>
-            <button
-              className={styles.navItem}
-              type="button"
-              onClick={() => {
-                setCategory('general')
-                setMobilePane('master')
-              }}
-            >
-              <ChevronLeft aria-hidden="true" />
-              <span className={styles.navItemBody}>
-                <strong>{props.t('textTransform.backToSettings')}</strong>
-                <small>{props.t('textTransform.workspaceDescription')}</small>
-              </span>
-            </button>
-            <TextTransformExplorer controller={textController} />
-          </div>
-        ) : (
-          <nav aria-label="Settings Navigation" className={styles.masterNav}>
-            <button
-              aria-current={category === 'general' ? 'page' : undefined}
-              className={styles.navItem}
-              type="button"
-              onClick={() => {
-                setCategory('general')
-                setMobilePane('detail')
-              }}
-            >
-              <Globe aria-hidden="true" />
-              <span className={styles.navItemBody}>
-                <strong>{props.t('settings.general')}</strong>
-                <small>语言与区域</small>
-              </span>
-            </button>
-
-            <button
-              aria-current={category === 'network' ? 'page' : undefined}
-              className={styles.navItem}
-              type="button"
-              onClick={() => {
-                setCategory('network')
-                setMobilePane('detail')
-              }}
-            >
-              <Network aria-hidden="true" />
-              <span className={styles.navItemBody}>
-                <strong>{props.t('settings.network')}</strong>
-                <small>代理与网络连接</small>
-              </span>
-            </button>
-
-            <button
-              aria-current={category === 'appearance' ? 'page' : undefined}
-              className={styles.navItem}
-              type="button"
-              onClick={() => {
-                setCategory('appearance')
-                setMobilePane('detail')
-              }}
-            >
-              <Palette aria-hidden="true" />
-              <span className={styles.navItemBody}>
-                <strong>{props.t('settings.appearance')}</strong>
-                <small>UI 缩放与自定义 CSS</small>
-              </span>
-            </button>
-
-            <button
-              className={styles.navItem}
-              type="button"
-              onClick={() => {
-                setCategory('text-pipeline')
-                setMobilePane('master')
-              }}
-            >
-              <Regex aria-hidden="true" />
-              <span className={styles.navItemBody}>
-                <strong>{props.t('rail.textTransform')}</strong>
-                <small>{props.t('textTransform.workspaceDescription')}</small>
-              </span>
-            </button>
-
-            <button
-              aria-current={category === 'about' ? 'page' : undefined}
-              className={styles.navItem}
-              type="button"
-              onClick={() => {
-                setCategory('about')
-                setMobilePane('detail')
-              }}
-            >
-              <Info aria-hidden="true" />
-              <span className={styles.navItemBody}>
-                <strong>系统与关于</strong>
-                <small>运行时信息与状态</small>
-              </span>
-            </button>
+        master={(
+          <nav aria-label="设置分类" className={styles.masterNav}>
+            {categories.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                aria-current={category === id ? 'page' : undefined}
+                className={styles.navItem}
+                type="button"
+                onClick={() => { setCategory(id); setMobilePane('detail') }}
+              >
+                <Icon aria-hidden="true" size={16} />
+                <span>{label}</span>
+              </button>
+            ))}
           </nav>
         )}
       >
-        {category === 'text-pipeline' ? (
-          <div className={styles.textPipelineDetail}>
-            <TextTransformDetail controller={textController} />
-          </div>
-        ) : (
         <div className={styles.detailPane}>
+          <header className={styles.detailHeader}>
+            <h3>{categories.find(item => item.id === category)?.label}</h3>
+          </header>
           {category === 'general' ? (
             <>
-              <header className={styles.detailHeader}>
-                <h3>{props.t('settings.general')}</h3>
-              </header>
-              <div className={styles.cardSection}>
-                <h4>语言选择</h4>
-                <p>切换 Loom Studio 的界面显示语言。</p>
+              <section className={styles.settingSection}>
                 <label className={styles.settingRow}>
                   <span>{props.t('app.localeLabel')}</span>
-                  <select
-                    value={props.locale}
-                    onChange={event => props.onChangeLocale(event.target.value as Locale)}
-                  >
-                    {supportedLocales.map(locale => (
-                      <option key={locale} value={locale}>{localeLabels[locale]}</option>
-                    ))}
+                  <select value={props.locale} onChange={event => props.onChangeLocale(event.target.value as Locale)}>
+                    {supportedLocales.map(locale => <option key={locale} value={locale}>{localeLabels[locale]}</option>)}
                   </select>
                 </label>
-              </div>
-              <div className={styles.cardSection}>
+              </section>
+              <section className={styles.settingSection}>
                 <label className={styles.settingRow} title="o200k_base · 仅用于资源原文展示，不修改模型运行系数">
                   <span>{props.t('tokens.displayMultiplier')}</span>
                   <input aria-label={props.t('tokens.displayMultiplier')} type="number" min="0.01" step="0.05"
@@ -221,194 +117,107 @@ export function SettingsPanel(props: {
                       if (Number.isFinite(value) && value > 0) setTokenMultiplier(value)
                     }} />
                 </label>
-              </div>
+              </section>
             </>
           ) : category === 'network' ? (
-            <>
-              <header className={styles.detailHeader}>
-                <h3>{props.t('settings.network')}</h3>
-              </header>
-              <form className={styles.cardSection} onSubmit={saveNetworkSettings}>
-                <h4>代理与网络模式</h4>
-                <p>配置用于 AI Gateway 和扩展通信的网络出口。</p>
-
+            <form className={styles.settingSection} onSubmit={saveNetworkSettings}>
+              <label className={styles.settingRow}>
+                <span>{props.t('settings.proxyMode')}</span>
+                <select disabled={props.busy} value={proxyMode}
+                  onChange={event => setProxyMode(event.target.value as NetworkSettings['proxyMode'])}>
+                  <option value="system">{props.t('settings.proxyModeSystem')}</option>
+                  <option value="direct">{props.t('settings.proxyModeDirect')}</option>
+                  <option value="manual">{props.t('settings.proxyModeManual')}</option>
+                </select>
+              </label>
+              {proxyMode === 'manual' ? (
                 <label className={styles.settingRow}>
-                  <span>{props.t('settings.proxyMode')}</span>
-                  <select
-                    disabled={props.busy}
-                    value={proxyMode}
-                    onChange={event => setProxyMode(event.target.value as NetworkSettings['proxyMode'])}
-                  >
-                    <option value="system">{props.t('settings.proxyModeSystem')}</option>
-                    <option value="direct">{props.t('settings.proxyModeDirect')}</option>
-                    <option value="manual">{props.t('settings.proxyModeManual')}</option>
-                  </select>
+                  <span>{props.t('settings.proxyUrl')}</span>
+                  <input disabled={props.busy} required placeholder="http://127.0.0.1:7890"
+                    value={proxyUrl} onChange={event => setProxyUrl(event.target.value)} />
                 </label>
-
-                {proxyMode === 'manual' ? (
-                  <label className={styles.settingRow}>
-                    <span>{props.t('settings.proxyUrl')}</span>
-                    <input
-                      disabled={props.busy}
-                      required
-                      placeholder="http://127.0.0.1:7890"
-                      value={proxyUrl}
-                      onChange={event => setProxyUrl(event.target.value)}
-                    />
-                  </label>
-                ) : null}
-
-                <p className={styles.networkStatus}>
-                  {props.networkSettings.systemProxyDetected
-                    ? props.t('settings.systemProxyDetected')
-                    : props.t('settings.systemProxyNotDetected')}
-                </p>
-
-                <button
-                  className={styles.primaryButton}
-                  disabled={props.busy || (proxyMode === 'manual' && !proxyUrl.trim())}
-                  type="submit"
-                >
-                  {props.t('settings.saveNetwork')}
-                </button>
-              </form>
-            </>
+              ) : null}
+              <p className={styles.networkStatus}>
+                {props.networkSettings.systemProxyDetected ? props.t('settings.systemProxyDetected') : props.t('settings.systemProxyNotDetected')}
+              </p>
+              <Button disabled={props.busy || (proxyMode === 'manual' && !proxyUrl.trim())} type="submit">
+                <Save aria-hidden="true" size={16} />{props.t('settings.saveNetwork')}
+              </Button>
+            </form>
           ) : category === 'appearance' ? (
-            <>
-              <header className={styles.detailHeader}>
-                <h3>{props.t('settings.appearance')}</h3>
-              </header>
-              <BackgroundMaterialsView
-                backgrounds={backgrounds}
-                followState={previewFollowState}
-                material={previewMaterial}
-                selectedId={previewBackgroundId}
-                general={(
-                  <>
-                    <div className={styles.cardSection}>
-                      <h4>界面缩放 (UI Scale)</h4>
-                      <p>调整客户端整体视觉比例大小。</p>
-                      <div className={styles.scaleRow}>
-                        <span>{props.t('settings.uiScale')}</span>
-                        <input
-                          aria-label={props.t('settings.uiScale')}
-                          max="125"
-                          min="80"
-                          step="5"
-                          type="range"
-                          value={props.uiScale}
-                          onChange={event => props.onChangeUiScale(Number(event.target.value))}
-                        />
-                        <output>{props.uiScale}%</output>
-                      </div>
-                    </div>
-                    <div className={styles.cardSection}>
-                      <h4>{props.t('settings.canvasWidth')}</h4>
-                      <p>{props.t('settings.canvasWidthDesc')}</p>
-                      <div className={styles.scaleRow}>
-                        <span>{props.t('settings.canvasWidth')}</span>
-                        <input
-                          aria-label={props.t('settings.canvasWidth')}
-                          max="1120"
-                          min="540"
-                          step="20"
-                          type="range"
-                          value={previewCanvasWidth}
-                          onChange={event => setPreviewCanvasWidth(Number(event.target.value))}
-                        />
-                        <output>{previewCanvasWidth}px</output>
-                      </div>
-                    </div>
-                    <div className={styles.cardSection}>
-                      <label>
-                        {props.t('settings.narrativeOverscan')}
-                        <input
-                          type="range"
-                          min={0}
-                          max={50}
-                          step={1}
-                          value={narrativeOverscan}
-                          onChange={event => setNarrativeOverscan(Number(event.target.value))}
-                        />
-                        <output>{narrativeOverscan}</output>
-                      </label>
-                    </div>
-                    <div className={styles.cardSection}>
-                      <h4>{props.t('settings.motion')}</h4>
-                      <p>{props.t('settings.motionDesc')}</p>
-                      <label className={styles.settingRow}>
-                        <span>{props.t('settings.motion')}</span>
-                        <select
-                          value={motionPreference}
-                          onChange={event => setMotionPreference(event.target.value as MotionPreference)}
-                        >
-                          <option value="system">{props.t('settings.motionSystem')}</option>
-                          <option value="full">{props.t('settings.motionFull')}</option>
-                          <option value="reduce">{props.t('settings.motionReduce')}</option>
-                        </select>
-                      </label>
-                    </div>
-                    <div className={styles.cardSection}>
-                      <h4>自定义 CSS (Custom Styles)</h4>
-                      <p>注入自定义样式规则以调整界面风格。</p>
-                      <textarea
-                        className={styles.customCssTextarea}
-                        placeholder={props.t('settings.customCssPlaceholder')}
-                        spellCheck={false}
-                        value={props.customCss}
-                        onChange={event => props.onChangeCustomCss(event.target.value)}
-                      />
-                    </div>
-                  </>
-                )}
-                onFollowStateChange={setPreviewFollowState}
-                onMaterialChange={setPreviewMaterial}
-                onSelect={id => {
-                  const background = backgrounds.find(item => item.id === id)
-                  if (background?.scope) {
-                    setScopedBackground({ id: background.id, image: background.image, ...background.scope })
-                  } else {
-                    setPreviewBackground(background ?? null)
-                  }
-                }}
-              />
-            </>
+            <BackgroundMaterialsView
+              backgrounds={backgrounds}
+              followState={previewFollowState}
+              material={previewMaterial}
+              selectedId={previewBackgroundId}
+              general={(
+                <div className={styles.generalSettings}>
+                  <section className={styles.settingSection}>
+                    <label className={styles.scaleRow}>
+                      <span>{props.t('settings.uiScale')}</span>
+                      <input max="125" min="80" step="5" type="range" value={props.uiScale}
+                        onChange={event => props.onChangeUiScale(Number(event.target.value))} />
+                      <output>{props.uiScale}%</output>
+                    </label>
+                  </section>
+                  <section className={styles.settingSection}>
+                    <label className={styles.scaleRow}>
+                      <span>{props.t('settings.canvasWidth')}</span>
+                      <input max="1120" min="540" step="20" type="range" value={previewCanvasWidth}
+                        onChange={event => setPreviewCanvasWidth(Number(event.target.value))} />
+                      <output>{previewCanvasWidth}px</output>
+                    </label>
+                  </section>
+                  <section className={styles.settingSection}>
+                    <label className={styles.scaleRow}>
+                      <span>{props.t('settings.narrativeOverscan')}</span>
+                      <input type="range" min={0} max={50} step={1} value={narrativeOverscan}
+                        onChange={event => setNarrativeOverscan(Number(event.target.value))} />
+                      <output>{narrativeOverscan}</output>
+                    </label>
+                  </section>
+                  <section className={styles.settingSection}>
+                    <label className={styles.settingRow}>
+                      <span>{props.t('settings.motion')}</span>
+                      <select value={motionPreference} onChange={event => setMotionPreference(event.target.value as MotionPreference)}>
+                        <option value="system">{props.t('settings.motionSystem')}</option>
+                        <option value="full">{props.t('settings.motionFull')}</option>
+                        <option value="reduce">{props.t('settings.motionReduce')}</option>
+                      </select>
+                    </label>
+                  </section>
+                  <section className={styles.settingSection}>
+                    <label className={styles.settingRow}>
+                      <span>自定义 CSS</span>
+                      <textarea className={styles.customCssTextarea} placeholder={props.t('settings.customCssPlaceholder')}
+                        spellCheck={false} value={props.customCss} onChange={event => props.onChangeCustomCss(event.target.value)} />
+                    </label>
+                  </section>
+                </div>
+              )}
+              onFollowStateChange={setPreviewFollowState}
+              onMaterialChange={setPreviewMaterial}
+              onSelect={id => {
+                const background = backgrounds.find(item => item.id === id)
+                if (background?.scope) {
+                  setScopedBackground({ id: background.id, image: background.image, ...background.scope })
+                } else {
+                  setPreviewBackground(background ?? null)
+                }
+              }}
+            />
           ) : (
-            <>
-              <header className={styles.detailHeader}>
-                <h3>系统与关于 (About)</h3>
-              </header>
-              <div className={styles.cardSection}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                  <img src="/images/logo.svg" alt="Loom Studio Logo" style={{ width: '38px', height: '38px', objectFit: 'contain' }} />
-                  <div>
-                    <h4 style={{ margin: 0, fontSize: '15px' }}>Loom Studio</h4>
-                    <span style={{ fontSize: '11.5px', color: 'var(--loom-muted-foreground, #888)' }}>Weave worlds, interweave stories.</span>
-                  </div>
-                </div>
-                <p>下一代 Agentic Narrative 沉浸式创作与工作台。</p>
-                <div style={{ display: 'grid', gap: '10px', fontSize: '12.5px', marginTop: '10px' }}>
-                  <div><strong>版本:</strong> v{STUDIO_VERSION}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <strong>开源代码仓:</strong>
-                    <a
-                      className={styles.aboutLink}
-                      href="https://github.com/The-LoomStudio/LoomStudio.git"
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      <GitHubMark />
-                      <span>GitHub (The-LoomStudio/LoomStudio)</span>
-                    </a>
-                  </div>
-                  <div><strong>架构:</strong> Next-Gen Agent Pipeline & Unified Master-Detail Engine</div>
-                  <div><strong>数据状态:</strong> Local Native SQLite + Reactive State Sync</div>
-                </div>
+            <section className={styles.settingSection}>
+              <div className={styles.aboutBrand}>
+                <img src="/images/logo.png" alt="" width={64} height={64} />
+                <div><h4>Loom Studio</h4><span>v{STUDIO_VERSION}</span></div>
               </div>
-            </>
+              <a className={styles.aboutLink} href="https://github.com/The-LoomStudio/LoomStudio.git" rel="noreferrer" target="_blank">
+                <ExternalLink aria-hidden="true" size={15} /><span>GitHub · The-LoomStudio/LoomStudio</span>
+              </a>
+            </section>
           )}
         </div>
-        )}
       </MasterDetailWorkbench>
     </section>
   )
@@ -417,11 +226,3 @@ export function SettingsPanel(props: {
 declare const __LOOM_STUDIO_VERSION__: string
 
 const STUDIO_VERSION = typeof __LOOM_STUDIO_VERSION__ === 'string' ? __LOOM_STUDIO_VERSION__ : '0.0.0-developer-preview'
-
-function GitHubMark() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 16 16">
-      <path d="M8 0C3.58 0 0 3.64 0 8c0 3.54 2.29 6.53 5.47 7.59.4.08.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.38-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.59 1.23.83.72 1.23 1.87.88 2.33.67.07-.53.28-.88.51-1.08-1.78-.21-3.64-.91-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.22 2.2.82A7.65 7.65 0 0 1 8 3.87c.68 0 1.36.09 2 .27 1.53-1.05 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.05-1.87 3.74-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.47.55.38A8.01 8.01 0 0 0 16 8c0-4.36-3.58-8-8-8Z" />
-    </svg>
-  )
-}

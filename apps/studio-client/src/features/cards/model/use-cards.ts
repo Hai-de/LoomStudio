@@ -171,7 +171,7 @@ export function useCards(input: UseCardsInput) {
     }
   }
 
-  async function updateCardProfile(patch: { cardId: string; expectedVersion: number; name: string; userName: string; description: string }) {
+  async function updateCardProfile(patch: { cardId: string; expectedVersion: number; name: string; userName: string; description: string; opening?: Card['opening'] }) {
     await input.runAction(async () => {
       const result = await input.api.cards.update(patch)
       recordCardEdit({

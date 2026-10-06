@@ -1,4 +1,4 @@
-import { Bot, ChevronRight, Copy, Plus, Server, Trash2, Wrench } from 'lucide-react'
+import { Bot, Check, ChevronRight, Copy, Plus, Server, Trash2, Wrench } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { ModelProfile, ProviderAccount } from '../../entities/index.js'
 import { mergeModelCatalog } from '../../features/provider-settings/model/model-catalog.js'
@@ -358,28 +358,18 @@ function ProviderAccountItem(props: {
                   {catalog.filter(item => !item.enabled).map(item => {
                     const isPending = pendingModelIds.has(item.id)
                     return (
-                      <div
+                      <button
                         key={item.id}
                         className={styles.availableModel}
-                        role="button"
-                        tabIndex={0}
+                        type="button"
+                        disabled={props.busy || isPending}
+                        aria-pressed={isPending}
                         onClick={() => void enableModel(item.id)}
-                        onKeyDown={event => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault()
-                            void enableModel(item.id)
-                          }
-                        }}
                       >
-                        <Toggle
-                          checked={isPending}
-                          disabled={isPending}
-                          label={item.id}
-                          onChange={() => void enableModel(item.id)}
-                        />
+                        {isPending ? <Check aria-hidden="true" /> : <Plus aria-hidden="true" />}
                         <ModelBrandIcon brand={resolveModelBrand(item.id)} fallback={<Bot aria-hidden="true" className={styles.brandIconFallback} />} />
                         <span>{item.id}</span>
-                      </div>
+                      </button>
                     )
                   })}
                 </div>

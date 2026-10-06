@@ -20,6 +20,9 @@ export type MasterDetailWorkbenchProps = {
   detailMinWidth?: number
   resizeLabel?: string
   dataComponent?: string
+  drilldown?: boolean
+  hasSelection?: boolean
+  hideBackBar?: boolean
 }
 
 export function MasterDetailWorkbench(props: MasterDetailWorkbenchProps) {
@@ -27,11 +30,9 @@ export function MasterDetailWorkbench(props: MasterDetailWorkbenchProps) {
   const [containerWidth, setContainerWidth] = useState(0)
   const [internalMobilePane, setInternalMobilePane] = useState<'master' | 'detail'>('master')
 
-  const parsedDefaultWidth = typeof props.masterWidth === 'number'
-    ? props.masterWidth
-    : (props.defaultMasterWidth ?? 280)
-
-  const [internalMasterWidth, setInternalMasterWidth] = useState(parsedDefaultWidth)
+  const [internalMasterWidth, setInternalMasterWidth] = useState(
+    typeof props.masterWidth === 'number' ? props.masterWidth : props.defaultMasterWidth ?? 280,
+  )
 
   // A supplied pane is controlled by the parent; otherwise this workbench owns mobile navigation locally.
   const mobilePane = props.mobilePane ?? internalMobilePane
@@ -49,11 +50,10 @@ export function MasterDetailWorkbench(props: MasterDetailWorkbenchProps) {
   }, [])
 
   const isNarrow = containerWidth > 0 && containerWidth < NARROW_BREAKPOINT
-  const showDetailOnly = isNarrow && mobilePane === 'detail'
+  const singlePane = isNarrow || props.drilldown === true
+  const showDetailOnly = singlePane && mobilePane === 'detail' && props.hasSelection !== false
 
-  const currentMasterWidth = typeof props.masterWidth === 'number'
-    ? props.masterWidth
-    : internalMasterWidth
+  const currentMasterWidth = typeof props.masterWidth === 'number' ? props.masterWidth : internalMasterWidth
 
   function handleMasterWidthChange(size: number) {
     setInternalMasterWidth(size)
@@ -61,14 +61,14 @@ export function MasterDetailWorkbench(props: MasterDetailWorkbenchProps) {
   }
 
   const masterPane = (
-    <aside className={styles.masterPane} data-loom-slot="master">
+    <aside className={styles.masterPane} data-loom-slot="master" inert={singlePane && showDetailOnly}>
       {props.master}
     </aside>
   )
 
   const detailPane = (
-    <section className={styles.detailPane} data-loom-slot="detail">
-      {isNarrow ? (
+    <section className={styles.detailPane} data-loom-slot="detail" inert={singlePane && !showDetailOnly}>
+      {isNarrow && !props.hideBackBar ? (
         <div className={styles.narrowBackBar}>
           <button
             className={styles.narrowBackButton}
@@ -95,7 +95,7 @@ export function MasterDetailWorkbench(props: MasterDetailWorkbenchProps) {
           content: masterPane,
           id: 'master',
           minSize: props.masterMinWidth ?? 180,
-          resizeLabel: props.resizeLabel ?? '调整侧栏宽度',
+          resizeLabel: singlePane ? undefined : props.resizeLabel ?? '调整侧栏宽度',
           size: currentMasterWidth,
         },
         {
@@ -109,23 +109,18 @@ export function MasterDetailWorkbench(props: MasterDetailWorkbenchProps) {
   return (
     <div
       ref={containerRef}
-      className={`${styles.container} ${isNarrow ? styles.narrow : ''} ${props.className ?? ''}`}
+      className={`${styles.container} ${props.className ?? ''}`}
       data-loom-component={props.dataComponent ?? 'master-detail-workbench'}
+      data-single-pane={singlePane}
+      data-pane={showDetailOnly ? 'detail' : 'master'}
     >
-      {isNarrow ? (
-        <div className={styles.narrowViewport} data-pane={showDetailOnly ? 'detail' : 'master'}>
-          <div className={styles.narrowPane} data-pane="master" inert={showDetailOnly}>{masterPane}</div>
-          <div className={styles.narrowPane} data-pane="detail" inert={!showDetailOnly}>{detailPane}</div>
-        </div>
-      ) : (
-        <WindowColumnLayout
+      <WindowColumnLayout
           className={styles.workbenchColumnLayout}
           columns={columns}
           onColumnSizeChange={(columnId, size) => {
             if (columnId === 'master') handleMasterWidthChange(size)
           }}
-        />
-      )}
+      />
     </div>
   )
 }

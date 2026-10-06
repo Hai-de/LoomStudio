@@ -34,6 +34,45 @@ export default defineServerExtension({
 
 SDK 不读取 Manifest 文件、不动态导入模块、不创建 Host、不执行 grant/lifecycle，也不暴露 Kernel、SQL connection 或内部 Registry。Server Module 当前仍是受信任的同进程 Node.js 代码；Capability contract 不等于恶意代码安全沙箱。
 
+## 开发与发行
+
+独立扩展在主应用根目录 `extensions/` 安装或就地开发；官方身份不改变安装位置。
+`official/extensions/` 只保留随主程序发行的轻量内容。
+开发者自行构建并在扩展中心重载，宿主不执行依赖安装、构建或生命周期脚本。
+TS、TSX/React、Vue 都可以作为源码语言，发行入口须是可加载的 JS；
+浏览器依赖及 CSS 由扩展自行打包或携带，不借用主程序的框架依赖。
+Renderer 的 `mount(root, context)` 接收 HTMLElement；扩展自行挂载并返回销毁句柄。
+
+源码分支可以忽略 dist，另行提供 Git 发行分支或 Release 成品 ZIP。
+Git 安装使用公开 HTTPS 克隆地址及可选 ref，不限定 GitHub；
+Release 附件通过 ZIP 链接安装，当前不自动检测新版。
+Manifest 的依赖身份是作者分配的稳定 ID，不是远程 URL 或宿主生成的 UUID：
+
+```json
+{
+  "dependencies": [
+    {
+      "id": "example.helper",
+      "version": "^1.0.0",
+      "source": {
+        "kind": "git",
+        "url": "https://example.org/team/helper.git",
+        "ref": "release"
+      }
+    }
+  ]
+}
+```
+
+source 也可以声明 `{ "kind": "zip", "url": "https://example.org/helper-1.0.0.zip" }，
+或省略 source 并要求依赖已安装。宿主核对实际 ID、版本及循环依赖，
+缺失依赖统一确认安装，授权与启用仍分别进行。
+
+SQL 数据使用已有 `ctx.storage.configs` / `ctx.storage.records` 的宿主归属隔离。
+Server 文件数据使用 `await ctx.storage.files!.directory()` 获取当前安装的目录，
+位于用户数据 `extensions/<packageId>/` 下；不要在代码目录或用户数据根目录随意写入。
+此接口不赋予对恶意同进程 Node.js 代码的文件系统沙箱保证。
+
 ### Client iframe 通知
 
 ```ts

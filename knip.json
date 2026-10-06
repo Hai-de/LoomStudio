@@ -20,11 +20,11 @@
     "packages/application-runtime": {
       "entry": ["src/index.ts", "src/agents/codeact/sandbox-worker.ts"]
     },
-    "official/extensions/st-data-compat": {
+    "extensions/st-data-compat": {
       "entry": ["src/index.ts", "src/client/index.ts"],
       "ignoreDependencies": ["@loom-studio/application-runtime"]
     },
-    "official/extensions/the-world": {
+    "extensions/the-world": {
       "entry": ["src/client/index.js", "src/client/panel-view.tsx", "src/server/index.js", "scripts/*.{mjs,ts}"],
       "project": ["src/**/*.{js,ts,tsx}", "scripts/*.{mjs,ts}"]
     },

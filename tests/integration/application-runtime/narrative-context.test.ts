@@ -320,7 +320,7 @@ describe('Published Narrative context', () => {
       await expect(complete(3)).rejects.toThrow(/count conflict/)
       expect((await f.agents.getLatestWorkSummary(session.id))?.id).toBe(result.entries[0]!.id)
       await expect(handleAgentsRpc(f.runtime, 'application.agent.run.resume', { agentSessionId: session.id }))
-        .resolves.toMatchObject({ accepted: false })
+        .rejects.toMatchObject({ code: 'agent.recovery_checkpoint_missing' })
 
       const next = await f.agents.appendEntries({
         actor, agentSessionId: session.id, expectedEntryCount: 4,

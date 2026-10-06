@@ -9,7 +9,7 @@ describe('resolveLoomStudioLocalPaths', () => {
     })
     expect(paths.databaseFile).toBe('/tmp/project/data/studio.sqlite')
     expect(paths.blobRoot).toBe('/tmp/project/data/blobs')
-    expect(paths.extensionStateFile).toBe('/tmp/project/data/extensions/state.json')
+    expect(paths.extensionStateFile).toBe('/tmp/project/data/config/extensions-state.json')
     expect(paths.logRoot).toBe('/tmp/dev/logs')
     expect(paths.cacheRoot).toBe('/tmp/dev/cache')
     expect(resolveLoomStudioLocalPaths({
@@ -28,7 +28,7 @@ describe('resolveLoomStudioLocalPaths', () => {
       dataRoot: '/tmp/loom-home/data',
       databaseFile: '/tmp/loom-home/data/studio.sqlite',
       blobRoot: '/tmp/loom-home/data/blobs',
-      extensionInstalledRoot: '/tmp/loom-home/data/extensions/installed',
+      extensionRoot: '/tmp/loom-home/data/extensions',
       cacheRoot: '/tmp/loom-home/cache',
       extensionCacheRoot: '/tmp/loom-home/cache/extensions',
       logRoot: '/tmp/loom-home/logs',
