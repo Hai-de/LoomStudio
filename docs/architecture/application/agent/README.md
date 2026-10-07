@@ -35,6 +35,7 @@ Agent Preset 是完整、可直接调用的执行身份；Agent Session 直接�
 - 单层 Preset Tool Mount 开关和 Tool Activation；
 - Tool Prompt 宏、Provider Tool Order、Content Anchor / Slot；
 - Provider Observation、Run State、Tool Invocation 和 Tool Result 的会话检查。
+- 有完整检查点且原执行者已退出时的显式冷恢复；不是 Provider 流断点续传或任意崩溃点自动恢复，见[恢复边界](runtime-and-session.md#显式冷恢复)。
 
 Extension Manifest 中的 Agent Preset 贡献属于静态声明。显式导入后才实例化为 Prompt Resource 与 Mount；声明、导入、安装授权和某轮实际激活不能互相替代。
 
@@ -47,7 +48,7 @@ Session 创建后固定 `agentPresetId`，不能通过 `updateAgentSession` 改�
 当前尚未完成：
 
 - OpenAI Responses Custom Tool 的正式 adapter 与 result replay；
-- 跨进程 Resume、Permission suspend UI 和 Agent Session 分支操作；
+- 通用 Permission 等待与恢复、Agent Session 正式分支操作；不要将这些缺口与已实现的受限显式冷恢复混为一谈；
 - 动态 Extension Tool 注册；
 - 泛化子智能体调度、通用 Bash、CLI 和 MCP。
 

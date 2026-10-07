@@ -293,7 +293,7 @@ Agent 经 CodeAct 调用 --+     |
 | Anchor 注入 | `composeAgentTurnPrompt` 将加工后的 Narrative 转为 Contribution，挂到 `@chat.narrative` | [Agent Turn](../../../packages/application-runtime/src/agents/agent-turn.ts) |
 | CodeAct 主动读取 | `ctx.readNarrative` 绑定当前 Timeline / Branch；默认 raw，显式 prompt 使用宿主当前规则。未接入 Memory 和历史权限分层，不能把目标绑定当成默认 / 历史范围授权已实现 | [CodeAct Context](../../../packages/application-runtime/src/agents/codeact/context.ts)、[Narrative Sampling](../../../packages/application-runtime/src/narrative/sampling.ts) |
 | 单次调用 | 扩展已有受能力声明约束的 `ctx.ai.invoke`，不要求创建 Agent Session；共用采样器可独立使用，但完整无 Session Prompt 加工合同仍未完成 | [Extension Host](../../../packages/extension-sdk/extension-host/src/instance.ts) |
-| Token 基础 | Gateway 返回 Provider usage；本轮检查的构建与历史加工路径未发现可复用的发送前模型 Token 估算能力，文本预算目前为字符数 / 条目数 | [Gateway](../../../packages/ai-gateway/src/gateway.ts)、[Token 讨论](../discussion/application/prompt/token-estimation-and-audit-v0.md) |
+| Token 基础 | Gateway 返回 Provider usage；本轮检查的构建与历史加工路径未发现可复用的发送前模型 Token 估算能力，文本预算目前为字符数 / 条目数 | [Gateway](../../../packages/ai-gateway/src/gateway.ts)、[Token 讨论](../../archive/discussion/application/prompt/token-estimation-and-audit-v0.md) |
 
 上述结论来自静态源码读取，不是运行、顺序正确性或性能验收。
 
@@ -422,13 +422,13 @@ Narrative 使用普通 Anchor 定位，不因采样引入带参数的特殊锚�
 
 - [剧情记忆与统一刷新策略计划](./narrative-memory-and-refresh-policy-plan.md) — 总结策略、次数阈值、近期缓冲、记事板策略及玩法配置；本 Plan 承接刷新执行与投影采用。
 - [CodeAct 与 VFS 工具实施计划](./codeact-vfs-tooling-plan.md) — 独立负责执行、路径、读取与写入合同；本计划负责 Skills / Notice / Workspace 锚点及上下文生命周期。LS 与 Notice 复用资源状态事实，不互相复制实现。
-- [`docs/workbench/discussion/application/prompt/README.md`](../discussion/application/prompt/README.md)
-- [`docs/workbench/discussion/application/agent/README.md`](../discussion/application/agent/README.md)
-- [`docs/workbench/discussion/application/summarization-v0.md`](../discussion/application/summarization-v0.md)
-- [`docs/workbench/discussion/application/memory-summary-v0.md`](../discussion/application/memory-summary-v0.md)
+- [`docs/archive/discussion/application/prompt/README.md`](../../archive/discussion/application/prompt/README.md)
+- [`docs/archive/discussion/application/agent/README.md`](../../archive/discussion/application/agent/README.md)
+- [`docs/archive/discussion/application/summarization-v0.md`](../../archive/discussion/application/summarization-v0.md)
+- [`docs/archive/discussion/application/memory-summary-v0.md`](../../archive/discussion/application/memory-summary-v0.md)
 - [`docs/architecture/application/prompt-build/README.md`](../../architecture/application/prompt-build/README.md)
 - [`docs/workbench/plans/agent-runtime-session-and-workspace-plan.md`](./agent-runtime-session-and-workspace-plan.md)
-- [Setting Layer 与配置宏职责](../discussion/application/prompt/setting-layer-prompt-source-v0.md)
+- [Setting Layer 与配置宏职责](../../archive/discussion/application/prompt/setting-layer-prompt-source-v0.md)
 
 ## 11. 接下来逐项讨论
 

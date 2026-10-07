@@ -696,7 +696,7 @@ MCP / Skill 也只能写成预留 seam，不能写成生态已完成：当前 re
 
 证据：PulsarAI `Agent/application/agent-extension-registry.ts:1-91`；`conversation-generation.ts:216-217`、`:278-285`。
 
-这说明“有很多文档”不等于“有单一事实源”。Loom 当前 Stable / Workbench 双轨是优势，但同样必须坚持：正式文档由当前入口、producer -> consumer 链和可执行验证反查；Discussion / Plan / AGENTS 不能单独证明实现。
+这说明“有很多文档”不等于“有单一事实源”。Loom 当前 Stable / Workbench 双轨是优势，但同样必须坚持：正式文档由当前入口、producer -> consumer 链和可执行验证反查；对话、Plan、AGENTS 和归档材料不能单独证明实现。
 
 工程交付方面，Pulsar 当前几乎没有自动测试，并缺少 CI、安装 smoke、Release、tag、License 和 contributor workflow。核心聚合文件包括 `src-tauri/src/lib.rs` 2079 行、`backup-store.ts` 1548 行、`conversation-store.ts` 1490 行、`plugin-store.ts` 1156 行、`useMessageScroller.ts` 1067 行、`plugin-reference-resolver.ts` 969 行和 `conversation-memory.ts` 849 行。Feature 自治与巨型 Store / Rust composition file 并存，Loom 不应为了模仿其产品广度而降低现有分层测试和可删除边界。
 

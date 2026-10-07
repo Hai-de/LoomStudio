@@ -9,16 +9,14 @@
 
 ## 2. 熟悉项目结构
 
-在你准备修改任何一行代码前，为了避免打破系统的分层架构，你必须了解项目的目录结构和各个 package 的职责划分。
-👉 **[第二步: 仔细阅读《项目全量文件地图》](project-structure.md)**
-你也可以参考 [Package 依赖图](../workbench/reference/dependency-graph.md)。
+先通过 [Workspace 开发入口](workspace-development.md)定位目标模块，读取局部 README 与相关行为合同。需要全仓视野时再看[仓库目录地图](project-structure.md)，涉及跨包依赖时查看 [Package 依赖图](../workbench/reference/dependency-graph.md)；不要求每次微小修改先通读全仓文档。
 
 ## 3. 认领任务与设计
 
 对于微小的修复或文案修改，你可以直接提交。
 如果涉及跨模块改动、新增 API 或大幅度的功能引入，应先完成必要讨论；决策明确后进入对应 Plan，再开始实施：
 1. 确认这不是内核层的禁区（内核 `kernel` 不做业务）。
-2. 在 `workbench/discussion/` 澄清问题和方案，在结论确定后建立或更新 `workbench/plans/`。
+2. 在对话中澄清问题和方案，或直接建立、更新 `workbench/plans/` 并边讨论边收束；明确区分开放问题与已确认决策，实施前确认相关合同，不要求独立 Discussion 文档。
 3. 只有跨域、长期、难逆转且需要保留取舍理由的决策，才建立或更新 `workbench/adr/`；ADR 不是默认门槛。
 
 ## 4. 编写代码的规范约束
@@ -31,7 +29,7 @@
 
 我们极其看重代码带来的稳定性，并且拒绝伪装成回归测试的冗余历史包袱测试。
 - 在你提交代码前，确保你理解了应当在哪里补充测试：👉 **[测试准则](testing.md)**
-- 运行 `pnpm test` 确保没有破坏现有流程。
+- 根据改动风险选择覆盖目标行为的定向验证；公共基础设施或广泛行为变化才考虑 `pnpm test`，不默认运行全套测试。
 
 ## 6. 提交 PR (Pull Request)
 

@@ -4,6 +4,8 @@
 
 我们废弃了早期的数字编号分类法，现在整个文档库按以下五类内容组织。Reference 尚未整体晋升，目前物理存放在 Workbench 中。
 
+**接手具体任务时，从[需求词与源码路由](guide/workspace-development.md)开始，不必顺序通读以下五类文档。** 已知 API 名称可直接查 [RPC 导航](workbench/reference/rpc-methods.md)；想确认某个概念属于谁，查[类型入口](workbench/reference/core-types.md)。
+
 ## 1. 📘 Guide: 开发者行为规范
 
 **入口: [`guide/README.md`](guide/README.md)**
@@ -12,7 +14,7 @@
 
 - [`guide/getting-started.md`](guide/getting-started.md) — 如何启动项目、跑通第一遍
 - [`guide/workspace-development.md`](guide/workspace-development.md) — **开发代码第一入口**：按任务进入对应 Workspace README 与正式 Architecture
-- [`guide/project-structure.md`](guide/project-structure.md) — 核心：**项目全量文件地图**（AI探索必备）
+- [`guide/project-structure.md`](guide/project-structure.md) — 仓库目录与 Package 职责，链接局部文件地图
 - [`guide/code-style.md`](guide/code-style.md) — 编码规范、命名规则
 - [`guide/testing.md`](guide/testing.md) — 测试分类与准则
 - [`guide/code-review.md`](guide/code-review.md) — PR 与审查边界
@@ -28,8 +30,8 @@ Reference 当前仍位于 Workbench，尚未整体晋升为正式文档；如与
 
 移动、重命名或新增文档后运行 `pnpm check:docs`，验证内部路径大小写、页内锚点，以及 Workbench / Archive 的索引和生命周期契约。
 
-- [`workbench/reference/rpc-methods.md`](workbench/reference/rpc-methods.md) — 全量 RPC 调用速查表
-- [`workbench/reference/document-types.md`](workbench/reference/document-types.md) — 全量 Document schema 速查表
+- [`workbench/reference/rpc-methods.md`](workbench/reference/rpc-methods.md) — RPC 方法族、Handler 与参数合同导航，不复制完整 Schema
+- [`workbench/reference/document-types.md`](workbench/reference/document-types.md) — Document 类型注册与领域 Store 边界
 - [`workbench/reference/core-types.md`](workbench/reference/core-types.md) — TypeScript 核心类型与概念速查
 - [`workbench/reference/dependency-graph.md`](workbench/reference/dependency-graph.md) — 工作区 Package 依赖关系图
 
@@ -39,7 +41,7 @@ Reference 当前仍位于 Workbench，尚未整体晋升为正式文档；如与
 
 只有经过完全实现、代码完全跑通且设计非常稳定的模块，才配记录在这里。这里的描述**必须与当前主干代码严丝合缝**。
 
-正式架构按现有 Workbench Discussion 的领域分类组织：
+正式架构按职责领域分类组织：
 
 - [`architecture/kernel/`](architecture/kernel/) — Kernel、RPC、事件与平台服务组装；
 - [`architecture/data/`](architecture/data/) — Document、Revision、Changeset 与持久化边界；
@@ -55,7 +57,7 @@ Reference 当前仍位于 Workbench，尚未整体晋升为正式文档；如与
 **入口: [`workbench/README.md`](workbench/README.md)**
 
 这里是项目的"白板"。它允许混乱、允许未定稿。
-所有处于讨论期的设计稿、遗留的白皮书巨型文档、ADR 记录、已知问题列表均存放在此。
+当前 Plan、ADR 记录、已知问题列表和参考材料存放在此。讨论直接在对话中进行，或写入 Plan 的开放问题；不另设 Discussion 阶段。历史白皮书和讨论稿统一归档。
 **在这些文档定稿之前，请不要将它们作为当前代码开发的绝对真理。**
 
 ## 5. 🗄️ Archive: 历史归档库
@@ -66,7 +68,7 @@ Reference 当前仍位于 Workbench，尚未整体晋升为正式文档；如与
 
 - [`archive/issues/`](archive/issues/) — 历史专项审计与缺陷发现快照；
 - [`archive/plans/`](archive/plans/) — 已完成、被取代或已拆分 successor 的实施计划；
-- [`archive/discussion/`](archive/discussion/) — MVP / M0 与已退出当前方向的历史规格；
+- [`archive/discussion/`](archive/discussion/) — MVP / M0 历史规格及退出独立 Discussion 流程后冻结的讨论旧稿；
 - [`archive/mvp-stage-notes/`](archive/mvp-stage-notes/)、[`archive/ui/`](archive/ui/) 与 [`archive/loom-project/`](archive/loom-project/) — 里程碑和外部设计历史。
 
 ---

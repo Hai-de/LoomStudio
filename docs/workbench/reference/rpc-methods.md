@@ -2,147 +2,62 @@
 
 > **状态**：Active Reference / Current RPC Registries Are Authority
 
-Loom Studio 使用统一的 JSON-RPC-like 协议跨进程通讯。本页列出主要方法与职责，不承诺全量 Schema。Kernel/Extension 方法以 [Kernel Registry](../../../packages/kernel/src/index.ts) 与 `system.introspect` 为准；Application 等 Server 路由以 [Router](../../../apps/studio-server/src/rpc/studio-rpc-router.ts) 和 [领域 Handler](../../../apps/studio-server/src/rpc/handlers/application/index.ts) 为准，不能仅从 Kernel introspection 推断整个 Server API。
+本页把方法名定位到当前 Handler，不复制完整参数 Schema 或保证穷举所有方法。Client DTO、Server 参数校验和 Runtime 业务合同是不同边界，改动时沿调用链核对，不只修改其中一处。
 
-## 官方内容
+## 按调用链定位
 
-官方本地内容另提供 Server 路由 `official.listContent`、`official.installContent`、
-`official.exportContent`。安装和导出参数为 `{ packageId, digest }`，digest 来自列表中的
-原始内容摘要；安装委托 `ApplicationRuntime.installOfficialContent`，不提供客户端任意路径读取。
-当前仅支持配置目录内的官方基础包，不代表具备远程更新。详见
-[官方内容说明](../../../official/README.md)。
+1. [Client typed API](../../../apps/studio-client/src/shared/api/studio-api.ts)：UI 使用的方法名、请求及返回类型。
+2. [Server Router](../../../apps/studio-server/src/rpc/studio-rpc-router.ts)：按 namespace 分流；没有匹配的 Server 路由才交给 Kernel。
+3. 下方领域 Handler：解析、校验参数并传播调用上下文。
+4. [ApplicationRuntime](../../../packages/application-runtime/src/types.ts) 与 [runtime/](../../../packages/application-runtime/src/runtime/)：领域行为；[领域 Store](../../../packages/application-data/README.md)负责持久化。
 
-## History Text Pipeline
+`system.introspect` 只覆盖 Kernel / Extension 注册面，不代表整个 Server API。`application.*` 不能仅从 Kernel Registry 推断。
 
-- `application.listTextTransformRules`
-- `application.getTextTransformRule`
-- `application.upsertTextTransformRule`
-- `application.deleteTextTransformRule`
-- `application.listTextExtractors`
-- `application.getTextExtractor`
-- `application.upsertTextExtractor`
-- `application.deleteTextExtractor`
-- `application.projectHistory`
-- `application.inspectTextPipeline`
-- `application.extractHistory`
-- `application.listRenderers`
-- `application.getTextPipelineOverride`
-- `application.upsertTextPipelineOverride`
-- `application.deleteTextPipelineOverride`
+## Application 方法族
 
-## Loom Script
+以下方法名为精确检索示例，其余同领域方法在同一 Handler 的 `case` 中。所有 Handler 由 [application/index.ts](../../../apps/studio-server/src/rpc/handlers/application/index.ts)串接。
 
-- `application.importLoomScript`
-- `application.updateLoomScript`
-- `application.getLoomScript`
-- `application.listLoomScripts`
-- `application.exportLoomScript`
-- `application.createLoomScriptMount`
-- `application.updateLoomScriptMount`
-- `application.listLoomScriptMounts`
-- `application.resolveLoomScriptRendererMounts`
+| 需求 / 精确方法示例 | 参数与路由入口 | 实现 / 行为入口 |
+|---|---|---|
+| Card、角色、导入；`application.createCard`、`application.deleteCard` | [cards.ts](../../../apps/studio-server/src/rpc/handlers/application/cards.ts) | [cards-runtime.ts](../../../packages/application-runtime/src/runtime/cards-runtime.ts)、[Card Bundle](../../architecture/application/card-bundle-files.md) |
+| Agent Preset、模型绑定；`application.createAgentPreset`、`application.updateAgentPreset` | [agents.ts](../../../apps/studio-server/src/rpc/handlers/application/agents.ts) | [agents-runtime.ts](../../../packages/application-runtime/src/runtime/agents-runtime.ts)、[Agent](../../architecture/application/agent/README.md) |
+| Session、Transcript；`application.createAgentSession`、`application.getAgentTranscriptPage` | [agents.ts](../../../apps/studio-server/src/rpc/handlers/application/agents.ts) | [Runtime 与 Session](../../architecture/application/agent/runtime-and-session.md) |
+| 执行、流式、恢复；`application.invokeAgentTurn`、`application.agent.run.create`、`application.agent.run.resume` | [agents.ts](../../../apps/studio-server/src/rpc/handlers/application/agents.ts) | [Run 检查点](../../../packages/application-runtime/src/agents/run-recovery.ts)、[恢复边界](../../architecture/application/agent/runtime-and-session.md#显式冷恢复) |
+| 工具启用；`application.listPresetToolMounts`、`application.replacePresetToolMounts` | [agents.ts](../../../apps/studio-server/src/rpc/handlers/application/agents.ts) | [Tool 系统](../../architecture/application/agent/tool-system.md) |
+| 正文、时间线、分支；`application.appendNarrativeInput`、`application.editNarrativeNode` | [timeline.ts](../../../apps/studio-server/src/rpc/handlers/application/timeline.ts) | [narrative-runtime.ts](../../../packages/application-runtime/src/runtime/narrative-runtime.ts)、[Narrative 边界](../../architecture/application/agent/runtime-and-session.md#6-narrative-边界) |
+| Prompt Resource、资源树；`application.getPromptResource`、`application.updatePromptResourceAsset` | [workspaces.ts](../../../apps/studio-server/src/rpc/handlers/application/workspaces.ts) | [prompt-runtime.ts](../../../packages/application-runtime/src/runtime/prompt-runtime.ts)、[PromptBuild](../../architecture/application/prompt-build/README.md) |
+| 世界书采用；`application.listSettingMounts`、`application.replaceSettingMounts` | [workspaces.ts](../../../apps/studio-server/src/rpc/handlers/application/workspaces.ts) | [资源归属与使用配置](../../architecture/application/prompt-build/README.md#资源归属与使用配置) |
+| Provider 账号与凭据；`application.createProviderProfile`、`application.replaceProviderCredential` | [providers.ts](../../../apps/studio-server/src/rpc/handlers/application/providers.ts) | [providers-runtime.ts](../../../packages/application-runtime/src/runtime/providers-runtime.ts) |
+| State、变量；`application.getStateSnapshot`、`application.applyStateMutation` | [states.ts](../../../apps/studio-server/src/rpc/handlers/application/states.ts) | [State 与变量](../../architecture/application/state-and-variables.md) |
+| 正则、提取器、显示；`application.projectHistory`、`application.listTextTransformRules` | [text-transforms.ts](../../../apps/studio-server/src/rpc/handlers/application/text-transforms.ts) | [History Text Pipeline](../../architecture/application/history-text-pipeline.md) |
+| Loom Script；`application.importLoomScript`、`application.createLoomScriptMount` | [loom-scripts.ts](../../../apps/studio-server/src/rpc/handlers/application/loom-scripts.ts) | [Loom Script Runtime](../../architecture/extensions/loom-script-runtime.md) |
+| 扩展私有配置与记录 | [extension-records.ts](../../../apps/studio-server/src/rpc/handlers/application/extension-records.ts) | [扩展数据合同](../../architecture/application/extension/data-and-portable-payload.md) |
+| Card 携带的扩展数据 | [portable-payloads.ts](../../../apps/studio-server/src/rpc/handlers/application/portable-payloads.ts) | [Portable Payload](../../architecture/application/extension/data-and-portable-payload.md) |
 
-## 1. Kernel RPC (内核级方法)
+## 其他 Namespace 与数据面
 
-内核 RPC 主要处理最底层的基础设施：系统探测、文档读写、事件订阅和可观测性。
-这些方法由 `packages/kernel/src/index.ts` 注册，`owner` 为 `kernel`。
+| Namespace / 入口 | 当前所有者 |
+|---|---|
+| `system.*`、`docs.*`、`diagnostics.*`、`trace.*`、`audit.*`、`loom.run` | [Kernel](../../../packages/kernel/src/index.ts) 与 [handlers.ts](../../../packages/kernel/src/handlers.ts)；`loom.run` 的 Core 执行不同于 Agent PromptBuild |
+| `extensions.*`：安装、卸载、资源导入、授权、重载 | [Kernel handlers.ts](../../../packages/kernel/src/handlers.ts)注册，委托 [Server Extension Manager](../../../apps/studio-server/src/extensions/extension-manager.ts)；[安装及生命周期合同](../../architecture/extensions/README.md) |
+| `ai.*` | [ai-gateway-rpc.ts](../../../apps/studio-server/src/rpc/handlers/ai-gateway-rpc.ts) |
+| `logs.*` | [logs-rpc.ts](../../../apps/studio-server/src/rpc/handlers/logs-rpc.ts)；[日志查询与隐私边界](../../architecture/platform/logging.md) |
+| `settings.*` | [settings-rpc.ts](../../../apps/studio-server/src/rpc/handlers/settings-rpc.ts)，不是 Setting Prompt Resource |
+| `official.*` | [official-content.ts](../../../apps/studio-server/src/official/official-content.ts)；[官方内容](../../../official/README.md) |
+| `directories.*` | [card-directory-catalog.ts](../../../apps/studio-server/src/resource-directories/card-directory-catalog.ts) |
+| HTTP 认证、Asset、Card 文件、Extension 文件与 SSE | [Server README](../../../apps/studio-server/README.md#当前-http-面)、[http/](../../../apps/studio-server/src/http/)；不把文件接口当成 RPC |
 
-### System
-- **`system.ping`**: 心跳测试，返回 `serverTime`。
-- **`system.introspect`**: 暴露当前 Kernel/Extension 注册的 RPC、Event 与版本信息。
+## 旧名称与合同陷阱
 
-### Document Store
-- **`docs.get`**: 根据 ID 获取单个 Document 的完整内容。
-- **`docs.list`**: 获取匹配类型的文档列表。
-- **`docs.write`**: 创建或更新文档，会触发 `docs.changed` 事件。
-- **`docs.delete`**: 删除文档。
+- `application.createAgentProfile` 等 Agent Profile CRUD 已取消。当前存在 `application.createAgentPreset` / `getAgentPreset` / `listAgentPresets` / `updateAgentPreset` / `deleteAgentPreset`；底层复用 Prompt Resource，并不因此不存在 Preset RPC。
+- `SettingMount.source.kind = preset` 是当前消费配置，不是仅供兼容的旧数据。`replaceSettingMounts` 接受 `settingResourceIds` 或 `mounts` 二选一；后者可按既有 Mount ID 保留失效引用。准确校验见 Handler 使用的共享 Schema 与 Runtime。
+- Session 固定绑定 Preset；查看 Session、主写作选择和 Run 恢复是不同操作。删除资源后的引用处理不按“所有删除都拒绝”或“全部级联”推断。
+- 旧 `createSession` / `submitTurn`、Agent Profile、Prompt Resource 整份 Document 存储不能作为新调用的合同。类型入口见 [Core Types](core-types.md)与 [Document Types](document-types.md)。
 
-### Extensions
-- **`extensions.listPackages`**: 返回插件管理初始快照，包括 Package 展示元数据、`tags`、受控 `iconUrl`、不泄露物理目录的 `sourceKinds`、可用性、声明式资源和各 Module 的 desired/runtime 状态。
-- **`extensions.installPackage`**: 从本地 `sourceDirectory` 安全安装 Manifest v2 Package。
-- **`extensions.installPackageZip`**: 接收 Base64 编码的 ZIP，先在临时目录执行路径、大小和文件数校验，再复用同一套 Manifest v2 安装流程。
-- **`extensions.uninstallPackage`**: 卸载指定 installed 或 dev-linked Package；释放并 forget Module、清除 enabled/grant。installed 删除复制目录，dev-link 只删除链接，二者均保留已导入资源、Document 与 Media Asset。
-- **`extensions.importPackageResources`**: 显式实例化 Package 声明的 Prompt Resource、Preset Mount 与 Agent Tool Definition。
-- **`extensions.removePackageResources`**: 按 Package provenance 删除已实例化的 Prompt Resource、Agent Tool Definition 与关联 Mount；仍被 Agent Profile 使用的 Preset 会阻止删除。
-- **`extensions.enableModule`**: 使用 `packageId + moduleId` 持久化启用选择与事件 / Asset grant；Server Module 会被激活或按需 reload。
-- **`extensions.disableModule`**: 持久化禁用目标 Module；Server Module 的当前 instance 会被释放。
-- **`extensions.reloadModule`**: 重新加载一个已启用 Server Module，不改变 sibling Module。
-- **`extensions.getDiagnostics`**: 按可选 `packageId + moduleId` 查询发现、激活、运行与清理 Diagnostics。
+已知精确方法时，直接在对应文件查找，例如：
 
-### Observability
-- **`diagnostics.list`**: 获取系统范围内的所有诊断信息 (Diagnostics)。
-- **`trace.list`**: 获取最近运行的 Trace。
-- **`audit.list`**: 获取审计日志。
+```bash
+rg -n -F 'application.replaceSettingMounts' apps/studio-server/src/rpc/handlers/application/workspaces.ts
+```
 
-### Runtime
-- **`loom.run`**: 将 `Fragment[]` 与 `PassConfig[]` 提交给 `@loom/core` 进行管线执行。
-
----
-
-## 2. Application RPC (应用层方法)
-
-这些是由 AIRP (Application Runtime) 提供的特定领域能力，入口位于 `apps/studio-server/src/rpc/handlers/application/index.ts`，并按领域拆分到相邻 Handler。
-
-### Provider & Model
-- **`application.createProviderProfile`** / **`getProviderProfile`** / **`listProviderProfiles`** / **`updateProviderProfile`** / **`deleteProviderProfile`**
-- **`application.replaceProviderCredential`**: 整体替换 Provider 的受控凭据；响应不返回明文或 `secretRef`。
-- **`application.pingProviderModel`**: 使用 `providerProfileId + modelId` 测试已启用模型。
-- **`application.deleteProviderProfile`**: 不因 Agent/Capability Profile 引用而拒绝，不自动解绑或切换引用者；仍删除受控凭据，清理未完成由既有状态/诊断表达。
-- **`application.getAiCapabilityProfile`** / **`listAiCapabilityProfiles`**: 缺失 Provider 账号、扩展或 Capability 时返回 `available: false` 与 `unavailableReason`，保留原引用和配置；完全缺少 Provider 记录时 `providerExtensionId` 可省略，不伪造默认值。实际 `ai.invoke` 仍因依赖缺失失败。
-- **`application.updateAiCapabilityProfile`**: 可显式传入 `providerProfileId` 重新绑定；校验新目标提供原 Capability 且接受当前或传入的 `config`。失败不提交，成功保留 Profile 身份；不会按同名账号自动匹配。
-
-### Card 与导入导出
-- **`application.createCard`** / **`getCard`** / **`listCards`** / **`updateCard`**
-- **`application.previewCardDeletion`**: 返回关联 Timeline、Card / Timeline Scope Extension Storage 与 Card-owned Text Rule 影响范围。
-- **`application.deleteCard`**: 默认只删除 Card 及其直接拥有的数据；`includePlayData: true` 时在同一事务级联关联 Timeline、Timeline State、Runtime Context 与 Timeline Scope Extension Storage。提交后广播 `entity.lifecycle.changed`。
-- **`application.importCardBundle`**: 导入自包含 Card Bundle，在同一事务中创建 Card、平铺 Prompt Resources 与 Import Bundle。
-- **`application.updateCardPromptResources`**: 以有序 `promptResourceIds` 更新 Card Manifest；拒绝重复、缺失或非 Prompt Resource 引用。
-- **`application.exportCardBundle`**: 从 Card 的有序 Prompt Resource IDs 导出当前自包含 Bundle。
-- **Card file HTTP data plane**: `GET /cards/:cardId/export.png` 输出 `iTXt/loom.bundle`，内容为文件化 ZIP 的 Base64；`GET /cards/:cardId/export.polyglot.png` 保留头像 PNG + ZIP 的旧入口；`GET /cards/:cardId/export.loomcard` 输出文件化 ZIP v2。`POST /cards/import/png` 读取新 PNG、旧压缩 JSON PNG 与 Polyglot，`POST /cards/import/loomcard` 读取 ZIP v1/v2；所有格式最终复用 `application.importCardBundle`。无 Loom 载荷的 ST PNG 需要启用 ST 扩展。文件布局见 [Card Bundle](../../architecture/application/card-bundle-files.md)。
-
-### Agent 配置与 Session
-- Preset 生命周期统一使用 Prompt Resource RPC，不再提供第二套 AgentPreset RPC。
-- **`application.createAgentProfile`** / **`getAgentProfile`** / **`listAgentProfiles`** / **`updateAgentProfile`** / **`deleteAgentProfile`**
-- **`application.createAgentSession`** / **`getAgentSession`** / **`getAgentTranscriptPage`** / **`updateAgentSession`** / **`deleteAgentSession`**
-- **`application.previewAgentTurn`**: 构造本轮 Prompt 与 Provider payload，但不持久化 Agent Message 或 Narrative Node。
-- **`application.invokeAgentTurn`**: 分阶段持久化用户 Message、Run State、Provider Observation 与 Tool Invocation / Result，不在 Loop 结束后自动追加正文。`narrativeTarget` 接收 `timelineId`、可选 `branchId` 和可选 `inputNodeId`；提供 inputNodeId 时读取目标分支上已持久化的节点正文作为输入。旧 commit 字段不再属于合同。正文由工具显式写入，失败返回 Tool Result；结果 mutation scope 为 `agent-session-transcript`，见 [运行边界](../../architecture/application/agent/runtime-and-session.md)。
-
-### Narrative Timeline
-- **`application.createNarrativeTimeline`**: 从 Card 当前版本创建 Timeline、初始 Branch 与 Opening Nodes。
-- **`application.appendNarrativeInput`**: 接收 `timelineId`、`branchId`、固定 `nodeId`、`expectedHeadNodeId: string | null` 和 `content`，返回 `timeline`、`branch`、`node`、`mutation`。先写用户正文，再由调用方投递 Session；匹配的同 ID 重试返回原节点/Changeset，不重复写入。冲突明确失败，不投递 Session。该方法本身不运行 Agent。
-- **`application.getNarrativeTimeline`** / **`getNarrativePage`**
-- **`application.forkNarrativeBranch`** / **`switchNarrativeBranch`** / **`deleteNarrativeTimeline`**
-
-### Prompt Resource
-- Prompt Resource 的权威数据来自 Application-owned `PromptResourceStore`；以下 RPC 返回嵌套兼容形状，不直接暴露 SQL Node 表。
-- **`application.listPromptResources`**: 按可选 `resourceKind` 列出全局平铺 Prompt Resource Library。
-- **`application.createPromptResource`** / **`duplicatePromptResource`**: 创建空资源或复制现有资源；复制会重建全部内部节点 ID。
-- **`application.listSettingMounts`**: 按可选 `source` 查询 Setting Mount；当前产品入口使用 `{ kind: 'manual', id?: 'global' }`。`{ kind: 'preset', id: string }` 只保留旧数据查询兼容，不参与当前 PromptBuild。
-- **`application.replaceSettingMounts`**: 用完整有序 `settingResourceIds` 替换指定来源的 Setting Mount；引用目标必须全部是 Setting。Studio Client 只写 `manual/global` 来源。
-- **`application.deletePromptResource`**: 墓碑化 Resource，保留外部 Card、Timeline、Agent Profile 及 Setting 挂载中的引用，不因被引用而阻止删除，解绑计数为零。删除 Preset 仍清理其自身拥有的挂载和 Text Transform Rule；具体事务边界以 [Prompt Runtime](../../../packages/application-runtime/src/runtime/prompt-runtime.ts) 为准。
-- **`application.importPromptResource`** / **`exportPromptResource`**: 导入、导出独立 `loom.promptResource` Artifact。
-- **`application.getPromptResource`**: 按 `resourceId` 读取一个 Prompt Resource。
-- **`application.createPromptResourceAsset`** / **`updatePromptResourceAsset`** / **`updatePromptResourceAssets`** / **`movePromptResourceAsset`** / **`deletePromptResourceAsset`**: 只修改指定 Prompt Resource；跨 Resource move / batch update 当前明确拒绝。
-  两个 update 方法接收可选 `expectedVersion`，表示调用方读取资源时的版本；传入后由 Store 在写入时原子校验，过期版本返回 `prompt_resource.conflict`，非正整数返回 `prompt_resource.expected_version_invalid`。未传入的现有调用仍使用服务端本次读取的版本，只保护服务端读写窗口，不提供客户端编辑基线保护。
-
-- **`application.editNarrativeNode`**：接收 `timelineId`、`branchId`、`nodeId`、`expectedHeadNodeId`、`expectedRaw`、`raw`。在指定分支中持久化正文修改，不更改其他分支、后续正文或 State；返回 `timeline`、`branch`、`replacements: [{ previousNodeId, node }]` 与 mutation。新路径节点使用新 ID，客户端按映射更新已加载消息。Head 或原文不匹配返回 `narrative.head_conflict` / `narrative.body_conflict`，目标不在分支路径则返回 `narrative.node_not_in_branch`。
-
-## 3. Media Asset HTTP 数据面
-
-大型字节不进入 JSON-RPC：
-
-- **`POST /assets`**: raw body 上传，使用 `Content-Type` 与 `X-Loom-Asset-Kind` 创建 Media Asset；
-- **`GET /assets/:assetId`** / **`HEAD /assets/:assetId`**: 按稳定 Asset ID 读取字节和 metadata headers。
-
-## 4. Extension HTTP 数据面
-
-- **`GET /extensions/:packageId/:version/icon`**: 读取 Manifest 声明的 Package 图标；只支持 Package 内的 PNG/JPEG/WebP/GIF，不暴露源目录。
-- **`GET /extensions/events`**: 建立 SSE 连接并推送 `extensions.changed`。初始和刷新后的完整状态仍通过 `extensions.listPackages` 获取。
-### State 与变量
-
-- `application.getStateSnapshot`
-- `application.applyStateMutation`
-- `application.listStateDefinitions`
-- `application.getStateDefinition`
-- `application.upsertStateDefinition`
-- `application.deleteStateDefinition`
+验证选择对应 Handler / Runtime / Store 的真实风险，不默认跑全套。会话运行的例子：[agent-run-rpc.test.ts](../../../tests/unit/studio-server/agent-run-rpc.test.ts)与 [agent-run-recovery.test.ts](../../../tests/integration/application-runtime/agent-run-recovery.test.ts)；Setting Mount 参数边界见 [setting-mount-rpc.test.ts](../../../tests/unit/studio-server/setting-mount-rpc.test.ts)。

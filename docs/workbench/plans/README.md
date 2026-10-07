@@ -33,6 +33,10 @@
 
 ## 历史已归档计划
 
+2026-10-07：[AI 开发文档导航优化](../../archive/plans/documentation-navigation-2026-10-07.md)已完成。需求词路由、Client / Runtime 文件与验证入口、RPC / 类型导航及已核实的架构摘要已更新；9 个定位样本、18 个注册类型和 25 个 RPC 示例静态核对通过，不代表全仓架构或产品验收。
+
+2026-10-07：[退出 Discussion 文档流程](../../archive/plans/discussion-retirement-plan.md)已完成。64 份旧稿冻结归档，讨论改为对话或 Plan 内收束；文档检查无新增问题，既有 5 个断链与 4 个生命周期问题保留。
+
 2026-10-06：[测试结构与可靠性改进](../../archive/plans/test-suite-maintenance-2026-10-05.md)已完成并归档。分类、重复夹具、过时合同与测试类型迁移收口；主应用 311 文件 / 2059 用例、测试类型检查及浏览器恢复探针 9 项通过，历史波动与未验收边界保留。
 
 2026-10-02 活跃目录清理：[扩展 Prompt/模型 API](../../archive/plans/extension-prompt-and-model-api-plan.md)、[Token 计数与测量](../../archive/plans/token-counting-and-measurement-plan.md)、[开场白 Display/HTML 修补](../../archive/plans/card-opening-display-and-html-layout.md)已实际移入归档。已交付基线不继续占用施工入口；真实模型、IME、页面/卡片交互与视觉验收保留在[独立后续清单](../issues/audit-follow-ups.md#implemented-plan-acceptance-2026-10-02)，未冒称通过。

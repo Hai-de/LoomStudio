@@ -205,4 +205,4 @@ callRpc(method, params, context)
 - Event Bus 从进程内模型升级为其他投递模型；
 - Kernel 开始或停止公开某项平台服务。
 
-仍处于讨论阶段的历史材料保留在 [`../../workbench/discussion/`](../../workbench/discussion/) 中。
+历史设计材料保留在 [`讨论归档`](../../archive/discussion/README.md) 中；新的开放问题和实施范围由 [Plan](../../workbench/plans/README.md) 承接。

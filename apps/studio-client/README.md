@@ -4,6 +4,30 @@
 
 Studio Client 是 React/Vite Web Client，负责页面组合、交互状态和 typed RPC 消费。它不直接访问 Kernel、SQLite、文件系统或 `@loom/core`。
 
+## 任务到文件与验证入口
+
+先按任务选一行，不必从 App 逐层翻目录。下表测试是定位入口，不是每次改动都要执行的清单；按实际风险选择其中一个，存在测试也不代表当前已通过。
+
+| 任务 / 关键词 | 第一实现入口 | 相关验证入口 |
+|---|---|---|
+| 角色卡列表、创建、选择、Card | [use-cards.ts](src/features/cards/model/use-cards.ts)、[character-panel/](src/widgets/character-panel/) | [card-operation-failures.test.ts](../../tests/unit/client/card-operation-failures.test.ts) |
+| 剧情、主写作、Agent Session、输入投递 | [use-narrative-runtime.ts](src/features/narrative-runtime/model/use-narrative-runtime.ts) | [use-narrative-runtime.test.ts](../../tests/unit/client/use-narrative-runtime.test.ts)、[narrative-session-lifecycle.test.ts](../../tests/unit/client/narrative-session-lifecycle.test.ts) |
+| Session 搜索、改名、查看与主对话选择 | [agent-session-picker.tsx](src/widgets/agent-chat-panel/agent-session-picker.tsx) | [agent-session-picker.test.ts](../../tests/unit/client/agent-session-picker.test.ts) |
+| Agent Preset、预设选择与 Settings 使用 | [use-agent-presets.ts](src/features/agent-presets/model/use-agent-presets.ts)、[preset-workbench.tsx](src/widgets/preset-workbench/preset-workbench.tsx) | [preset-setting-uses.test.ts](../../tests/unit/client/preset-setting-uses.test.ts)（使用配置 UI） |
+| 世界书、Context Assets、资源树操作 | [tree-ops.ts](src/features/context-assets/model/tree-ops.ts)、[use-context-assets.ts](src/features/context-assets/model/use-context-assets.ts) | [context-assets.test.ts](../../tests/unit/client/context-assets.test.ts) |
+| 投影、projection order、编排视图 | [projection-order.ts](src/features/context-assets/model/projection-order.ts)、[projection-workbench.ts](src/features/context-assets/model/projection-workbench.ts) | [projection-order.test.ts](../../tests/unit/client/projection-order.test.ts)、[projection-workbench.test.ts](../../tests/unit/client/projection-workbench.test.ts) |
+| PromptBuild 展示步骤 | [build-prompt-build-steps.ts](src/features/prompt-build/model/build-prompt-build-steps.ts) | [prompt-build-steps.test.ts](../../tests/unit/client/prompt-build-steps.test.ts) |
+| Provider 账号、模型选择、凭据表单 | [use-provider-settings.ts](src/features/provider-settings/model/use-provider-settings.ts) | [provider-settings.test.ts](../../tests/unit/client/provider-settings.test.ts) |
+| typed API、RPC 方法映射 | [studio-api.ts](src/shared/api/studio-api.ts) | [studio-api.test.ts](../../tests/unit/client/studio-api.test.ts) |
+| 通用文件树、拖放 | [file-tree-model.ts](src/shared/ui/file-tree/file-tree-model.ts) | [file-tree-model.test.ts](../../tests/unit/client/file-tree-model.test.ts) |
+| Markdown、HTML、正文展示 | [message-content/](src/features/message-content/) | [message-html.test.ts](../../tests/unit/client/message-html.test.ts) |
+| Token 文本计数与 Worker | [use-token-counts.ts](src/shared/tokenizer/use-token-counts.ts) | [token-counting.test.ts](../../tests/unit/client/token-counting.test.ts)、[token-worker.test.ts](../../tests/unit/client/token-worker.test.ts) |
+| 撤销、编辑历史、Undo | [use-edit-history.ts](src/features/edit-history/model/use-edit-history.ts) | [edit-history.test.ts](../../tests/unit/client/edit-history.test.ts) |
+| 面板、窗口、返回、导航恢复 | [studio-shell/](src/shared/studio-shell/)、[studio-page.tsx](src/pages/studio/studio-page.tsx) | [studio-workspace-navigation.test.ts](../../tests/unit/client/studio-workspace-navigation.test.ts) |
+| 文案、翻译、i18n | [zh-cn.ts](src/shared/i18n/zh-cn.ts)、[en-us.ts](src/shared/i18n/en-us.ts) | [国际化规范](../../docs/guide/i18n.md)；按使用方核对，不为纯文案默认构建 |
+
+旧名称 `agent-profiles` / `features/agent-runtime` 不能作为当前源码入口：预设选择在 `agent-presets`，Narrative 与独立 Session 的客户端编排在 `narrative-runtime`。不要因为旧生成物目录仍存在而重建旧层。
+
 ## 开发入口
 
 正常开发从仓库根目录，在两个独立终端分别启动 Server 与 Client：
@@ -130,7 +154,7 @@ URL / History 路由导航       -> React Router
 ## 文档入口
 
 - [Workspace 开发路由](../../docs/guide/workspace-development.md)
-- [项目全量文件地图与前端任务路由](../../docs/guide/project-structure.md)
+- [仓库目录与职责地图](../../docs/guide/project-structure.md)
 - [Studio UI Architecture](../../docs/architecture/ui/README.md)
 - [Application UI Architecture](../../docs/architecture/application/ui/README.md)
 - [External Dependency Ownership](../../docs/architecture/platform/external-dependency-ownership.md)

@@ -2,16 +2,16 @@
 
 本目录记录所有关于"如何在项目中进行开发"的指导性文件。
 
-日常开发先看本目录。`workbench/` 记录讨论、议题和历史决策，不作为当前施工规则的第一入口；当 Guide 与 workbench 历史草案冲突时，以 Guide 为准，再回到 workbench 更新对应议题。
+日常开发先从 [Workspace 开发入口](workspace-development.md)按需求词选路，不需要先通读本目录。`workbench/` 保存当前 Plan、Issue、ADR 与参考材料；它不替代当前源码和正式行为合同。
 
 - [`getting-started.md`](getting-started.md) — 如何启动项目、跑通第一遍
 - [`beta-release.md`](beta-release.md) — Beta 下载、便捷启动、发行产物与支持边界
 - [`workspace-development.md`](workspace-development.md) — **开发代码第一入口**：任务到 Workspace README / Architecture 的路由
-- [`project-structure.md`](project-structure.md) — 核心：**项目全量文件地图与任务路由表**（AI探索必备）
-- [`tech-stack.md`](tech-stack.md) — **必读**：NPM 依赖清单与技术栈选型底线
-- [`design-philosophy.md`](design-philosophy.md) — **必读**：场景驱动的设计哲学
+- [`project-structure.md`](project-structure.md) — 仓库目录、Package 职责与局部 README；不是递归全量文件清单
+- [`tech-stack.md`](tech-stack.md) — 涉及依赖或技术选型时查阅
+- [`design-philosophy.md`](design-philosophy.md) — 涉及新设计判断时查阅
 - [`design-method.md`](design-method.md) — 领域发现、场景模拟、ADR / Spec 收口与最小实现验证的方法
-- [`architecture-rules.md`](architecture-rules.md) — **必读**：架构红线与包间约束
+- [`architecture-rules.md`](architecture-rules.md) — 涉及模块边界与包依赖时查阅
 - [`code-style.md`](code-style.md) — 编码规范、命名规则
 - [`testing.md`](testing.md) — 测试分类与准则
 - [`code-review.md`](code-review.md) — PR 与审查边界

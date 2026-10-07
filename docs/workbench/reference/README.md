@@ -2,8 +2,8 @@
 
 这里存放高频查阅的"字典式"内容。供 AI 和开发者按需搜索。
 
-- [`rpc-methods.md`](rpc-methods.md) — 全量 RPC 调用速查表
-- [`document-types.md`](document-types.md) — 全量 Document schema 速查表
+- [`rpc-methods.md`](rpc-methods.md) — 方法族到 Handler / Runtime 的导航及旧名称辨析，不复制完整 Schema
+- [`document-types.md`](document-types.md) — 当前 Document 类型注册与独立 Store 边界
 - [`core-types.md`](core-types.md) — TypeScript 核心类型与概念速查
 - [`dependency-graph.md`](dependency-graph.md) — 工作区 Package 依赖关系图
 - [`sillytavern-architecture-reference.md`](sillytavern-architecture-reference.md) — SillyTavern Prompt Builder、Runtime 与 Session 隔离历史参考

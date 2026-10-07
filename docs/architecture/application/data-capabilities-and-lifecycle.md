@@ -80,4 +80,4 @@ Changeset 是提交事实，不是能够恢复任意领域对象的完整快照�
 
 Session 已能显式持久化 `work-summary` 并用它建立后续工作段，不应继续笼统描述为“没有 Summary 存储”。它不负责自动生成摘要，也不等于完整的 Narrative Memory 整理、Token 预算或 Server 重启恢复。已实现的交接及来源边界见[Agent Runtime](agent/runtime-and-session.md)；Session 历史仍不能直接当作 Timeline 文件。
 
-运行文本、记忆、作者宏和跨类型版本协调的后续原则保留在 [数据能力与运行内容讨论](../../workbench/discussion/application/data-capabilities-and-runtime-content.md)，不以新建通用 Data / Binding / Lifecycle Manager 的方式提前实现。
+运行文本、记忆、作者宏和跨类型版本协调的历史原则保留在 [数据能力与运行内容旧稿](../../archive/discussion/application/data-capabilities-and-runtime-content.md)，后续合同以 [Plan](../../workbench/plans/README.md) 为准，不以新建通用 Data / Binding / Lifecycle Manager 的方式提前实现。

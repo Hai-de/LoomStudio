@@ -58,7 +58,7 @@ Agent ToolResult 由 Agent Runtime 按工具传输协议交给后续 Provider St
 
 因此本文只记录这条交界，不将 Agent 主动读取列为第三种 PromptBuild 注入语法。检索权限、工具调用、结果持久化和跨 Step 保留属于 [Agent Runtime](../agent/runtime-and-session.md) 与 [Tool System](../agent/tool-system.md)。
 
-持续 Pin / Unpin 和独立固定区仍是 [Agent 数据交互讨论](../../../workbench/discussion/application/agent/tool-data-view-interaction-v0.md) 中的待实施语义，不是当前 Fresh Context 的保证。后续若将固定内容编排进提示词，放置行为再遵循 PromptBuild 合同，而不是由 Pin 改写原条目的 Placement。
+持续 Pin / Unpin 和独立固定区是 [Agent 数据交互旧稿](../../../archive/discussion/application/agent/tool-data-view-interaction-v0.md) 中的历史候选，不是当前 Fresh Context 的保证；是否实施及具体合同以 [CodeAct Plan](../../../workbench/plans/codeact-vfs-tooling-plan.md) 为准。后续若将固定内容编排进提示词，放置行为再遵循 PromptBuild 合同，而不是由 Pin 改写原条目的 Placement。
 
 ## 实现与相关边界
 

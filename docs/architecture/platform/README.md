@@ -13,4 +13,4 @@
 - [`logging.md`](logging.md) — Server/Client 统一结构化运行日志、Memory/Console/JSONL Sink、扩展 Logger、历史查询、诊断复制与 Viewer 边界。
 - [`external-dependency-ownership.md`](external-dependency-ownership.md) — 第三方依赖的能力所有权、状态边界、构建工具与当前未形成的技术合同。
 
-AI Gateway、Credential、跨应用 Capability Host 等尚未与实现完全收口的材料继续保留在 [`../../workbench/discussion/platform/`](../../workbench/discussion/platform/) 或对应 Workbench 专题中。
+AI Gateway、Credential、跨应用 Capability Host 的旧设计保留在 [`历史讨论归档`](../../archive/discussion/platform/README.md)；当前演进与未决合同由 [Plan](../../workbench/plans/README.md) 承接，归档稿不证明实现。

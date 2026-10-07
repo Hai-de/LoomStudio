@@ -75,4 +75,4 @@ External Source
 - [`loom-core/trace-and-replay.md`](loom-core/trace-and-replay.md) — Mutation、Trace v1、Diagnostic、Replay 与 DevTool 边界；
 - [`loom-core/studio-integration.md`](loom-core/studio-integration.md) — PromptBuild、Loom Runner、Kernel 与 Provider 集成边界。
 
-Structure / Source / Capability、Skeleton、Activation 和动态投影等仍在演进的设计保留于 [`../../../workbench/discussion/application/prompt/`](../../../workbench/discussion/application/prompt/)。只有已经与实现一致的部分才会逐项晋升。
+Structure / Source / Capability、Skeleton、Activation 和动态投影等历史设计保留于 [`讨论归档`](../../../archive/discussion/application/prompt/README.md)，当前演进由 [Plan](../../../workbench/plans/README.md) 承接。只有已经与实现一致的部分才会逐项晋升。

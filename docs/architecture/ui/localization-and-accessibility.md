@@ -84,4 +84,4 @@ ARIA 不替代键盘行为。自定义 Tree、Menu、Toggle 和 Resize 组件必
 - reduced-motion 与主题 token 的传播；
 - 插件不可访问时 Host 提供的退出路径。
 
-未完成设计继续保留在 [`../../archive/discussion/ui/i18n-and-accessibility-v0.md`](../../archive/discussion/ui/i18n-and-accessibility-v0.md)。
+历史候选保留在 [`I18N 与无障碍旧稿`](../../archive/discussion/ui/i18n-and-accessibility-v0.md)，需要继续推进的范围由 [Plan](../../workbench/plans/README.md) 确认。

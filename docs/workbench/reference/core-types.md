@@ -26,7 +26,7 @@
 
 ## Client 实体层
 
-[entities/](../../../apps/studio-client/src/entities/) 保存 Client DTO 与领域类型：`agent.ts` 对应 Agent Profile / Session，`narrative.ts` 对应 Timeline / Branch / Node，`card.ts` 对应 Card。请求编排与派生 UI 状态由 Feature hooks 负责，不把实体类型文件描述成完整 UI 状态管理器。
+[entities/](../../../apps/studio-client/src/entities/) 保存 Client DTO 与领域类型：[agent.ts](../../../apps/studio-client/src/entities/agent.ts)对应 Agent Session / Transcript / Tool，[narrative.ts](../../../apps/studio-client/src/entities/narrative.ts)对应 Timeline / Branch / Node，[card.ts](../../../apps/studio-client/src/entities/card.ts)对应 Card。Agent Profile 已取消；Agent Preset 使用 [prompt.ts](../../../apps/studio-client/src/entities/prompt.ts)的 Prompt Resource 身份。请求编排与派生 UI 状态由 Feature hooks 负责，不把实体类型文件描述成完整 UI 状态管理器。
 
 ## Loom Core
 

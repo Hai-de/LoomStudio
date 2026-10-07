@@ -94,7 +94,7 @@ Session 的默认记忆采用 Agent 可维护的记事板（Scratchpad），保�
 - [Extensions Runtime](../../../packages/application-runtime/src/runtime/extensions-runtime.ts) 已提供 Extension Config 的读取和带版本写入；不能由此推断已有记忆配置继承解析器。
 - [Narrative Store](../../../packages/application-data/src/narrative/store.ts) 提供节点、分支和分页；总结进度不能只存一个无分支归属的楼层数字。
 - [当前 Prompt 输入准备](../../../packages/application-runtime/src/runtime/agents-runtime.ts) 与 [多轮仿真](../../../tests/integration/application-runtime/default-preset-lifecycle.test.ts) 是投影接线与生命周期验收入口，不是记忆系统已经实现的证据。
-- 旧讨论 [Summarization v0](../discussion/application/summarization-v0.md)、[Memory Summary v0](../discussion/application/memory-summary-v0.md) 仅作背景。其独立触发器、必须使用子 Agent、总结绑定修改稳定 Setting 等历史候选，不自动继承为本 Plan 的实施要求。
+- 旧讨论 [Summarization v0](../../archive/discussion/application/summarization-v0.md)、[Memory Summary v0](../../archive/discussion/application/memory-summary-v0.md) 仅作背景。其独立触发器、必须使用子 Agent、总结绑定修改稳定 Setting 等历史候选，不自动继承为本 Plan 的实施要求。
 
 ## 4. 后续最小工作包
 

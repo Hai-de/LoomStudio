@@ -36,7 +36,7 @@
 
 **Loom Studio** 是专为 AI Native 时代设计的现代交互叙事与智能体编排工作台。
 
-Loom Studio 集成 **Loom Core** 编译核心，将提示词编排（PromptBuild）、非线性时间线分支（Narrative Timeline）、设定资源与 Agent 工具链放在同一个工作台中，为创作者与玩家提供可组织、可追溯的叙事上下文。
+Loom Studio 将提示词编排（PromptBuild）、非线性时间线分支（Narrative Timeline）、设定资源与 Agent 工具链放在同一个工作台中。当前 Agent PromptBuild 直接使用 Application DFS 编译器；**Loom Core** 是仓库中的独立编译能力，不是这条运行主链。
 
 > 当前为 Beta，不是稳定版。不承诺自动更新、数据恢复或降级兼容；升级前请自行备份。
 
@@ -48,7 +48,7 @@ Loom Studio 集成 **Loom Core** 编译核心，将提示词编排（PromptBuild
   <tr>
     <td width="50%" valign="top">
       <h3>预设即有序树 & 笼中深度</h3>
-      <p>彻底告别传统的矩阵投影与深度争夺军备竞赛。预设是一棵干净的有序树，单次线性 DFS 遍历编译；外部世界书与卡片注入目标 Anchor 自动聚合为 Slot，局部深度（<code>1~9999</code>）严格封闭隔离，绝不打乱主干排版。</p>
+      <p>预设使用有序树，通过 DFS 遍历编译；外部世界书与卡片贡献按目标 Anchor 聚合为 Slot，按局部深度排序，不改变预设树本身的物理顺序。具体值域与回退规则以 PromptBuild 合同和实现为准。</p>
     </td>
     <td width="50%" valign="top">
       <h3>时间线非线性叙事分支</h3>
@@ -79,8 +79,11 @@ flowchart TD
     messages["Compiled Messages[]<br/>独立 Message 块"] --> provider
     provider["Provider Gateway & LLM"] --> output
     provider --> tools
-    output["Text Output Stream<br/>文本输出流"] --> timeline
+    output["Text Output Stream<br/>文本输出流"] --> transcript
+    transcript["Agent Transcript<br/>工作记录与最终回复"]
     tools["Tool Execution Loop<br/>工具执行循环"] --> state
+    tools --> timeline
+    input["用户输入"] --> timeline
     timeline["Timeline Append / Edit<br/>叙事写入与编辑"]
     state["State Mutation & Update<br/>状态变更"]
 ```
@@ -229,13 +232,13 @@ LoomStudio/
 
 ## 文档导航
 
-开始修改代码或了解深层设计之前，请查阅完整文档体系 [`docs/README.md`](docs/README.md)：
+开始具体开发时，先用[需求词与源码路由](docs/guide/workspace-development.md)定位；需要了解文档分工再看 [`docs/README.md`](docs/README.md)，不要求通读文档库：
 
 - **[`docs/guide/workspace-development.md`](docs/guide/workspace-development.md)** — 全仓开发规范、共同契约与任务路线
 - **[`docs/guide/beta-release.md`](docs/guide/beta-release.md)** — 玩家安装、数据目录、发行命令与 Beta 限制
 - **[`docs/architecture/`](docs/architecture/)** — 核心领域稳定架构合同（PromptBuild、Timeline、Agent、State）
 - **[`docs/workbench/`](docs/workbench/)** — 演进中的设计提案与讨论
-- **[`docs/archive/`](docs/archive/)** — 已落地完成的历史实施计划与归档总结
+- **[`docs/archive/`](docs/archive/)** — 冻结的历史材料，不代表内容全部已实现；默认仅保存在本机
 
 ---
 
@@ -245,7 +248,7 @@ LoomStudio/
 
 欢迎提交 Issue 和 Pull Request。在开始贡献前，请确保：
 1. 恪守 KISS 原则与极简主义，杜绝过度工程；
-2. 保持测试覆盖，提交前执行 `pnpm build:packages` 与相关定向测试；
+2. 按改动风险执行相关定向验证；涉及构建或包导出时再验证产物；
 3. 遵循现有的代码风格与命名契约。
 
 <div align="center">

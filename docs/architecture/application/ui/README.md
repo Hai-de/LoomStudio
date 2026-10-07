@@ -12,7 +12,7 @@ Application / UI:
   第一方 AIRP 领域体验与交互。
 ```
 
-以下是当前已落地的编辑、提交与渲染合同；尚未实现的页面设计继续留在 [`../../../workbench/discussion/application/ui/`](../../../workbench/discussion/application/ui/)。
+以下是当前已落地的编辑、提交与渲染合同；页面设计旧稿保留在 [`历史讨论归档`](../../../archive/discussion/application/ui/README.md)，当前 UI 演进从 [Plan](../../../workbench/plans/ui/README.md) 进入。
 
 ## 位置、缓存与草稿
 

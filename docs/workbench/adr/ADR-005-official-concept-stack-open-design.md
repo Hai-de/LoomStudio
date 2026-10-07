@@ -4,14 +4,14 @@
 > **Date**: 2026-05-17
 > **Decision scope**: 2026-05 Studio AIRP Layer 开放设计与术语迁移历史
 > **Owner**: Loom Studio architecture discussion
-> **Current authority**: [`docs/architecture/application/`](../../architecture/application/) 记录已实现事实；[`discussion/application/`](../discussion/application/) 只保留尚未晋升的开放问题。
+> **Current authority**: [`docs/architecture/application/`](../../architecture/application/) 记录已实现事实；当前开放问题以 [Plan](../plans/README.md) 为准。[讨论旧稿](../../archive/discussion/application/README.md)已于 2026-10-07 冻结归档，下文迁移与讨论安排仅为历史记录。
 > **Related**:
 > - [`ADR-004-platform-auth-secrets-and-provider-credential-boundary.md`](ADR-004-platform-auth-secrets-and-provider-credential-boundary.md)
 > - [`docs/architecture/README.md`](../../architecture/README.md)
 > - [`studio-kernel-public-surface-v0.md`](../../archive/discussion/kernel/studio-kernel-public-surface-v0.md)
 > - [`studio-extension-lifecycle-v0.md`](../../archive/discussion/extensions/studio-extension-lifecycle-v0.md)
 > - [`studio-mvp-development-plan.md`](../../archive/discussion/studio-mvp-development-plan.md)
-> - [`discussion/application/README.md`](../discussion/application/README.md)
+> - [`discussion/application/README.md`](../../archive/discussion/application/README.md)
 
 ---
 
@@ -20,7 +20,7 @@
 本 ADR 已冻结为历史决策追踪，不再是 Studio Application 的当前入口。原本堆积在这里的详细开放设计后来迁入 Workbench Application 目录，其中已实现部分继续晋升到正式 Architecture。本文中的术语、候选 API 与开放问题不应被当作当前实现合同：
 
 ```text
-docs/workbench/discussion/application/
+docs/archive/discussion/application/
 ```
 
 这样做是为了避免 ADR-005 继续膨胀，并为后续大议题保留独立讨论空间。
@@ -93,45 +93,45 @@ Settings:
 
 | 文件 | 内容 |
 |---|---|
-| [`discussion/application/README.md`](../discussion/application/README.md) | Studio Application 当前开放设计索引 |
-| [`discussion/application/0-overview-v0.md`](../discussion/application/0-overview-v0.md) | 原 ADR-005 §0~§5：状态说明、Context、Problem、Non-goals、High-level Boundary、Open Discussion Layers |
-| [`../08-concept-stack/discussion-order-v0.md`](../discussion/application/discussion-order-v0.md) | 原 ADR-005 §17、§19、§21：讨论顺序、未决事项、实施前置条件 |
+| [Application 历史设计索引](../../archive/discussion/application/README.md) | 已冻结的 Studio Application 讨论记录 |
+| [`discussion/application/0-overview-v0.md`](../../archive/discussion/application/0-overview-v0.md) | 原 ADR-005 §0~§5：状态说明、Context、Problem、Non-goals、High-level Boundary、Open Discussion Layers |
+| [`../08-concept-stack/discussion-order-v0.md`](../../archive/discussion/application/discussion-order-v0.md) | 原 ADR-005 §17、§19、§21：讨论顺序、未决事项、实施前置条件 |
 
 ### 1.2 Card 与内容单元
 
 | 文件 | 内容 |
 |---|---|
-| [`../08-concept-stack/card-model-v0.md`](../discussion/application/card-model-v0.md) | 原 ADR-005 CS-0 中 Card、metadata、Character 字段、Example Dialogues、Group Chat、硬编码类层级、Import 延后等内容 |
+| [`../08-concept-stack/card-model-v0.md`](../../archive/discussion/application/card-model-v0.md) | 原 ADR-005 CS-0 中 Card、metadata、Character 字段、Example Dialogues、Group Chat、硬编码类层级、Import 延后等内容 |
 
 ### 1.3 Chat 与 Opening
 
 | 文件 | 内容 |
 |---|---|
-| [`../08-concept-stack/chat-opening-model-v0.md`](../discussion/application/chat-opening-model-v0.md) | 原 ADR-005 Opening 方向与 CS-1 Chat / Opening Model |
+| [`../08-concept-stack/chat-opening-model-v0.md`](../../archive/discussion/application/chat-opening-model-v0.md) | 原 ADR-005 Opening 方向与 CS-1 Chat / Opening Model |
 
 ### 1.4 Composition Skeleton
 
 | 文件 | 内容 |
 |---|---|
-| [`../08-concept-stack/composition-skeleton-v0.md`](../discussion/application/composition-skeleton-v0.md) | 原 ADR-005 Preset / Composition Skeleton 方向与 CS-2 |
+| [`../08-concept-stack/composition-skeleton-v0.md`](../../archive/discussion/application/composition-skeleton-v0.md) | 原 ADR-005 Preset / Composition Skeleton 方向与 CS-2 |
 
 ### 1.5 Unified Setting Layer / Global / State
 
 | 文件 | 内容 |
 |---|---|
-| [`../08-concept-stack/setting-layer-v0.md`](../discussion/application/setting-layer-v0.md) | 原 ADR-005 统一设定层方向与 CS-3 |
-| [`../08-concept-stack/global-scope-v0.md`](../discussion/application/global-scope-v0.md) | 原 ADR-005 CS-4 Global Scope |
-| [`../08-concept-stack/state-mutation-api-v0.md`](../discussion/application/state-mutation-api-v0.md) | 原 ADR-005 CS-5 State / Mutation API |
+| [`../08-concept-stack/setting-layer-v0.md`](../../archive/discussion/application/setting-layer-v0.md) | 原 ADR-005 统一设定层方向与 CS-3 |
+| [`../08-concept-stack/global-scope-v0.md`](../../archive/discussion/application/global-scope-v0.md) | 原 ADR-005 CS-4 Global Scope |
+| [`../08-concept-stack/state-mutation-api-v0.md`](../../archive/discussion/application/state-mutation-api-v0.md) | 原 ADR-005 CS-5 State / Mutation API |
 
 ### 1.6 Composition / Runtime / Frontend / Compatibility / Trace
 
 | 文件 | 内容 |
 |---|---|
 | [`../08-concept-stack/composition-pipeline-v0.md`](../../archive/discussion/application/composition-pipeline-v0.md) | 原 ADR-005 CS-6 与 M0 Candidate Scope |
-| [`../08-concept-stack/runtime-boundary-v0.md`](../discussion/application/runtime-boundary-v0.md) | 原 ADR-005 CS-7 Runtime Boundary |
-| [`../08-concept-stack/frontend-projection-v0.md`](../discussion/application/frontend-projection-v0.md) | 原 ADR-005 CS-8 Frontend Projection |
-| [`../08-concept-stack/compatibility-import-v0.md`](../discussion/application/compatibility-import-v0.md) | 原 ADR-005 CS-9 Import / Compatibility |
-| [`../08-concept-stack/trace-explainability-v0.md`](../discussion/application/trace-explainability-v0.md) | 原 ADR-005 CS-10 Trace / Explainability |
+| [`../08-concept-stack/runtime-boundary-v0.md`](../../archive/discussion/application/runtime-boundary-v0.md) | 原 ADR-005 CS-7 Runtime Boundary |
+| [`../08-concept-stack/frontend-projection-v0.md`](../../archive/discussion/application/frontend-projection-v0.md) | 原 ADR-005 CS-8 Frontend Projection |
+| [`../08-concept-stack/compatibility-import-v0.md`](../../archive/discussion/application/compatibility-import-v0.md) | 原 ADR-005 CS-9 Import / Compatibility |
+| [`../08-concept-stack/trace-explainability-v0.md`](../../archive/discussion/application/trace-explainability-v0.md) | 原 ADR-005 CS-10 Trace / Explainability |
 
 ---
 
@@ -165,7 +165,7 @@ Unified Setting Layer
 入口文档：
 
 ```text
-docs/workbench/discussion/application/setting-layer-v0.md
+docs/archive/discussion/application/setting-layer-v0.md
 ```
 
 原因：

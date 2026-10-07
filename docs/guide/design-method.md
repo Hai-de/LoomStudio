@@ -138,7 +138,7 @@ Loom Studio 是开发平台，不只是单一应用。
 - 变更代价高、难以逆转，或会形成长期兼容承诺；
 - 单靠当前 Architecture 无法解释为什么选择该方案。
 
-如果只是记录当前实现是什么，更新 Architecture；如果还没有决定，保留在 Discussion；如果已经决定并准备施工，写入 Plan。
+如果只是记录当前实现是什么，更新 Architecture；如果还没有决定，在对话中讨论，需要持久记录时写入 Plan 的开放问题；如果已经决定并准备施工，在 Plan 中明确决策、范围和验证方式。不再设置独立 Discussion 阶段。
 
 如果第 2 步和第 3 步说不清楚，通常不应该直接写最终 schema。
 
@@ -183,11 +183,11 @@ Loom Studio 也需要规格驱动，因为平台边界一旦实现就会成为�
 
 ## 5. 相关文档
 
-- [`scenario-driven-design-v0.md`](../workbench/discussion/scenario-driven-design-v0.md)
+- [`scenario-driven-design-v0.md`](../archive/discussion/scenario-driven-design-v0.md)
 - [`architecture-governance-v0.md`](../archive/issues/architecture-governance-v0.md)
 - [`architecture-rules.md`](architecture-rules.md)
 - [`testing.md`](testing.md)
-- [`../workbench/discussion/application/README.md`](../workbench/discussion/application/README.md)
+- [`../archive/discussion/application/README.md`](../archive/discussion/application/README.md)
 - [`../reference/sillytavern-architecture-reference.md`](../workbench/reference/sillytavern-architecture-reference.md)
 
 ---

@@ -383,10 +383,10 @@ TUI 不编辑 Narrative、不承担 Commit review、不展示完整 Agent 工作
 
 相关文档：
 
-- [AIRP Runtime Model](../../discussion/application/airp-runtime-model-v0.md)
-- [Agent Runtime Loop](../../discussion/application/agent/agent-runtime-loop-v0.md)
-- [Runtime Policy](../../discussion/application/agent/runtime-policy-v0.md)
-- [Tool Capability](../../discussion/application/agent/tool-capability-v0.md)
-- [Runtime Turn Flow](../../discussion/application/runtime-turn-flow-v0.md)
-- [Agent Panel Rendering](../../discussion/application/ui/agent-panel-rendering-v0.md)
+- [AIRP Runtime Model](../../../archive/discussion/application/airp-runtime-model-v0.md)
+- [Agent Runtime Loop](../../../archive/discussion/application/agent/agent-runtime-loop-v0.md)
+- [Runtime Policy](../../../archive/discussion/application/agent/runtime-policy-v0.md)
+- [Tool Capability](../../../archive/discussion/application/agent/tool-capability-v0.md)
+- [Runtime Turn Flow](../../../archive/discussion/application/runtime-turn-flow-v0.md)
+- [Agent Panel Rendering](../../../archive/discussion/application/ui/agent-panel-rendering-v0.md)
 - [Trace / Audit / Correlation](../../../archive/discussion/data/studio-trace-audit-correlation-v0.md)

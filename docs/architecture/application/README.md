@@ -10,14 +10,14 @@ Studio Application 是 Loom Studio 第一方内建的 AIRP 领域层。它定义
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------- | ------------------------------------------------------ |
 | [`data-capabilities-and-lifecycle.md`](data-capabilities-and-lifecycle.md) | 文本、State、宏、运行记录的能力与共享事务、引用和生命周期边界 | 当前实现边界 |
 | [`card-bundle-files.md`](card-bundle-files.md) | 文件化 Card Bundle、可编辑目录、ZIP 与 PNG 分发 | ZIP v2、PNG Base64 ZIP 与旧格式读取已实现 |
-| [`prompt-build/`](prompt-build/)                       | Sources、Composition、PromptBuild pipeline 与 Loom Core 对接                          | Loom Core 边界已晋升                                   |
+| [`prompt-build/`](prompt-build/) | Sources、Composition 与 Application DFS 编译；Core 是独立边界 | Agent 主链直接编译，不执行 Core Pass |
 | [`agent/`](agent/)                                     | Agent Session、Loop、Tool、Provider 与 PromptBuild 接缝                               | 基础运行架构已晋升；恢复、子智能体与领域 Tool 仍在演进 |
 | [`history-text-pipeline.md`](history-text-pipeline.md) | Narrative / Session History 的 Regex、Reasoning Promotion、Extractor 与 Renderer Slot | Phase 0—5 基础闭环已实现                               |
 | [`extension/`](extension/)                             | Extension Scoped Storage、Card Portable Payload 与领域贡献协议                        | 数据、分发与 Client Renderer 主链已晋升                |
 | [`state-and-variables.md`](state-and-variables.md)     | Global / Timeline State、EC 初始化、Extension Contribution、Revision、Macro 与 Undo   | State v1 核心运行链已晋升                              |
 | [`ui/`](ui/) | 第一方 AIRP 的草稿/冲突、Timeline 提交与正文窗口生命周期 | 已实现合同；其他页面设计仍在 Workbench |
 
-Application 的其他领域文档在稳定前继续保留于 [`../../workbench/discussion/`](../../workbench/discussion/)。
+Application 的演进与开放问题由 [Plan](../../workbench/plans/README.md) 承接；旧领域设计保留于 [`历史讨论归档`](../../archive/discussion/application/README.md)，不作为当前合同。
 
 ## 资源包与 Agent Preset
 

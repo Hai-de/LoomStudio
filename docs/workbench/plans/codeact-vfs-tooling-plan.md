@@ -29,7 +29,7 @@
 > **状态**：In Progress / 双通道、领域 VFS 读取、引用跳转、replace、Prompt Resource Patch、节点 Metadata、同资源 move/delete/create/copy 与整份 Prompt Resource copy、绑定 Timeline 的 Narrative 只读采样已接入；Pin、Narrative 历史权限与通用资产挂载待接续
 > **更新**：2026-09-22
 > **归属**：CodeAct 执行与 VFS 工具的唯一实施入口。2026-09-21 用户已授权正式接入，明确要求 Content/freeform 与 JSON 两种入口；按第 6 节实施，不重新开放已经确认的产品方向。
-> **来源**：[读取与交互 Discussion](../discussion/application/agent/tool-data-view-interaction-v0.md)、[Playground 记录](../../../apps/playground/CODEACT-EXPERIMENT.md)、[旧综合提案](../../archive/plans/file-backed-resource-agent-script-codeact-plan.md)。
+> **来源**：[读取与交互 Discussion](../../archive/discussion/application/agent/tool-data-view-interaction-v0.md)、[Playground 记录](../../../apps/playground/CODEACT-EXPERIMENT.md)、[旧综合提案](../../archive/plans/file-backed-resource-agent-script-codeact-plan.md)。
 
 ## 1. 目标与归属
 

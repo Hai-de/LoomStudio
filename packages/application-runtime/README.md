@@ -21,7 +21,7 @@ Package 只通过 [`src/index.ts`](./src/index.ts) 暴露 public API，构建产
 
 | 文件或目录                                      | 当前职责                                               |
 | ----------------------------------------------- | ------------------------------------------------------ |
-| `runtime/runtime.ts`、`runtime/`                | `ApplicationRuntime` facade 与领域流程组装；根 `runtime.ts` 仅重导出 |
+| [`src/runtime/runtime.ts`](src/runtime/runtime.ts)、[`src/runtime/`](src/runtime/) | `ApplicationRuntime` facade 与领域流程组装；没有根 `src/runtime.ts` 源码入口 |
 | `types.ts`                                      | 公共 Application 合同                                  |
 | `foundation/application-context.ts`            | Store、Gateway、Registry、Logger、Clock 等内部基础设施 |
 | `foundation/document-types.ts`                 | 第一方 Application Document Types                      |
@@ -60,6 +60,18 @@ Package 只通过 [`src/index.ts`](./src/index.ts) 暴露 public API，构建产
 - **分页必须完整消费**：Profile 等列表返回 `nextCursor`，不能把首个 100 条当作全量。全量读取沿 cursor 收集后发布；Runtime 的 Document 收集与 Prompt Resource 稳定 ID 扫描见 [`foundation/document-store.ts`](./src/foundation/document-store.ts)、[`cards/workspace.ts`](./src/cards/workspace.ts)。Keyset 仍是动态遍历，不提供跨请求快照。
 
 CodeAct 的 QuickJS/VFS 与 `readNarrative` 只代表当前已接入的执行和读取能力，不代表完整 Memory/Session 生命周期已完成。未装配 Narrative Context Provider 时，被动 Prompt 构建仍有 recent-100 回退及诊断，它不是冻结的 Memory 基线；主动工具读取不继承这一回退，见[默认剧情上下文来源](../../docs/architecture/application/extension/narrative-context.md)与 [`agents-runtime.ts`](./src/runtime/agents-runtime.ts)。
+
+## 跨文件定位
+
+| 任务 | 调用入口与下游 | 验证入口 |
+|---|---|---|
+| Agent PromptBuild、消息顺序、Anchor / Slot | [agents-runtime.ts](src/runtime/agents-runtime.ts) → [composeAgentTurnPrompt](src/agents/agent-turn.ts) → [compilePromptDataModel](src/prompt/prompt-build-pipeline.ts) | [default-preset.test.ts](../../tests/integration/application-runtime/default-preset.test.ts) |
+| Session 历史、摘要后的工作段 | [session-history.ts](src/agents/session-history.ts) | [session-history.test.ts](../../tests/integration/application-runtime/session-history.test.ts) |
+| Run 冷恢复、检查点与工具结果 | [run-recovery.ts](src/agents/run-recovery.ts)、[tool-loop.ts](src/agents/tool-loop.ts) | [agent-run-recovery.test.ts](../../tests/integration/application-runtime/agent-run-recovery.test.ts) |
+| 多开场、用户正文、分支写入 | [narrative-runtime.ts](src/runtime/narrative-runtime.ts) → [Narrative Store](../application-data/src/narrative/store.ts) | [opening-selection.test.ts](../../tests/integration/application-runtime/opening-selection.test.ts)、[narrative-timeline.test.ts](../../tests/integration/application-runtime/narrative-timeline.test.ts) |
+| CodeAct 与虚拟文件读取 | [execute.ts](src/agents/codeact/execute.ts)、[vfs/](src/vfs/) | [codeact-tool-loop.test.ts](../../tests/integration/application-runtime/codeact-tool-loop.test.ts)、[resource-vfs.test.ts](../../tests/integration/application-runtime/resource-vfs.test.ts) |
+
+按改动选取相关用例，不默认执行整张表。文件存在与测试通过均不代表全部产品或恢复场景已经验收。
 
 ## 构建与验证
 

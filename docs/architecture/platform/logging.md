@@ -471,7 +471,7 @@ Observability UI 可以本地化导航、筛选器、字段标签和有限的稳
 - Metric backend；
 - OTel exporter。
 
-这些方向继续保留在 [`../../workbench/plans/log-plan/`](../../workbench/plans/log-plan/) 的远期路线图和相关专题 Discussion 中。已完成的历史查询、扩展日志平台与诊断复制实施记录位于归档的 [`../../archive/plans/log-platform-consumption-plan.md`](../../archive/plans/log-platform-consumption-plan.md)。
+这些方向继续保留在 [`../../workbench/plans/log-plan/`](../../workbench/plans/log-plan/) 的远期路线图与专题 Plan 中。已完成的历史查询、扩展日志平台与诊断复制实施记录位于归档的 [`../../archive/plans/log-platform-consumption-plan.md`](../../archive/plans/log-platform-consumption-plan.md)。
 
 ## 17. 变更纪律
 

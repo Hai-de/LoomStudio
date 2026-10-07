@@ -31,8 +31,8 @@ Architecture / Application / UI:
 - 跨窗口焦点模型；
 - 提示词资源 Diff 与 Tokenizer 协议。
 
-这些设计继续保留在：
+当前路线从 [UI Plan 索引](../../workbench/plans/ui/README.md) 进入。以下材料分别保留历史依据和当前计划，归档候选不自动成为待办：
 
-- [`../../workbench/discussion/ui/widget-workspace-and-motion-v0.md`](../../workbench/discussion/ui/widget-workspace-and-motion-v0.md)
+- [Workspace 与 Motion 历史设计](../../archive/discussion/ui/widget-workspace-and-motion-v0.md)
 - [`../../workbench/plans/ui/prompt-resource-diff-mode-v0.md`](../../workbench/plans/ui/prompt-resource-diff-mode-v0.md)
-- [`../../workbench/discussion/application/ui/`](../../workbench/discussion/application/ui/)
+- [第一方 UI 历史设计](../../archive/discussion/application/ui/README.md)

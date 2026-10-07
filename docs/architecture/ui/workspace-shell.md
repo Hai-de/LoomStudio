@@ -99,4 +99,4 @@ Prompt Resource、Setting Mount 与 Preset Tool Mount 的缓存型远端状态�
 - 跨窗口拖动、排序和 suspend；
 - 完整移动端窗口交互。
 
-演进方向见 [`../../workbench/discussion/ui/widget-workspace-and-motion-v0.md`](../../workbench/discussion/ui/widget-workspace-and-motion-v0.md)。
+历史设计依据见 [`Workspace 与 Motion 旧稿`](../../archive/discussion/ui/widget-workspace-and-motion-v0.md)，当前演进以 [UI Plan](../../workbench/plans/ui/README.md) 为准。
