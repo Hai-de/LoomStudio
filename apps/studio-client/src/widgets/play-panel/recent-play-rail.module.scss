@@ -1,4 +1,4 @@
-.root { display: grid; gap: 6px; width: min(100%, 260px); margin: 4px 8px 0; }
+.root { display: grid; gap: 6px; width: 100%; margin: 4px 0 0; padding: 0 4px; box-sizing: border-box; }
 .group { display: grid; gap: 2px; }
 .date { padding: 2px 8px; color: var(--loom-color-text-subtle); font-size: 10px; }
 .item {

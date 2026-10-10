@@ -17,6 +17,7 @@ export type MaterialValue = {
   mode: 'solid' | 'translucent' | 'glass'
   blur: number
   opacity: number
+  glassPanels?: boolean
 }
 
 type AppearancePage = 'background' | 'material' | 'general'
@@ -129,6 +130,16 @@ export function BackgroundMaterialsView(props: {
                       </label>
                     ))}
                   </fieldset>
+                  <label className={styles.switchRow}>
+                    <span>{props.t('appearance.glassPanels')}</span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      disabled={props.material.mode !== 'glass'}
+                      checked={props.material.glassPanels ?? true}
+                      onChange={event => props.onMaterialChange({ ...props.material, glassPanels: event.target.checked })}
+                    />
+                  </label>
                   <label className={styles.range}>
                     <span>{props.t('appearance.blur')} <output>{props.material.blur}px</output></span>
                     <input aria-label={props.t('appearance.blur')} disabled={props.material.mode !== 'glass'} max={32} min={0} type="range" value={props.material.blur} onChange={event => props.onMaterialChange({ ...props.material, blur: Number(event.target.value) })} />

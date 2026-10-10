@@ -982,3 +982,10 @@
     transform: none;
   }
 }
+
+:global(html[data-loom-glass-panels='true']) {
+  .panel,
+  .detailPane {
+    background: transparent;
+  }
+}

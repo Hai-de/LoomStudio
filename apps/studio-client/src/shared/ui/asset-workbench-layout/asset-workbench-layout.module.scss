@@ -67,3 +67,10 @@
   overflow: hidden;
   position: relative;
 }
+
+:global(html[data-loom-glass-panels='true']) {
+  .explorerPane,
+  .detailPane {
+    background: transparent;
+  }
+}

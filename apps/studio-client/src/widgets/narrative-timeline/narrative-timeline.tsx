@@ -296,7 +296,7 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
                   data-index={index}
                   ref={virtualizer.measureElement}
                   className={styles.virtualRow}
-                  style={{ transform: `translateY(${item.start - scrollMargin}px)` }}
+                  style={{ top: `${item.start - scrollMargin}px` }}
                 >
                 <Suspense fallback={<div aria-busy="true" className={styles.messagePending} />}>
                 <article

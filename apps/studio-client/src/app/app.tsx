@@ -88,6 +88,11 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
   useEffect(() => {
     const root = document.documentElement
     root.dataset.loomMaterialPreview = appearance.material.mode
+    if (appearance.material.mode === 'glass' && (appearance.material.glassPanels ?? true)) {
+      root.dataset.loomGlassPanels = 'true'
+    } else {
+      delete root.dataset.loomGlassPanels
+    }
     root.style.setProperty('--loom-preview-blur', `${appearance.material.blur}px`)
     root.style.setProperty('--loom-preview-opacity', `${appearance.material.opacity}%`)
     root.style.setProperty('--loom-canvas-width', `${appearance.canvasWidth || 720}px`)

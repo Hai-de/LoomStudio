@@ -1246,3 +1246,9 @@
   color: var(--loom-color-text-muted);
   font-size: 12px;
 }
+
+:global(html[data-loom-glass-panels='true']) {
+  .characterPanel {
+    background: transparent;
+  }
+}

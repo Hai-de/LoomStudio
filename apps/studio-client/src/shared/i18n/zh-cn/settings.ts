@@ -15,6 +15,7 @@ export const messages = {
   'appearance.noMatches': '没有匹配的背景',
   'appearance.empty': '暂无可用背景',
   'appearance.surfaceMode': '表面模式',
+  'appearance.glassPanels': '悬浮面板启用毛玻璃',
   'appearance.blur': '模糊强度',
   'appearance.opacity': '表面不透明度',
   'appearance.previewMaterial': '预览材质',

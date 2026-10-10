@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import { safeLocalStorage } from '../browser/safe-local-storage.js'
 
 type AppearanceBackground = { id: string; image: string }
-type AppearanceMaterial = { mode: 'solid' | 'translucent' | 'glass'; blur: number; opacity: number }
+type AppearanceMaterial = { mode: 'solid' | 'translucent' | 'glass'; blur: number; opacity: number; glassPanels?: boolean }
 type AppearanceState = {
   background: AppearanceBackground | null
   scopedBackground: (AppearanceBackground & { cardId: string; ownerKey: string }) | null
@@ -26,7 +26,7 @@ export const useAppearanceStore = create<AppearanceState>()(persist((set) => ({
   canvasWidth: 720,
   narrativeOverscan: 5,
   followAI: true,
-  material: { mode: 'glass', blur: 18, opacity: 62 },
+  material: { mode: 'glass', blur: 18, opacity: 62, glassPanels: true },
   setBackground: background => set({ background, scopedBackground: null }),
   setScopedBackground: scopedBackground => set({ scopedBackground }),
   clearScopedBackground: (ownerKey, backgroundId) => set(state => state.scopedBackground?.ownerKey === ownerKey
@@ -61,6 +61,7 @@ export const useAppearanceStore = create<AppearanceState>()(persist((set) => ({
           && material.blur >= 0 && material.blur <= 32 ? material.blur : current.material.blur,
         opacity: typeof material.opacity === 'number' && Number.isFinite(material.opacity)
           && material.opacity >= 0 && material.opacity <= 100 ? material.opacity : current.material.opacity,
+        glassPanels: typeof material.glassPanels === 'boolean' ? material.glassPanels : (current.material.glassPanels ?? true),
       },
     }
   },

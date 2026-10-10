@@ -626,3 +626,9 @@
   }
 
 }
+
+:global(html[data-loom-glass-panels='true']) {
+  .modelPanel {
+    background: transparent;
+  }
+}

@@ -17,6 +17,7 @@ export const messages = {
   'appearance.noMatches': 'No matching backgrounds',
   'appearance.empty': 'No backgrounds available',
   'appearance.surfaceMode': 'Surface mode',
+  'appearance.glassPanels': 'Glass floating panels',
   'appearance.blur': 'Blur intensity',
   'appearance.opacity': 'Surface opacity',
   'appearance.previewMaterial': 'Preview material',

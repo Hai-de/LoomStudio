@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
 
 describe('sqlite document store', () => {
-  it('creates schema version 1 with the expected tables, indexes, and WAL mode', async () => {
+  it('creates schema version 2 with the expected tables, indexes, and WAL mode', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'loom-docstore-'))
     const filename = join(dir, 'store.sqlite')
 
@@ -24,7 +24,7 @@ describe('sqlite document store', () => {
 
       expect(migrations).toEqual([
         { namespace: 'platform.data-engine', version: 1 },
-        { namespace: 'platform.documents', version: 1 },
+        { namespace: 'platform.documents', version: 2 },
       ])
       expect(journal.journal_mode).toBe('wal')
       expect(changesetColumns.map(column => column.name)).toContain('committed_at')
@@ -67,7 +67,7 @@ describe('sqlite document store', () => {
       const version = inspected.prepare('SELECT version FROM schema_migrations WHERE namespace = ?').get('platform.documents') as { version: number }
       inspected.close()
 
-      expect(version.version).toBe(1)
+      expect(version.version).toBe(2)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
@@ -148,19 +148,19 @@ describe('sqlite document store', () => {
       const newer = new DatabaseSync(filename)
       newer.exec(`
         CREATE TABLE schema_migrations (namespace TEXT PRIMARY KEY, version INTEGER NOT NULL);
-        INSERT INTO schema_migrations (namespace, version) VALUES ('platform.documents', 2);
+        INSERT INTO schema_migrations (namespace, version) VALUES ('platform.documents', 3);
       `)
       newer.close()
 
       expect(() => createSqliteDocumentStore({ filename }))
-        .toThrow('SQLite schema platform.documents@2 is newer than supported version 1')
+        .toThrow('SQLite schema platform.documents@3 is newer than supported version 2')
 
       const inspected = new DatabaseSync(filename)
       const version = inspected.prepare('SELECT version FROM schema_migrations WHERE namespace = ?').get('platform.documents') as { version: number }
       const journal = inspected.prepare('PRAGMA journal_mode').get() as { journal_mode: string }
       inspected.close()
 
-      expect(version.version).toBe(2)
+      expect(version.version).toBe(3)
       expect(journal.journal_mode).toBe('wal')
     } finally {
       await rm(dir, { recursive: true, force: true })

@@ -126,26 +126,43 @@
   z-index: 40;
   top: 0;
   left: 0;
-  width: var(--loom-shell-rail-preferred-width, var(--loom-rail-expanded-width));
+  bottom: 0;
+  width: var(--loom-shell-rail-preferred-width, var(--loom-rail-expanded-width, 240px));
   height: 100%;
   max-height: 100%;
   max-width: 100%;
   display: grid;
   overflow: hidden;
-  border: none;
   border-radius: 0;
-  background: transparent;
-  box-shadow: none;
+  border: none;
+  border-right: 1px solid color-mix(in srgb, var(--loom-color-border) 60%, transparent);
+  background: var(--loom-color-surface);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.16);
   transition:
+    width var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing),
     transform var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing),
     opacity var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing);
 }
 
-:global(html[data-loom-material-preview='glass']) .panelRight {
-  background: color-mix(in srgb, var(--loom-color-surface) var(--loom-preview-opacity, 58%), transparent);
-  -webkit-backdrop-filter: blur(var(--loom-preview-blur, 18px)) saturate(135%);
-  backdrop-filter: blur(var(--loom-preview-blur, 18px)) saturate(135%);
-  border-color: color-mix(in srgb, var(--loom-color-border) 55%, transparent);
+:global(html[data-loom-glass-panels='true']) {
+  .floatingDock {
+    background: color-mix(in srgb, var(--loom-color-surface) var(--loom-preview-opacity, 58%), transparent);
+    -webkit-backdrop-filter: blur(var(--loom-preview-blur, 18px)) saturate(135%);
+    backdrop-filter: blur(var(--loom-preview-blur, 18px)) saturate(135%);
+    border-right-color: color-mix(in srgb, var(--loom-color-border) 55%, transparent);
+  }
+
+  .workspaceRail {
+    background: transparent;
+  }
+
+  .dockPanelHost {
+    background: transparent;
+
+    .panelStage > :global(*) {
+      background: transparent;
+    }
+  }
 }
 
 .floatingDockHidden {
@@ -177,7 +194,7 @@
   min-width: var(--loom-rail-collapsed-width);
   min-height: 0;
   display: grid;
-  grid-template-rows: 40px minmax(0, 1fr);
+  grid-template-rows: 46px minmax(0, 1fr);
   container-name: studio-rail;
   container-type: inline-size;
 }
@@ -186,6 +203,7 @@
   position: relative;
   width: 100%;
   height: 40px;
+  margin-top: 6px;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -317,7 +335,7 @@
 }
 
 .floatingDockOpen {
-  width: var(--loom-shell-rail-preferred-width, var(--loom-rail-expanded-width));
+  width: var(--loom-shell-rail-preferred-width, var(--loom-rail-expanded-width, 240px));
 }
 
 .floatingDock:not(.floatingDockActive) .dockDivider,
@@ -329,6 +347,7 @@
   transform: none !important;
   opacity: 1 !important;
   pointer-events: auto !important;
+  top: 0;
   bottom: 0;
   width: clamp(42rem, 52vw, 72rem);
   height: 100%;
@@ -630,18 +649,18 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  clip-path: inset(0 0 0 0);
-  transition: clip-path var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing);
+  border-radius: inherit;
 }
 
-.floatingDock[data-panel-motion='closing'] .workspaceMotionClip {
-  clip-path: inset(0 calc(100% - var(--loom-shell-rail-preferred-width)) 0 0);
+.floatingDock[data-panel-motion='closing'] {
+  width: var(--loom-shell-rail-preferred-width, var(--loom-rail-expanded-width, 240px)) !important;
   transition-duration: var(--loom-shell-motion-duration-exit);
 }
 
-.floatingDockResizing .workspaceMotionClip {
-  clip-path: inset(0 0 0 0);
-  transition: none;
+.floatingDock[data-panel-motion='closing'] .workspacePanel {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing);
 }
 
 .workspaceShellLayout {
@@ -656,8 +675,8 @@
 .workspaceRail {
   position: absolute;
   z-index: 2;
-  inset: 0 auto 0 0;
-  width: var(--loom-shell-rail-preferred-width, var(--loom-rail-expanded-width));
+  inset: 0 0 0 0;
+  width: 100%;
   overflow: hidden;
   background: var(--loom-color-surface);
   clip-path: inset(0 0 0 0);
@@ -676,6 +695,9 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  opacity: 1;
+  outline: none;
+  transition: opacity var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing);
 }
 
 .workspaceRail .dockSidebar,
@@ -701,6 +723,7 @@
   position: relative;
   height: 40px !important;
   min-height: 40px !important;
+  margin-top: 6px;
   flex: 0 0 40px;
   display: flex;
   align-items: center;
@@ -868,9 +891,9 @@
   min-height: 0;
   position: relative;
   overflow: hidden;
-  border-top: 1px solid var(--loom-color-border);
-  border-left: 1px solid var(--loom-color-border);
-  border-top-left-radius: var(--loom-radius-window);
+  border-top: 1px solid color-mix(in srgb, var(--loom-color-border) 60%, transparent);
+  border-left: 1px solid color-mix(in srgb, var(--loom-color-border) 60%, transparent);
+  border-top-left-radius: var(--loom-radius-window, 18px);
 }
 
 .dockPanelHost::-webkit-scrollbar,
@@ -965,9 +988,10 @@
 
 .stageFloatingHeader {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(var(--loom-canvas-width), calc(100vw - 32px));
   height: 40px;
   display: flex;
   justify-content: space-between;
@@ -976,7 +1000,7 @@
   background: transparent;
   pointer-events: none;
   gap: 12px;
-  padding: 0 8px 0 5px;
+  padding: 0 12px;
   box-sizing: border-box;
 }
 
@@ -988,11 +1012,6 @@
   min-width: 0;
   pointer-events: none;
   transition: opacity var(--loom-motion-duration-fast) ease;
-
-  &[data-dock-open='true'] {
-    opacity: 0;
-    pointer-events: none;
-  }
 }
 
 .stageHeaderRight {
@@ -1296,9 +1315,13 @@
   }
 
   .floatingDock:not(.floatingDockActive):not(.floatingDockMobileOpen) {
+    top: 0;
+    left: 0;
+    bottom: 0;
     transform: translateX(-100%) !important;
     opacity: 0 !important;
     pointer-events: none !important;
+    border-radius: 0;
   }
 
   .floatingDockMobileOpen {
@@ -1313,6 +1336,7 @@
     height: var(--loom-viewport-height, 100%) !important;
     max-height: var(--loom-viewport-height, 100%) !important;
     border: none;
+    border-radius: 0;
     z-index: 40;
     box-shadow: none;
   }

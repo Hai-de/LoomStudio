@@ -24,4 +24,11 @@ describe('appearance persistence boundary', () => {
     })
     expect(result.setMaterial).toBe(current.setMaterial)
   })
+
+  it('preserves glassPanels boolean preference', () => {
+    const disabled = merge({ material: { glassPanels: false } }, current)
+    expect(disabled.material.glassPanels).toBe(false)
+    const enabled = merge({ material: { glassPanels: true } }, current)
+    expect(enabled.material.glassPanels).toBe(true)
+  })
 })

@@ -19,8 +19,8 @@
   align-content: start;
   justify-items: center;
   gap: 16px;
-  padding: 32px 0 var(--loom-composer-clearance, 200px);
-  scroll-padding: 32px 0 var(--loom-composer-clearance, 200px);
+  padding: calc(var(--loom-page-header-height, 40px) + 12px) 0 var(--loom-composer-clearance, 200px);
+  scroll-padding: calc(var(--loom-page-header-height, 40px) + 12px) 0 var(--loom-composer-clearance, 200px);
   background: transparent;
   transition:
     padding-bottom var(--loom-motion-duration-standard) var(--loom-motion-easing-standard),
@@ -91,10 +91,9 @@
   transition: border-color var(--loom-motion-duration-fast) ease;
 
   &[data-loom-latest='true'] {
-    will-change: transform, opacity;
     animation:
-      message-fade-in-up 360ms var(--loom-motion-ease-out, cubic-bezier(0.215, 0.61, 0.355, 1)) both,
-      new-message-glow 2.8s var(--loom-motion-ease-out, ease-out) both;
+      message-fade-in 280ms var(--loom-motion-ease-out, cubic-bezier(0.215, 0.61, 0.355, 1)),
+      new-message-glow 2.8s var(--loom-motion-ease-out, ease-out);
   }
 }
 
@@ -299,14 +298,12 @@
   }
 }
 
-@keyframes message-fade-in-up {
-  0% {
+@keyframes message-fade-in {
+  from {
     opacity: 0;
-    transform: translateY(14px);
   }
-  100% {
+  to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -329,11 +326,9 @@
 @keyframes timeline-content-enter {
   from {
     opacity: 0;
-    transform: translateY(8px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -341,11 +336,11 @@
   position: relative;
   width: 100%;
   min-width: 0;
-  animation: timeline-content-enter 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: timeline-content-enter 240ms ease-out;
 }
 
 .openingDraft {
-  animation: timeline-content-enter 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: timeline-content-enter 240ms ease-out;
 }
 
 .virtualRow {

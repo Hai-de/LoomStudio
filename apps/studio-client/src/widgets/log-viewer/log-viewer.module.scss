@@ -31,3 +31,9 @@
   .toolbar { gap: 8px; }
   .search { flex-basis: calc(100% - 110px); }
 }
+
+:global(html[data-loom-glass-panels='true']) {
+  .viewer {
+    background: transparent;
+  }
+}

@@ -28,7 +28,7 @@ Studio Server 当前创建一个 `@loom-studio/data-engine` SQLite Engine，并�
 迁移版本记录在 `schema_migrations(namespace, version)`，不再使用单一 `PRAGMA user_version`。当前已注册：
 
 - `platform.data-engine@1`：`schema_migrations` 与通用 `changesets` Commit Journal；
-- `platform.documents@1`：`documents`、`document_revisions` 及其索引。
+- `platform.documents@2`：`documents`、`document_revisions` 及其索引与外键约束。
 - `platform.blob-store@1`：`stored_blobs` 与 SHA-256 唯一索引；
 - `platform.asset-store@1`：`source_artifacts`、`media_assets` 及 Blob / owner 索引。
 

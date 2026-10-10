@@ -14,7 +14,7 @@
   display: grid;
   grid-template-rows: minmax(0, 1fr);
   overflow: visible;
-  isolation: isolate;
+  isolation: auto;
   background: transparent;
 }
 

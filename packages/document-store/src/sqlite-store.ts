@@ -77,6 +77,51 @@ const documentMigrations = [
       CREATE INDEX IF NOT EXISTS idx_revisions_document ON document_revisions(document_id, version);
     `),
   },
+  {
+    version: 2,
+    migrate: (database: DatabaseSync) => {
+      const foreignKeys = database.prepare("PRAGMA foreign_key_list('document_revisions')").all() as Array<{
+        table?: string
+        from?: string
+        to?: string
+      }>
+      const hasDocumentForeignKey = foreignKeys.some(foreignKey =>
+        foreignKey.table === 'documents'
+        && foreignKey.from === 'document_id'
+        && foreignKey.to === 'id')
+      if (hasDocumentForeignKey) return
+
+      database.exec(`
+        CREATE TABLE document_revisions_v2 (
+          document_id TEXT NOT NULL,
+          version INTEGER NOT NULL,
+          type TEXT NOT NULL,
+          content_json TEXT NOT NULL,
+          meta_json TEXT NOT NULL,
+          changeset_id TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          created_by_json TEXT NOT NULL,
+          PRIMARY KEY (document_id, version),
+          FOREIGN KEY (document_id) REFERENCES documents(id)
+        );
+
+        INSERT INTO document_revisions_v2 (
+          document_id, version, type, content_json, meta_json,
+          changeset_id, created_at, created_by_json
+        )
+        SELECT
+          document_id, version, type, content_json, meta_json,
+          changeset_id, created_at, created_by_json
+        FROM document_revisions;
+
+        DROP TABLE document_revisions;
+
+        ALTER TABLE document_revisions_v2 RENAME TO document_revisions;
+
+        CREATE INDEX IF NOT EXISTS idx_revisions_document ON document_revisions(document_id, version);
+      `)
+    },
+  },
 ]
 
 export function createSqliteDocumentStore(options: SqliteDocumentStoreOptions): SqliteDocumentStore {

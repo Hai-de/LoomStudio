@@ -1151,3 +1151,9 @@
   align-items: center;
   justify-content: space-between;
 }
+
+:global(html[data-loom-glass-panels='true']) {
+  .panel {
+    background: transparent;
+  }
+}

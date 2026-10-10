@@ -141,3 +141,11 @@
     > span { grid-column: 1 / -1; }
   }
 }
+
+:global(html[data-loom-glass-panels='true']) {
+  .settingsPanel,
+  .settingsPanel .workbench,
+  .detailPane {
+    background: transparent;
+  }
+}

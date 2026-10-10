@@ -433,3 +433,9 @@
   color: var(--loom-danger, #ef4444);
   font-size: 12.5px;
 }
+
+:global(html[data-loom-glass-panels='true']) {
+  .panel {
+    background: transparent;
+  }
+}

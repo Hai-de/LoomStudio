@@ -30,3 +30,9 @@
   width: 12px;
   height: 12px;
 }
+
+:global(html[data-loom-glass-panels='true']) {
+  .inspector {
+    background: transparent;
+  }
+}

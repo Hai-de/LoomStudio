@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { AlignLeft, ChevronDown, ImageOff, PanelRight, PanelRightClose } from 'lucide-react'
 import type { Translator } from '../../shared/i18n/index.js'
 import { StudioPanelRight } from './studio-panel-right.js'
@@ -109,9 +109,6 @@ export function StudioPage(props: StudioPageProps) {
   const [panelMotion, setPanelMotion] = useState<'closing' | 'idle'>('idle')
   const displayedPanelRef = useRef(activePanel)
   const panelCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const previousDockRectRef = useRef<DOMRect | null>(null)
-  const workspaceMotionRef = useRef<HTMLDivElement>(null)
-  const workspaceAnimationRef = useRef<Animation | null>(null)
   const historyMotionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const requestedHistoryDirection = useRef<'back' | 'forward' | undefined>(undefined)
   const assetMetadataOpen = useStudioLayoutStore(state => state.assetMetadataOpen)
@@ -184,7 +181,6 @@ export function StudioPage(props: StudioPageProps) {
 
   useEffect(() => () => {
     if (panelCloseTimerRef.current) clearTimeout(panelCloseTimerRef.current)
-    workspaceAnimationRef.current?.cancel()
     if (historyMotionTimerRef.current) clearTimeout(historyMotionTimerRef.current)
   }, [])
 
@@ -318,31 +314,6 @@ export function StudioPage(props: StudioPageProps) {
     '--loom-shell-rail-preferred-width': `${railPresentation.preferredWidth}px`,
     ...(dockWindowSize && !isDisplayedImmersive ? { width: `${dockWindowSize.width}px` } : {}),
   } as CSSProperties
-  useLayoutEffect(() => {
-    const dock = dockRef.current
-    if (!dock) return
-    const nextRect = dock.getBoundingClientRect()
-    const previousRect = previousDockRectRef.current
-    previousDockRectRef.current = nextRect
-    const workspace = workspaceMotionRef.current
-    workspaceAnimationRef.current?.cancel()
-    workspaceAnimationRef.current = null
-    if (!workspace || !previousRect || effectiveMotion === 'reduce' || windowResize.resizing) return
-    const insets = {
-      top: Math.max(0, previousRect.top - nextRect.top),
-      right: Math.max(0, nextRect.right - previousRect.right),
-      bottom: Math.max(0, nextRect.bottom - previousRect.bottom),
-      left: Math.max(0, previousRect.left - nextRect.left),
-    }
-    if (insets.top === 0 && insets.right === 0 && insets.bottom === 0 && insets.left === 0) return
-    workspaceAnimationRef.current = workspace.animate([
-      { clipPath: `inset(${insets.top}px ${insets.right}px ${insets.bottom}px ${insets.left}px)` },
-      { clipPath: 'inset(0)' },
-    ], {
-      duration: 320,
-      easing: 'cubic-bezier(0.2, 0, 0.2, 1)',
-    })
-  }, [displayedPanel, dockWindowSize, effectiveMotion, isDisplayedImmersive, windowResize.resizing])
   const dockSidebar = (
     <div className={styles.dockSidebar}>
       <header className={styles.dockHeader} data-loom-component="page-header">
@@ -556,7 +527,7 @@ export function StudioPage(props: StudioPageProps) {
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
         >
-          <div ref={workspaceMotionRef} className={styles.workspaceMotionClip}>
+          <div className={styles.workspaceMotionClip}>
             <div className={styles.workspaceShellLayout} data-rail-compact={railPresentation.compact}>
               <div className={styles.workspaceRail}>{dockSidebar}</div>
               <div className={styles.workspacePanel} hidden={displayedPanel === null}
