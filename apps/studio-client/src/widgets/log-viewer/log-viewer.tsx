@@ -66,12 +66,14 @@ export function LogViewer(props: {
   }, [])
 
   const handleUnreadRecords = useCallback((items: LogRecord[]) => {
-    const matching = filterLogRecords(items, { query, level, technical, runId })
+    const matching = filterLogRecords(items, { query, level, technical, runId, packageId, moduleId, event: eventFilter })
     setUnread(current => ({
       count: current.count + matching.length,
       level: moreSevereLogLevel(current.level, highestLogLevel(matching)),
     }))
-  }, [query, level, technical, runId])
+  }, [query, level, technical, runId, packageId, moduleId, eventFilter])
+
+  useEffect(() => { setUnread({ count: 0 }) }, [query, level, technical, runId, packageId, moduleId, eventFilter])
 
   const current = useLogFeed({
     active: props.active && !historyMode, source: historyMode ? 'all' : source, api: props.api, clientLogs: props.clientLogs, packageId,
@@ -97,8 +99,10 @@ export function LogViewer(props: {
   }, [props.active, source, resetFollowingLatest])
 
   const visibleRecords = useMemo(
-    () => filterLogRecords(records, { query: historyMode ? '' : query, level: historyMode ? 'all' : level, technical, runId })
-      .filter(record => (!packageId || record.extension?.packageId === packageId) && (historyMode || !moduleId || record.extension?.moduleId === moduleId) && (historyMode || !eventFilter || record.event === eventFilter)),
+    () => filterLogRecords(records, {
+      query: historyMode ? '' : query, level: historyMode ? 'all' : level, technical, runId, packageId,
+      moduleId: historyMode ? undefined : moduleId, event: historyMode ? undefined : eventFilter,
+    }),
     [records, query, level, technical, runId, packageId, moduleId, eventFilter, historyMode],
   )
   // Identity survives polling and filtering; eviction cannot transfer an open row to another event.

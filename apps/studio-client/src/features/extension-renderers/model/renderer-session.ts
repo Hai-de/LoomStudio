@@ -56,9 +56,9 @@ export function createRendererSessionHost(rendererHost?: ClientRendererHost): Re
         }
       })
       const sessionId = globalThis.crypto?.randomUUID?.() ?? `renderer-session-${Date.now()}-${Math.random().toString(16).slice(2)}`
-      const separator = registration.frame.src.includes('?') ? '&' : '?'
-      const url = `${registration.frame.src}${separator}loomRendererSession=${encodeURIComponent(sessionId)}`
-      const opened = typeof window === 'undefined' ? undefined : window.open(url, '_blank') ?? undefined
+      const url = typeof window === 'undefined' ? undefined : new URL(registration.frame.src, window.location.href)
+      url?.searchParams.set('loomRendererSession', sessionId)
+      const opened = url ? window.open(url.href, '_blank') ?? undefined : undefined
       if (opened) opened.opener = null
       const channel = typeof BroadcastChannel === 'undefined' ? undefined : new BroadcastChannel(`loom-renderer:${sessionId}`)
       const session: RendererSessionSummary & { channel?: BroadcastChannel; window?: Window } = {

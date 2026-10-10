@@ -48,6 +48,8 @@ export function useStudioState(transportLogger: Logger) {
     extensions: api.extensions,
     extensionRuntime: api.extensionRuntime,
     states: api.states,
+    timelineExtensions: api.timelineExtensions,
+    extensionInstallations: api.extensionInstallations,
     textTransforms: api.textTransforms,
   }), [api])
   const editHistory = useEditHistory({ revertChangeset: api.history.revert })
@@ -306,6 +308,7 @@ export function useStudioState(transportLogger: Logger) {
     updateCardMedia: cardsState.updateCardMedia,
     updateCardProfile: cardsState.updateCardProfile,
     updateCardStateConfig: cardsState.updateCardStateConfig,
+    updateCardExtensionAdoptions: cardsState.updateCardExtensionAdoptions,
     updateCardMacros: cardsState.updateCardMacros,
     macroInspection: macroPreview.key === macroKey ? macroPreview.inspection : undefined,
     macroInspectionLoading: macroPreview.key !== macroKey || macroPreview.loading || macroSelection.loading,
@@ -322,6 +325,7 @@ export function useStudioState(transportLogger: Logger) {
     detachCardExtensionPackage: cardsState.detachExtensionPackage,
     importCards: cardsState.importCards,
     exportCard: cardsState.exportCard,
+    forkCard: cardsState.forkCard,
     directoryApi: cardsState.directoryApi,
     // narrative
     narrativeTimeline: narrativeRuntime.timeline,

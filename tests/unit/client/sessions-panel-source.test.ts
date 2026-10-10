@@ -10,6 +10,11 @@ const hooks = vi.hoisted(() => ({ cursor: 0, values: [] as unknown[], effects: [
 vi.mock('react', async importOriginal => ({
   ...await importOriginal<typeof import('react')>(),
   useMemo: (compute: () => unknown) => compute(),
+  useRef: (initial: unknown) => {
+    const index = hooks.cursor++
+    if (!(index in hooks.values)) hooks.values[index] = { current: initial }
+    return hooks.values[index]
+  },
   useState: (initial: unknown) => {
     const index = hooks.cursor++
     if (!(index in hooks.values)) hooks.values[index] = typeof initial === 'function' ? initial() : initial
@@ -112,6 +117,74 @@ function confirmDeletion(f: ReturnType<typeof fixture>) {
 }
 
 describe('Session panel preview source isolation', () => {
+  it.each(['archive', 'chat'] as const)('retains a committed %s and retries only its post-import completion', async kind => {
+    const f = fixture('timeline')
+    const finish = vi.fn().mockRejectedValueOnce(new Error('Catalog offline')).mockResolvedValue(undefined)
+    f.props.onArchiveImported = finish
+    const imported = { timelineId: 'imported', unknownParticipantNamespaces: ['missing-extension'], participantFailures: [] }
+    const importArchive = vi.spyOn(f.a.api.narratives, 'importArchive').mockResolvedValue(imported as never)
+    const create = vi.spyOn(f.a.api.narratives, 'create').mockResolvedValue({ timeline: { id: 'imported' } } as never)
+    vi.spyOn(f.a.api.extensionRuntime, 'call').mockResolvedValue({ title: 'Imported', messages: [{ content: 'Hello' }] })
+    const detail = f.render().find(element => 'nodes' in element.props)!
+    for (let i = 0; i < 4; i++) await Promise.resolve()
+    hooks.values = []; hooks.effects = []
+    const renderDetail = () => {
+      hooks.cursor = 0
+      return elements((detail.type as (props: Record<string, unknown>) => unknown)({
+        ...detail.props, card: { id: 'card', name: 'Character' },
+      }))
+    }
+    const input = renderDetail().find(element => element.type === 'input'
+      && element.props.accept === (kind === 'archive' ? 'application/json,.json' : '.jsonl,application/x-ndjson'))!
+    ;(input.props.onChange as (event: unknown) => void)({ target: { files: [new File(['{}'], 'archive.json')], value: 'archive.json' } })
+    await vi.waitFor(() => expect(renderDetail().find(element => element.props.role === 'alert')?.props.children)
+      .toBe('Import completed, but refresh or navigation failed: Catalog offline'))
+    const notice = renderDetail().find(element => element.props.role === 'status' && text(element.props.children).includes('imported'))!
+    expect(text(notice.props.children)).toContain(kind === 'archive' ? 'missing-extension' : 'Imported 1 ST messages')
+    const retry = renderDetail().find(element => text(element.props.children) === 'Refresh and open the imported Timeline')!
+    ;(retry.props.onClick as () => void)()
+    await vi.waitFor(() => expect(finish).toHaveBeenCalledTimes(2))
+    expect(finish.mock.calls[1]?.[0]).toBe('imported')
+    expect(importArchive).toHaveBeenCalledTimes(kind === 'archive' ? 1 : 0)
+    expect(create).toHaveBeenCalledTimes(kind === 'chat' ? 1 : 0)
+  })
+
+  it.each(['timeline', 'session'] as const)('refreshes the same %s after its content revision changes', async kind => {
+    const f = fixture(kind)
+    f.render()
+    await Promise.resolve()
+    expect(f.preview()).toEqual(kind === 'timeline' ? f.a.nodes : f.a.entries)
+    if (kind === 'timeline') {
+      f.props.timelines = [{ ...timeline, activeBranchId: 'other-branch', updatedAt: 'later' }]
+      f.a.getPage.mockResolvedValueOnce(f.b.page)
+    } else {
+      f.props.allAgentSessions = [{ ...session, entryCount: 2, updatedAt: 'later' }]
+      f.a.getTranscript.mockResolvedValueOnce(f.b.transcript)
+    }
+    expect(f.preview(f.render())).toEqual([])
+    await Promise.resolve()
+    expect(f.preview()).toEqual(kind === 'timeline' ? f.b.nodes : f.b.entries)
+    if (kind === 'timeline') expect(f.a.getPage).toHaveBeenLastCalledWith(expect.objectContaining({ branchId: 'other-branch' }))
+  })
+
+  it.each(['timeline', 'session'] as const)('exposes %s preview errors and retries only on request', async kind => {
+    const f = fixture(kind)
+    if (kind === 'timeline') f.a.getPage.mockRejectedValueOnce(new Error('Preview unavailable'))
+    else f.a.getTranscript.mockRejectedValueOnce(new Error('Preview unavailable'))
+    const detail = () => f.render().find(element => 'onRetryPreview' in element.props)!
+    expect(detail().props.previewLoading).toBe(true)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(detail().props.previewError).toBe('Preview unavailable')
+    detail()
+    expect(kind === 'timeline' ? f.a.getPage : f.a.getTranscript).toHaveBeenCalledOnce()
+    ;(detail().props.onRetryPreview as () => void)()
+    detail()
+    await Promise.resolve()
+    expect(f.preview()).toEqual(kind === 'timeline' ? f.a.nodes : f.a.entries)
+    expect(detail().props.previewError).toBeUndefined()
+  })
+
   it('delegates creation to the shared dialog and opens its created Session', () => {
     const dispatchEvent = vi.fn()
     vi.stubGlobal('window', { dispatchEvent })
@@ -127,7 +200,7 @@ describe('Session panel preview source isolation', () => {
       if (!button) throw new Error(`Missing ${label}`)
       ;(button.props.onClick as () => void)()
     }
-    click('新建 Agent 对话')
+    click(f.props.t('agent.createSession'))
     const createDialog = () => f.render().find(element => element.type === AgentSessionCreateDialog)
     const dialog = createDialog()!
     expect(dialog.props.presets).toBe(f.props.agentPresets)

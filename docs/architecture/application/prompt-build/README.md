@@ -10,13 +10,24 @@ PromptBuild 是 Studio Application 中负责把领域数据投影为模型输入
 领域 Stores / Runtime Sources
   -> PromptBuild source preparation
   -> Composition data model
-  -> Application DFS 编译器
+  -> 可选的 prepare / 有序 render 加工
+  -> Application DFS 编排与消息生成
   -> Compiled Prompt / Provider Messages
 ```
 
 PromptBuild 拥有 Card、Setting Layer、Narrative Timeline、Ordered Tree、Anchor、Slot、Activation 和 Caged Depth 等领域语义。Loom Core 只执行 Fragment pipeline，不理解这些字段。
 
-当前 Agent Turn 将 Preset 有序树、该预设显式采用的 Settings、可选的当前角色 Settings、Agent Session History 和当前输入准备为 SourceNode / PromptContribution，再直接调用 Application 的 `compilePromptDataModel()`。全局 Setting Mount 注册不代表默认写入所有 Agent。Runtime 默认使用 `@chat.narrative`、`@chat.session`、`@chat.input` 等 Anchor。该路径没有执行 Core 的 `materialize -> order -> emit` Pass，返回的 `core-compact-1` Trace 也只有最小摘要，`executions` 为空。实际调用与设计边界见 [Studio 集成](loom-core/studio-integration.md)。
+当前 Agent Turn 将 Preset 有序树、该预设显式采用的 Settings、可选的当前角色 Settings、Agent Session History 和当前输入准备为 SourceNode / PromptContribution，再通过 Application 加工与 DFS 编排生成消息。全局 Setting Mount 注册不代表默认写入所有 Agent。Runtime 默认使用 `@chat.narrative`、`@chat.session`、`@chat.input` 等 Anchor。该路径没有执行 Core 的 `materialize -> order -> emit` Pass；Trace 仍使用兼容的 `core-compact-1` 版本，但已注册的作者正文处理器会留下真实 prepare/render 执行记录。未使用处理器的构建不产生这些记录。
+
+## 作者正文加工
+
+扩展通过 `ctx.prompt.registerProcessor()` 注册包命名空间下的处理器（例如 `sillytavern.importer/ejs`），需声明 `prompt.process`。Preset / Setting Entry 用 `capabilities.processorId` 显式采用；安装扩展不会自动执行任意文本。Host 跟踪注销、取消和 Card 安装作用域；只有声明 `state.read` 的模块才收到当前 Timeline / Branch 的 State 快照。注册代码仍属于可信扩展代码，这个接口本身不是作者脚本沙箱。
+
+每次构建创建独立会话。`prepare` 接收该处理器的候选条目，只能返回这些条目的正文和本轮激活修改；`render` 按 DFS / Anchor 深度确定的发送顺序，对实际使用的条目执行一次。持久 `enabled: false` 不可被激活补丁复活。带处理器的正文在语言处理后才展开普通宏，加工结果同步用于消息和工具上下文；原始资源不改写。Native Session 消息、Tool Result 和运行时贡献不能注册为作者正文。缺失处理器或处理失败会阻断构建，而不是将原始模板静默发给模型。
+
+Agent Preview、新 Run 和 `ctx.prompt.build` 均接入该流程。独立扩展构建是无 Timeline State 的 preview 上下文，不隐式读取“当前聊天”；需要 State 的处理器应明确拒绝无上下文调用。工具后续 Step 不重建模板。处理过的来源与投影随 Run checkpoint 保存，热/冷 Resume 都复用已接受消息与加工快照，不重新运行处理器。语言引擎属于扩展，平台不理解 EJS/MVU 标签。
+
+完整无工具助手回复另经 `ctx.state.registerContentHandler` 的采用/作用域过滤；它不是 Prompt pass，也不处理推理、工具参数或工具结果。处理器只计算已声明 JSON Pointer 子树的替换值，由 Runtime 使用当前 Revision CAS 提交；需要 `state.processContent`、`state.read` 和 `state.write`。长度/暂停续写先合并。已接受操作写入 `content` checkpoint 后才提交 State，恢复按原幂等键重试同一操作，不重新调用模型或处理器。该提交不要求新增 Narrative Node，也不代表整组 Node/State/Transcript 跨模块事务。
 
 Setting Entry 的 `enabled` 是持久化作者配置，Activation 则在每次 PromptBuild 中重新求值；inactive Entry 不进入本轮 Provider Message，但仍可进入解释视图与受控 Agent Context Scope。`read_context` 可以把 Scope 中一个条目作为非持久化 Fresh Context Mount 返回：Runtime 只在下一次 Provider Step 追加该内容，调用后自动卸载，不写入 `global_setting_mounts`、Agent Session 或 Prompt Resource。Settled Mount、TTL、token budget、pin/release 与跨 Step 长期保留尚未实现。
 

@@ -35,9 +35,11 @@ beforeEach(() => { hooks.cursor = 0; hooks.values = []; hooks.dispatch.mockClear
 afterEach(() => { vi.unstubAllGlobals() })
 
 describe('Card operation failure propagation', () => {
-  it.each(['list', 'related'] as const)('retains a committed import when %s refresh fails', async stage => {
+  it.each([
+    ['import', 'list'], ['import', 'related'], ['fork', 'list'], ['fork', 'related'],
+  ] as const)('retains a committed %s when %s refresh fails', async (operation, stage) => {
     const card: Card = {
-      id: 'imported-card', version: 3, name: 'Imported',
+      id: 'imported-card', artifactId: 'work-imported', version: 3, name: 'Imported',
       opening: { entries: [] }, settingLayer: { entries: [] },
       createdAt: '2026-09-23', updatedAt: '2026-09-23',
     }
@@ -47,7 +49,8 @@ describe('Card operation failure propagation', () => {
       : vi.fn().mockResolvedValue({ cards: [card] })
     const onCardsImported = vi.fn().mockRejectedValue(failure)
     const update = vi.fn().mockResolvedValue({ card: { ...card, version: 4 }, mutation: { changesetId: 'save' } })
-    const api = { cards: { list, update } } as unknown as StudioApi
+    const fork = vi.fn().mockResolvedValue({ card })
+    const api = { cards: { list, update, fork } } as unknown as StudioApi
     const fetch = vi.fn(async () => new Response(JSON.stringify({ card })))
     vi.stubGlobal('fetch', fetch)
     const render = () => {
@@ -57,18 +60,38 @@ describe('Card operation failure propagation', () => {
         runAction: action => action(),
       })
     }
-    await expect(render().importCards([new File(['image'], 'card.png')])).rejects.toBe(failure)
+    const pending = operation === 'import'
+      ? render().importCards([new File(['image'], 'card.png')])
+      : render().forkCard('original', 1)
+    if (operation === 'import') await expect(pending).rejects.toThrow('Imported characters are preserved: Refresh failed')
+    else await expect(pending).rejects.toBe(failure)
     const current = render()
     expect(current.cards).toEqual([expect.objectContaining({ id: card.id, version: card.version })])
     expect(current.selectedCardId).toBe(card.id)
     expect(current.selectedCardDetails).toEqual(card)
     expect(current.cardDraft.name).toBe(card.name)
-    expect(fetch).toHaveBeenCalledOnce()
+    if (operation === 'import') expect(fetch).toHaveBeenCalledOnce()
+    else expect(fork).toHaveBeenCalledExactlyOnceWith({ cardId: 'original', expectedVersion: 1 })
     list.mockResolvedValue({ cards: [{ ...card, version: 4 }] })
     await current.updateCard({ preventDefault() {} } as FormEvent)
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ cardId: card.id, expectedVersion: 3 }))
   })
 
+  it('preserves per-file failures alongside post-import refresh failures', async () => {
+    const card: Card = { id: 'imported', version: 1, name: 'Imported', opening: { entries: [] }, settingLayer: { entries: [] }, createdAt: '', updatedAt: '' }
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ card })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: 'Invalid card' } }), { status: 400 })))
+    const api = { cards: { list: vi.fn().mockRejectedValue(new Error('Refresh failed')) } } as unknown as StudioApi
+    const render = () => {
+      hooks.cursor = 0
+      return useCards({ api, initialCardName: '', recordEdit: vi.fn(), t: createTranslator('en-US'), runAction: action => action() })
+    }
+    await expect(render().importCards([new File([''], 'good.png'), new File([''], 'bad.png')])).rejects.toThrow(
+      'bad.png: Invalid card\nCatalog refresh after import failed. Imported characters are preserved: Refresh failed',
+    )
+    expect(render().cards.map(item => item.id)).toContain('imported')
+  })
   it.each(['a', 'b'] as const)('invalidates a pending selection only when its card %s was deleted', async deletedId => {
     const card = (id: string): Card => ({
       id, name: id, version: 1, opening: { entries: [] }, settingLayer: { entries: [] },
@@ -101,7 +124,7 @@ describe('Card operation failure propagation', () => {
     else expect(current.selectedCardDetails?.id).toBe('a')
   })
 
-  it.each(['create', 'import'] as const)('does not replace a later selection when %s finishes', async operation => {
+  it.each(['create', 'import', 'fork'] as const)('does not replace a later selection when %s finishes', async operation => {
     const card = (id: string): Card => ({
       id, name: id, version: 1, opening: { entries: [] }, settingLayer: { entries: [] },
       createdAt: '2026-09-23', updatedAt: '2026-09-23',
@@ -112,6 +135,7 @@ describe('Card operation failure propagation', () => {
     const api = {
       cards: {
         create: async () => { await pendingWrite; return { card: created, mutation: { changesetId: 'commit' } } },
+        fork: async () => { await pendingWrite; return { card: created } },
         get: async (id: string) => ({ card: card(id) }),
         list: async () => ({ cards: [card('other'), created] }),
       },
@@ -129,6 +153,7 @@ describe('Card operation failure propagation', () => {
     }
     const pending = operation === 'create'
       ? render().createCard()
+      : operation === 'fork' ? render().forkCard('original', 1)
       : render().importCards([new File(['image'], 'card.png', { type: 'image/png' })])
     await render().selectCard('other')
     render().setCardDraft({ name: 'Other draft', userName: '', description: '' })

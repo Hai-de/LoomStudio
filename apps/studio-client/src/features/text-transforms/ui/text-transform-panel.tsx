@@ -100,6 +100,8 @@ export function useTextTransformController(props: TextTransformProps) {
   const [selectedExtractorId, setSelectedExtractorId] = useState('')
   const [ruleText, setRuleText] = useState(defaultRuleText)
   const [extractorText, setExtractorText] = useState(defaultExtractorText)
+  const ruleDraftRef = useRef<{ version?: number } | undefined>(undefined)
+  const extractorDraftRef = useRef<{ version?: number } | undefined>(undefined)
   const [phase, setPhase] = useState<TextTransformPhase>('display')
   const [busy, setBusy] = useState(false)
   const inspectionRequest = useRef(0)
@@ -202,6 +204,8 @@ export function useTextTransformController(props: TextTransformProps) {
     setSelectedExtractorId('')
     setRuleText(defaultRuleText)
     setExtractorText(defaultExtractorText)
+    ruleDraftRef.current = undefined
+    extractorDraftRef.current = undefined
     setInspection(undefined)
     setTraceEntryId('')
     inspectionRequest.current += 1
@@ -391,6 +395,7 @@ export function useTextTransformController(props: TextTransformProps) {
     setSelectedTarget({ kind: 'rule', id })
     setMobilePane('detail')
     const item = rules.find(rule => rule.id === id)
+    ruleDraftRef.current = { version: item?.version }
     setRuleText(item ? JSON.stringify(toRuleDraft(item), null, 2) : defaultRuleText)
   }
 
@@ -410,6 +415,7 @@ export function useTextTransformController(props: TextTransformProps) {
   }, [props.initialExtractorId, extractors])
 
   function startNewRule() {
+    ruleDraftRef.current = {}
     const id = `rule-${Date.now().toString(36)}`
     setSelectedRuleId(id)
     setSelectedTarget({ kind: 'rule', id })
@@ -422,10 +428,12 @@ export function useTextTransformController(props: TextTransformProps) {
     setSelectedTarget({ kind: 'extractor', id })
     setMobilePane('detail')
     const item = extractors.find(extractor => extractor.id === id)
+    extractorDraftRef.current = { version: item?.version }
     setExtractorText(item ? JSON.stringify(toExtractorDraft(item), null, 2) : defaultExtractorText)
   }
 
   function startNewExtractor() {
+    extractorDraftRef.current = {}
     const id = `extractor-${Date.now().toString(36)}`
     setSelectedExtractorId(id)
     setSelectedTarget({ kind: 'extractor', id })
@@ -435,6 +443,8 @@ export function useTextTransformController(props: TextTransformProps) {
 
   async function saveRule() {
     if (!isCurrentCatalog() || ruleWriteRef.current?.scope === catalogScope) return
+    const baseline = ruleDraftRef.current
+    if (!baseline) return
     const task = { scope: catalogScope, id: selectedRuleId }
     ruleWriteRef.current = task
     setRuleWrite(task)
@@ -443,9 +453,10 @@ export function useTextTransformController(props: TextTransformProps) {
     try {
       const existing = rules.find(rule => rule.id === selectedRuleId)
       const draft = { ...(JSON.parse(ruleText) as TextTransformRuleDraft), owner: existing?.owner ?? editingOwner }
-      const result = await props.api.upsertRule({ ruleId: selectedRuleId, ...(existing ? { expectedVersion: existing.version } : {}), rule: draft })
+      const result = await props.api.upsertRule({ ruleId: selectedRuleId, expectedVersion: baseline.version, rule: draft })
       props.onRuntimeChanged?.()
       if (!isCurrentCatalog()) return
+      if (ruleDraftRef.current === baseline) baseline.version = result.rule.version
       setRules(current => [...current.filter(rule => rule.id !== result.rule.id), result.rule])
       setSavedRule({ scope: catalogScope, id: selectedRuleId, text: ruleText })
       await refresh()
@@ -466,10 +477,15 @@ export function useTextTransformController(props: TextTransformProps) {
   }
 
   async function saveExtractor() {
+    const baseline = extractorDraftRef.current
+    if (!isCurrentCatalog() || !baseline) return
     try {
       const existing = extractors.find(item => item.id === selectedExtractorId)
       const draft = { ...(JSON.parse(extractorText) as TextExtractorDraft), owner: existing?.owner ?? editingOwner }
-      await props.api.upsertExtractor({ extractorId: selectedExtractorId, ...(existing ? { expectedVersion: existing.version } : {}), extractor: draft })
+      const result = await props.api.upsertExtractor({ extractorId: selectedExtractorId, expectedVersion: baseline.version, extractor: draft })
+      if (!isCurrentCatalog()) return
+      if (extractorDraftRef.current === baseline) baseline.version = result.extractor.version
+      setExtractors(current => [...current.filter(item => item.id !== result.extractor.id), result.extractor])
       await refresh()
     } catch (cause) { setError(readError(cause)) }
   }

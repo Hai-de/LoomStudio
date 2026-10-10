@@ -226,4 +226,22 @@ describe('Context Asset editing drafts', () => {
     expect(state.render().draftResourceIds).toEqual([])
     expect(state.render().nodes[0]?.children?.[0]?.body).toBe('Retained')
   })
+
+  it('updates the root node label when renaming a resource root asset', async () => {
+    const updateAsset = vi.fn().mockResolvedValue({
+      resource: {
+        ...resource(2),
+        rootNode: { ...resource().rootNode, label: 'Renamed Root' },
+      },
+      mutation: { changesetId: 'rename' },
+    })
+    const state = fixture(updateAsset)
+    await state.render().updateContextAsset('root', { label: 'Renamed Root' })
+    expect(updateAsset).toHaveBeenCalledWith(expect.objectContaining({
+      resourceId: 'resource',
+      assetId: 'root',
+      label: 'Renamed Root',
+    }))
+    expect(state.render().nodes[0]?.label).toBe('Renamed Root')
+  })
 })

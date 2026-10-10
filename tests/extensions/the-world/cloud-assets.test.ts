@@ -40,6 +40,8 @@ describe('The World cloud asset', () => {
         port, 'application.listExtensionInstallations', {},
       )
       expect(installed.installations).toEqual([expect.objectContaining({ packageId: 'official.the-world', target: { kind: 'global' } })])
+      const catalog = await callRpc<{ items: Array<{ packageId: string; participation?: string }> }>(port, 'extensions.listPackages', {})
+      expect(catalog.items.find(item => item.packageId === 'official.the-world')?.participation).toBe('timeline')
       const manifest = JSON.parse(await readFile(new URL('../../../extensions/the-world/manifest.json', import.meta.url), 'utf8'))
       const filesBase = `/extensions/${manifest.id}/${manifest.version}/files`
       const cloud = await authenticatedFetch(port, `${filesBase}/assets/images/cloud.png`)

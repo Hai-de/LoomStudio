@@ -668,70 +668,8 @@
   }
 }
 
-.mutationApprovalBackdrop {
-  position: absolute;
-  inset: 0;
-  z-index: 20;
-  display: grid;
-  place-items: center;
-  padding: 16px;
-  background: color-mix(in srgb, black 38%, transparent);
-}
-
 .mutationApproval {
-  width: min(760px, 100%);
-  max-height: min(680px, 90%);
-  display: grid;
-  gap: 12px;
-  overflow: auto;
-  border: 1px solid var(--loom-color-border);
-  border-radius: var(--loom-radius-card);
-  padding: 16px;
-  color: var(--loom-color-text);
-  background: var(--loom-color-surface);
-  box-shadow: 0 18px 48px color-mix(in srgb, black 35%, transparent);
-}
-
-.mutationApprovalHeader {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-
-  strong,
-  span {
-    display: block;
-  }
-
-  span {
-    margin-top: 4px;
-    color: var(--loom-color-text-subtle);
-    font-size: var(--loom-font-size-1);
-    overflow-wrap: anywhere;
-  }
-}
-
-.iconButton {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border: 0;
-  border-radius: var(--loom-radius-control);
-  color: var(--loom-color-text-subtle);
-  background: transparent;
-  cursor: pointer;
-
-  &:hover,
-  &:focus-visible {
-    color: var(--loom-color-text);
-    background: color-mix(in srgb, var(--loom-color-accent) 15%, transparent);
-  }
-
-  svg {
-    width: 16px;
-    height: 16px;
-  }
+  width: min(760px, calc(100vw - 32px));
 }
 
 .mutationApprovalDiff {
@@ -779,28 +717,6 @@
   padding: 8px 10px;
   color: var(--loom-color-text);
   background: var(--loom-color-surface-raised);
-}
-
-.mutationApprovalActions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-
-  button {
-    min-width: 72px;
-    border: 1px solid var(--loom-color-border);
-    border-radius: var(--loom-radius-control);
-    padding: 7px 12px;
-    color: var(--loom-color-text);
-    background: var(--loom-color-surface-raised);
-    cursor: pointer;
-  }
-
-  button:last-child {
-    border-color: var(--loom-color-accent);
-    color: var(--loom-color-accent-contrast);
-    background: var(--loom-color-accent);
-  }
 }
 
 @media (max-width: 820px) {

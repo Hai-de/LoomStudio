@@ -14,7 +14,7 @@ type ExtensionStorageScope =
   | { kind: 'agent-session'; agentSessionId: string }
 ```
 
-Card 既是可移植内容的分发 Carrier，也可作为作者默认配置的持久 Scope；创建新 Timeline 时是否继承这些默认值由 Extension 自己决定。Narrative Node、Agent Message、Asset 和 State Path 是 Record 的绑定目标，不是独立存储桶。State 继续承载跨 Prompt、UI、脚本和回滚共享的角色或世界语义；Extension 私有配置与记录不写入 State。
+Card 既是可移植内容的分发 Carrier，也可作为作者默认配置的持久 Scope；普通私有配置的复制由 Extension 决定，扩展采用与 State 初始化则由平台统一管理，见 [Timeline 扩展采用](timeline-participation.md)。Narrative Node、Agent Message、Asset 和 State Path 是 Record 的绑定目标，不是独立存储桶。State 继续承载跨 Prompt、UI、脚本和回滚共享的角色或世界语义；Extension 私有配置与记录不写入 State。
 
 Secret 不得进入 Extension Config、Record、Portable Payload 或 Card Bundle。这是数据合同与作者责任边界：Core 不尝试从任意字符串中猜测 API Key；SDK 不提供把 Secret Store 内容直接导出为上述数据的能力。
 
@@ -42,6 +42,9 @@ type ExtensionEntityRef =
 Record list 可以按 Scope、Record Type 和 Binding 查询。Host 强制 Package owner，拒绝跨 Package get/update/delete。Studio Server 在写入前验证 Timeline、Agent Session、Node、Message 与 Asset 的真实存在及归属关系；State Path 验证所属 Timeline 与非空路径，但不要求目标字段已经存在，以保留插件声明未来状态字段的能力。
 
 Config 与 Record 分别保存为 `airp.extensionConfig` 和 `airp.extensionRecord` Document。它们使用 Document Revision、Tombstone 与 Changeset，不另建 Extension 数据库或通用 Graph Store。首版按 Package/Document Type 分页读取，再在内存中过滤 Scope、Record Type 与 Binding；出现实际规模压力后再增加窄索引。
+
+声明 Timeline 参与的包访问故事 Scope/Binding 必须位于对应 `ctx.timeline.run`，列表必须提供 Scope；
+同一 Data Engine 的受管写入在实际事务内复核原始采用代次。全局配置的非故事编辑不受某条 Timeline 暂停影响。
 
 Studio Client Host 通过 `application.listExtensionConfigs/getExtensionConfig/upsertExtensionConfig` 管理声明式设置，Client Extension 则只获得自动绑定当前 Package 的 `ctx.configs.list/get/upsert/subscribe`。Client 更新同样要求现有 Document Version；`subscribe` 由已提交的 `extensions.data.changed` 触发重新读取并比较版本，不接收 Host 表单 draft。
 

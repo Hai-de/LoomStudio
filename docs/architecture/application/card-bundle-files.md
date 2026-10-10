@@ -66,6 +66,12 @@ assets/background.webp
 
 ## 编辑与往返
 
+`artifactId` 是作品的公共身份，持久化在 Card Source 并由 Card 查询、列表和导出返回；本地 `cardId` 仅标识当前工作区中的记录。同一包再次导入会创建新的本地 Card，但保留 `artifactId`，因此作品 ID 不具有本地唯一性。普通编辑和目录 Apply 不改变作品身份。
+
+角色面板的“派生为新作品”通过 `application.forkCard` 检查源 Card 版本，再复用导出/导入链路创建新 Card、新 `artifactId` 和 `derivedFrom.artifactId`。它不修改原卡、不复制 Timeline 运行数据，也不承诺所有资源获得独立身份；资源沿用现有导入规则。派生来源随目录、ZIP、PNG 往返，不能指向自己的作品 ID。这些字段不是作者认证，首版不提供签名或身份注册中心。派生与普通导入一样暂不接入界面撤销历史。
+
+本轮开发不迁移此前缺少源 `artifactId` 的开发数据库记录；此类记录导出明确报错，不使用本地 `cardId` 伪造公共身份。
+
 下载文件名使用 `.loomcard.zip`，可用普通解压工具直接打开。编辑 Markdown、JSON 或脚本后，重新压缩包根下的文件，保证 `manifest.json` 位于 ZIP 根，再导入 Studio。导入接受 `.loomcard.zip`、普通 `.zip` 和旧 `.loomcard`。ZIP 工具生成的显式目录项与流式数据描述符受支持。已有 `/export.loomcard` HTTP 路径保留，下载文件名由 Content-Disposition 与 Client 统一使用新后缀。
 
 移动或重命名文件时，要同步更新对应索引路径；不要为文件重命名改领域 ID。导入仍是现有的创建新 Card 操作，不是覆盖原 Card 的 Apply。Prompt 节点与已有数据发生冲突时继续使用既有导入重映射语义。

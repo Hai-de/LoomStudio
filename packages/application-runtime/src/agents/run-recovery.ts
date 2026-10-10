@@ -1,10 +1,11 @@
 import { isRecord, type ChatMessage, type JsonObject } from '@loom-studio/shared'
-import type { AgentStore, AgentTranscriptEntry } from '@loom-studio/application-data'
-import type { InvokeAgentTurnInput, ProviderModelSelection } from '../types.js'
+import type { AgentStore, AgentTranscriptEntry, AgentTranscriptEntryData } from '@loom-studio/application-data'
+import type { InvokeAgentTurnInput, ProviderModelSelection, ApplyStateMutationInput, GatewayChatResult, TimelineExtensionLease } from '../types.js'
+import type { ProcessedPromptSnapshot } from '../prompt/process-prompt.js'
 
 export type AgentRunRecoveryCheckpoint = {
   version: 1
-  phase: 'provider' | 'tools'
+  phase: 'provider' | 'tools' | 'content'
   executor: { pid: number; id: string }
   request: InvokeAgentTurnInput
   model: ProviderModelSelection
@@ -13,6 +14,16 @@ export type AgentRunRecoveryCheckpoint = {
   userEntryId: string
   nextProviderStep: number
   partialEntryId?: string
+  processedPrompt?: ProcessedPromptSnapshot
+  promptExtensionLeases: TimelineExtensionLease[]
+  pendingAssistantContent?: string
+  acceptedContent?: {
+    mutation: ApplyStateMutationInput
+    extensionLeases: TimelineExtensionLease[]
+    entries: AgentTranscriptEntryData[]
+    providerResult: GatewayChatResult
+    diagnostics?: string[]
+  }
 }
 
 export type AgentRunRecovery = {
@@ -58,7 +69,7 @@ function assertExecutorStopped(executor: AgentRunRecoveryCheckpoint['executor'])
 }
 
 function parseCheckpoint(value: JsonObject): AgentRunRecoveryCheckpoint {
-  if (!isRecord(value) || value.version !== 1 || !['provider', 'tools'].includes(String(value.phase))
+  if (!isRecord(value) || value.version !== 1 || !['provider', 'tools', 'content'].includes(String(value.phase))
     || !isRecord(value.executor) || !Number.isSafeInteger(value.executor.pid) || Number(value.executor.pid) <= 0
     || typeof value.executor.id !== 'string' || !value.executor.id
     || !isRecord(value.request) || typeof value.request.agentSessionId !== 'string' || typeof value.request.input !== 'string'
@@ -72,6 +83,58 @@ function parseCheckpoint(value: JsonObject): AgentRunRecoveryCheckpoint {
     throw recoveryError('checkpoint_invalid', 'Agent recovery checkpoint is incomplete or unsupported')
   }
   const target = value.request.narrativeTarget
+  if (!Array.isArray(value.promptExtensionLeases) || !value.promptExtensionLeases.every(lease =>
+    isRecord(lease) && isRecord(target) && lease.timelineId === target.timelineId
+    && typeof lease.installationId === 'string' && lease.installationId.length > 0
+    && typeof lease.generation === 'string' && lease.generation.length > 0
+    && Number.isSafeInteger(lease.installationVersion) && Number(lease.installationVersion) > 0)) {
+    throw recoveryError('checkpoint_invalid', 'Invalid Prompt extension dependencies')
+  }
+  if (value.pendingAssistantContent !== undefined && typeof value.pendingAssistantContent !== 'string')
+    throw recoveryError('checkpoint_invalid', 'Pending assistant content must be text')
+  if (value.phase === 'content') {
+    const accepted = value.acceptedContent
+    if (!isRecord(accepted) || !isRecord(accepted.mutation)
+      || !isRecord(accepted.mutation.target) || accepted.mutation.target.scope !== 'timeline'
+      || !isRecord(target) || accepted.mutation.target.timelineId !== target.timelineId
+      || accepted.mutation.target.branchId !== target.branchId
+      || typeof accepted.mutation.expectedRevisionId !== 'string'
+      || typeof accepted.mutation.idempotencyKey !== 'string'
+      || !Array.isArray(accepted.extensionLeases) || !accepted.extensionLeases.every(lease =>
+        isRecord(lease) && lease.timelineId === target.timelineId
+        && typeof lease.installationId === 'string' && lease.installationId.length > 0
+        && typeof lease.generation === 'string' && lease.generation.length > 0
+        && Number.isSafeInteger(lease.installationVersion) && Number(lease.installationVersion) > 0)
+      || !Array.isArray(accepted.mutation.operations) || !accepted.mutation.operations.length
+      || !accepted.mutation.operations.every(op => isRecord(op) && op.op === 'set'
+        && typeof op.path === 'string' && op.path.startsWith('/') && op.path !== '/' && isRecord(op.value))
+      || !Array.isArray(accepted.entries) || !accepted.entries.some(entry => isRecord(entry) && entry.kind === 'message')
+      || !accepted.entries.every(entry => isRecord(entry) && typeof entry.content === 'string'
+        && (entry.kind === 'reasoning' || entry.kind === 'message' && entry.role === 'assistant'))
+      || !isRecord(accepted.providerResult) || !isRecord(accepted.providerResult.message)
+      || (accepted.diagnostics !== undefined && (!Array.isArray(accepted.diagnostics)
+        || !accepted.diagnostics.every(message => typeof message === 'string')))
+      || accepted.providerResult.message.role !== 'assistant') {
+      throw recoveryError('checkpoint_invalid', 'Accepted content checkpoint is invalid')
+    }
+  } else if (value.acceptedContent !== undefined) {
+    throw recoveryError('checkpoint_invalid', 'Accepted content requires the content recovery phase')
+  }
+  if (value.processedPrompt !== undefined) {
+    const snapshot = value.processedPrompt
+    if (!isRecord(snapshot) || !Array.isArray(snapshot.sourceNodes) || !Array.isArray(snapshot.contributions)
+      || !isRecord(snapshot.projection) || !Array.isArray(snapshot.projection.messages)
+      || !snapshot.sourceNodes.every(node => isRecord(node) && typeof node.id === 'string'
+        && typeof node.sourceId === 'string' && typeof node.kind === 'string' && typeof node.displayName === 'string')
+      || !snapshot.contributions.every(entry => isRecord(entry) && typeof entry.id === 'string'
+        && typeof entry.content === 'string' && isRecord(entry.capabilities) && isRecord(entry.sourceRef)
+        && typeof entry.sourceRef.kind === 'string' && typeof entry.sourceRef.sourceId === 'string'
+        && typeof entry.sourceRef.sourceNodeId === 'string')
+      || !snapshot.projection.messages.every(message => isRecord(message) && typeof message.content === 'string'
+        && Array.isArray(message.fragmentIds) && message.fragmentIds.every(id => typeof id === 'string'))) {
+      throw recoveryError('checkpoint_invalid', 'Processed Prompt recovery snapshot is invalid')
+    }
+  }
   if (target !== undefined && (!isRecord(target) || typeof target.timelineId !== 'string'
     || typeof target.branchId !== 'string' || (target.inputNodeId !== undefined && typeof target.inputNodeId !== 'string'))) {
     throw recoveryError('checkpoint_invalid', 'The original Narrative target is incomplete')
@@ -94,11 +157,12 @@ export async function readAgentRunRecovery(
     cursor = page.nextCursor
   } while (cursor)
   entries.sort((left, right) => left.sequence - right.sequence)
-  const latestState = entries.findLast(item => item.entry.kind === 'run-state')
+  const newestFirst = [...entries].reverse()
+  const latestState = newestFirst.find(item => item.entry.kind === 'run-state')
   if (!latestState || latestState.entry.kind !== 'run-state') return undefined
   if (input.runId && input.runId !== latestState.runId) throw recoveryError('superseded', 'This Run was superseded by a later Run')
   if (latestState.entry.state === 'completed' || latestState.entry.state === 'discarded' || latestState.entry.state === 'aborted') return undefined
-  const checkpointEntry = entries.findLast(item => item.runId === latestState.runId && item.entry.kind === 'run-state' && item.entry.recovery)
+  const checkpointEntry = newestFirst.find(item => item.runId === latestState.runId && item.entry.kind === 'run-state' && item.entry.recovery)
   if (!checkpointEntry || checkpointEntry.entry.kind !== 'run-state' || !checkpointEntry.entry.recovery) {
     throw recoveryError('checkpoint_missing', 'This Run has no durable checkpoint; it cannot be resumed without reconstructing its missing context')
   }

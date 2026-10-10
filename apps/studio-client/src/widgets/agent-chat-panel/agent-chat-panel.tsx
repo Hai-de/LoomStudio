@@ -13,12 +13,12 @@ import {
   Search,
   Terminal,
   Trash2,
-  X,
 } from 'lucide-react'
 import {
   lazy,
   Suspense,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type ReactNode,
@@ -48,6 +48,7 @@ import {
   ConversationMessageChrome,
 } from '../../shared/ui/conversation-message-chrome/conversation-message-chrome.js'
 import { ChatComposer } from '../chat-composer/chat-composer.js'
+import { AgentMutationApprovalDialog } from './agent-mutation-approval-dialog.js'
 import { RunRecoveryControls, type RunRecoveryControlsProps } from '../../features/narrative-runtime/ui/run-recovery-controls.js'
 import type { ClientRendererHost } from '../../shared/extension-renderer-runtime/client-renderer-host.js'
 import { RendererNodeMountHost } from '../../features/extension-renderers/ui/renderer-node-mount-host.js'
@@ -246,13 +247,12 @@ export type AgentChatPanelProps = RunRecoveryControlsProps & {
   onCancelRun?(): void
   onPauseRun?(): void
   onResumeRun?(): void
-  onApproveMutation?(allow: boolean, reason?: string): void
+  onApproveMutation?(allow: boolean, reason?: string): Promise<boolean>
 }
 
 export function AgentChatPanel(props: AgentChatPanelProps) {
   const recovery = props.runRecovery?.target === 'agent' ? props.runRecovery : undefined
   const disconnected = props.runRecovery?.status === 'disconnected'
-  const [approvalReason, setApprovalReason] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const approval = props.activeRun?.approval
   const { feedback: copyState, copy: copyText } = useCopyFeedback()
@@ -307,6 +307,7 @@ export function AgentChatPanel(props: AgentChatPanelProps) {
         </button>
       </header>
       {createOpen && props.onCreateSession ? <AgentSessionCreateDialog
+        t={props.t}
         presets={props.profiles}
         initialPresetId={props.selectedProfileId}
         canMakePrimary={props.canMakePrimary === true}
@@ -339,6 +340,7 @@ export function AgentChatPanel(props: AgentChatPanelProps) {
                   expansion={expansion}
                   label={item.label}
                   tools={item.tools}
+                  t={props.t}
                 />
               )
             }
@@ -360,6 +362,8 @@ export function AgentChatPanel(props: AgentChatPanelProps) {
                   codeBlockLabels={codeBlockLabels}
                   content={item.content}
                   displayContent={displayText(props.displayProjection, item.id, item.content, item.isStreaming || isTransientAgentEntryId(item.id))}
+                  displayProjectionError={Boolean(props.displayProjection?.error)}
+                  displayProjectionPending={Boolean(props.displayProjection?.pending)}
                   copyState={copyState?.id === item.id ? copyState.status === 'copied' : undefined}
                   index={item.index}
                   key={item.id}
@@ -386,84 +390,8 @@ export function AgentChatPanel(props: AgentChatPanelProps) {
         </div>
       </div>
 
-      {approval ? (
-        <div className={styles.mutationApprovalBackdrop} role="presentation">
-          <section aria-label={approval.action ? '允许读取历史正文' : approval.preview.action === 'author-mode' ? '允许作者视图' : '确认资源修改'} className={styles.mutationApproval} role="dialog" aria-modal="true">
-            <header className={styles.mutationApprovalHeader}>
-              <div>
-                <strong>{approval.action ? '允许读取历史正文' : approval.preview.action === 'author-mode' ? '允许作者视图' : '确认资源修改'}</strong>
-                <span>{approval.action ? '仅授权本次请求，不修改剧情或记忆范围' : `${approval.preview.action} · ${approval.preview.path}`}</span>
-              </div>
-              <button
-                aria-label="拒绝请求"
-                className={styles.iconButton}
-                type="button"
-                onClick={() => {
-                  props.onApproveMutation?.(false, approvalReason.trim() || undefined)
-                  setApprovalReason('')
-                }}
-              >
-                <X aria-hidden="true" />
-              </button>
-            </header>
-            {approval.action ? (
-              <div className={styles.mutationApprovalDiff}>
-                <div>
-                  <span>读取范围</span>
-                  <pre>{[
-                    `Timeline: ${approval.action.timelineId}`,
-                    `Branch: ${approval.action.branchId}`,
-                    approval.action.selection.kind === 'tail'
-                      ? `最近 ${approval.action.selection.count} 个节点`
-                      : `起点（不含）: ${approval.action.selection.afterNodeId ?? '分支开头'}`,
-                    `终点（包含）: ${approval.action.selection.throughNodeId ?? '请求时固定的 Head'}`,
-                    `最多 ${approval.action.maxNodes} 个节点，${approval.action.maxCharacters} 个字符`,
-                  ].join('\n')}</pre>
-                </div>
-              </div>
-            ) : <div className={styles.mutationApprovalDiff}>
-              <div>
-                <span>{approval.preview.action === 'author-mode' ? '当前可见范围' : '修改前'}</span>
-                <pre>{approval.preview.before}</pre>
-              </div>
-              <div>
-                <span>{approval.preview.action === 'author-mode' ? '请求开放范围' : '修改后'}</span>
-                <pre>{approval.preview.after}</pre>
-              </div>
-            </div>}
-            {approval.preview?.kind === 'state' && approval.preview.pointer ? (
-              <code className={styles.mutationApprovalPointer}>{approval.preview.pointer}</code>
-            ) : null}
-            <input
-              aria-label="拒绝原因（可选）"
-              className={styles.mutationApprovalReason}
-              placeholder="拒绝原因（可选）"
-              value={approvalReason}
-              onChange={event => setApprovalReason(event.target.value)}
-            />
-            <footer className={styles.mutationApprovalActions}>
-              <button
-                type="button"
-                onClick={() => {
-                  props.onApproveMutation?.(false, approvalReason.trim() || undefined)
-                  setApprovalReason('')
-                }}
-              >
-                拒绝
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  props.onApproveMutation?.(true)
-                  setApprovalReason('')
-                }}
-              >
-                允许
-              </button>
-            </footer>
-          </section>
-        </div>
-      ) : null}
+      {approval ? <AgentMutationApprovalDialog key={`${props.activeRun!.runId}:${approval.requestId}`}
+        approval={approval} onApprove={props.onApproveMutation} t={props.t} /> : null}
 
       <footer className={styles.footer}>
         <ChatComposer
@@ -577,7 +505,7 @@ type RowExpansion = {
   toggle(id: string, initial?: boolean): void
 }
 
-function AgentToolActionItem(props: StepToolItem & { defaultOpen?: boolean; expansion?: RowExpansion }) {
+function AgentToolActionItem(props: StepToolItem & { defaultOpen?: boolean; expansion?: RowExpansion; t?: Translator }) {
   const [localOpen, setLocalOpen] = useState(props.defaultOpen ?? false)
   const open = props.expansion?.isOpen(props.id, props.defaultOpen) ?? localOpen
 
@@ -625,14 +553,14 @@ function AgentToolActionItem(props: StepToolItem & { defaultOpen?: boolean; expa
           ))}
           {props.errorContent ? (
             <div className={styles.toolDetailSection}>
-              <span className={styles.toolDetailTag}>错误</span>
+              <span className={styles.toolDetailTag}>{props.t ? props.t('agent.tool.error') : '错误'}</span>
               <pre className={`${styles.toolDetailCode} ${styles.toolDetailError}`}>{props.errorContent}</pre>
             </div>
           ) : null}
           {props.resultContent !== undefined && (props.resultContent || !props.errorContent) ? (
             <div className={styles.toolDetailSection}>
-              <span className={styles.toolDetailTag}>结果</span>
-              <pre className={styles.toolDetailCode}>{props.resultContent || '无输出'}</pre>
+              <span className={styles.toolDetailTag}>{props.t ? props.t('agent.tool.result') : '结果'}</span>
+              <pre className={styles.toolDetailCode}>{props.resultContent || (props.t ? props.t('agent.tool.noOutput') : '无输出')}</pre>
             </div>
           ) : null}
           <div
@@ -642,17 +570,17 @@ function AgentToolActionItem(props: StepToolItem & { defaultOpen?: boolean; expa
             {props.status === 'error' ? (
               <>
                 <AlertCircle aria-hidden="true" />
-                <span>失败</span>
+                <span>{props.t ? props.t('agent.tool.failed') : '失败'}</span>
               </>
             ) : props.status === 'running' ? (
               <>
                 <RefreshCw aria-hidden="true" />
-                <span>执行中</span>
+                <span>{props.t ? props.t('agent.tool.running') : '执行中'}</span>
               </>
             ) : (
               <>
                 <CheckCircle2 aria-hidden="true" />
-                <span>成功</span>
+                <span>{props.t ? props.t('agent.tool.success') : '成功'}</span>
               </>
             )}
           </div>
@@ -673,6 +601,7 @@ export function AgentToolGroupBlock(props: {
   tools: StepToolItem[]
   defaultOpen?: boolean
   expansion?: RowExpansion
+  t?: Translator
 }) {
   const [localOpen, setLocalOpen] = useState(props.defaultOpen ?? false)
   const open = props.id && props.expansion ? props.expansion.isOpen(props.id, props.defaultOpen) : localOpen
@@ -704,6 +633,7 @@ export function AgentToolGroupBlock(props: {
               {...tool}
               expansion={props.expansion}
               defaultOpen={index === 0 && props.defaultOpen}
+              t={props.t}
             />
           ))}
         </div>
@@ -717,6 +647,8 @@ function AgentTranscriptEntry(props: {
   codeBlockLabels: MarkdownCodeBlockLabels
   content: string
   displayContent?: string
+  displayProjectionError?: boolean
+  displayProjectionPending?: boolean
   copyState?: boolean
   index: number
   isStreaming?: boolean
@@ -727,7 +659,19 @@ function AgentTranscriptEntry(props: {
   t: Translator
   onCopy(): void
 }) {
-  const displayContent = props.displayContent ?? ''
+  const lastDisplay = useRef<{ raw: string; text: string } | undefined>(undefined)
+  if (props.displayContent !== undefined) {
+    lastDisplay.current = { raw: props.content, text: props.displayContent }
+  }
+  const displayContent = props.displayContent ?? (
+    lastDisplay.current?.raw === props.content
+      ? lastDisplay.current.text
+      : props.displayProjectionError
+        ? props.content
+        : props.displayProjectionPending
+          ? ''
+          : props.content
+  )
   const body = <ConversationMarkdown
     className={styles.messageBody}
     codeBlockLabels={props.codeBlockLabels}
@@ -737,7 +681,7 @@ function AgentTranscriptEntry(props: {
   />
 
   return (
-    <article aria-busy={props.displayContent === undefined} className={`${styles.message} ${styles[props.role]}`}>
+    <article aria-busy={props.displayContent === undefined && props.displayProjectionPending} className={`${styles.message} ${styles[props.role]}`}>
       <div className={styles.messageSurface}>
         {props.rendererHost && props.agentSessionId ? (
           <RendererNodeMountHost

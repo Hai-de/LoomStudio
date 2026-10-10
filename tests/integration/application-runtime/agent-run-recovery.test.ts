@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { createAgentStore, createNarrativeStore, createPromptResourceStore } from '@loom-studio/application-data'
 import { createSqliteDataEngine } from '@loom-studio/data-engine'
 import { createSqliteDocumentStore } from '@loom-studio/document-store'
-import { createAgentToolRegistry, createApplicationRuntime, type ApplicationRuntimeOptions, type ToolDefinition } from '@loom-studio/application-runtime'
+import { createAgentToolRegistry, createApplicationRuntime, createPromptProcessorRegistry, type ApplicationRuntimeOptions, type ToolDefinition } from '@loom-studio/application-runtime'
 import { describe, expect, it, vi } from 'vitest'
 import { handleAgentsRpc } from '../../../apps/studio-server/src/rpc/handlers/application/agents.js'
 
@@ -24,11 +24,13 @@ function open(filename: string, invokeChat: NonNullable<ApplicationRuntimeOption
   const agents = createAgentStore({ engine })
   const documents = createSqliteDocumentStore({ engine })
   const promptResources = createPromptResourceStore({ engine })
+  const promptProcessors = createPromptProcessorRegistry()
   const runtime = createApplicationRuntime({
     dataEngine: engine, agents, documents, promptResources, narratives: createNarrativeStore({ engine }),
     gateway: { invokeChat }, agentTools: createAgentToolRegistry([tool], [{ toolId: tool.id, execute }]),
+    promptProcessors,
   })
-  return { engine, agents, runtime, execute }
+  return { engine, agents, runtime, execute, promptProcessors }
 }
 
 async function setup(runtime: ReturnType<typeof open>['runtime']) {
@@ -49,6 +51,34 @@ async function setup(runtime: ReturnType<typeof open>['runtime']) {
 }
 
 describe('durable Agent Run recovery', () => {
+  it('persists processed sources and resumes without executing an unloaded processor', async () => {
+    let calls = 0
+    const fixture = open(':memory:', async input => {
+      expect(input.request.messages.some(message => message.content?.includes('ACCEPTED_TEMPLATE'))).toBe(true)
+      if (++calls === 1) throw new Error('Interrupted after prompt acceptance')
+      return { provider: 'test', model: 'original', text: 'Recovered.', message: { role: 'assistant', content: 'Recovered.' } }
+    })
+    const create = vi.fn(() => ({ render: () => 'ACCEPTED_TEMPLATE' }))
+    const handle = fixture.promptProcessors.register({ id: 'test/recovery', create })
+    try {
+      const { session, preset } = await setup(fixture.runtime)
+      await fixture.runtime.createPromptResourceAsset({
+        resourceId: preset.id, targetAssetId: preset.rootNode.id, position: 'inside',
+        asset: { id: 'template', kind: 'entry', label: 'Template', body: 'RAW_TEMPLATE', capabilities: { processorId: 'test/recovery' } },
+      })
+      await expect(fixture.runtime.invokeAgentTurn({ agentSessionId: session.id, input: 'Work.' }, {
+        agentRun: { runId: 'processed-original', onEvent: () => {} },
+      })).rejects.toThrow('Interrupted after prompt acceptance')
+      handle.dispose()
+      const recovery = await fixture.runtime.prepareAgentRunRecovery({ agentSessionId: session.id })
+      expect(recovery?.continuation.recovery.processedPrompt?.contributions.some(entry => entry.content === 'ACCEPTED_TEMPLATE')).toBe(true)
+      await fixture.runtime.invokeAgentTurn(recovery!.request, {
+        agentRun: { runId: 'processed-resume', onEvent: () => {}, continuation: recovery!.continuation },
+      })
+      expect(create).toHaveBeenCalledOnce()
+      expect(calls).toBe(2)
+    } finally { fixture.engine.close() }
+  })
   it('retains a cold checkpoint when preparation fails and resumes after the model is restored', async () => {
     let calls = 0
     const fixture = open(':memory:', async () => {

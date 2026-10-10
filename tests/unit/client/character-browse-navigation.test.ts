@@ -10,6 +10,7 @@ function fixture() {
     setSelectedCardId: vi.fn(),
     createTimelineFromCard: vi.fn(async () => ({ timelineId: 'new-timeline', branchId: 'new-branch' })),
     activateTimeline: vi.fn(async () => 'saved-branch'),
+    refreshAllTimelines: vi.fn(async () => []),
     narrativeTimeline: { id: 'playing-timeline', createdFrom: { cardId: 'playing-card' } },
     deleteTimeline: vi.fn(async (_id: string) => true),
   }
@@ -19,6 +20,8 @@ function fixture() {
     openPanel: vi.fn(),
     openNarrative: vi.fn(),
     clearDeletedTimeline: vi.fn(),
+    isCurrent: vi.fn(() => true),
+    openUri: vi.fn(),
   }
   const panels = createStudioPanels({
     state, navigation, resourcePanels: {},
@@ -30,11 +33,23 @@ function fixture() {
   }>).props
   const sessionsProps = (panels.sessions(true) as ReactElement<{
     onDeleteTimeline(id: string): Promise<boolean>
+    onArchiveImported(id: string): Promise<void>
   }>).props
   return { props, sessionsProps, state, navigation }
 }
 
 describe('Character browsing versus playing', () => {
+  it('routes a committed archive through target resolution and does not steal later navigation', async () => {
+    const { sessionsProps, navigation, state } = fixture()
+    await sessionsProps.onArchiveImported('imported')
+    expect(navigation.openUri).toHaveBeenCalledWith(expect.stringContaining('id=imported'))
+    expect(state.activateTimeline).not.toHaveBeenCalled()
+    navigation.openUri.mockClear()
+    navigation.isCurrent.mockReturnValue(false)
+    await sessionsProps.onArchiveImported('late')
+    expect(navigation.openUri).not.toHaveBeenCalled()
+    expect(state.refreshAllTimelines).toHaveBeenCalledTimes(2)
+  })
   it('clears deleted Timeline navigation only after a successful deletion', async () => {
     const { sessionsProps, state, navigation } = fixture()
     state.deleteTimeline.mockResolvedValueOnce(false)

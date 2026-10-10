@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import {
   Button,
   ContextMenu,
@@ -27,6 +28,7 @@ import {
   Pencil,
   Plus,
   Play,
+  RefreshCw,
   Trash2,
   Upload,
   X,
@@ -43,7 +45,7 @@ import type {
 import type { StudioApi } from '../../shared/api/studio-api.js'
 import { cardMediaUrl, useCardMediaRevision } from '../../shared/lib/card-media.js'
 import { downloadBlob } from '../../shared/browser/download.js'
-import type { Translator } from '../../shared/i18n/index.js'
+import { formatDateTime, type Translator } from '../../shared/i18n/index.js'
 import { MasterDetailWorkbench } from '../../shared/ui/master-detail-workbench/master-detail-workbench.js'
 import { PanelTabs } from '../../shared/ui/panel-tabs/index.js'
 import { AgentToolGroupBlock, buildRenderItems } from '../agent-chat-panel/agent-chat-panel.js'
@@ -71,6 +73,12 @@ type SessionFilter = 'all' | 'timelines' | 'sessions'
 type SelectedHistoryItem =
   | { kind: 'timeline'; id: string }
   | { kind: 'session'; id: string }
+
+type HistoryPreview<T> = { key: string } & (
+  | { status: 'loading' }
+  | { status: 'ready'; data: T[] }
+  | { status: 'error'; error: string }
+)
 
 type SessionsPanelProps = {
   activeBranch?: NarrativeBranch
@@ -128,9 +136,10 @@ export function SessionsPanel(props: SessionsPanelProps) {
 
   const [previews, setPreviews] = useState<{
     api?: StudioApi
-    timelineNodes: Record<string, NarrativeNode[]>
-    sessionTranscripts: Record<string, AgentTranscriptEntry[]>
+    timelineNodes: Record<string, HistoryPreview<NarrativeNode> | undefined>
+    sessionTranscripts: Record<string, HistoryPreview<AgentTranscriptEntry> | undefined>
   }>({ api: props.api, timelineNodes: {}, sessionTranscripts: {} })
+  const [previewRetry, setPreviewRetry] = useState(0)
   const timelineNodesMap = previews.api === props.api ? previews.timelineNodes : undefined
   const sessionTranscriptMap = previews.api === props.api ? previews.sessionTranscripts : undefined
 
@@ -328,39 +337,65 @@ export function SessionsPanel(props: SessionsPanelProps) {
     return props.allAgentSessions.find(s => s.id === selectedItem.id)
   }, [props.allAgentSessions, selectedItem])
 
+  const previewBranch = props.branches.find(branch => branch.id === selectedTimeline?.activeBranchId)
+  const timelinePreviewKey = JSON.stringify([selectedTimeline?.activeBranchId, selectedTimeline?.updatedAt, previewBranch?.updatedAt, previewBranch?.headNodeId])
+  const sessionPreviewKey = JSON.stringify([selectedSession?.updatedAt, selectedSession?.entryCount])
+  const timelinePreview = selectedTimeline && timelineNodesMap?.[selectedTimeline.id]?.key === timelinePreviewKey
+    ? timelineNodesMap[selectedTimeline.id] : undefined
+  const sessionPreview = selectedSession && sessionTranscriptMap?.[selectedSession.id]?.key === sessionPreviewKey
+    ? sessionTranscriptMap[selectedSession.id] : undefined
+
   // 按需拉取选中时间线的演变节点日志
   useEffect(() => {
     const api = props.api
     if (!selectedTimeline || !api?.narratives?.getPage) return
     const timelineId = selectedTimeline.id
-    if (timelineNodesMap?.[timelineId]) return
+    if (timelineNodesMap?.[timelineId]?.key === timelinePreviewKey && timelineNodesMap[timelineId]?.status === 'ready') return
 
     let active = true
+    setPreviews(prev => ({
+      api,
+      timelineNodes: { ...(prev.api === api ? prev.timelineNodes : {}), [timelineId]: { key: timelinePreviewKey, status: 'loading' } },
+      sessionTranscripts: prev.api === api ? prev.sessionTranscripts : {},
+    }))
     void api.narratives
-      .getPage({ timelineId, limit: 20 })
+      .getPage({ timelineId, branchId: selectedTimeline.activeBranchId, limit: 20 })
       .then(page => {
         if (active && page?.nodes) {
           setPreviews(prev => ({
             api,
-            timelineNodes: { ...(prev.api === api ? prev.timelineNodes : {}), [timelineId]: page.nodes },
+            timelineNodes: { ...(prev.api === api ? prev.timelineNodes : {}), [timelineId]: { key: timelinePreviewKey, status: 'ready', data: page.nodes } },
             sessionTranscripts: prev.api === api ? prev.sessionTranscripts : {},
           }))
         }
       })
-      .catch(() => undefined)
+      .catch(cause => {
+        if (active) setPreviews(prev => ({
+          api,
+          timelineNodes: { ...(prev.api === api ? prev.timelineNodes : {}), [timelineId]: {
+            key: timelinePreviewKey, status: 'error', error: cause instanceof Error ? cause.message : String(cause),
+          } },
+          sessionTranscripts: prev.api === api ? prev.sessionTranscripts : {},
+        }))
+      })
     return () => {
       active = false
     }
-  }, [selectedTimeline, props.api, timelineNodesMap])
+  }, [selectedTimeline?.id, timelinePreviewKey, props.api, previewRetry])
 
   // 按需拉取选中会话的转录缩略预览
   useEffect(() => {
     const api = props.api
     if (!selectedSession || !api?.agentSessions?.getTranscript) return
     const sessionId = selectedSession.id
-    if (sessionTranscriptMap?.[sessionId]) return
+    if (sessionTranscriptMap?.[sessionId]?.key === sessionPreviewKey && sessionTranscriptMap[sessionId]?.status === 'ready') return
 
     let active = true
+    setPreviews(prev => ({
+      api,
+      timelineNodes: prev.api === api ? prev.timelineNodes : {},
+      sessionTranscripts: { ...(prev.api === api ? prev.sessionTranscripts : {}), [sessionId]: { key: sessionPreviewKey, status: 'loading' } },
+    }))
     void api.agentSessions
       .getTranscript({ agentSessionId: sessionId, limit: 12 })
       .then(page => {
@@ -368,15 +403,23 @@ export function SessionsPanel(props: SessionsPanelProps) {
           setPreviews(prev => ({
             api,
             timelineNodes: prev.api === api ? prev.timelineNodes : {},
-            sessionTranscripts: { ...(prev.api === api ? prev.sessionTranscripts : {}), [sessionId]: page.entries },
+            sessionTranscripts: { ...(prev.api === api ? prev.sessionTranscripts : {}), [sessionId]: { key: sessionPreviewKey, status: 'ready', data: page.entries } },
           }))
         }
       })
-      .catch(() => undefined)
+      .catch(cause => {
+        if (active) setPreviews(prev => ({
+          api,
+          timelineNodes: prev.api === api ? prev.timelineNodes : {},
+          sessionTranscripts: { ...(prev.api === api ? prev.sessionTranscripts : {}), [sessionId]: {
+            key: sessionPreviewKey, status: 'error', error: cause instanceof Error ? cause.message : String(cause),
+          } },
+        }))
+      })
     return () => {
       active = false
     }
-  }, [selectedSession, props.api, sessionTranscriptMap])
+  }, [selectedSession?.id, sessionPreviewKey, props.api, previewRetry])
 
   // 当选中时间线时，若该时间线存在关联会话，自动展开子树
   useEffect(() => {
@@ -529,7 +572,7 @@ export function SessionsPanel(props: SessionsPanelProps) {
                 <div className={styles.searchContainer}>
                   <input
                     className={styles.searchInput}
-                    placeholder="搜索时间线、角色或会话..."
+                    placeholder={props.t('sessions.searchPlaceholder')}
                     value={searchQuery}
                     onChange={event => setSearchQuery(event.target.value)}
                   />
@@ -548,7 +591,7 @@ export function SessionsPanel(props: SessionsPanelProps) {
 
                 <div className={styles.toolbarActions}>
                   {props.onCreateAgentSession ? <button
-                    aria-label="新建 Agent 对话" title="新建 Agent 对话"
+                    aria-label={props.t('agent.createSession')} title={props.t('agent.createSession')}
                     className={styles.toolbarIconBtn} type="button"
                     onClick={() => setCreateOpen(true)}
                   ><Plus aria-hidden="true" size={14} /></button> : null}
@@ -644,7 +687,7 @@ export function SessionsPanel(props: SessionsPanelProps) {
                                 <div className={styles.selectionToggleWrapper}>
                                   <Toggle
                                     checked={isTimelineChecked}
-                                    label={`选择时间线 ${timeline.title || card?.name || ''}`}
+                                    label={props.t('sessions.selectTimelineNamed', { name: timeline.title || card?.name || '' })}
                                     onChange={() => {}}
                                   />
                                 </div>
@@ -652,7 +695,7 @@ export function SessionsPanel(props: SessionsPanelProps) {
                                 hasChildren ? (
                                   <button
                                     aria-expanded={isExpanded}
-                                    aria-label="展开关联会话"
+                                    aria-label={props.t('sessions.expandRelated')}
                                     className={styles.expandButton}
                                     type="button"
                                     onClick={e => toggleExpandTimeline(timeline.id, e)}
@@ -708,7 +751,7 @@ export function SessionsPanel(props: SessionsPanelProps) {
                               {isSelectionMode && hasChildren ? (
                                 <button
                                   aria-expanded={isExpanded}
-                                  aria-label="展开关联会话"
+                                  aria-label={props.t('sessions.expandRelated')}
                                   className={styles.expandButton}
                                   type="button"
                                   onClick={e => toggleExpandTimeline(timeline.id, e)}
@@ -806,7 +849,7 @@ export function SessionsPanel(props: SessionsPanelProps) {
                                         <div className={styles.selectionToggleWrapper}>
                                           <Toggle
                                             checked={isSessionChecked}
-                                            label={`选择会话 ${session.title || profile?.rootNode.label || ''}`}
+                                            label={props.t('sessions.selectSessionNamed', { name: session.title || profile?.rootNode.label || '' })}
                                             onChange={() => {}}
                                           />
                                         </div>
@@ -814,7 +857,7 @@ export function SessionsPanel(props: SessionsPanelProps) {
                                       <Bot aria-hidden="true" />
                                       <span className={styles.childItemBody}>
                                         <strong>{session.title || profile?.rootNode.label || props.t('sessions.untitledAgentSession')}
-                                          {session.id === props.narrativeAgentSession?.id ? ' · 主写作' : ''}
+                                          {session.id === props.narrativeAgentSession?.id ? ` · ${props.t('agent.primarySession')}` : ''}
                                         </strong>
                                         <small>{formatDate(session.updatedAt)}</small>
                                       </span>
@@ -939,7 +982,7 @@ export function SessionsPanel(props: SessionsPanelProps) {
                               <div className={styles.selectionToggleWrapper}>
                                 <Toggle
                                   checked={isSessionChecked}
-                                  label={`选择会话 ${session.title || profile?.rootNode.label || ''}`}
+                                  label={props.t('sessions.selectSessionNamed', { name: session.title || profile?.rootNode.label || '' })}
                                   onChange={() => {}}
                                 />
                               </div>
@@ -963,7 +1006,7 @@ export function SessionsPanel(props: SessionsPanelProps) {
                               </div>
                               <span className={styles.itemBody}>
                                 <strong>{session.title || profile?.rootNode.label || props.t('sessions.untitledAgentSession')}
-                                  {session.id === props.narrativeAgentSession?.id ? ' · 主写作' : ''}
+                                  {session.id === props.narrativeAgentSession?.id ? ` · ${props.t('agent.primarySession')}` : ''}
                                 </strong>
                                 <small>{profile?.rootNode.label ?? session.agentPresetId} · {formatDate(session.updatedAt)}</small>
                               </span>
@@ -1038,12 +1081,16 @@ export function SessionsPanel(props: SessionsPanelProps) {
         <div className={styles.detailPane}>
           {selectedItem?.kind === 'timeline' && selectedTimeline ? (
             <TimelineDetail
+              key={selectedTimeline.id}
               activeBranch={props.activeBranch}
               activeTimeline={props.activeTimeline}
               boundSessions={sessionsByTimelineId.get(selectedTimeline.id) ?? []}
               branches={props.branches}
               card={selectedTimeline.createdFrom?.cardId ? cardMap.get(selectedTimeline.createdFrom.cardId) : undefined}
-              nodes={timelineNodesMap?.[selectedTimeline.id] ?? []}
+              nodes={timelinePreview?.status === 'ready' ? timelinePreview.data : []}
+              previewLoading={Boolean(props.api) && (!timelinePreview || timelinePreview.status === 'loading')}
+              previewError={timelinePreview?.status === 'error' ? timelinePreview.error : undefined}
+              onRetryPreview={() => setPreviewRetry(value => value + 1)}
               api={props.api}
               profiles={props.agentPresets}
               t={props.t}
@@ -1056,7 +1103,10 @@ export function SessionsPanel(props: SessionsPanelProps) {
             />
           ) : selectedItem?.kind === 'session' && selectedSession ? (
             <SessionDetail
-              entries={sessionTranscriptMap?.[selectedSession.id] ?? []}
+              entries={sessionPreview?.status === 'ready' ? sessionPreview.data : []}
+              previewLoading={Boolean(props.api) && (!sessionPreview || sessionPreview.status === 'loading')}
+              previewError={sessionPreview?.status === 'error' ? sessionPreview.error : undefined}
+              onRetryPreview={() => setPreviewRetry(value => value + 1)}
               profiles={props.agentPresets}
               session={selectedSession}
               isPrimary={props.narrativeAgentSession?.id === selectedSession.id}
@@ -1070,12 +1120,13 @@ export function SessionsPanel(props: SessionsPanelProps) {
           ) : (
             <div className={styles.empty}>
               <FolderGit2 aria-hidden="true" />
-              <span>请选择左侧时间线或会话查看详情</span>
+              <span>{props.t('sessions.selectForDetails')}</span>
             </div>
           )}
         </div>
       </MasterDetailWorkbench>
       {createOpen && props.onCreateAgentSession ? <AgentSessionCreateDialog
+        t={props.t}
         presets={props.agentPresets}
         canMakePrimary={Boolean(props.activeTimeline || props.selectedCardName)}
         onCreate={props.onCreateAgentSession}
@@ -1116,6 +1167,9 @@ function TimelineDetail(props: {
   branches: NarrativeBranch[]
   card?: CardSummary
   nodes: NarrativeNode[]
+  previewLoading: boolean
+  previewError?: string
+  onRetryPreview(): void
   profiles: AgentPreset[]
   t: Translator
   timeline: NarrativeTimeline
@@ -1129,6 +1183,13 @@ function TimelineDetail(props: {
   const [archiveBusy, setArchiveBusy] = useState(false)
   const [archiveError, setArchiveError] = useState<string>()
   const [archiveNotice, setArchiveNotice] = useState<string>()
+  const [importedArchive, setImportedArchive] = useState<{
+    timelineId: string
+    unknownParticipantNamespaces: string[]
+    participantFailures: Array<{ namespace: string; message: string }>
+  }>()
+  const archiveInputRef = useRef<HTMLInputElement>(null)
+  const chatInputRef = useRef<HTMLInputElement>(null)
   const avatarUrl = props.card?.media?.avatarAssetId
     ? cardMediaUrl(props.card.id, 'avatar', props.card.media.avatarAssetId, mediaRevision)
     : undefined
@@ -1138,6 +1199,7 @@ function TimelineDetail(props: {
   async function exportArchive() {
     if (!props.api) return
     setArchiveBusy(true); setArchiveError(undefined); setArchiveNotice(undefined)
+    setImportedArchive(undefined)
     try {
       const result = await props.api.narratives.exportArchive(props.timeline.id)
       downloadBlob(
@@ -1151,14 +1213,21 @@ function TimelineDetail(props: {
   async function importArchive(file: File) {
     if (!props.api) return
     setArchiveBusy(true); setArchiveError(undefined); setArchiveNotice(undefined)
+    setImportedArchive(undefined)
     try {
       const result = await props.api.narratives.importArchive(await file.text())
-      await props.onArchiveImported?.(result.timelineId, result)
       const warnings = [
-        result.unknownParticipantNamespaces.length > 0 ? `未处理的存档扩展数据：${result.unknownParticipantNamespaces.join(', ')}` : '',
-        result.participantFailures.length > 0 ? `存档扩展数据导入失败：${result.participantFailures.map(item => item.namespace).join(', ')}` : '',
+        result.unknownParticipantNamespaces.length > 0 ? props.t('sessions.archiveUnknownData', { names: result.unknownParticipantNamespaces.join(', ') }) : '',
+        result.participantFailures.length > 0 ? props.t('sessions.archiveParticipantFailed', {
+          names: result.participantFailures.map(item => `${item.namespace}: ${item.message}`).join('; '),
+        }) : '',
       ].filter(Boolean)
-      if (warnings.length > 0) setArchiveNotice(warnings.join('；'))
+      setImportedArchive(result)
+      const notice = [props.t('sessions.archiveImported', { id: result.timelineId }), ...warnings].join('\n')
+      setArchiveNotice(notice)
+      if (warnings.length) toast.warning(notice)
+      else toast.success(notice)
+      await finishImport(result)
     } catch (error) { setArchiveError(error instanceof Error ? error.message : String(error)) }
     finally { setArchiveBusy(false) }
   }
@@ -1166,6 +1235,7 @@ function TimelineDetail(props: {
   async function importSillyTavernChat(file: File) {
     if (!props.api || !props.card) return
     setArchiveBusy(true); setArchiveError(undefined); setArchiveNotice(undefined)
+    setImportedArchive(undefined)
     try {
       const converted = await props.api.extensionRuntime.call<{
         title: string
@@ -1176,10 +1246,28 @@ function TimelineDetail(props: {
         title: converted.title,
         openingNodes: converted.messages,
       })
-      await props.onArchiveImported?.(result.timeline.id, { unknownParticipantNamespaces: [], participantFailures: [] })
-      setArchiveNotice(`已导入 ${converted.messages.length} 条 ST 消息`)
+      const imported = { timelineId: result.timeline.id, unknownParticipantNamespaces: [], participantFailures: [] }
+      setImportedArchive(imported)
+      const notice = props.t('sessions.chatImported', { count: converted.messages.length, id: result.timeline.id })
+      setArchiveNotice(notice)
+      toast.success(notice)
+      await finishImport(imported)
     } catch (error) { setArchiveError(error instanceof Error ? error.message : String(error)) }
     finally { setArchiveBusy(false) }
+  }
+
+  async function finishImport(result: NonNullable<typeof importedArchive>) {
+    setArchiveBusy(true)
+    setArchiveError(undefined)
+    try {
+      await props.onArchiveImported?.(result.timelineId, result)
+    } catch (error) {
+      setArchiveError(props.t('sessions.importRefreshFailed', {
+        message: error instanceof Error ? error.message : String(error),
+      }))
+    } finally {
+      setArchiveBusy(false)
+    }
   }
 
   return (
@@ -1195,7 +1283,7 @@ function TimelineDetail(props: {
           )}
           <div className={styles.detailTitleMeta}>
             <h3>{props.timeline.title || props.card?.name || props.t('sessions.untitledTimeline')}</h3>
-            <span>{props.card?.name ? `角色：${props.card.name} · ` : ''}{props.timeline.id}</span>
+            <span>{props.card?.name ? `${props.t('sessions.characterNamed', { name: props.card.name })} · ` : ''}{props.timeline.id}</span>
           </div>
         </div>
 
@@ -1223,16 +1311,14 @@ function TimelineDetail(props: {
             </button>
           ) : null}
           {props.api ? <>
-            <button aria-label="导出 Timeline" className={styles.detailIconButton} disabled={archiveBusy} title="导出 Timeline" type="button" onClick={() => void exportArchive()}><Download aria-hidden="true" size={14} /></button>
-            <label aria-label="导入 Timeline" className={styles.detailIconButton} title="导入 Timeline">
-              <Upload aria-hidden="true" size={14} />
-              <input hidden type="file" accept="application/json,.json" disabled={archiveBusy} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void importArchive(file) }} />
-            </label>
+            <button aria-label={props.t('sessions.exportTimeline')} className={styles.detailIconButton} disabled={archiveBusy} title={props.t('sessions.exportTimeline')} type="button" onClick={() => void exportArchive()}><Download aria-hidden="true" size={14} /></button>
+            <button aria-label={props.t('sessions.importTimeline')} className={styles.detailIconButton} title={props.t('sessions.importTimeline')}
+              disabled={archiveBusy} type="button" onClick={() => archiveInputRef.current?.click()}><Upload aria-hidden="true" size={14} /></button>
+            <input ref={archiveInputRef} hidden type="file" accept="application/json,.json" disabled={archiveBusy} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void importArchive(file) }} />
             {props.card ? (
-              <label aria-label="导入 SillyTavern 会话" className={styles.detailIconButton} title="导入 SillyTavern 会话">
-                <MessageSquareText aria-hidden="true" size={14} />
-                <input hidden type="file" accept=".jsonl,application/x-ndjson" disabled={archiveBusy} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void importSillyTavernChat(file) }} />
-              </label>
+              <><button aria-label={props.t('sessions.importChat')} className={styles.detailIconButton} title={props.t('sessions.importChat')}
+                disabled={archiveBusy} type="button" onClick={() => chatInputRef.current?.click()}><MessageSquareText aria-hidden="true" size={14} /></button>
+                <input ref={chatInputRef} hidden type="file" accept=".jsonl,application/x-ndjson" disabled={archiveBusy} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void importSillyTavernChat(file) }} /></>
             ) : null}
           </> : null}
           <button className={styles.primaryButton} type="button" onClick={props.onOpen}>
@@ -1243,23 +1329,26 @@ function TimelineDetail(props: {
       </header>
       {archiveError ? <p className={styles.emptyNotice} role="alert">{archiveError}</p> : null}
       {archiveNotice ? <p className={styles.emptyNotice} role="status">{archiveNotice}</p> : null}
+      {archiveError && importedArchive ? <Button disabled={archiveBusy} onClick={() => void finishImport(importedArchive)}>
+        <RefreshCw aria-hidden="true" size={14} />{props.t('sessions.retryImported')}
+      </Button> : null}
 
       <div className={styles.infoGrid}>
         <div className={styles.infoCard}>
-          <span>所属角色</span>
-          <strong>{props.card?.name ?? '自由叙事'}</strong>
+          <span>{props.t('sessions.character')}</span>
+          <strong>{props.card?.name ?? props.t('sessions.freeNarrative')}</strong>
         </div>
         <div className={styles.infoCard}>
-          <span>最后游玩时间</span>
+          <span>{props.t('sessions.lastPlayed')}</span>
           <strong>{formatDate(props.timeline.updatedAt)}</strong>
         </div>
         <div className={styles.infoCard}>
-          <span>关联资源</span>
-          <strong>{props.timeline.promptResourceIds?.length ?? 0} 个</strong>
+          <span>{props.t('sessions.relatedResources')}</span>
+          <strong>{props.timeline.promptResourceIds?.length ?? 0}</strong>
         </div>
         {isActive && props.activeBranch ? (
           <div className={styles.infoCard}>
-            <span>当前活跃分支</span>
+            <span>{props.t('sessions.activeBranch')}</span>
             <strong>{props.activeBranch.title || props.activeBranch.id}</strong>
           </div>
         ) : null}
@@ -1267,7 +1356,7 @@ function TimelineDetail(props: {
 
       {isActive && props.branches.length > 0 ? (
         <section className={styles.branchesSection}>
-          <h4>分支列表 (Branches)</h4>
+          <h4>{props.t('sessions.branches')}</h4>
           <div className={styles.branchList}>
             {props.branches.map(branch => {
               const isCurrentBranch = branch.id === props.activeBranch?.id
@@ -1278,7 +1367,7 @@ function TimelineDetail(props: {
                     <strong>{branch.title || 'Untitled Branch'}</strong>
                     <code>{branch.id.slice(0, 8)}</code>
                   </div>
-                  {isCurrentBranch ? <span className={styles.badge}>当前活跃</span> : null}
+                  {isCurrentBranch ? <span className={styles.badge}>{props.t('sessions.currentlyActive')}</span> : null}
                 </div>
               )
             })}
@@ -1331,7 +1420,10 @@ function TimelineDetail(props: {
       {/* 状态日志与推进轨迹 */}
       <section className={styles.timelineLogsSection}>
         <h4 className={styles.sectionTitle}>{props.t('sessions.timelineLogs')}</h4>
-        {props.nodes.length === 0 ? (
+        {props.previewLoading ? <p role="status">{props.t('sessions.previewLoading')}</p>
+          : props.previewError ? <div role="alert"><p>{props.previewError}</p>
+            <Button onClick={props.onRetryPreview}><RefreshCw aria-hidden="true" />{props.t('sessions.retryPreview')}</Button></div>
+          : props.nodes.length === 0 ? (
           <div className={styles.empty}>
             <span>{props.t('sessions.noLogs')}</span>
           </div>
@@ -1343,14 +1435,14 @@ function TimelineDetail(props: {
                   <span>#{index + 1} · {formatDate(node.createdAt)}</span>
                   <div className={styles.logMetaBadges}>
                     {node.source?.agentSessionId ? (
-                      <span className={styles.logSourceBadge}>Agent 协同</span>
+                      <span className={styles.logSourceBadge}>{props.t('sessions.agentCollaboration')}</span>
                     ) : null}
                     {node.source?.changesetId ? (
                       <span className={styles.logRevisionBadge}>{node.source.changesetId.slice(0, 8)}</span>
                     ) : null}
                   </div>
                 </div>
-                <p className={styles.logNodeText}>{node.body?.raw || '（空正文节点）'}</p>
+                <p className={styles.logNodeText}>{node.body?.raw || props.t('sessions.emptyNode')}</p>
               </div>
             ))}
           </div>
@@ -1362,6 +1454,9 @@ function TimelineDetail(props: {
 
 function SessionDetail(props: {
   entries: AgentTranscriptEntry[]
+  previewLoading: boolean
+  previewError?: string
+  onRetryPreview(): void
   profiles: AgentPreset[]
   session: AgentSession
   isPrimary?: boolean
@@ -1384,13 +1479,13 @@ function SessionDetail(props: {
           <div className={styles.detailTitleMeta}>
             <h3>{props.session.title || profile?.rootNode.label || 'Agent Session'}</h3>
             <span>{profile?.rootNode.label ?? props.session.agentPresetId} · {props.session.id}</span>
-            {props.isPrimary ? <span>主写作对话</span> : null}
+            {props.isPrimary ? <span>{props.t('agent.primarySession')}</span> : null}
           </div>
         </div>
 
         <div className={styles.detailActions}>
           {!props.isPrimary && props.onSetPrimary ? <Button size="small" variant="secondary"
-            onClick={props.onSetPrimary}>设为主写作对话</Button> : null}
+            onClick={props.onSetPrimary}>{props.t('agent.makePrimary')}</Button> : null}
           {props.onRename ? (
             <button
               aria-label={props.t('sessions.rename')}
@@ -1426,15 +1521,15 @@ function SessionDetail(props: {
           <strong>{profile?.rootNode.label ?? props.session.agentPresetId}</strong>
         </div>
         <div className={styles.infoCard}>
-          <span>消息条数</span>
-          <strong>{props.session.entryCount} 条</strong>
+          <span>{props.t('sessions.messageCountLabel')}</span>
+          <strong>{props.session.entryCount}</strong>
         </div>
         <div className={styles.infoCard}>
-          <span>归属状态</span>
-          <strong>{props.session.timelineId ? '时间线关联' : '全局独立'}</strong>
+          <span>{props.t('sessions.affiliation')}</span>
+          <strong>{props.t(props.session.timelineId ? 'sessions.timelineBound' : 'sessions.standalone')}</strong>
         </div>
         <div className={styles.infoCard}>
-          <span>最后活跃</span>
+          <span>{props.t('sessions.lastActiveLabel')}</span>
           <strong>{formatDate(props.session.updatedAt)}</strong>
         </div>
       </div>
@@ -1442,14 +1537,17 @@ function SessionDetail(props: {
       {/* 转录缩略预览 */}
       <section className={styles.timelineLogsSection}>
         <h4 className={styles.sectionTitle}>{props.t('sessions.transcriptPreview')}</h4>
-        {renderItems.length === 0 ? (
+        {props.previewLoading ? <p role="status">{props.t('sessions.previewLoading')}</p>
+          : props.previewError ? <div role="alert"><p>{props.previewError}</p>
+            <Button onClick={props.onRetryPreview}><RefreshCw aria-hidden="true" />{props.t('sessions.retryPreview')}</Button></div>
+          : renderItems.length === 0 ? (
           <div className={styles.empty}>
             <span>{props.t('sessions.noTranscript')}</span>
           </div>
         ) : (
           <div className={styles.transcriptList}>
             {renderItems.map(item => item.kind === 'tool-group' ? (
-              <AgentToolGroupBlock key={item.id} label={item.label} tools={item.tools} />
+              <AgentToolGroupBlock key={item.id} label={item.label} tools={item.tools} t={props.t} />
             ) : item.kind === 'reasoning' ? (
               <details className={styles.transcriptReasoning} key={item.id}>
                 <summary>{props.t('agent.reasoning')}</summary>
@@ -1481,6 +1579,5 @@ function EmptyState(props: { text: string }) {
 }
 
 function formatDate(value: string): string {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
+  return formatDateTime(value)
 }

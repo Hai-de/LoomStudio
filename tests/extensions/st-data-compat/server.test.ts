@@ -10,6 +10,7 @@ import { createInMemoryDiagnosticsRegistry } from '@loom-studio/diagnostics'
 import type { ExtensionInstallationTarget, ExtensionRpcHandler } from '@loom-studio/extension-sdk'
 import * as instanceLoader from '../../../packages/extension-sdk/extension-host/src/instance.js'
 import { activate } from '../../../extensions/st-data-compat/src/index.js'
+import { createPromptProcessorRegistry, createStateContributionRegistry, createStateContentRegistry } from '@loom-studio/application-runtime'
 
 vi.mock('node:fs/promises', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs/promises')>()
@@ -33,9 +34,15 @@ async function withMigrationHost(run: (fixture: {
   await writeFile(join(sourceDirectory, 'characters', 'Hero.json'), JSON.stringify({ name: 'Hero', description: 'Temporary fixture' }))
   const handlers = new Map<string, ExtensionRpcHandler>()
   const loader = vi.spyOn(instanceLoader, 'loadServerModule').mockResolvedValue({ activate })
+  const processors = createPromptProcessorRegistry()
+  const contributions = createStateContributionRegistry()
+  const content = createStateContentRegistry()
   const host = createExtensionHost({
     documents: createInMemoryDocumentStore(), diagnostics: createInMemoryDiagnosticsRegistry(),
     callRpc: async () => null,
+    registerPromptProcessor: (processor, owner) => processors.register(processor, owner.target),
+    registerStateContribution: (contribution, owner, initialize) => contributions.register({ contribution, ...owner, initialize }),
+    registerStateContentHandler: (handler, owner) => content.register(handler, owner),
     registerRpc: (name, ownerPackageId, ownerModuleId, handler, ownerInstanceId) => {
       const key = `${ownerInstanceId}/${name}`
       handlers.set(key, handler)
@@ -146,7 +153,7 @@ describe('SillyTavern migration lifecycle', () => {
   })
 })
 
-const withStudioServer: typeof withMainStudioServer = run => withMainStudioServer(run, resolve('official/extensions'))
+const withStudioServer: typeof withMainStudioServer = run => withMainStudioServer(run, resolve('extensions'))
 
 function createMockPngWithText(keyword: string, text: string): Uint8Array<ArrayBuffer> {
   const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
@@ -267,6 +274,38 @@ describe('studio server SillyTavern silent import pipeline', () => {
       const avatarRes = await authenticatedFetch(port, `/assets/${body.card.media!.avatarAssetId}`)
       expect(avatarRes.status).toBe(200)
       expect(avatarRes.headers.get('content-type')).toBe('image/png')
+    })
+  })
+
+  it('initializes MVU through the isolated Extension Host and keeps State after disabling the module', async () => {
+    await withStudioServer(async port => {
+      const module = { packageId: 'sillytavern.importer', moduleId: 'server' }
+      await callRpc(port, 'extensions.enableModule', module)
+      const png = createMockPngWithText('ccv3', JSON.stringify({
+        spec: 'chara_card_v3', spec_version: '3.0', data: {
+          name: 'MVU Host', first_mes: 'Start',
+          character_book: { name: 'Variables', entries: [{
+            id: 1, comment: '[initvar]', content: 'hp: 10', enabled: false,
+          }] },
+        },
+      }))
+      const imported = await authenticatedFetch(port, '/cards/import/png', {
+        method: 'POST', headers: { 'content-type': 'image/png' }, body: png,
+      })
+      expect(imported.status).toBe(201)
+      const { card } = await imported.json() as { card: { id: string } }
+      const story = await callRpc<{ timeline: { id: string }; branch: { id: string } }>(
+        port, 'application.createNarrativeTimeline', { cardId: card.id },
+      )
+      const target = { scope: 'timeline', timelineId: story.timeline.id, branchId: story.branch.id }
+      await expect(callRpc(port, 'application.getStateSnapshot', { target })).resolves.toMatchObject({
+        snapshot: { value: { entities: { stCompatibility: { mvu: { components: { data: { stat_data: { hp: 10 } } } } } } } },
+      })
+      await callRpc(port, 'extensions.disableModule', module)
+      await expect(callRpc(port, 'application.getStateSnapshot', { target })).resolves.toMatchObject({
+        snapshot: { value: { entities: { stCompatibility: { mvu: { components: { data: { stat_data: { hp: 10 } } } } } } } },
+      })
+      await expect(callRpc(port, 'application.createNarrativeTimeline', { cardId: card.id })).rejects.toThrow('not registered')
     })
   })
 

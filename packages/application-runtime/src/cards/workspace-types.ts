@@ -6,6 +6,7 @@ import type {
   ExtensionPackageResourceOrigin,
   CardPresetInput,
   CardMediaRefs,
+  CardExtensionAdoption,
   OpeningChatInput,
   SettingLayerInput,
 } from '../types.js'
@@ -17,6 +18,7 @@ import type { TextExtractorDraft, TextTransformRuleDraft } from '../transforms/h
 export type CardBundleArtifact = {
   schemaVersion: 4
   artifactId: string
+  derivedFrom?: { artifactId: string }
   displayName: string
   description?: string
   card: {
@@ -30,6 +32,7 @@ export type CardBundleArtifact = {
     macros?: Record<string, string>
     macroOptions?: import("@loom-studio/shared").MacroOptions
     stateContributionIds?: string[]
+    extensionAdoptions?: CardExtensionAdoption[]
   }
   contextAssets: PromptResourceNode[]
   externalContextAssetIds?: string[]

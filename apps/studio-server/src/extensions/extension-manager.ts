@@ -88,6 +88,8 @@ export function createServerExtensionManager(options: {
   readCardPackage(input: { cardId: string; packageId: string; source?: 'installed' }): Promise<{ cardVersion: number; archive: { packageId: string; version: string; archiveBase64: string } }>
   listInstallations(): Promise<ListExtensionInstallationsResult>
   importPackageResources(input: {
+    participation?: 'timeline'
+    source?: import('@loom-studio/application-runtime').ExtensionInstallationSource
     loomScripts?: Array<{ contribution: { id: string; source: string }; source: string }>
     target?: ExtensionInstallationTarget
     expectedCardVersion?: number
@@ -410,6 +412,10 @@ export function createServerExtensionManager(options: {
     const imported = await options.importPackageResources({
       packageId,
       packageVersion: record.manifest.version,
+      ...(record.manifest.participation ? { participation: record.manifest.participation } : {}),
+      source: cardSource ? { kind: 'card' }
+        : record.remote ? { kind: record.remote.source.kind, url: record.remote.source.url }
+          : { kind: 'local', directory: record.directory },
       loomScripts: await Promise.all((record.manifest.contributes?.loomScripts ?? []).map(async contribution => ({
         contribution, source: new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode((await readFileFromPackage(record, contribution.source)).bytes),
       }))),
@@ -434,7 +440,8 @@ export function createServerExtensionManager(options: {
   async function importNewGlobalResources(packageId: string): Promise<void> {
     const record = requireAvailablePackage(catalog, packageId)
     const resources = record.manifest.contributes
-    if (![resources?.promptResources, resources?.agentTools, resources?.transformRules, resources?.textExtractors, resources?.loomScripts]
+    if (record.manifest.participation !== 'timeline'
+      && ![resources?.promptResources, resources?.agentTools, resources?.transformRules, resources?.textExtractors, resources?.loomScripts]
       .some(items => items?.length)) return
     const { installations } = await options.listInstallations()
     if (installations.some(item => item.packageId === packageId && item.target.kind === 'global')) return
@@ -1109,6 +1116,7 @@ function toManagedPackage(
 ): ManagedExtensionPackage {
   return {
     packageId,
+    ...(record.manifest.participation ? { participation: record.manifest.participation } : {}),
     ...(record.archiveDigest ? { archiveDigest: record.archiveDigest } : {}),
     ...(target?.kind === 'card' ? { target, installationId: extensionInstallationId(packageId, target) } : {}),
     version: record.manifest.version,

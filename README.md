@@ -185,6 +185,9 @@ pnpm dev:client
 # 运行默认测试集（unit、contract、integration、regression；不含 probes / stress）
 pnpm test
 
+# 全仓包复合构建与测试类型契约门禁（提交前必跑）
+pnpm check:types
+
 # 运行集成测试套件
 pnpm exec vitest run tests/integration
 

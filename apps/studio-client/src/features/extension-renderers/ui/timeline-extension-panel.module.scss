@@ -1,0 +1,112 @@
+.panel {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  color: var(--loom-color-text);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel h3 {
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(88px, auto);
+  align-items: center;
+  gap: 12px;
+  min-height: 76px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--loom-color-divider);
+}
+
+.identity {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.identity small,
+.status {
+  color: var(--loom-color-text-muted);
+  font-size: 12px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.resourceList {
+  padding: 0;
+  list-style: none;
+}
+
+.resourceList li {
+  display: grid;
+  gap: 4px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--loom-color-divider);
+  overflow-wrap: anywhere;
+}
+
+.resourceList span {
+  color: var(--loom-color-text-muted);
+  font-size: 12px;
+}
+
+.actions > input {
+  justify-self: end;
+  width: 18px;
+  height: 18px;
+}
+
+.iconButton {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--loom-color-divider);
+  background: transparent;
+  color: inherit;
+  border-radius: 4px;
+}
+
+.error {
+  color: var(--loom-color-danger);
+  overflow-wrap: anywhere;
+}
+
+.preview {
+  display: grid;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.preview dd {
+  margin: 0 0 8px;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 540px) {
+  .row { grid-template-columns: minmax(0, 1fr) auto; }
+  .status { grid-column: 1; }
+  .actions { grid-column: 2; grid-row: 1 / 3; }
+}

@@ -132,11 +132,15 @@ describe('application macro provider integration', () => {
     const promptResources = createPromptResourceStore({ engine, createId, now })
     const macroProviders = createMacroProviderRegistry()
     let providerCalls = 0
+    const providerTargets: Array<{ timelineId: string; branchId: string } | undefined> = []
     macroProviders.register({
       id: 'provider.build-count',
       name: 'dynamic',
       sourceLabel: 'test/provider',
-      resolve: () => `dynamic-${++providerCalls}`,
+      resolve: context => {
+        providerTargets.push(context.timelineTarget)
+        return `dynamic-${++providerCalls}`
+      },
     })
     const runtime = createApplicationRuntime({
       agents,
@@ -219,6 +223,9 @@ describe('application macro provider integration', () => {
       agentSessionId: session.session.id, input: 'Missing', macroSelections: selection,
       narrativeTarget: { timelineId: timeline.timeline.id, branchId: timeline.branch.id },
     })).rejects.toThrow('Selected macro is unavailable')
+    expect(providerTargets).toEqual(Array.from({ length: providerCalls }, () => ({
+      timelineId: timeline.timeline.id, branchId: timeline.branch.id,
+    })))
     engine.close()
   })
 })

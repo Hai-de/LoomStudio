@@ -176,23 +176,23 @@ export function ChatComposer(props: ChatComposerProps) {
                 {props.sendLeadingAction}
                 {props.runStatus === 'running' ? (
                   <button
-                    aria-label={props.pauseLabel ?? '暂停'}
+                    aria-label={props.pauseLabel ?? 'Pause'}
                     className={styles.sendButton}
                     data-run="running"
                     type="button"
                     onClick={props.onPause}
-                    title={props.pauseLabel ?? '暂停'}
+                    title={props.pauseLabel ?? 'Pause'}
                   >
                     <Pause aria-hidden="true" strokeWidth={2} />
                   </button>
                 ) : props.runStatus === 'suspended' && !props.input.trim() ? (
                   <button
-                    aria-label={props.resumeLabel ?? '继续'}
+                    aria-label={props.resumeLabel ?? 'Resume'}
                     className={styles.sendButton}
                     data-run="suspended"
                     type="button"
                     onClick={props.onResume}
-                    title={props.resumeLabel ?? '继续'}
+                    title={props.resumeLabel ?? 'Resume'}
                   >
                     <Play aria-hidden="true" strokeWidth={2} style={{ marginLeft: 2 }} />
                   </button>

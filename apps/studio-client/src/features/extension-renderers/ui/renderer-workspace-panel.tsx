@@ -21,6 +21,8 @@ import { FileTree, type FileTreeNode } from '../../../shared/ui/file-tree/file-t
 import { toggleExtensionPackage } from '../model/toggle-extension-package.js'
 import { ExtensionRemoteControls, RemoteExtensionInstall } from './remote-extension-install.js'
 import { Button, Dialog } from '@loom-studio/ui'
+import { PanelTabs } from '../../../shared/ui/panel-tabs/index.js'
+import { TimelineExtensionPanel, type TimelineExtensionPanelProps } from './timeline-extension-panel.js'
 import styles from './renderer-workspace-panel.module.scss'
 
 const WORKSPACE_SCOPE_KEY = 'workspace'
@@ -46,6 +48,7 @@ export function RendererWorkspacePanel(props: {
   extensionRuntime: Pick<StudioApi['extensionRuntime'], 'getConfig' | 'listConfigs' | 'upsertConfig'>
   extensionApi: StudioApi['extensions']
   onRefreshExtensions(): Promise<unknown>
+  runtimeError?: string
   configRevision: number
   settingScopeContext: { cardId?: string; timelineId?: string; agentSessionId?: string }
   searchParams: URLSearchParams
@@ -61,6 +64,7 @@ export function RendererWorkspacePanel(props: {
   onUninstallCardPackage(input: Parameters<StudioApi['extensions']['uninstallCard']>[0]): Promise<unknown>
   onRemoveCardResources(input: Parameters<StudioApi['extensions']['removeCardResources']>[0]): Promise<unknown>
   installations: ListExtensionInstallationsResult['installations']
+  timelineParticipation: Omit<TimelineExtensionPanelProps, 'installations' | 't'>
   promptResources: PromptResource[]
   onOpenPromptResource(resource: PromptResource): void
   onUpdateResources(input: Parameters<StudioApi['extensions']['updateResources']>[0]): Promise<unknown>
@@ -82,6 +86,7 @@ export function RendererWorkspacePanel(props: {
   const [removal, setRemoval] = useState<{ packageId: string; version: string }>()
   const [deleteData, setDeleteData] = useState(false)
   const [installOpen, setInstallOpen] = useState(false)
+  const [view, setView] = useState<'packages' | 'participation'>('packages')
   const [expandedIds, setExpandedIds] = useState<string[]>(() => [...props.packages, ...props.cardPackages].flatMap(item => {
     const prefix = `${item.target?.kind === 'card' ? item.target.cardId : 'global'}:${item.packageId}:`
     return [`${prefix}resources`, `${prefix}modules`, ...['prompt', 'tool', 'rule', 'extractor'].map(kind => `${prefix}resources:${kind}`)]
@@ -93,10 +98,20 @@ export function RendererWorkspacePanel(props: {
   const activeOwner = active?.owner
   const activePackage = activeOwner?.kind === 'extension' ? props.packages.find(item => item.packageId === activeOwner.packageId) : undefined
   const activeIconUrl = activePackage ? extensionIconUrl(activePackage) : undefined
+  const runtimeAlert = props.runtimeError ? <div role="alert" className={styles.runtimeAlert}>
+    <p>{props.t('renderer.runtimeUnavailable')}</p>
+    <p>{props.runtimeError}</p>
+    <Button disabled={!!busyKey} onClick={() => {
+      setBusyKey('refresh')
+      void props.onRefreshExtensions().catch(error => {
+        toast.error(error instanceof Error ? error.message : String(error))
+      }).finally(() => setBusyKey(undefined))
+    }}><RefreshCw aria-hidden="true" size={16} />{props.t('renderer.retryRuntime')}</Button>
+  </div> : null
 
   if (active) {
     return (
-      <section className={styles.panel} data-loom-component="renderer-workspace-panel">
+      <section className={styles.panel} data-runtime-error={Boolean(props.runtimeError)} data-loom-component="renderer-workspace-panel">
         <header className={styles.header}>
           <button type="button" onClick={() => props.host.release('shell.workspace-panel', WORKSPACE_SCOPE_KEY, activeKey)}>
             <ArrowLeft aria-hidden="true" />
@@ -107,6 +122,7 @@ export function RendererWorkspacePanel(props: {
             <span>{active.definition.name}</span>
           </strong>
         </header>
+        {runtimeAlert}
         <RendererSurfaceHost activeContributionKey={activeKey} className={styles.renderer} host={props.host} scope={{ kind: 'workspace', key: WORKSPACE_SCOPE_KEY }} surface="shell.workspace-panel" />
       </section>
     )
@@ -209,12 +225,17 @@ export function RendererWorkspacePanel(props: {
   }
 
   return (
-    <section className={styles.panel} data-loom-component="renderer-workspace-panel">
+    <section className={`${styles.panel} ${styles.management}`} data-runtime-error={Boolean(props.runtimeError)} data-loom-component="renderer-workspace-panel">
       <header className={styles.intro}>
         <div><h2>{props.t('renderer.workspaceTitle')}</h2>
           <small>{props.packages.length} · {instances.length} {props.t('renderer.activeInstances')}</small></div>
         <Button onClick={() => setInstallOpen(true)}><PackagePlus size={16} aria-hidden="true" />{props.t('renderer.install')}</Button>
       </header>
+      {runtimeAlert}
+      <PanelTabs className={styles.managementTabs} activeId={view} onChange={setView} ariaLabel={props.t('renderer.workspaceTitle')} items={[
+        { id: 'packages', label: props.t('renderer.packages') },
+        { id: 'participation', label: props.t('participation.title') },
+      ]} />
       {installOpen ? <RemoteExtensionInstall api={props.extensionApi} t={props.t}
         onClose={() => setInstallOpen(false)} onInstalled={props.onRefreshExtensions} /> : null}
       {removal ? <Dialog open title={props.t('renderer.uninstall')} dismissible={!busyKey} onClose={() => setRemoval(undefined)}
@@ -225,7 +246,10 @@ export function RendererWorkspacePanel(props: {
         <p>{removal.packageId} · {removal.version}</p>
         <label><input type="checkbox" checked={deleteData} disabled={!!busyKey} onChange={event => setDeleteData(event.target.checked)} /> {props.t('renderer.remote.deleteData')}</label>
       </Dialog> : null}
-      <MasterDetailWorkbench
+      {view === 'participation' ? <TimelineExtensionPanel
+        key={JSON.stringify([props.timelineParticipation.timeline?.id, props.timelineParticipation.timeline?.branchId, props.timelineParticipation.card?.id])}
+        {...props.timelineParticipation} installations={props.installations} t={props.t}
+      /> : <MasterDetailWorkbench
         masterWidth="minmax(210px, 0.24fr)"
         mobilePane={mobilePane}
         onMobilePaneChange={setMobilePane}
@@ -505,7 +529,7 @@ export function RendererWorkspacePanel(props: {
           {!selected ? <p className={styles.empty}>{props.t('renderer.workspaceEmpty')}</p> : null}
           </>}
         </div>
-      </MasterDetailWorkbench>
+      </MasterDetailWorkbench>}
     </section>
   )
 }

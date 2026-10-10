@@ -30,16 +30,27 @@ export type PromptBuildTrace = {
   }
 }
 
-export function compilePromptDataModel(input: {
+export type PromptDataModel = {
   contributions: PromptContribution[]
   sourceNodes: SourceNode[]
   skeletonRootId?: string
   currentInput?: string
   activationFacts?: ActivationFacts
-}): CompiledPrompt {
+}
+
+export function compilePromptDataModel(input: PromptDataModel): CompiledPrompt {
+  if (input.contributions.some(entry => entry.capabilities.processorId))
+    throw new Error('Authored Prompt processors require the asynchronous build path')
+  return emitPromptBlocks(planPromptBlocks(input))
+}
+
+/** Planning is synchronous; async language processors run over these ordered fragments. */
+export function planPromptBlocks(input: PromptDataModel): PromptFragment[][] {
   const { contributions, sourceNodes, activationFacts } = input
+  const disabledNodeIds = new Set(sourceNodes.filter(node => node.enabled === false).map(node => node.id))
   
   const activeContributions = contributions.filter(c => {
+    if (disabledNodeIds.has(c.sourceRef.sourceNodeId)) return false
     if (c.capabilities.activation) {
       return evaluatePromptActivation({
         activation: c.capabilities.activation,
@@ -120,31 +131,8 @@ export function compilePromptDataModel(input: {
     return fragments
   }
 
-  function appendFragments(messages: CompiledMessage[], fragments: PromptFragment[]) {
-    let previousWasSession = false
-    for (const fragment of fragments) {
-      const session = fragment.source.kind === 'sessionHistory'
-      if (fragment.messages) {
-        if (!session) throw new Error('Native Prompt messages must come from Session history')
-        messages.push(...fragment.messages.map(message => ({
-          ...structuredClone(message), content: message.content ?? '', fragmentIds: [fragment.id],
-        })))
-        previousWasSession = true
-        continue
-      }
-      const previous = messages[messages.length - 1]
-      if (previous && previous.role === fragment.role && !session && !previousWasSession) {
-        previous.content += '\n\n' + fragment.content
-        previous.fragmentIds.push(fragment.id)
-      } else {
-        messages.push({ role: fragment.role, content: fragment.content, fragmentIds: [fragment.id] })
-      }
-      previousWasSession = session
-    }
-  }
-
   if (hasMessageNodes) {
-    const messages: CompiledMessage[] = []
+    const blocks: PromptFragment[][] = []
 
     function readMessageRole(node: SourceNode): 'system' | 'user' | 'assistant' | 'developer' {
       const hint = node.capabilities?.roleHint
@@ -199,9 +187,7 @@ export function compilePromptDataModel(input: {
             frags.push(...collectFragments(item, role))
           }
           if (frags.length > 0) {
-            const block: CompiledMessage[] = []
-            appendFragments(block, frags)
-            messages.push(...block)
+            blocks.push(frags)
           }
         } else if (child.kind === 'folder' || child.kind === 'module') {
           traverse(child.id)
@@ -210,9 +196,7 @@ export function compilePromptDataModel(input: {
             ? collectVirtualFragments(child)
             : collectFragments(child, child.capabilities?.roleHint ?? 'system')
           if (frags.length > 0) {
-            const block: CompiledMessage[] = []
-            appendFragments(block, frags)
-            messages.push(...block)
+            blocks.push(frags)
           }
         }
       }
@@ -220,13 +204,7 @@ export function compilePromptDataModel(input: {
 
     traverse(null)
 
-    return {
-      messages,
-      editorProjection: {
-        sourceRows: [],
-        promptRows: [],
-      },
-    }
+    return blocks
   }
 
   const fragments: PromptFragment[] = []
@@ -257,9 +235,36 @@ export function compilePromptDataModel(input: {
   
   dfs(null)
   
+  return [fragments]
+}
+
+export function emitPromptBlocks(blocks: PromptFragment[][]): CompiledPrompt {
   const messages: CompiledMessage[] = []
-  appendFragments(messages, fragments)
-  
+  for (const fragments of blocks) {
+    const block: CompiledMessage[] = []
+    let previousWasSession = false
+    for (const fragment of fragments) {
+      const session = fragment.source.kind === 'sessionHistory'
+      if (fragment.messages) {
+        if (!session) throw new Error('Native Prompt messages must come from Session history')
+        block.push(...fragment.messages.map(message => ({
+          ...structuredClone(message), content: message.content ?? '', fragmentIds: [fragment.id],
+        })))
+        previousWasSession = true
+        continue
+      }
+      if (!fragment.content.trim()) continue
+      const previous = block[block.length - 1]
+      if (previous && previous.role === fragment.role && !session && !previousWasSession) {
+        previous.content += '\n\n' + fragment.content
+        previous.fragmentIds.push(fragment.id)
+      } else {
+        block.push({ role: fragment.role, content: fragment.content, fragmentIds: [fragment.id] })
+      }
+      previousWasSession = session
+    }
+    messages.push(...block)
+  }
   return {
     messages,
     editorProjection: {

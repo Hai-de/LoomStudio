@@ -18,7 +18,9 @@ Card / Preset 静态宏配置与 Extension 提供者进入同一来源候选组�
 - `narrative_nodes.state_revision_id` 保存该正文节点对应的 State Revision；
 - Card 可通过 `stateTemplates` 携带内联组件模板，或通过 `stateDefinitionIds` 引用共享 Definition；`stateEntityTypes`、`timelineStateEntities` 与 `timelineComponentMounts` 描述 EC 初始化，`timelineStateBindings` 只保留为高级原始路径与旧卡兼容入口。同 ID 时内联模板优先，修改内联模板不会写回共享 Definition。
 
-创建 Timeline 时，Card 内联 Contribution 与 `stateContributionIds` 显式选择的 Extension Contribution 先确定性组合。重名 Entity Type、Template、Entity 或最终组件路径会失败，不存在隐式覆盖顺序。组合结果物化为初始 Snapshot，并把 Entity / Component / Reference 元数据、Extension Package 版本、Schema、User 名字回退与 Card-owned Text Transform Rule 固化为 Timeline Runtime Context；随后在同一个 Data Engine transaction 中创建 Runtime Context、State Scope、Initial Revision、Timeline、Primary Branch 与 Opening Nodes。Extension 后续卸载或重载不会改写已有 Timeline。
+创建 Timeline 时，Card 内联 Contribution、`stateContributionIds` 显式选择的 Contribution，以及 `extensionAdoptions` 默认采用安装的已注册 Contribution 先确定性组合。声明 `participation: "timeline"` 的包必须被采用，不能仅通过 `stateContributionIds` 绕过。重名 Entity Type、Template、Entity 或最终组件路径会失败，不存在隐式覆盖顺序。组合结果物化为初始 Snapshot，并把 Entity / Component / Reference 描述、Extension 原始声明与安装来源、Package 版本、Schema 和 User 名字回退固化为 Timeline Runtime Context；随后在同一个 Data Engine transaction 中创建 Runtime Context、采用记录、State Scope、Initial Revision、Timeline、Primary Branch 与 Opening Nodes。来源、版本和采用记录不写入业务 Entity 或专用 metadata 组件。Extension 后续卸载或重载不会改写已有 Timeline。
+
+中途采用也保存原始声明和绑定来源。绑定的归属按声明 Mount / Binding 的 Contribution 确定，不按共享模板的作者确定；原始路径通配符及 Entity Type 批量挂载均展开到具体路径。Card 默认配置只影响新 Timeline；同一 Timeline 下所有 Branch 共用采用关系，State Head 仍各自独立。暂停或卸载保留数据，旧 checkpoint 缺失数据通过显式初始化流程补齐，不根据路径存在性推断是否采用。
 
 ## Definition 与 Artifact
 
@@ -27,6 +29,14 @@ Card / Preset 静态宏配置与 Extension 提供者进入同一来源候选组�
 规范交换容器为 `kind: "loom.state"`、`schemaVersion: 1` 的 JSON Artifact。纯可序列化 `StateContribution` DTO 位于 `@loom-studio/shared`；Application Runtime 保留 Artifact 校验、Contribution 组合、引用诊断和最终物化。Extension 通过 `state.contribute` capability 注册包命名空间下的 Contribution，注册 handle 随 Extension Scope 释放；`state.read` / `state.write` 只转发现有 Application State Service，不向 Extension 暴露 State Store。
 
 `loom.cardBundle` 当前只接受 `schemaVersion: 4`；这与 ZIP 容器的 `loom.cardBundle.zip.v2` 不是同一个版本字段。State Contribution、模板与 Binding 的携带由 [Card Artifact 实现](../../../packages/application-runtime/src/cards/workspace.ts) 及 [文件合同](card-bundle-files.md) 负责。导出收集 Card 内联模板与未被内联覆盖的共享模板；导入时相同 ID/version/content 的模板复用，identity 冲突、缺失模板、版本不匹配与 Binding 路径错误会被拒绝，不静默覆盖工作区已有同 ID 不同内容模板。测试期旧 Card Bundle schema v2/v3 不再兼容；外部 SillyTavern V2/V3 仍先转换为内部 V4。
+
+## 来源检查
+
+Studio 的 `application.inspectStateSources` 是只读查询，接受可选 `cardId` 与 Timeline/Branch `target`。有 target 时，Card 从 Timeline 来源确定，显式 Card 不匹配或 Branch 不属于 Timeline 时拒绝查询；没有 target 时只展示当前 Card 和工作区可查看来源，不伪造故事资格。其他 Card 的私有注册贡献不进入结果。
+
+查询分别返回工作区 Definition、当前 Card 内联声明及引用、扩展当前注册声明、Timeline 接受时的声明，以及当前 Branch 已接受路径的存在性。暂停、模块解除注册或安装记录消失后，仍从 Runtime Context 展示接受时的来源与声明。`eligible` 表示采用记录与安装身份/版本允许参与，不证明模块已加载或正在执行；当前注册列表也不是 State 已初始化的证明。缺失 Card 或 Runtime Context 明确呈现为不可用，不用当前 Card 配置补造历史。
+
+State 面板的“来源”“初始化配置”“运行态变量”分别展示这些来源事实、编辑 Card 的当前作者配置、查看或修改运行值。诊断不执行初始化器、重建 State、更新采用表或创建修订，也不为旧开发数据补写来源。查询返回的修订与声明用于观察，不是并发写入授权。当前边界由 `timeline-extension-participation.test.ts` 的真实 Runtime 查询与初始化来源用例，以及 `state-panel-source.test.ts` 的异步目标隔离验证覆盖；视觉与完整扩展执行验收独立记录。
 
 ## Mutation、Branch 与 Undo
 

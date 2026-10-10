@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { BookOpen, Bot, FileText, Folder, Regex } from 'lucide-react'
 import type { PromptResource } from '../../entities/index.js'
@@ -7,26 +7,20 @@ import type { Translator } from '../../shared/i18n/index.js'
 import { FileTree, type FileTreeNode } from '../../shared/ui/file-tree/file-tree.js'
 import styles from './user-resources-panel.module.scss'
 
-export function UserResourcesPanel(props: {
-  api: StudioApi['textTransforms']
-  endpoint: string
-  resources: PromptResource[]
-  t: Translator
-  onOpenResource(resource: PromptResource, nodeId: string): void
-  onOpenRule(ruleId: string): void
-}) {
-  const rules = useQuery({
-    queryKey: ['user-resources', props.endpoint, 'rules'],
-    queryFn: () => props.api.listRules(),
-  })
-  const [expandedIds, setExpandedIds] = useState(['user:presets', 'user:settings', 'user:other', 'user:rules'])
-  const own = props.resources.filter(isUserPromptResource)
+export type UserResourceRuleItem = { id: string; name: string; owner: { kind: string } }
+
+export function buildUserResourceTree(
+  resources: readonly PromptResource[],
+  rules: readonly UserResourceRuleItem[],
+  t: Translator,
+): { nodes: FileTreeNode[]; resourcesByNode: Map<string, PromptResource> } {
+  const own = resources.filter(isUserPromptResource)
   const groups = [
-    { id: 'presets', title: props.t('rail.agent'), items: own.filter(resource => resource.resourceKind === 'preset') },
-    { id: 'settings', title: props.t('context.authoring.settings'), items: own.filter(resource => resource.resourceKind === 'setting') },
-    { id: 'other', title: props.t('rail.resource'), items: own.filter(resource => resource.resourceKind !== 'preset' && resource.resourceKind !== 'setting') },
+    { id: 'presets', title: t('rail.agent'), items: own.filter(resource => resource.resourceKind === 'preset') },
+    { id: 'settings', title: t('context.authoring.settings'), items: own.filter(resource => resource.resourceKind === 'setting') },
+    { id: 'other', title: t('rail.resource'), items: own.filter(resource => resource.resourceKind !== 'preset' && resource.resourceKind !== 'setting') },
   ]
-  const ownRules = (rules.data?.rules ?? []).filter(rule => rule.owner.kind === 'workspace')
+  const ownRules = rules.filter(rule => rule.owner.kind === 'workspace')
   const resourcesByNode = new Map<string, PromptResource>()
   const nodes: FileTreeNode[] = groups.map(group => ({
     id: `user:${group.id}`, label: group.title, kind: 'folder', meta: String(group.items.length),
@@ -42,9 +36,29 @@ export function UserResourcesPanel(props: {
     }),
   }))
   nodes.push({
-    id: 'user:rules', label: props.t('rail.textTransform'), kind: 'folder', meta: String(ownRules.length),
+    id: 'user:rules', label: t('rail.textTransform'), kind: 'folder', meta: String(ownRules.length),
     children: ownRules.map(rule => ({ id: `user:rule:${rule.id}`, label: rule.name, kind: 'entry' })),
   })
+  return { nodes, resourcesByNode }
+}
+
+export function UserResourcesPanel(props: {
+  api: StudioApi['textTransforms']
+  endpoint: string
+  resources: PromptResource[]
+  t: Translator
+  onOpenResource(resource: PromptResource, nodeId: string): void
+  onOpenRule(ruleId: string): void
+}) {
+  const rules = useQuery({
+    queryKey: ['user-resources', props.endpoint, 'rules'],
+    queryFn: () => props.api.listRules(),
+  })
+  const [expandedIds, setExpandedIds] = useState(['user:presets', 'user:settings', 'user:other', 'user:rules'])
+  const { nodes, resourcesByNode } = useMemo(
+    () => buildUserResourceTree(props.resources, rules.data?.rules ?? [], props.t),
+    [props.resources, rules.data?.rules, props.t],
+  )
 
   return <section aria-label={props.t('rail.user')} className={styles.panel}>
     <header><h2>{props.t('rail.user')}</h2></header>

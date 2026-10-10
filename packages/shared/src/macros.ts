@@ -150,6 +150,7 @@ export function cloneMacroInspection(inspection: MacroInspection): MacroInspecti
 }
 
 export type MacroProviderContext = {
+  timelineTarget?: { timelineId: string; branchId: string }
   global: JsonObject
   timeline?: JsonObject
   cardId?: string

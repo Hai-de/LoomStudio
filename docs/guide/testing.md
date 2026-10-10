@@ -38,12 +38,14 @@ tests/
 | `pnpm test:stress` | 仅 `stress`，包含显式性能阈值 |
 | `pnpm test:probes` | `probes/**/*.test.ts` 的测量，不包含 `.browser.ts(x)` 手动诊断 |
 | `pnpm benchmark:context-assets` | mitata 纯模型基准，独立于 Vitest 门禁 |
+| `pnpm check:types` | 全仓包复合构建与测试类型契约硬性门禁（`tsc -b && tsc -p tests/tsconfig.json`） |
+| `pnpm check:all` | 综合检查工作区一致性与全仓类型契约 |
 
 范围由根 `vitest.config.ts` 的 `LOOM_TEST_SCOPE` 决定；未知值直接报错，不静默运行全套。
 定向运行使用 `pnpm exec vitest run tests/…/name.test.ts`；只检查范围使用
 `pnpm exec vitest list --filesOnly`。不要把“未收集到目标测试”或带 `passWithNoTests` 的退出码 0 当作通过。
 
-`pnpm test:typecheck` 独立检查主应用测试及其引用源码的类型契约，包含探针和压力测试，不包含 `extensions/`；Vitest 的运行时通过不替代此检查。测试类型环境按项目 Node 最低版本提供 ES2024 API，浏览器测试同时保留 DOM 类型；内部包通过源码映射解析，不以旧构建产物代替。
+`pnpm check:types` 统一执行全仓 Project References 复合构建（`tsc -b`）与测试类型检查（`tsc -p tests/tsconfig.json`），是全仓类型一致性的最高门禁，可防止本地因别名直通而漏报 `packages/` 编译失败。`pnpm test:typecheck` 仅独立检查主应用测试及其引用源码的类型契约；全仓基础编译基线与测试环境均对齐至 ES2024 与 DOM 规范。内部包通过源码映射解析，不以旧构建产物代替。
 
 The World 与 ST Data Compat 独立发布。检出对应扩展源码后，可用 `pnpm test:extensions` 和 `pnpm test:extensions:typecheck` 运行本仓库保留的扩展验证；只运行某个扩展时，在前者后附 `tests/extensions/the-world` 或 `tests/extensions/st-data-compat`。这些命令不是主应用门禁，不会自动下载扩展。主应用仍验证 Extension Host 和扩展安装、重载、卸载契约，使用自身维护的测试夹具。
 
@@ -61,6 +63,7 @@ The World 与 ST Data Compat 独立发布。检出对应扩展源码后，可用
    但测量记录、失败边界等本身是目标时，应单独断言它们。更新旧预期前先核对实现与正式合同。
 5. **相似场景不一定重复**：Store 原子性、Runtime 业务行为、HTTP 身份边界各有不同风险。
    只有前置条件、执行路径与断言合同一致时才合并；保留独立的权限、并发和失败恢复用例。
+6. **UI 树节点与实体标识契约明确**：涉及树形资源（如 `PromptResource`）操作与展示时，测试必须明确断言树根节点使用 `rootNode.id` 而非外层 `resource.id`，并在选择/重命名回调中严格验证节点标识与资源标识语义，禁止混淆。
 
 ## 4. 如何新增测试
 
@@ -71,6 +74,8 @@ The World 与 ST Data Compat 独立发布。检出对应扩展源码后，可用
 
 ## 5. 现有依赖与夹具
 
+- **happy-dom 与客户端隔离环境**：通过 `vitest.config.ts` 的 `environmentMatchGlobs` 对 `tests/unit/client/**` 和 `tests/integration/client/**` 自动启用 `happy-dom` 运行时，为客户端 Hook 与组件提供原生 DOM 与事件环境；服务端、内核与数据引擎测试严格保持纯 Node 极速环境。
+- **原生 Hook 挂载工具 (`renderHook`)**：针对需要验证 React 生命周期的 Custom Hooks，使用 `tests/support/client/render-hook.ts` 提供的零依赖原生挂载器（基于 React 19 的 `act` 与 `createRoot`）。**严禁在新测试中手写 `vi.mock('react')` 拦截 `useState`/`useEffect`**；纯逻辑应优先下沉为纯函数或纯模型文件进行无 Mock 单测。
 - **fast-check**：当前用于 Context Asset 操作序列与 Prompt Resource 树不变量。
   所有随机输入必须由 arbitrary 生成，禁止在 property 或 `.map()` 中用 `Math.random()`。
   ID 从本次样本派生，避免全局递增状态；保留失败输出的 seed/path，通过

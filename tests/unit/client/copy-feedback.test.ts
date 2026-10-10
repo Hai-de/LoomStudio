@@ -1,51 +1,66 @@
+// @vitest-environment happy-dom
+import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useCopyFeedback } from '../../../apps/studio-client/src/shared/hooks/use-copy-feedback.js'
+import { renderHook } from '../../support/client/render-hook.js'
 
-const hooks = vi.hoisted(() => ({
-  state: undefined as unknown,
-  timer: { current: undefined as ReturnType<typeof setTimeout> | undefined },
-  cleanup: undefined as (() => void) | undefined,
-  write: vi.fn(async (_text: string) => true),
-}))
-vi.mock('react', async original => ({
-  ...await original<typeof import('react')>(),
-  useState: () => [hooks.state, (state: unknown) => { hooks.state = state }],
-  useRef: () => hooks.timer,
-  useEffect: (effect: () => (() => void)) => { hooks.cleanup = effect() },
-}))
+const writeMock = vi.fn(async (_text: string) => true)
 vi.mock('../../../apps/studio-client/src/shared/browser/clipboard.js', () => ({
-  tryWriteClipboardText: hooks.write,
+  tryWriteClipboardText: (text: string) => writeMock(text),
 }))
 
 beforeEach(() => {
   vi.useFakeTimers()
-  hooks.state = undefined
-  hooks.timer.current = undefined
-  hooks.write.mockReset().mockResolvedValue(true)
+  writeMock.mockReset().mockResolvedValue(true)
 })
+
 afterEach(() => {
-  hooks.cleanup?.()
   vi.useRealTimers()
 })
 
-describe('clipboard feedback channel', () => {
+describe('clipboard feedback channel (real React 19 + happy-dom)', () => {
   it('copies the supplied text and replaces the active row feedback for another 1600ms', async () => {
-    await useCopyFeedback().copy('raw text', 'message')
-    expect(hooks.write).toHaveBeenLastCalledWith('raw text')
-    expect(useCopyFeedback().feedback).toEqual({ id: 'message', status: 'copied' })
-    vi.advanceTimersByTime(1000)
-    await useCopyFeedback().copy('node link', 'link')
-    vi.advanceTimersByTime(600)
-    expect(useCopyFeedback().feedback).toEqual({ id: 'link', status: 'copied' })
-    vi.advanceTimersByTime(1000)
-    expect(useCopyFeedback().feedback).toBeUndefined()
+    const harness = renderHook(() => useCopyFeedback())
+
+    await act(async () => {
+      await harness.current.copy('raw text', 'message')
+    })
+
+    expect(writeMock).toHaveBeenLastCalledWith('raw text')
+    expect(harness.current.feedback).toEqual({ id: 'message', status: 'copied' })
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+
+    await act(async () => {
+      await harness.current.copy('node link', 'link')
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(600)
+    })
+    expect(harness.current.feedback).toEqual({ id: 'link', status: 'copied' })
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+    expect(harness.current.feedback).toBeUndefined()
+
+    harness.unmount()
   })
 
   it('reports permission failure and cancels expiry when the channel unmounts', async () => {
-    hooks.write.mockResolvedValue(false)
-    await useCopyFeedback().copy('denied')
-    expect(useCopyFeedback().feedback).toEqual({ id: '', status: 'failed' })
-    hooks.cleanup?.()
+    writeMock.mockResolvedValue(false)
+    const harness = renderHook(() => useCopyFeedback())
+
+    await act(async () => {
+      await harness.current.copy('denied')
+    })
+
+    expect(harness.current.feedback).toEqual({ id: '', status: 'failed' })
+
+    harness.unmount()
     expect(vi.getTimerCount()).toBe(0)
   })
 })

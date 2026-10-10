@@ -6,6 +6,9 @@ import { App } from './app/app.js'
 import { AppErrorBoundary } from './app/app-error-boundary.js'
 import { NotFoundPage } from './app/not-found-page.js'
 import { STUDIO_ENTRY_PATHS } from './shared/studio-shell/studio-route.js'
+import { syncMobileViewport } from './shared/browser/mobile-viewport.js'
+
+syncMobileViewport()
 
 const root = document.getElementById('root')
 const clientLogs = createMemoryLogSink({ capacity: 1_000 })
@@ -19,6 +22,7 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
       retry: false,
       staleTime: 30_000,
     },

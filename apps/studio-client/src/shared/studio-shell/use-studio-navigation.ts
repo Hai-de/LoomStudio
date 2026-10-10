@@ -87,13 +87,14 @@ export function useStudioNavigation(input: { endpoint: string; api: StudioApi })
     goForward: () => navigate(1),
     locationKey: location.key,
     historyAction,
+    isCurrent: () => current.current === workspace,
     route: workspace,
     targetError: workspace.targetUri === targetError?.uri ? targetError?.message : undefined,
     targetPending: workspace.targetUri !== undefined && workspace.targetUri !== targetError?.uri,
     referenceUri: workspace.referenceUri,
     openReference,
     closeReference: () => publish({ ...current.current, referenceUri: undefined }, true),
-    openUri: (uri: string) => publish({ ...current.current, targetUri: uri, referenceUri: undefined }),
+    openUri: (uri: string, replace = false) => publish({ ...current.current, targetUri: uri, referenceUri: undefined }, replace),
     openPath: (path: string) => {
       const url = new URL(path, globalThis.location.origin)
       const target = url.searchParams.get('target')

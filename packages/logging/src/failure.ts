@@ -5,10 +5,21 @@ const failureReasons: Record<string, string> = {
   SyntaxError: 'Invalid syntax',
   AbortError: 'Operation cancelled',
   TimeoutError: 'Operation timed out',
+  NetworkError: 'Network request failed',
   ProviderConnectTimeoutError: 'Provider connection timed out',
   ProviderDnsError: 'Provider host could not be resolved',
   ProviderTlsError: 'Provider TLS validation failed',
   ProviderNetworkError: 'Provider network request failed',
+}
+
+function isFetchNetworkError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  if (error.name === 'NetworkError') return true
+  if (error.name === 'TypeError') {
+    const message = error.message.toLowerCase()
+    return message.includes('failed to fetch') || message.includes('load failed') || message.includes('networkerror')
+  }
+  return false
 }
 
 // Only known classifications and numeric HTTP status cross the logging boundary.
@@ -18,6 +29,9 @@ export function readLogFailure(error: unknown): {
   failureReason: string
   statusCode?: number
 } {
+  if (isFetchNetworkError(error)) {
+    return { failureType: 'NetworkError', failureReason: failureReasons.NetworkError }
+  }
   const name = error instanceof Error && Object.hasOwn(failureReasons, error.name) ? error.name : 'Error'
   let current = error
   for (let depth = 0; depth < 5 && current && typeof current === 'object'; depth += 1) {

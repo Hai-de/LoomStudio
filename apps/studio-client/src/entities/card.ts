@@ -32,6 +32,8 @@ type TimelineComponentMount = {
 }
 
 export type Card = {
+  artifactId: string
+  derivedFrom?: { artifactId: string }
   macros?: Record<string, string>
   macroOptions?: import("@loom-studio/shared").MacroOptions
   id: string
@@ -50,6 +52,7 @@ export type Card = {
   timelineStateEntities?: StateEntityId[]
   timelineComponentMounts?: TimelineComponentMount[]
   stateContributionIds?: string[]
+  extensionAdoptions?: Array<{ packageId: string; target: 'global' | 'card' }>
   timelineStateBindings?: Array<{ path: string; templateId: string; templateVersion: number; initial?: JsonObject }>
   media?: CardMedia
   preset?: {
@@ -80,7 +83,7 @@ export type CardMedia = {
 }
 
 export type CardSummary = Pick<Card,
-  'id' | 'version' | 'name' | 'userName' | 'description' | 'media' | 'createdAt' | 'updatedAt'
+  'id' | 'artifactId' | 'derivedFrom' | 'version' | 'name' | 'userName' | 'description' | 'media' | 'createdAt' | 'updatedAt'
 > & { openingPreview?: string }
 
 export type CardPresetInput = {

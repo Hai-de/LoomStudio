@@ -7,6 +7,7 @@ import { applicationDocumentTypes } from '../foundation/document-types.js'
 import { listDocuments } from '../foundation/document-store.js'
 import { validateStateValue } from './state-definition.js'
 import { readTimelineRuntimeContext } from '../narrative/timeline-runtime-context.js'
+import { assertTimelineExtensionLease } from '../extensions/timeline-participation.js'
 import { narrativeWriteContext, requireDocumentParticipant } from '../runtime/context.js'
 import type {
   ApplyStateMutationInput,
@@ -73,6 +74,13 @@ export async function applyApplicationStateMutation(
   requestContext?: RuntimeRequestContext,
 ): Promise<ApplyStateMutationResult> {
   validateMutationInput(input)
+  const extensionLeases = requestContext?.extensionLeases ?? []
+  for (const extensionLease of extensionLeases) {
+    if (input.target.scope !== 'timeline' || input.target.timelineId !== extensionLease.timelineId) {
+      throw new Error('State target is outside the extension execution Timeline')
+    }
+    await assertTimelineExtensionLease(ctx, ctx.documents, extensionLease)
+  }
   const current = await readTargetSnapshot(ctx, input.target)
   if (input.idempotencyKey) {
     const replay = await ctx.states.getRevisionByIdempotencyKey(current.scope.id, input.idempotencyKey)
@@ -112,6 +120,13 @@ export async function applyApplicationStateMutation(
     callId: requestContext?.callId,
     parentCallId: requestContext?.parentCallId,
   }, async dataTx => {
+    if (extensionLeases.length) {
+      await requireDocumentParticipant(ctx).participateTransaction(dataTx, async documents => {
+        for (const lease of extensionLeases) {
+          await assertTimelineExtensionLease({ narratives: ctx.narratives!.transaction(dataTx) }, documents, lease)
+        }
+      }, { allowEmpty: true })
+    }
     const stateTx = ctx.states.transaction(dataTx)
     const created = stateTx.createRevision({
       scopeId: current.scope.id,
@@ -421,7 +436,7 @@ async function readTargetSnapshot(ctx: ApplicationStateContext, target: StateTar
   return { scope, revision }
 }
 
-async function validateSnapshotAgainstDefinitions(
+export async function validateSnapshotAgainstDefinitions(
   ctx: ApplicationStateContext,
   target: StateTarget,
   previous: JsonObject,
@@ -435,6 +450,7 @@ async function validateSnapshotAgainstDefinitions(
   if (runtimeContext) {
     for (const binding of runtimeContext.stateBindings) {
       const value = readDotPath(snapshot, binding.path)
+      if (!value.found && binding.installationId && !readDotPath(previous, binding.path).found) continue
       if (!value.found) throw new ApplicationStateError('state.schema_required', `Bound Timeline State is missing: timeline.${binding.path}`)
       validateStateValue(value.value, binding.schema, `timeline.${binding.path}`)
     }

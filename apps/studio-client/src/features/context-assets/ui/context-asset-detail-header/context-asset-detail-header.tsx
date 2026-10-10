@@ -34,6 +34,9 @@ export function ContextAssetDetailHeader(props: ContextAssetDetailHeaderProps) {
 
   const uri = props.node ? resolveContextAssetUri(props.node, props.pathNodes) : ''
   const badgeInfo = readContextAssetBadgeInfo(props.node, props.t)
+  const anchorId = props.node?.kind === 'virtual'
+    ? (props.node.capabilities?.targetAnchorId || (props.node.label.startsWith('@') ? props.node.label : undefined))
+    : undefined
 
   const handleCopyUri = async () => {
     if (!uri) return
@@ -65,7 +68,7 @@ export function ContextAssetDetailHeader(props: ContextAssetDetailHeaderProps) {
             onMouseDown={event => event.preventDefault()}
           >
             <span className={styles.statusDot} aria-hidden="true" />
-            <span className={styles.statusLabel}>{badgeInfo.label}</span>
+            <span>{badgeInfo.label}</span>
           </button>
         ) : null}
       </div>
@@ -80,6 +83,7 @@ export function ContextAssetDetailHeader(props: ContextAssetDetailHeaderProps) {
               onChange={event => props.onChangeLabel?.(event.target.value)}
               onBlur={event => props.onCommitLabel?.(event.target.value)}
               onKeyDown={event => {
+                if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return
                 if (event.key === 'Enter') {
                   event.currentTarget.blur()
                 }
@@ -114,7 +118,11 @@ export function ContextAssetDetailHeader(props: ContextAssetDetailHeaderProps) {
           </button>
         ) : null}
       </div>
-      <span>{props.node?.meta ?? props.t('context.emptyBody')}</span>
+      <span>
+        {anchorId
+          ? `${props.node?.meta ? `${props.node.meta} · ` : ''}${props.t('context.metadata.anchorId')}: ${anchorId}`
+          : props.node?.meta ?? props.t('context.emptyBody')}
+      </span>
     </header>
   )
 }

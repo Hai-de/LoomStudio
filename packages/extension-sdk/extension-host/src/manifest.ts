@@ -67,6 +67,9 @@ function validateManifest(manifest: Partial<ExtensionManifest>): void {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(manifest.id)) throw new Error('Manifest id is invalid')
   if (studioReservedNamespaces.includes(manifest.id.split('.')[0] ?? '')) throw new Error(`Manifest id uses a reserved Studio namespace: ${manifest.id}`)
   if (!manifest.version) throw new Error('Manifest version is required')
+  if (manifest.participation !== undefined && manifest.participation !== 'timeline') {
+    throw new Error('Manifest participation must be timeline when declared')
+  }
   if (!manifest.displayName) throw new Error('Manifest displayName is required')
   if (manifest.dependencies !== undefined) {
     if (!Array.isArray(manifest.dependencies) || manifest.dependencies.length > 100) throw new Error('Manifest dependencies must be a bounded array')
@@ -282,7 +285,7 @@ function validateManifest(manifest: Partial<ExtensionManifest>): void {
     if (eventCapabilities !== undefined && (!Array.isArray(eventCapabilities) || !eventCapabilities.every(value => typeof value === 'string'))) {
       throw new Error(`Module capabilities.events.subscribe must be a string array: ${moduleManifest.id}`)
     }
-    for (const capability of ['assets.publish', 'assets.read', 'ai.invoke', 'macros.provide', 'narrative.context.provide', 'state.contribute', 'state.read', 'state.write', 'ui.notify'] as const) {
+    for (const capability of ['assets.publish', 'assets.read', 'ai.invoke', 'macros.provide', 'prompt.process', 'narrative.context.provide', 'state.contribute', 'state.read', 'state.write', 'state.processContent', 'ui.notify'] as const) {
       const requested = moduleManifest.capabilities?.[capability]
       if (requested !== undefined && typeof requested !== 'boolean') {
         throw new Error(`Module capabilities.${capability} must be a boolean: ${moduleManifest.id}`)

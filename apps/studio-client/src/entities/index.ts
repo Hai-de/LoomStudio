@@ -52,6 +52,8 @@ export type {
   GetStateSnapshotResult,
   GetStateDefinitionResult,
   ListStateDefinitionsResult,
+  InspectStateSourcesInput,
+  StateSourcesInspection,
   StateDefinitionDraft,
   StateSnapshot,
   StateTarget,

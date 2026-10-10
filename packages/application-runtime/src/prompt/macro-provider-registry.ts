@@ -23,7 +23,7 @@ export type MacroStaticSource = {
 }
 
 export type MacroProviderRegistry = {
-  register(provider: MacroProviderDefinition, target?: ExtensionInstallationTarget): { dispose(): void }
+  register(provider: MacroProviderDefinition, target?: ExtensionInstallationTarget, isAvailable?: (context: MacroProviderContext) => Promise<boolean>): { dispose(): void }
   inspect(input: {
     snapshot: VariableSnapshot
     context: MacroProviderContext
@@ -33,17 +33,17 @@ export type MacroProviderRegistry = {
   }): Promise<MacroInspection>
 }
 
-type RegisteredProvider = MacroProviderDefinition & { order: number; target: ExtensionInstallationTarget }
+type RegisteredProvider = MacroProviderDefinition & { order: number; target: ExtensionInstallationTarget; isAvailable?: (context: MacroProviderContext) => Promise<boolean> }
 
 export function createMacroProviderRegistry(): MacroProviderRegistry {
   const providers = new Map<string, RegisteredProvider>()
   let order = 0
 
   return {
-    register(provider, target = { kind: 'global' }) {
+    register(provider, target = { kind: 'global' }, isAvailable) {
       validateProvider(provider)
       if (providers.has(provider.id)) throw new Error(`Macro provider id is already registered: ${provider.id}`)
-      const registered = { ...provider, order: order++, target: structuredClone(target) }
+      const registered = { ...provider, order: order++, target: structuredClone(target), isAvailable }
       providers.set(provider.id, registered)
       return {
         dispose() {
@@ -89,6 +89,7 @@ export function createMacroProviderRegistry(): MacroProviderRegistry {
       let cardProviderContext: MacroProviderContext | undefined
       for (const provider of [...providers.values()].sort((left, right) => left.order - right.order)) {
         if (provider.target.kind === 'card' && provider.target.cardId !== providerContext.cardId) continue
+        if (provider.isAvailable && !await provider.isAvailable(providerContext)) continue
         assertWritableMacroName(provider.name, 'macro provider')
         try {
           const context = provider.target.kind === 'global'

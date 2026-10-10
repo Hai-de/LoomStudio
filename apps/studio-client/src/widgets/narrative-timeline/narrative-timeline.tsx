@@ -12,7 +12,7 @@ import {
 } from './narrative-timeline-navigator.js'
 import type { NarrativeTimelineMarker } from './narrative-timeline-navigator-model.js'
 import { LongTextEditor } from '../../shared/ui/long-text-editor/long-text-editor.js'
-import { SkeletonText } from '@loom-studio/ui'
+import { LoadingText } from '@loom-studio/ui'
 import { ConversationMessageAction, ConversationMessageChrome, formatConversationTimestamp } from '../../shared/ui/conversation-message-chrome/conversation-message-chrome.js'
 import styles from './narrative-timeline.module.scss'
 import type { ClientRendererHost } from '../../shared/extension-renderer-runtime/client-renderer-host.js'
@@ -244,13 +244,9 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
         </div>
         {props.timeline.length === 0 ? (
           props.openingDraft ? (
-            <Suspense fallback={(
-              <div aria-busy="true" className={styles.renderingMessages}>
-                <SkeletonText lines={4} />
-              </div>
-            )}>
+            <Suspense fallback={<div aria-busy="true" className={styles.renderingMessages} />}>
               <article
-                className={`${styles.message} ${styles.assistant}`}
+                className={`${styles.message} ${styles.assistant} ${styles.openingDraft}`}
                 data-loom-component="chat-message"
                 data-loom-role="narrative"
                 data-loom-state="draft"
@@ -260,7 +256,7 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
                   data-loom-slot="message-content"
                 >
                   {props.openingControls}
-                  {props.openingDisplay?.pending ? <div aria-busy="true"><SkeletonText lines={4} /></div>
+                  {props.openingDisplay?.pending ? <div aria-busy="true" className={styles.displayPending} />
                     : props.openingDisplay?.error ? <div role="alert">
                       <span>Display: {props.openingDisplay.error}</span>
                       <button type="button" onClick={props.openingDisplay.retry} title={props.t('textTransform.refresh')} aria-label={props.t('textTransform.refresh')}><RefreshCw aria-hidden="true" /></button>
@@ -277,9 +273,17 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
                 </div>
               </article>
             </Suspense>
+          ) : props.busy ? (
+            <div aria-busy="true" className={styles.timelineCenterLoading}>
+              <LoadingText label={props.t('directory.loading')} />
+            </div>
           ) : (
             <div className={styles.empty}>{props.emptyTimelineText}</div>
           )
+        ) : (Boolean(props.displayProjection?.pending && props.displayProjection.entries.size === 0 && !props.displayProjection.error)) ? (
+          <div aria-busy="true" className={styles.timelineCenterLoading}>
+            <LoadingText label={props.t('directory.loading')} />
+          </div>
         ) : (
           <div ref={listRef} className={styles.virtualList} style={{ height: virtualizer.getTotalSize() }}>
             {virtualizer.getVirtualItems().map(item => {
@@ -294,13 +298,14 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
                   className={styles.virtualRow}
                   style={{ transform: `translateY(${item.start - scrollMargin}px)` }}
                 >
-                <Suspense fallback={<div aria-busy="true"><SkeletonText lines={6} /></div>}>
+                <Suspense fallback={<div aria-busy="true" className={styles.messagePending} />}>
                 <article
                 className={`${styles.message} ${styles[role]}`}
                 data-loom-component="chat-message"
                 data-loom-role="narrative"
                 data-loom-motion={messageMotion?.id === entry.id ? messageMotion.direction : undefined}
                 data-loom-state={editingId === entry.id ? 'editing' : 'settled'}
+                data-loom-latest={index === props.timeline.length - 1 ? 'true' : undefined}
                 id={`node-${encodeURIComponent(entry.id)}`}
                 key={entry.id}
               >
@@ -426,9 +431,7 @@ function NarrativeMessageBody(props: {
   const lastDisplay = useRef<{ raw: string; text: string } | undefined>(undefined)
   const projected = displayText(props.displayProjection, props.entry.id, props.entry.body.raw)
   if (projected !== undefined) lastDisplay.current = { raw: props.entry.body.raw, text: projected }
-  // Keep this mounted node intact while a new Session or Preset projection is pending.
-  const text = projected ?? (props.displayProjection?.pending && lastDisplay.current?.raw === props.entry.body.raw
-    ? lastDisplay.current.text : '')
+  const text = resolveNarrativeDisplayText(projected, props.entry.body.raw, lastDisplay.current, props.displayProjection)
   const content = (
     <ConversationMarkdown
       className={styles.messageBody}
@@ -464,6 +467,23 @@ export function readNarrativeNodeRole(nodes: NarrativeNode[], index: number): 'u
     && next.source.agentSessionId === node.source.agentSessionId
     ? 'user'
     : 'assistant'
+}
+
+export function resolveNarrativeDisplayText(
+  projected: string | undefined,
+  raw: string,
+  lastDisplay?: { raw: string; text: string },
+  projectionState?: { error?: string; pending?: boolean },
+): string {
+  return projected ?? (
+    lastDisplay?.raw === raw
+      ? lastDisplay.text
+      : projectionState?.error
+        ? raw
+        : projectionState?.pending
+          ? ''
+          : raw
+  )
 }
 
 export { isConversationNearBottom as isTimelineNearBottom } from '../../shared/ui/conversation-viewport/use-conversation-viewport.js'

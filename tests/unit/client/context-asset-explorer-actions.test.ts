@@ -21,7 +21,7 @@ vi.mock('react', async importOriginal => ({
   useEffect: (effect: () => (() => void)) => { hooks.cleanups.push(effect()) },
 }))
 vi.mock('../../../apps/studio-client/src/shared/hooks/use-restorable-scroll.js', () => ({
-  useRestorableScroll: () => ({ ref: { current: null }, onScroll() {} }),
+  useRestorableScroll: () => ({ ref: { current: null }, attach() {}, onScroll() {} }),
 }))
 beforeEach(() => { hooks.cursor = 0; hooks.values = []; hooks.cleanups = [] })
 

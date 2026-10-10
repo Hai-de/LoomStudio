@@ -46,3 +46,15 @@
   width: 18px;
   height: 18px;
 }
+
+.treeAnchorBadge {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--loom-font-family-mono);
+  font-size: var(--loom-font-size-1, 11px);
+  color: var(--loom-color-text-subtle);
+  user-select: none;
+  pointer-events: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}

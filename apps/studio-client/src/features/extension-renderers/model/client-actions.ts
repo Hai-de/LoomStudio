@@ -31,9 +31,11 @@ export function listClientActions(input: {
   packages: readonly ManagedExtensionPackage[]
   surface: ClientActionSurface
   context: ClientCommandInvocationContext
+  isAvailable?(extensionPackage: ManagedExtensionPackage): boolean
 }): ResolvedClientAction[] {
   const actions: ResolvedClientAction[] = []
   for (const extensionPackage of input.packages) {
+    if (input.isAvailable && !input.isAvailable(extensionPackage)) continue
     if (extensionPackage.target?.kind === 'card' && extensionPackage.target.cardId !== input.context.cardId) continue
     for (const module of extensionPackage.modules) {
       if (module.runtimeKind !== 'client' || !module.desired.enabled) continue

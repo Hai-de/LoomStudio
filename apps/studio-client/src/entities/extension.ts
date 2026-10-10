@@ -16,10 +16,64 @@ export type ListExtensionInstallationsResult = {
     version: number
     packageId: string
     packageVersion: string
+    participation?: 'timeline'
+    source?: ExtensionInstallationSource
     target: import('@loom-studio/extension-sdk').ExtensionInstallationTarget
     createdAt: string
     updatedAt: string
   }>
+}
+
+export type ExtensionInstallationSource =
+  | { kind: 'git' | 'zip'; url: string }
+  | { kind: 'local'; directory: string }
+  | { kind: 'card' }
+
+export type TimelineExtensionParticipation = {
+  timelineId: string
+  version: number
+  entries: Array<{
+    installationId: string
+    packageId: string
+    packageVersion: string
+    installationVersion: number
+    source?: ExtensionInstallationSource
+    enabled: boolean
+    generation: string
+  }>
+}
+
+export type TimelineExtensionResourceInspection = {
+  timelineId: string
+  installationId: string
+  resources: Array<{ id: string; kind: string; label: string; contributionId: string; packageId: string; eligible: boolean }>
+}
+
+export type TimelineExtensionAdoptionPreview = {
+  timelineId: string
+  branchId: string
+  installationId: string
+  packageId: string
+  packageVersion: string
+  source: ExtensionInstallationSource
+  expectedVersion: number
+  expectedInstallationVersion: number
+  expectedStateRevisionId: string
+  expectedRuntimeContextVersion: number
+  contributionInstances: Array<{ contributionId: string; instanceId: string }>
+  paths: string[]
+}
+
+export type TimelineExtensionRecoveryPreview = {
+  timelineId: string
+  installationId: string
+  packageId: string
+  packageVersion: string
+  expectedVersion: number
+  expectedInstallationVersion: number
+  source: ExtensionInstallationSource
+  previousSource: ExtensionInstallationSource
+  sourceChanged: boolean
 }
 
 export type ExtensionPackageResourceOrigin = {
@@ -59,6 +113,7 @@ export type ManagedExtensionModule = {
 }
 
 export type ManagedExtensionPackage = {
+  participation?: 'timeline'
   remote?: { source: import('@loom-studio/extension-sdk').ExtensionDownloadSource; commit?: string; canRollback: boolean }
   archiveDigest?: string
   fileRevision?: string

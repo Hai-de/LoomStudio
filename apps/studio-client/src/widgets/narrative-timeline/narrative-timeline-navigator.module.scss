@@ -141,6 +141,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  :global(html:not([data-loom-motion='full'])) {
+    .tickMark,
+    .ticks { transition: none; }
+    .preview { animation: none; }
+  }
+}
+
+:global(html[data-loom-motion='reduce']) {
   .tickMark,
   .ticks { transition: none; }
   .preview { animation: none; }

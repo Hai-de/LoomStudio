@@ -142,7 +142,7 @@ export function CardResourceDirectory(props: {
       incomplete={boundIds.some(id => !props.resources.some(resource => resource.id === id))} /></div> : null}
     {error ? <p role="alert" className={styles.error}>{error.message}</p> : null}
     {card.isPending ? <p role="status">{t('directory.loading')}</p> : null}
-    {!location.item && !card.isPending ? <div ref={scroll.ref} onScroll={scroll.onScroll} className={styles.directoryList}>
+    {!location.item && !card.isPending ? <div ref={scroll.attach} onScroll={scroll.onScroll} className={styles.directoryList}>
       <FileTree ariaLabel={t('directory.attachments')} expandedIds={expandedIds} selectedId={props.selectedTreeId} nodes={nodes}
         getDisclosureLabel={item => item.label} getDragLabel={item => item.label}
         moreActionsLabel={t('context.actionMore')} onExpandedIdsChange={ids => {
@@ -188,17 +188,19 @@ export function CardResourceDirectory(props: {
     </div> : null}
     {location.item?.startsWith('card-setting:') && location.folder === 'settings' && current
       ? <CardSettingEntry key={`${cardId}:${location.item}`} card={current} index={Number(location.item.slice(13))}
-          onSave={async (partial, expectedVersion) => {
+          onSave={async (partial, expectedVersion, onCommitted) => {
             const entries = current.settingLayer.entries.map((entry, index) => index === Number(location.item!.slice(13))
               ? { ...entry, ...(partial.label !== undefined ? { title: partial.label } : {}), ...(partial.body !== undefined ? { content: partial.body } : {}) } : entry)
-            await api.cards.update({ cardId, expectedVersion, settingLayer: { entries } })
+            const result = await api.cards.update({ cardId, expectedVersion, settingLayer: { entries } })
+            onCommitted(result.card.version)
             await queryClient.invalidateQueries({ queryKey: ['card-resource-directory', endpoint, cardId, 'card'] })
             await props.onRefreshCards?.()
           }} t={t} /> : null}
     {location.item && location.folder === 'rules' && ownRules.find(item => item.id === location.item)
       ? <CardRuleEditor key={`${cardId}:${location.item}`} rule={ownRules.find(item => item.id === location.item)!}
-          onSave={async (rule, expectedVersion) => {
-            await api.textTransforms.upsertRule({ ruleId: location.item!, expectedVersion, rule })
+          onSave={async (rule, expectedVersion, onCommitted) => {
+            const result = await api.textTransforms.upsertRule({ ruleId: location.item!, expectedVersion, rule })
+            onCommitted(result.rule.version)
             await queryClient.invalidateQueries({ queryKey: ['card-resource-directory', endpoint, cardId, 'rules'] })
           }} t={t} /> : null}
     {location.item && location.folder === 'scripts' && ownScripts.find(item => item.id === location.item)
@@ -207,8 +209,9 @@ export function CardResourceDirectory(props: {
           onSaved={() => queryClient.invalidateQueries({ queryKey: ['card-resource-directory', endpoint, cardId, 'scripts'] })} /> : null}
     {location.item && location.folder === 'macros' && current?.macros?.[location.item] !== undefined
       ? <CardMacroEditor key={`${cardId}:${location.item}`} card={current} name={location.item}
-          onSave={async (name, value, expectedVersion) => {
-            await api.cards.update({ cardId, expectedVersion, macros: { ...current.macros, [name]: value } })
+          onSave={async (name, value, expectedVersion, onCommitted) => {
+            const result = await api.cards.update({ cardId, expectedVersion, macros: { ...current.macros, [name]: value } })
+            onCommitted(result.card.version)
             await queryClient.invalidateQueries({ queryKey: ['card-resource-directory', endpoint, cardId, 'card'] })
             await props.onRefreshCards?.()
           }} t={t} /> : null}
@@ -216,16 +219,18 @@ export function CardResourceDirectory(props: {
       location.item.startsWith('inline:') || stateDefinitions.some(item => item.id === location.item)
     ) ? <CardStateDefinitionEditor key={`${cardId}:${location.item}`}
       card={current} id={location.item} definition={stateDefinitions.find(item => item.id === location.item)}
-      t={t} onSave={async (schema, initial, label, templateVersion, expectedVersion) => {
+      t={t} onSave={async (schema, initial, label, templateVersion, expectedVersion, onCommitted) => {
         if (location.item!.startsWith('inline:')) {
           const id = location.item!.slice(7)
-          await api.cards.update({ cardId, expectedVersion, stateTemplates: (current.stateTemplates ?? []).map(item =>
+          const result = await api.cards.update({ cardId, expectedVersion, stateTemplates: (current.stateTemplates ?? []).map(item =>
             item.id === id ? { ...item, schema, initial, label, templateVersion } : item) })
+          onCommitted(result.card.version)
           await queryClient.invalidateQueries({ queryKey: ['card-resource-directory', endpoint, cardId, 'card'] })
           await props.onRefreshCards?.()
         } else {
-          await api.states.upsertDefinition({ definitionId: location.item!, expectedVersion,
+          const result = await api.states.upsertDefinition({ definitionId: location.item!, expectedVersion,
             definition: { kind: 'timeline-template', schema, initial, label, templateVersion } })
+          onCommitted(result.definition.version)
           await queryClient.invalidateQueries({ queryKey: ['card-resource-directory', endpoint, cardId, 'state'] })
         }
       }} /> : null}
@@ -267,7 +272,7 @@ function CardScriptEditor(props: {
 }) {
   const { script, api, endpoint, t } = props
   const exported = useQuery({ queryKey: ['card-script-source', endpoint, script.id, script.version], queryFn: () => api.export(script.id) })
-  const [draft, setDraft] = useState<{ fileName: string; source: string }>()
+  const [draft, setDraft] = useState<{ fileName: string; source: string; version: number }>()
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const value = draft ?? exported.data?.artifact
@@ -276,16 +281,19 @@ function CardScriptEditor(props: {
     {exported.isPending ? <p role="status">{t('directory.loading')}</p> : null}
     {exported.isError ? <p role="alert" className={styles.error}>{exported.error.message}</p> : null}
     {value ? <LoomScriptSourceFields fileName={value.fileName} source={value.source} disabled={saving} t={t}
-      onFileNameChange={fileName => setDraft({ ...value, fileName })}
-      onSourceChange={source => setDraft({ ...value, source })} /> : null}
+      onFileNameChange={fileName => setDraft({ ...value, version: draft?.version ?? script.version, fileName })}
+      onSourceChange={source => setDraft({ ...value, version: draft?.version ?? script.version, source })} /> : null}
     {error ? <p role="alert" className={styles.error}>{error}</p> : null}
     <button type="button" disabled={!value || saving || !draft} onClick={() => {
-      if (!value) return
+      if (!draft || saving) return
       setSaving(true)
       setError('')
-      void api.update({ scriptDocumentId: script.id, expectedVersion: script.version,
-        fileName: value.fileName, source: value.source })
-        .then(() => props.onSaved())
+      void api.update({ scriptDocumentId: script.id, expectedVersion: draft.version,
+        fileName: draft.fileName, source: draft.source })
+        .then(result => {
+          setDraft({ ...draft, version: result.script.version })
+          return props.onSaved()
+        })
         .then(() => setDraft(undefined))
         .catch(cause => setError(cause instanceof Error ? cause.message : String(cause)))
         .finally(() => setSaving(false))
@@ -299,7 +307,7 @@ function CardStateDefinitionEditor(props: {
   definition?: Awaited<ReturnType<StudioApi['states']['listDefinitions']>>['definitions'][number]
   onSave(schema: Record<string, import('@loom-studio/client-bridge').ClientJsonValue>,
     initial: Record<string, import('@loom-studio/client-bridge').ClientJsonValue>,
-    label: string | undefined, templateVersion: number, expectedVersion: number): Promise<void>
+    label: string | undefined, templateVersion: number, expectedVersion: number, onCommitted: (version: number) => void): Promise<void>
   t: Translator
 }) {
   const inline = props.id.startsWith('inline:')
@@ -311,14 +319,15 @@ function CardStateDefinitionEditor(props: {
   const [initialText, setInitialText] = useState(() => objectToYaml(template?.initial))
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [baseVersion, setBaseVersion] = useState(inline ? props.card.version : props.definition?.version)
   if (!template) return <p className={styles.error} role="alert">{props.t('stateAuthoring.unassigned')}</p>
   return <div className={styles.stateDefinitionEditor}>
     <h3>{template.label || (inline?.id ?? props.definition?.id)}</h3>
-    <label>{props.t('stateAuthoring.templateLabel')}<input value={label} onChange={event => setLabel(event.target.value)} /></label>
-    <label>{props.t('stateAuthoring.templateVersion')}<input min={1} type="number" value={templateVersion}
+    <label>{props.t('stateAuthoring.templateLabel')}<input disabled={saving} value={label} onChange={event => setLabel(event.target.value)} /></label>
+    <label>{props.t('stateAuthoring.templateVersion')}<input disabled={saving} min={1} type="number" value={templateVersion}
       onChange={event => setTemplateVersion(Number(event.target.value))} /></label>
-    <label>{props.t('stateAuthoring.schema')}<textarea value={schemaText} onChange={event => setSchemaText(event.target.value)} /></label>
-    <label>{props.t('stateAuthoring.initial')}<textarea value={initialText} onChange={event => setInitialText(event.target.value)} /></label>
+    <label>{props.t('stateAuthoring.schema')}<textarea disabled={saving} value={schemaText} onChange={event => setSchemaText(event.target.value)} /></label>
+    <label>{props.t('stateAuthoring.initial')}<textarea disabled={saving} value={initialText} onChange={event => setInitialText(event.target.value)} /></label>
     {error ? <p role="alert" className={styles.error}>{error}</p> : null}
     <button type="button" disabled={saving} onClick={() => {
       setError('')
@@ -327,7 +336,7 @@ function CardStateDefinitionEditor(props: {
         const initial = yamlToObject(initialText, props.t('stateAuthoring.initial'))
         if (!Number.isSafeInteger(templateVersion) || templateVersion < 1) throw new Error(props.t('stateAuthoring.templateVersion'))
         setSaving(true)
-        void props.onSave(schema, initial, label || undefined, templateVersion, inline ? props.card.version : props.definition!.version)
+        void props.onSave(schema, initial, label || undefined, templateVersion, baseVersion!, setBaseVersion)
           .catch(cause => setError(cause instanceof Error ? cause.message : String(cause)))
           .finally(() => setSaving(false))
       } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) }
@@ -352,7 +361,7 @@ function CardExtensionConfig(props: {
 
 function CardRuleEditor(props: {
   rule: Awaited<ReturnType<StudioApi['textTransforms']['listRules']>>['rules'][number]
-  onSave(rule: Parameters<StudioApi['textTransforms']['upsertRule']>[0]['rule'], version: number): Promise<void>
+  onSave(rule: Parameters<StudioApi['textTransforms']['upsertRule']>[0]['rule'], version: number, onCommitted: (version: number) => void): Promise<void>
   t: Translator
 }) {
   const [draft, setDraft] = useState<Parameters<typeof RuleEditorFields>[0]['value']>(() => ({
@@ -360,6 +369,7 @@ function CardRuleEditor(props: {
     orderIndex: props.rule.orderIndex, matcher: props.rule.matcher, effect: props.rule.effect,
     targets: props.rule.targets, phases: props.rule.phases, range: props.rule.range,
   }))
+  const [baseVersion, setBaseVersion] = useState(props.rule.version)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   return <div className={styles.directoryEditor}>
@@ -368,59 +378,68 @@ function CardRuleEditor(props: {
     <button type="button" disabled={saving} onClick={() => {
       setSaving(true)
       setError('')
-      void props.onSave({ ...draft, orderIndex: draft.orderIndex ?? props.rule.orderIndex }, props.rule.version)
+      void props.onSave({ ...draft, orderIndex: draft.orderIndex ?? props.rule.orderIndex }, baseVersion, setBaseVersion)
         .catch(cause => setError(cause instanceof Error ? cause.message : String(cause)))
         .finally(() => setSaving(false))
     }}>{props.t('textTransform.save')}</button>
   </div>
 }
 
-function CardMacroEditor(props: { card: Card; name: string; onSave(name: string, value: string, version: number): Promise<void>; t: Translator }) {
+function CardMacroEditor(props: { card: Card; name: string; onSave(name: string, value: string, version: number, onCommitted: (version: number) => void): Promise<void>; t: Translator }) {
   const [value, setValue] = useState(props.card.macros?.[props.name] ?? '')
+  const [baseline, setBaseline] = useState({ version: props.card.version, value })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   return <MacroEntryDetail title={props.t('macroAuthoring.title')} name={props.name} value={value} editable
-    busy={busy} dirty={value !== props.card.macros?.[props.name]} error={error} t={props.t}
+    busy={busy} dirty={value !== baseline.value} error={error} t={props.t}
     onValueChange={setValue} onSave={() => {
       setBusy(true)
       setError('')
-      void props.onSave(props.name, value, props.card.version)
+      void props.onSave(props.name, value, baseline.version, version => setBaseline({ version, value }))
         .catch(cause => setError(cause instanceof Error ? cause.message : String(cause)))
         .finally(() => setBusy(false))
     }} />
 }
 
-function CardSettingEntry(props: { card: Card; index: number; onSave(partial: Partial<ContextAssetNode>, version: number): Promise<void>; t: Translator }) {
+function CardSettingEntry(props: { card: Card; index: number; onSave(partial: Partial<ContextAssetNode>, version: number, onCommitted: (version: number) => void): Promise<void>; t: Translator }) {
   const entry = props.card.settingLayer.entries[props.index]
   const [node, setNode] = useState<ContextAssetNode>(() => ({
     id: `card-setting:${props.index}`, kind: 'entry', category: 'setting',
     label: entry?.title || entry?.path || String(props.index + 1), body: entry?.content ?? '',
   }))
   const [error, setError] = useState('')
+  const baseVersion = useRef(props.card.version)
+  const savingRef = useRef(false)
   const [saving, setSaving] = useState(false)
   const [metadataOpen, setMetadataOpen] = useState(false)
   const [editorMode, setEditorMode] = useState<LongTextEditorMode>('source')
   if (!entry) return null
   return <div className={styles.directoryDetail}>
+    <div inert={saving}>
     <ContextAssetEditor node={node} activationEditable={false} editorMode={editorMode}
       metadataOpen={metadataOpen} t={props.t}
       onChangeNode={(_, partial) => setNode(current => ({ ...current, ...partial }))}
       onCommitNode={(_, partial) => {
+        if (savingRef.current) return
+        savingRef.current = true
         setNode(current => ({ ...current, ...partial }))
         setSaving(true)
         setError('')
-        void props.onSave(partial, props.card.version)
+        void props.onSave(partial, baseVersion.current, version => { baseVersion.current = version })
           .catch(cause => setError(cause instanceof Error ? cause.message : String(cause)))
-          .finally(() => setSaving(false))
+          .finally(() => { savingRef.current = false; setSaving(false) })
       }}
       onEditorModeChange={setEditorMode} onMetadataOpenChange={setMetadataOpen} />
+    </div>
     {error ? <p role="alert" className={styles.error}>{error}</p> : null}
     <button type="button" disabled={saving || (node.body === entry.content && node.label === (entry.title || entry.path || String(props.index + 1)))} onClick={() => {
+      if (savingRef.current) return
+      savingRef.current = true
       setSaving(true)
       setError('')
-      void props.onSave({ label: node.label, body: node.body }, props.card.version)
+      void props.onSave({ label: node.label, body: node.body }, baseVersion.current, version => { baseVersion.current = version })
         .catch(cause => setError(cause instanceof Error ? cause.message : String(cause)))
-        .finally(() => setSaving(false))
+        .finally(() => { savingRef.current = false; setSaving(false) })
     }}>{props.t('character.save')}</button>
   </div>
 }

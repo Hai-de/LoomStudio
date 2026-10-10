@@ -1,5 +1,5 @@
 import type { CardSummary, NarrativeTimeline } from '../../entities/index.js'
-import type { Translator } from '../../shared/i18n/index.js'
+import { formatDate, formatDateTime, type Translator } from '../../shared/i18n/index.js'
 import { cardMediaUrl, useCardMediaRevision } from '../../shared/lib/card-media.js'
 import styles from './recent-play-rail.module.scss'
 
@@ -28,7 +28,7 @@ export function RecentPlayRail(props: Props) {
             <span className={styles.avatar}>{avatarUrl ? <img src={avatarUrl} alt="" /> : card?.name?.slice(0, 1) ?? '·'}</span>
             <span className={styles.info}>
               <strong>{card?.name ?? timeline.title ?? timeline.id}</strong>
-              <small>{new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(timeline.updatedAt))}</small>
+              <small>{formatDateTime(timeline.updatedAt, undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</small>
             </span>
           </button>
         )
@@ -40,7 +40,7 @@ export function RecentPlayRail(props: Props) {
 function groupByDate(items: NarrativeTimeline[]) {
   const groups = new Map<string, NarrativeTimeline[]>()
   for (const item of items) {
-    const key = new Date(item.updatedAt).toLocaleDateString()
+    const key = formatDate(item.updatedAt)
     groups.set(key, [...(groups.get(key) ?? []), item])
   }
   return [...groups.entries()].map(([key, group]) => ({ key, items: group }))

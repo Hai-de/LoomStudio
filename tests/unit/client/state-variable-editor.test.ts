@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/index.js'
 import {
   createBatchSetStatePropertiesInput,
   createSnapshotReplaceFromYaml,
@@ -64,7 +65,7 @@ timelineStateBindings: []
   })
 
   it('converts runtime snapshots to editable tree nodes and batch patches', () => {
-    const treeNodes = stateSnapshotToTreeNodes({ player: { hp: 100, lore: 'long text\nsecond line' }, flag: true })
+    const treeNodes = stateSnapshotToTreeNodes({ player: { hp: 100, lore: 'long text\nsecond line' }, flag: true }, createTranslator('en-US'))
     expect(treeNodes.find(node => node.label === 'player')?.children?.find(node => node.label === 'lore')?.capabilities?.macroToken).toBe('{{player.lore}}')
     expect(treeNodes.find(node => node.label === 'player')?.children?.find(node => node.label === 'lore')?.capabilities?.isLongText).toBe(true)
     expect(createBatchSetStatePropertiesInput({ scope: 'timeline', timelineId: 'tl-1', branchId: 'br-1' }, 'rev-batch', { '/player/hp': 90 })).toEqual({

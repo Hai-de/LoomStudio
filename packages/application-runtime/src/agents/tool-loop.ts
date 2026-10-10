@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { extensionInstallationId } from '@loom-studio/extension-sdk'
 import { estimateRequestTokens } from '@loom-studio/ai-gateway'
 import type {
   AgentStore,
@@ -20,6 +21,7 @@ import type {
   ToolExecutionScope,
   ToolInvocation,
   ToolResult,
+  ToolDiagnostic,
 } from './tool-registry.js'
 import {
   createLoomContentScannerState,
@@ -47,9 +49,13 @@ import {
 import { codeActToolIds } from './codeact/prompts.js'
 import { renderToolResult } from './tool-result-text.js'
 import { applicationDocumentTypes } from '../foundation/document-types.js'
-import { isExtensionResourceAvailable } from '../runtime/extension-resource-access.js'
+import { isExtensionResourceAvailable, readAvailableExtensionInstallations } from '../runtime/extension-resource-access.js'
 import type { AgentToolContent } from '../types.js'
 import { encodeRunRecovery, type AgentRunRecoveryCheckpoint } from './run-recovery.js'
+import { applyApplicationStateMutation, type ApplicationStateContext } from '../state/state.js'
+import { prepareStateContent } from '../state/process-state-content.js'
+import { beginTimelineExtensionWork, assertTimelineExtensionLease } from '../extensions/timeline-participation.js'
+import { collectPromptExtensionDependencies } from '../extensions/prompt-dependencies.js'
 
 const maximumProviderSteps = 8
 const toolTimeoutMs = 30_000
@@ -87,24 +93,35 @@ export type ContentToolPromptRuntimeInputs = {
 }
 
 type AgentToolResolutionContext = Pick<ApplicationRuntimeContext, 'agentTools' | 'documents' | 'providerAdapters'>
-type NativeToolLoopContext = Pick<ApplicationRuntimeContext, 'agentTools' | 'createId' | 'gateway' | 'runtimeLogger' | 'dataEngine'>
+type NativeToolLoopContext = ApplicationStateContext & Pick<ApplicationRuntimeContext, 'agentTools' | 'createId' | 'gateway' | 'runtimeLogger' | 'stateContent'>
 
 export async function compileAgentToolSet(input: {
   ctx: AgentToolResolutionContext
   model: ProviderModelSelection
   toolMounts: PresetToolMount[]
   availableExtensionInstallations?: ReadonlyMap<string, string>
+  cardId?: string
   variables: VariableRenderContext
   currentInput: string
   activationFacts?: ActivationFacts
 }): Promise<CompiledAgentToolSet> {
-  const enabledMounts = input.toolMounts.filter(mount => mount.defaultEnabled)
-  for (const mount of enabledMounts) {
+  const enabledMounts: PresetToolMount[] = []
+  const unavailableDiagnostics: ToolDiagnostic[] = []
+  for (const mount of input.toolMounts.filter(mount => mount.defaultEnabled)) {
     const document = await input.ctx.documents.get(mount.toolId)
     if (document?.type === applicationDocumentTypes.agentTool
       && !isExtensionResourceAvailable((document.content as AgentToolContent).origin, input.availableExtensionInstallations)) {
-      throw new Error(`Agent Tool is not available in this context: ${mount.toolId}`)
+      const origin = (document.content as AgentToolContent).origin!
+      const belongsToContext = origin.installationId === extensionInstallationId(origin.packageId, { kind: 'global' })
+        || (input.cardId !== undefined && origin.installationId === extensionInstallationId(origin.packageId, { kind: 'card', cardId: input.cardId }))
+      if (!belongsToContext) throw new Error(`Agent Tool is not available in this context: ${mount.toolId}`)
+      unavailableDiagnostics.push({
+        severity: 'warning', code: 'tool.source_unavailable', toolId: mount.toolId,
+        message: 'Skipped a tool whose extension source is unavailable in this story; its mount is retained.',
+      })
+      continue
     }
+    enabledMounts.push(mount)
   }
   const { tools: resolvedTools, diagnostics } = await resolveTools(
     input.ctx,
@@ -157,7 +174,7 @@ export async function compileAgentToolSet(input: {
       mount: mountsByToolId.get(exposure.toolId)!,
       transport: exposure.transport,
     })),
-    trace: { ...toolPromptBuild.trace, diagnostics },
+    trace: { ...toolPromptBuild.trace, diagnostics: [...unavailableDiagnostics, ...diagnostics] },
   }
 }
 
@@ -247,7 +264,7 @@ export function createNativeToolSpecs(toolSet: CompiledAgentToolSet) {
   }))
 }
 
-export async function runNativeToolLoop(input: {
+type NativeToolLoopInput = {
   ctx: NativeToolLoopContext
   agents: AgentStore
   session: AgentSession
@@ -256,6 +273,8 @@ export async function runNativeToolLoop(input: {
   tokenMultiplier?: number
   initialMessages: ChatMessage[]
   recoveryRequest: InvokeAgentTurnInput
+  processedPrompt?: AgentRunRecoveryCheckpoint['processedPrompt']
+  promptExtensionLeases?: AgentRunRecoveryCheckpoint['promptExtensionLeases']
   userInput: string
   compiledToolSet: CompiledAgentToolSet
   toolExecutionScope?: ToolExecutionScope
@@ -267,7 +286,57 @@ export async function runNativeToolLoop(input: {
   resumeUserEntry?: AgentTranscriptEntry
   resumeAssistantEntryId?: string
   progress?: AgentRunProgress
-}): Promise<NativeToolLoopResult> {
+}
+
+export async function runNativeToolLoop(input: NativeToolLoopInput): Promise<NativeToolLoopResult> {
+  const scopes: Array<Awaited<ReturnType<typeof beginTimelineExtensionWork>>> = []
+  const controller = new AbortController()
+  const promptExtensionLeases = [...(input.promptExtensionLeases ?? [])]
+  const extensionLeases = [...(input.requestContext?.extensionLeases ?? []), ...promptExtensionLeases]
+  const abortSignal = input.requestContext?.abortSignal
+    ? AbortSignal.any([input.requestContext.abortSignal, controller.signal]) : controller.signal
+  const addScope = async (lease: AgentRunRecoveryCheckpoint['promptExtensionLeases'][number]) => {
+    const scope = await beginTimelineExtensionWork(input.ctx, { ...lease, lease, signal: abortSignal })
+    scopes.push(scope)
+    scope.signal.addEventListener('abort', () => controller.abort(scope.signal.reason), { once: true })
+    scope.signal.throwIfAborted()
+  }
+  const guarded = <T>(work: () => Promise<T>) => scopes.reduceRight<() => Promise<T>>(
+    (next, scope) => () => scope.run(next), work,
+  )()
+  try {
+    for (const lease of promptExtensionLeases) await addScope(lease)
+    return await runToolLoop({
+      ...input, promptExtensionLeases,
+      requestContext: {
+        ...input.requestContext, abortSignal, extensionLeases,
+      },
+    }, guarded, async work => {
+      const consumed = await collectPromptExtensionDependencies(input.ctx, async () => {
+        const timelineId = input.recoveryRequest.narrativeTarget?.timelineId
+        const timeline = timelineId ? await input.ctx.narratives?.getTimeline(timelineId) : undefined
+        const available = await readAvailableExtensionInstallations(input.ctx.documents, timeline?.createdFrom?.cardId, timelineId ?? null)
+        if (input.toolExecutionScope) input.toolExecutionScope.availableExtensionInstallations = available
+        return { result: await guarded(work) }
+      })
+      for (const lease of consumed.promptExtensionLeases) {
+        if (promptExtensionLeases.some(existing => existing.installationId === lease.installationId)) continue
+        await addScope(lease)
+        promptExtensionLeases.push(lease)
+        extensionLeases.push(lease)
+      }
+      return consumed.result
+    })
+  } finally {
+    for (const scope of scopes) scope.dispose()
+  }
+}
+
+async function runToolLoop(
+  input: NativeToolLoopInput,
+  runTool: <T>(work: () => Promise<T>) => Promise<T>,
+  runInvocation: (work: () => Promise<ToolResult>) => Promise<ToolResult>,
+): Promise<NativeToolLoopResult> {
   const progress = input.progress ?? { stage: 'transcript', providerStep: 0, toolCount: 0, suspended: false }
   progress.stage = 'transcript'
   const stepLogger = input.ctx.runtimeLogger?.child('step')
@@ -294,9 +363,16 @@ export async function runNativeToolLoop(input: {
     id: tool.definition.id, exposure: tool.exposure, transport: tool.transport,
   })))).digest('hex')
   const continuation = input.requestContext?.agentRun?.continuation
+  let acceptedContent = continuation?.recovery?.acceptedContent
+  let pendingAssistantContent = continuation?.recovery?.pendingAssistantContent ?? ''
   let nextRecoveryStep = continuation?.recovery?.nextProviderStep ?? 1
   if (continuation?.recovery && continuation.recovery.toolContract !== toolContract) {
     throw Object.assign(new Error('Agent tool contract changed since the checkpoint'), { code: 'agent.recovery_tools_changed' })
+  }
+  if (continuation?.recovery?.phase === 'tools') {
+    throw Object.assign(new Error('The interrupted tool outcome is unknown; side effects will not be repeated'), {
+      code: 'agent.recovery_tool_outcome_unknown',
+    })
   }
   const userEntryId = input.resumeUserEntry?.id ?? input.ctx.createId('agent-entry')
   function recovery(phase: AgentRunRecoveryCheckpoint['phase'], messages: ChatMessage[], nextProviderStep: number) {
@@ -304,6 +380,10 @@ export async function runNativeToolLoop(input: {
       version: 1, phase, executor: { pid: process.pid, id: input.runId },
       request: input.recoveryRequest, model: input.model, toolContract,
       messages, userEntryId, nextProviderStep,
+      promptExtensionLeases: input.promptExtensionLeases ?? [],
+      ...(input.processedPrompt ? { processedPrompt: input.processedPrompt } : {}),
+      ...(pendingAssistantContent ? { pendingAssistantContent } : {}),
+      ...(phase === 'content' && acceptedContent ? { acceptedContent } : {}),
       ...(continuationAssistantEntryId ? { partialEntryId: continuationAssistantEntryId } : {}),
     })
   }
@@ -318,7 +398,7 @@ export async function runNativeToolLoop(input: {
     ? await append([{
         kind: 'run-state', state: 'running',
         sourceRunId: input.requestContext?.agentRun?.continuation?.sourceRunId,
-        recovery: recovery('provider', providerMessages, continuation?.recovery?.nextProviderStep ?? 1),
+        recovery: recovery(acceptedContent ? 'content' : 'provider', providerMessages, continuation?.recovery?.nextProviderStep ?? 1),
       }], undefined, continuation?.recovery ? continuation : undefined)
     : await append([
         { kind: 'message', role: 'user', content: input.userInput },
@@ -327,6 +407,7 @@ export async function runNativeToolLoop(input: {
   const userEntry = input.resumeUserEntry ?? initial.entries[0]!
 
   try {
+    if (acceptedContent) return await finishAcceptedContent()
     for (let step = continuation?.recovery?.nextProviderStep ?? 1; step <= maximumProviderSteps; step += 1) {
       nextRecoveryStep = step
       progress.providerStep = step
@@ -356,6 +437,7 @@ export async function runNativeToolLoop(input: {
       }])
       if (input.requestContext?.abortSignal?.aborted)
         throw createAbortError(input.requestContext.abortSignal.reason)
+      await assertPromptDependencies()
       const providerResult = await input.ctx.gateway.invokeChat({
         request: {
           messages: stepMessages,
@@ -397,6 +479,7 @@ export async function runNativeToolLoop(input: {
         },
       })
 
+      await assertPromptDependencies()
       progress.stage = 'response'
       await append([{ ...providerObservation(providerResult), measurementId, providerStep: step }])
       const toolCalls = providerResult.message.tool_calls ?? []
@@ -518,11 +601,39 @@ export async function runNativeToolLoop(input: {
       })
       const finalResponse = invocationPairs.length === 0 && providerResult.finishReason !== 'error'
         && providerResult.finishReason !== 'length' && Boolean(providerResult.message.content) && Boolean(contentScan.text)
-      if (finalResponse) stepEntries.push({ kind: 'run-state', state: 'completed' })
-      if (invocationPairs.length === 0 && providerResult.finishReason === 'length') stepEntries.push({
-        kind: 'run-state', state: 'running', recovery: recovery('provider', checkpointMessages, step + 1),
+      let contentDiagnostics: string[] = []
+      if (finalResponse) {
+        const completeText = classifyAssistantContent(pendingAssistantContent + (providerResult.message.content ?? ''),
+          session.id, input.classificationRules ?? []).text
+        const prepared = await prepareStateContent(input.ctx, {
+          text: scanContentTools(completeText, contentTools.map(tool => tool.definition.name)).text,
+          operationId: `agent-content:${input.runId}:${step}`,
+          target: input.recoveryRequest.narrativeTarget ? {
+            timelineId: input.recoveryRequest.narrativeTarget.timelineId, branchId: input.branchId,
+          } : undefined,
+          signal: input.requestContext?.abortSignal ?? new AbortController().signal,
+        })
+        contentDiagnostics = prepared.diagnostics
+        if (prepared.mutation) {
+          const { raw: _raw, ...recoverableResult } = providerResult
+          acceptedContent = { mutation: prepared.mutation, extensionLeases: prepared.extensionLeases, entries: stepEntries, providerResult: recoverableResult, diagnostics: contentDiagnostics }
+          // Once accepted, replay commits these exact operations, never re-runs extension code.
+          await append([{ kind: 'run-state', state: 'running', recovery: recovery('content', checkpointMessages, step) }])
+          streamedText = ''
+          streamedToolInputs.clear()
+          return await finishAcceptedContent()
+        }
+      }
+      if (finalResponse) stepEntries.push({
+        kind: 'run-state', state: 'completed', ...(contentDiagnostics.length ? { reason: contentDiagnostics.join('\n') } : {}),
       })
-      const persistedStep = await append(stepEntries)
+      if (invocationPairs.length === 0 && providerResult.finishReason === 'length') {
+        pendingAssistantContent += providerResult.message.content ?? ''
+        stepEntries.push({
+          kind: 'run-state', state: 'running', recovery: recovery('provider', checkpointMessages, step + 1),
+        })
+      } else pendingAssistantContent = ''
+      const persistedStep = await runTool(() => append(stepEntries))
       for (const pair of invocationPairs) {
         pendingTools.set(pair.invocation.id, {
           invocation: pair.invocation,
@@ -599,13 +710,13 @@ export async function runNativeToolLoop(input: {
           pair.invocation,
           'codeact.incomplete_step',
           'CodeAct was not executed because the Provider response did not finish normally. Submit a complete invocation.',
-        ) : await executeInvocation(
+        ) : await runInvocation(() => executeInvocation(
           input.ctx,
           pair.invocation,
           pair.resolved?.transport,
           input.toolExecutionScope,
           input.requestContext?.abortSignal,
-        )
+        ))
         const toolOutcome = result.status
         const errorCode = result.error?.code && safeToolCodes.has(result.error.code) ? result.error.code : undefined
         toolLogger?.[toolOutcome === 'completed' || (toolOutcome === 'aborted' && errorCode !== 'tool.timeout') ? 'info' : 'warn'](`${activeTool.toolName} · ${toolOutcome}${errorCode ? ` · ${errorCode}` : ''}`, {
@@ -703,9 +814,9 @@ export async function runNativeToolLoop(input: {
         results.forEach(result => checkpointMessages.push(pendingTools.get(result.invocationId)!.render(result)))
         pendingTools.clear()
       }
-      if (suspended || !aborted) {
+      if (suspended || !aborted || acceptedContent) {
         const checkpointEntries: AgentTranscriptEntryData[] = []
-        if (streamedText) checkpointEntries.push({
+        if (streamedText && !acceptedContent) checkpointEntries.push({
           kind: 'message',
           role: 'assistant',
           content: streamedText,
@@ -740,10 +851,12 @@ export async function runNativeToolLoop(input: {
           }] : []),
         ]
         if (partialEntryId) continuationAssistantEntryId = partialEntryId
+        if (streamedText && !acceptedContent) pendingAssistantContent += streamedText
+        const checkpoint = recovery(acceptedContent ? 'content' : uncertainToolOutcome ? 'tools' : 'provider', resumeMessages, nextRecoveryStep)
         checkpointEntries.push({
           kind: 'run-state', state: suspended ? 'suspended' : 'failed', reason: errorMessage(error),
           ...(measurementId ? { measurementId } : {}),
-          recovery: recovery(uncertainToolOutcome ? 'tools' : 'provider', resumeMessages, nextRecoveryStep),
+          recovery: checkpoint,
         })
         const checkpointAppend = await append(checkpointEntries, partialEntryId)
         const appendedPartial = checkpointAppend.entries.find(entry =>
@@ -753,7 +866,16 @@ export async function runNativeToolLoop(input: {
           sourceRunId: input.requestContext.agentRun.runId,
           messages: resumeMessages,
           userEntry,
-          ...(appendedPartial ? { partialEntryId: appendedPartial.id } : {}),
+          // Live handoff has paired terminal tool results above and advances to a new
+          // Provider request, as before. The durable checkpoint still fails closed if
+          // a stopped process cannot establish its interrupted tool outcome.
+          recovery: {
+            ...checkpoint,
+            ...(uncertainToolOutcome && !acceptedContent ? { phase: 'provider' } : {}),
+          } as unknown as AgentRunRecoveryCheckpoint,
+          expectedEntryCount: session.entryCount,
+          ...(appendedPartial ? { partialEntryId: appendedPartial.id }
+            : continuationAssistantEntryId ? { partialEntryId: continuationAssistantEntryId } : {}),
         })
         progress.suspended = Boolean(input.requestContext?.agentRun?.onSuspended)
       } else {
@@ -766,6 +888,34 @@ export async function runNativeToolLoop(input: {
       // Preserve the original failure if recording the terminal state also fails.
     }
     throw error
+  }
+
+  async function finishAcceptedContent(): Promise<NativeToolLoopResult> {
+    const accepted = acceptedContent!
+    await assertPromptDependencies()
+    input.requestContext?.abortSignal?.throwIfAborted()
+    await applyApplicationStateMutation(input.ctx, accepted.mutation, {
+      ...input.requestContext,
+      extensionLeases: [...(input.requestContext?.extensionLeases ?? []), ...accepted.extensionLeases],
+    })
+    const persisted = await runTool(() => append([...accepted.entries, {
+      kind: 'run-state', state: 'completed',
+      ...(accepted.diagnostics?.length ? { reason: accepted.diagnostics.join('\n') } : {}),
+    }]))
+    const assistantEntry = persisted.entries.find(entry => entry.entry.kind === 'message')!
+    acceptedContent = undefined
+    completeStep('Assistant output and State content accepted')
+    return {
+      session, userEntry, assistantEntry, providerResult: accepted.providerResult,
+      toolPromptBuildTrace: input.compiledToolSet.trace, changesetId: persisted.changesetId,
+    }
+  }
+
+  async function assertPromptDependencies(): Promise<void> {
+    input.requestContext?.abortSignal?.throwIfAborted()
+    for (const lease of input.promptExtensionLeases ?? []) {
+      await assertTimelineExtensionLease(input.ctx, input.ctx.documents, lease)
+    }
   }
 
   function completeStep(detail: string) {

@@ -15,7 +15,7 @@ export function presetAnchorDeclarations(input: {
   settingMounts: SettingMount[]
   timelinePromptResourceIds?: string[]
 }): { nodes: FileTreeNode[]; targets: Map<string, PresetDeclaration> } {
-  const anchorId = input.anchor.label.startsWith('@') ? input.anchor.label : (input.anchor.capabilities?.targetAnchorId ?? input.anchor.label)
+  const anchorId = input.anchor.capabilities?.targetAnchorId || (input.anchor.label.startsWith('@') ? input.anchor.label : input.anchor.label)
   const resources = new Map(input.resources.map(resource => [resource.id, resource]))
   const ids = [
     ...input.settingMounts.filter(mount => mount.source.kind === 'manual').map(mount => mount.settingResourceId),

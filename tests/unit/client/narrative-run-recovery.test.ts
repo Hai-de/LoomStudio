@@ -3,6 +3,29 @@ import { fixture, primaryFixture } from '../../support/client/narrative-runtime.
 import type { StudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
 
 describe('Narrative Run recovery', () => {
+  it('reports pause rejection while preserving the active run and approval', async () => {
+    const f = fixture()
+    const finish = Promise.withResolvers<Awaited<ReturnType<StudioApi['agentSessions']['subscribeRun']>>>()
+    f.subscribeRun.mockResolvedValueOnce({
+      events: [{ type: 'mutation-approval-requested', runId: 'run', requestId: 'approval',
+        preview: { action: 'replace', path: '/test', kind: 'state', before: '1', after: '2' } }],
+      nextCursor: 1, done: false, state: 'running',
+    }).mockReturnValueOnce(finish.promise)
+    const failure = new Error('Pause unavailable')
+    f.input.api.agentSessions.pauseRun = vi.fn(async () => { throw failure })
+    f.input.api.agentSessions.approveMutation = vi.fn(async () => ({ accepted: true }))
+    f.render().setAgentInput('Draft')
+    const running = f.render().submitAgentTurn(f.event)
+    await vi.waitFor(() => expect(f.subscribeRun).toHaveBeenCalledTimes(2))
+    await f.render().pauseAgentRun()
+    expect(f.reportFailure).toHaveBeenCalledWith(failure)
+    expect(f.render().activeAgentRun?.approval?.requestId).toBe('approval')
+    expect(await f.render().approveAgentMutation(false, 'Reason')).toBe(true)
+    expect(f.input.api.agentSessions.approveMutation).toHaveBeenCalledWith('run', 'approval', false, 'Reason')
+    expect(f.render().activeAgentRun?.approval).toBeUndefined()
+    finish.resolve({ events: [{ type: 'suspended', runId: 'run' }], nextCursor: 2, done: true, state: 'suspended' })
+    await running
+  })
   it('publishes the Inspector result after expired replay and acknowledges only received completion', async () => {
     const f = fixture()
     await f.render().createAgentSession('profile', true)

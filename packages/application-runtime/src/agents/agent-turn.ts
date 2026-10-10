@@ -9,11 +9,14 @@ import type {
 } from '../prompt/prompt-builder.js'
 import type { ActivationFacts } from '../prompt/prompt-activation.js'
 import { compilePromptDataModel, type PromptBuildTrace } from '../prompt/prompt-build-pipeline.js'
+import { processPrompt, type ProcessedPromptSnapshot } from '../prompt/process-prompt.js'
+import type { PromptProcessorRegistry } from '../prompt/prompt-processor-registry.js'
+import type { ExtensionPromptProcessingContext } from '@loom-studio/extension-sdk'
 import { readPromptResourceInputs } from '../cards/workspace.js'
 import type { PromptResourceContent } from '../cards/workspace-types.js'
 import { createPromptToolExecutionScope } from './official-tools/index.js'
 import type { ToolExecutionScope } from './tool-registry.js'
-import { cloneVariableRenderTrace, createVariableRenderContext, type VariableRenderContext } from '../prompt/variables.js'
+import { cloneVariableRenderTrace, createVariableRenderContext, renderVariableMacros, type VariableRenderContext } from '../prompt/variables.js'
 import { projectHistoryEntries, type TextTransformRuleEntry } from '../transforms/history-text.js'
 import { projectNarrativeNodes } from '../narrative/projection.js'
 import { projectSessionHistory } from './session-history.js'
@@ -49,7 +52,10 @@ export async function composeAgentTurnPrompt(input: {
     contributions: PromptContribution[]
   }
   promptAddition?: ExtensionPromptAddition
-}): Promise<{ messages: ChatMessage[]; projection: CompiledPrompt; promptBuildTrace: PromptBuildTrace; toolExecutionScope: ToolExecutionScope }> {
+  processing?: { registry: PromptProcessorRegistry; context: ExtensionPromptProcessingContext }
+  resumeMessages?: ChatMessage[]
+  resumeProcessingSnapshot?: ProcessedPromptSnapshot
+}): Promise<{ messages: ChatMessage[]; projection: CompiledPrompt; promptBuildTrace: PromptBuildTrace; toolExecutionScope: ToolExecutionScope; processingSnapshot?: ProcessedPromptSnapshot }> {
   const variables = input.variables ?? createVariableRenderContext()
   const diagnostics: PromptBuildTrace['diagnostics'] = []
   const missingResourceIds = new Set<string>()
@@ -131,12 +137,34 @@ export async function composeAgentTurnPrompt(input: {
     ...(input.externalRuntime?.contributions ?? []),
     ...(additionalInputs?.contributions ?? []),
   ]
-  const resourceProjection = compilePromptDataModel({
+  const model = {
     skeletonRootId: input.preset.rootNode.id,
     sourceNodes,
     contributions,
     currentInput: input.userInput,
     activationFacts: input.activationFacts,
+  }
+  const processed = input.processing && !input.resumeMessages
+    ? await processPrompt(model, {
+        ...input.processing,
+        renderText: content => renderVariableMacros(content, variables),
+      }) : undefined
+  if (input.resumeMessages && !input.resumeProcessingSnapshot && contributions.some(entry => entry.capabilities.processorId)) {
+    throw new Error('Cannot restore processed Prompt context without its build snapshot')
+  }
+  const processingSnapshot = input.resumeProcessingSnapshot ?? (processed && contributions.some(entry => entry.capabilities.processorId) ? {
+    sourceNodes: processed.model.sourceNodes,
+    contributions: processed.model.contributions,
+    projection: processed.projection,
+  } : undefined)
+  const resourceProjection = input.resumeMessages
+    ? { messages: input.resumeMessages.map(message => ({
+        ...structuredClone(message), content: message.content ?? '', fragmentIds: [] as string[],
+      })), editorProjection: { sourceRows: [], promptRows: [] } }
+    : processed?.projection ?? compilePromptDataModel(model)
+  if (input.resumeMessages) diagnostics.push({
+    severity: 'info', code: 'prompt.checkpoint_reused',
+    message: 'Resumed Provider messages were reused; author processors were not executed.',
   })
 
   // Create a minimal trace for now since DFS compiler is simplified
@@ -158,10 +186,11 @@ export async function composeAgentTurnPrompt(input: {
         rawThroughNodeId: input.narrative.context.rawThroughNodeId,
       },
     } : {}),
-    executions: []
+    executions: processed?.executions ?? [],
   }
 
   return {
+    ...(processingSnapshot ? { processingSnapshot } : {}),
     messages: resourceProjection.messages,
     projection: resourceProjection,
     promptBuildTrace: {
@@ -170,9 +199,9 @@ export async function composeAgentTurnPrompt(input: {
     },
     toolExecutionScope: {
       ...createPromptToolExecutionScope({
-        prompt: resourceProjection,
-        contributions,
-        sourceNodes,
+        prompt: processingSnapshot?.projection ?? resourceProjection,
+        contributions: processingSnapshot?.contributions ?? processed?.model.contributions ?? contributions,
+        sourceNodes: processingSnapshot?.sourceNodes ?? processed?.model.sourceNodes ?? sourceNodes,
         promptResources: input.promptResources,
         workspaceResourceAccess: !input.narrative,
         availableExtensionInstallations: input.availableExtensionInstallations,

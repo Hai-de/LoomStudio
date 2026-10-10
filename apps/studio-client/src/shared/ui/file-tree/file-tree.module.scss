@@ -29,8 +29,8 @@
   grid-template-rows: 0fr;
   opacity: 0;
   transition:
-    grid-template-rows 180ms var(--loom-shell-motion-easing),
-    opacity 120ms ease;
+    grid-template-rows 280ms var(--loom-motion-ease-out, cubic-bezier(0.215, 0.61, 0.355, 1)),
+    opacity 200ms ease;
 
   > div {
     min-height: 0;
@@ -48,7 +48,7 @@
 }
 
 .row {
-  --loom-tree-base-x: 22px;
+  --loom-tree-base-x: 23px;
   --loom-tree-guide-x: var(--loom-tree-base-x);
   --loom-tree-indent-step: 8px;
   --loom-tree-indent: calc((var(--loom-tree-level) - 1) * var(--loom-tree-indent-step));
@@ -73,7 +73,7 @@
   contain-intrinsic-size: auto 30px;
 
   &.noDrag {
-    --loom-tree-base-x: 8px;
+    --loom-tree-base-x: 9px;
   }
 }
 
@@ -190,7 +190,10 @@
   padding: 0;
   cursor: pointer;
   margin-left: var(--loom-tree-indent);
-  margin-right: 4px;
+
+  svg {
+    transition: transform 200ms var(--loom-motion-ease-out, cubic-bezier(0.215, 0.61, 0.355, 1));
+  }
 }
 
 .row > .disclosure:hover {
@@ -222,6 +225,13 @@
   min-width: 0;
   display: grid;
   gap: 1px;
+}
+
+.labelRow {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .metaRow {
@@ -348,7 +358,7 @@
 .editInput {
   color: var(--loom-color-text);
   background: var(--loom-color-surface-raised);
-  border: 1px solid var(--loom-color-focus);
+  border: 1px solid var(--loom-color-accent);
   border-radius: 4px;
   padding: 0 4px;
   font-family: inherit;

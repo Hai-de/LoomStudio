@@ -2,6 +2,7 @@
 
 本目录用于跟踪**当前开放或周期性滚动审查的质量发现**。
 
+- [`frontend-continuous-audit-2026-10-07.md`](./frontend-continuous-audit-2026-10-07.md) — **前端持续审查与修复**（当前保留 38 项，FE-035 确证复现并建账待实施；FE-028 完整 Renderer 映射、FE-031 旧路径统一反馈及全量语言/浏览器验收仍见台账）。
 - [`audit-playbook.md`](./audit-playbook.md) — **审查工作指南**（历史发现与实际修复经验、常见偏移、精简反证、最小验证及关闭/归档流程；新审查先读此文，不是新增施工清单）。
 - [持续代码审查](../../archive/issues/continuous-code-review-2026-10-02.md)已于 2026-10-06 归档：CR-001～013 与 QA/DOC 本机修复完成，F-06 经用户确认延期，见[延期验收](./audit-follow-ups.md#continuous-review-acceptance-2026-10-06)；不再作为进行中的审查。
 - [`audit-follow-ups.md`](./audit-follow-ups.md) — **审查归档后续**（延期的远端 CI、旧计划接续及代码精简后的用户 UI 验收/独立测试维护；已完成的修复账目不再留在 Workbench）。

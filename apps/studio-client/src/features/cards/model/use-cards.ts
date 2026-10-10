@@ -47,6 +47,7 @@ export function useCards(input: UseCardsInput) {
     }
   }, [selectionSource])
   const refreshRequest = useRef(0)
+  const forking = useRef(false)
   useEffect(() => () => { refreshRequest.current += 1 }, [input.api])
   const [cardCollection, setCardCollection] = useState<{ source: typeof selectionSource; cards: CardSummary[] }>()
   const cards = cardCollection?.source === selectionSource ? cardCollection.cards : []
@@ -145,9 +146,9 @@ export function useCards(input: UseCardsInput) {
         changesetId: result.mutation.changesetId,
         anchor: { documentId: result.card.id },
       })
-      const { id, version, name, userName, description, media, createdAt, updatedAt } = result.card
+      const { id, artifactId, derivedFrom, version, name, userName, description, media, createdAt, updatedAt } = result.card
       setCards(current => [
-        { id, version, name, userName, description, media, createdAt, updatedAt },
+        { id, artifactId, derivedFrom, version, name, userName, description, media, createdAt, updatedAt },
         ...current.filter(card => card.id !== id),
       ])
       if (selection === selectionSource.request) publishSelectedCard(result.card)
@@ -169,6 +170,28 @@ export function useCards(input: UseCardsInput) {
     } finally {
       if (pendingSelectionRef.current === pending) pendingSelectionRef.current = undefined
     }
+  }
+
+  async function forkCard(cardId: string, expectedVersion: number) {
+    if (forking.current) return
+    forking.current = true
+    try {
+      await input.runAction(async () => {
+        assertCurrentSource()
+        const selection = ++selectionSource.request
+        const result = await input.api.cards.fork({ cardId, expectedVersion })
+        assertCurrentSource()
+        const { id, artifactId, derivedFrom, version, name, userName, description, media, createdAt, updatedAt } = result.card
+        setCards(current => [
+          { id, artifactId, derivedFrom, version, name, userName, description, media, createdAt, updatedAt },
+          ...current.filter(card => card.id !== id),
+        ])
+        if (selection === selectionSource.request) publishSelectedCard(result.card)
+        await refreshCards()
+        assertCurrentSource()
+        await input.onCardsImported?.()
+      })
+    } finally { forking.current = false }
   }
 
   async function updateCardProfile(patch: { cardId: string; expectedVersion: number; name: string; userName: string; description: string; opening?: Card['opening'] }) {
@@ -266,6 +289,21 @@ export function useCards(input: UseCardsInput) {
     timelineComponentMounts: NonNullable<Card['timelineComponentMounts']>
     stateContributionIds: NonNullable<Card['stateContributionIds']>
     timelineStateBindings: NonNullable<Card['timelineStateBindings']>
+  }) {
+    const result = await input.api.cards.update(config)
+    recordCardEdit({
+      label: input.t('history.card.update'),
+      changesetId: result.mutation.changesetId,
+      anchor: { documentId: config.cardId },
+    })
+    applyUpdatedCard(result.card)
+    return result.card
+  }
+
+  async function updateCardExtensionAdoptions(config: {
+    cardId: string
+    expectedVersion: number
+    extensionAdoptions: NonNullable<Card['extensionAdoptions']>
   }) {
     const result = await input.api.cards.update(config)
     recordCardEdit({
@@ -398,9 +436,9 @@ export function useCards(input: UseCardsInput) {
             throw new Error(typeof result.error?.message === 'string' ? result.error.message : `Card import failed (${response.status})`)
           }
           assertCurrentSource()
-          const { id, version, name, userName, description, media, createdAt, updatedAt } = result.card
+          const { id, artifactId, derivedFrom, version, name, userName, description, media, createdAt, updatedAt } = result.card
           setCards(current => [
-            { id, version, name, userName, description, media, createdAt, updatedAt },
+            { id, artifactId, derivedFrom, version, name, userName, description, media, createdAt, updatedAt },
             ...current.filter(card => card.id !== id),
           ])
           if (selection === selectionSource.request) publishSelectedCard(result.card)
@@ -411,14 +449,20 @@ export function useCards(input: UseCardsInput) {
         }
       }
       assertCurrentSource()
-      await refreshCards()
-      assertCurrentSource()
-      await input.onCardsImported?.()
-      assertCurrentSource()
       if (importedNames.length === 1) {
         toast.success(input.t('character.cardImportedNotice', { name: importedNames[0] }))
       } else if (importedNames.length > 1) {
         toast.success(input.t('character.cardsImportedNotice', { count: importedNames.length }))
+      }
+      try {
+        await refreshCards()
+        assertCurrentSource()
+        await input.onCardsImported?.()
+        assertCurrentSource()
+      } catch (error) {
+        failures.push(input.t('character.importRefreshFailed', {
+          message: error instanceof Error ? error.message : String(error),
+        }))
       }
       if (failures.length > 0) throw new Error(failures.join('\n'))
     })
@@ -500,6 +544,7 @@ export function useCards(input: UseCardsInput) {
     attachExtensionPackage,
     detachExtensionPackage,
     updateCardStateConfig,
+    updateCardExtensionAdoptions,
     updateCardMacros,
     deleteCard,
     deleteCards,
@@ -507,6 +552,7 @@ export function useCards(input: UseCardsInput) {
     updateCardMedia,
     importCards,
     exportCard,
+    forkCard,
   }
 }
 

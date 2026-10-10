@@ -32,6 +32,11 @@ import { createMacroConfigurationRuntimeMethods } from './macros-runtime.js'
 import { buildExtensionPrompt } from '../prompt/extension-prompt.js'
 import { readAvailableExtensionInstallations } from './extension-resource-access.js'
 import { extensionInstallationId } from '@loom-studio/extension-sdk'
+import { assertTimelineExtensionLease, beginTimelineExtensionWork, createTimelineExtensionParticipationMethods, runTimelineExtensionWork } from '../extensions/timeline-participation.js'
+import { inspectTimelineExtensionResources } from '../extensions/resource-inspection.js'
+import { createTimelineExtensionRecoveryMethods } from '../extensions/timeline-recovery.js'
+import { createTimelineExtensionAdoptionMethods } from '../extensions/timeline-adoption.js'
+import { createTimelineExtensionStateInitializationMethods } from '../extensions/timeline-state-initialization.js'
 
 export function createApplicationRuntime(options: ApplicationRuntimeOptions): ApplicationRuntime {
   const ctx: ApplicationRuntimeContext = createApplicationRuntimeContext(options)
@@ -89,20 +94,38 @@ export function createApplicationRuntime(options: ApplicationRuntimeOptions): Ap
     ...createCardDirectoryRuntimeMethods(ctx),
     ...createNarrativeRuntimeMethods(ctx),
     ...createAgentsRuntimeMethods(ctx),
-    buildExtensionPrompt: async (input, target, packageId) => ({
-      messages: (await buildExtensionPrompt({
+    buildExtensionPrompt: async (input, target, packageId, lease) => {
+      if (lease) {
+        if (lease.installationId !== extensionInstallationId(packageId, target)) throw new Error('Prompt execution belongs to another installation')
+        await assertTimelineExtensionLease(ctx, ctx.documents, lease)
+      }
+      const timeline = lease ? await ctx.narratives?.getTimeline(lease.timelineId) : undefined
+      const cardId = timeline?.createdFrom?.cardId ?? (target.kind === 'card' ? target.cardId : undefined)
+      const messages = (await buildExtensionPrompt({
         build: input,
         promptResources: ctx.promptResources,
-        installations: await readAvailableExtensionInstallations(ctx.documents, target.kind === 'card' ? target.cardId : undefined),
+        installations: await readAvailableExtensionInstallations(ctx.documents, cardId, lease?.timelineId),
         owner: { installationId: extensionInstallationId(packageId, target), packageId },
-      })).messages,
-    }),
+        processors: ctx.promptProcessors,
+        ...(cardId ? { cardId } : {}),
+      })).messages
+      if (lease) await assertTimelineExtensionLease(ctx, ctx.documents, lease)
+      return { messages }
+    },
     ...createMacroConfigurationRuntimeMethods(ctx),
     ...createPromptRuntimeMethods(ctx),
     ...createStateRuntimeMethods(ctx),
     ...createTransformsRuntimeMethods(ctx),
     ...createProvidersRuntimeMethods(ctx),
     ...createExtensionsRuntimeMethods(ctx),
+    ...createTimelineExtensionParticipationMethods(ctx),
+    ...createTimelineExtensionRecoveryMethods(ctx),
+    ...createTimelineExtensionAdoptionMethods(ctx),
+    ...createTimelineExtensionStateInitializationMethods(ctx),
+    runTimelineExtensionWork: (input, work) => runTimelineExtensionWork(ctx, input, work),
+    beginTimelineExtensionWork: input => beginTimelineExtensionWork(ctx, input),
+    inspectTimelineExtensionResources: input => inspectTimelineExtensionResources(ctx, input),
+    assertTimelineExtensionWork: lease => assertTimelineExtensionLease(ctx, ctx.documents, lease),
     ...createLoomScriptsRuntimeMethods(ctx),
     ...createOfficialContentRuntimeMethods(ctx),
   }

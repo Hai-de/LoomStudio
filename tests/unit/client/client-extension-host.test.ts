@@ -1,7 +1,7 @@
-import { extensionInstallationId, type ClientExtensionModule, type ExtensionConfigEntry } from '@loom-studio/extension-sdk'
+import { extensionInstallationId, type ClientExtensionActivationContext, type ClientExtensionModule, type ClientStateSnapshot, type ExtensionConfigEntry } from '@loom-studio/extension-sdk'
 import { createMemoryLogSink, createRootLogger, queryExtensionLogs } from '@loom-studio/logging'
 import { describe, expect, it, vi } from 'vitest'
-import { createClientExtensionHost, type ClientExtensionDataApi, type ManagedClientExtensionPackage } from '../../../apps/studio-client/src/features/extension-renderers/model/client-extension-host.js'
+import { createClientExtensionHost, type ClientExtensionDataApi, type ClientTimelineParticipation, type ManagedClientExtensionPackage } from '../../../apps/studio-client/src/features/extension-renderers/model/client-extension-host.js'
 import { createClientExtensionDataApi, mapPackageImportState } from '../../../apps/studio-client/src/features/extension-renderers/model/use-client-extension-runtime.js'
 import { createClientRendererHost } from '../../../apps/studio-client/src/shared/extension-renderer-runtime/client-renderer-host.js'
 import { useAppearanceStore } from '../../../apps/studio-client/src/shared/studio-shell/appearance-store.js'
@@ -28,6 +28,105 @@ function extensionPackage(enabled = true): ManagedClientExtensionPackage {
 }
 
 describe('Client Extension Host', () => {
+  it('binds Timeline modules to adoption and replaces them on Branch or generation changes', async () => {
+    const pkg = { ...extensionPackage(), participation: 'timeline' as const }
+    const rendererHost = createClientRendererHost()
+    const target = { scope: 'timeline' as const, timelineId: 'story', branchId: 'main' }
+    rendererHost.setScopeSnapshot({ workspace: 'workspace', ...target })
+    let context!: ClientExtensionActivationContext
+    const cleanup = vi.fn()
+    const loadModule = vi.fn(async () => ({ activate: (value: ClientExtensionActivationContext) => {
+      context = value
+      value.renderers.register(pkg.modules[0]!.contributions.renderers![0]!, { mount() {} })
+      return { dispose: cleanup }
+    } }))
+    const host = createClientExtensionHost({ rendererHost, loadModule })
+    const timeline: ClientTimelineParticipation = {
+      target,
+      leases: [{ timelineId: 'story', installationId: extensionInstallationId(pkg.packageId, { kind: 'global' }), installationVersion: 1, generation: 'a' }],
+    }
+    try {
+      await host.reconcile([pkg])
+      expect(loadModule).not.toHaveBeenCalled()
+      expect(host.isPackageAvailable(pkg)).toBe(false)
+      await host.reconcile([pkg], { timeline })
+      expect(context.timeline.target).toEqual(target)
+      expect(Object.isFrozen(context.timeline.target)).toBe(true)
+      await expect(context.state.get({ ...target, branchId: 'other' })).rejects.toThrow('does not match')
+      await host.reconcile([pkg], { timeline })
+      expect(loadModule).toHaveBeenCalledOnce()
+      const pausedContext = context
+      const paused = host.reconcile([pkg], { timeline: { ...timeline, leases: [] } })
+      expect(pausedContext.signal.aborted).toBe(true)
+      expect(rendererHost.list('narrative.timeline.tail')).toEqual([])
+      await paused
+      expect(cleanup).toHaveBeenCalledOnce()
+      timeline.leases[0]!.generation = 'b'
+      await host.reconcile([pkg], { timeline })
+      expect(loadModule).toHaveBeenCalledTimes(2)
+      const oldBranch = context
+      rendererHost.setScopeSnapshot({ workspace: 'workspace', ...target, branchId: 'fork' })
+      expect(oldBranch.signal.aborted).toBe(true)
+      expect(rendererHost.list('narrative.timeline.tail')).toEqual([])
+      await host.reconcile([pkg], { timeline: { ...timeline, target: { ...target, branchId: 'fork' } } })
+      expect(context.timeline.target?.branchId).toBe('fork')
+      expect(loadModule).toHaveBeenCalledTimes(3)
+      expect(host.diagnostics()).toEqual([])
+    } finally { await host.dispose() }
+  })
+
+  it('deduplicates State revisions, recovers reads and drops superseded or paused results', async () => {
+    const target = { scope: 'timeline' as const, timelineId: 'story', branchId: 'main' }
+    const pkg = { ...extensionPackage(), participation: 'timeline' as const }
+    const rendererHost = createClientRendererHost()
+    rendererHost.setScopeSnapshot({ workspace: 'workspace', ...target })
+    const snapshot = (revisionId: string): ClientStateSnapshot => ({
+      target, scopeId: 'story:main', revisionId, value: { revisionId }, createdAt: '2026-10-07T00:00:00Z',
+    })
+    const initial = Promise.withResolvers<ClientStateSnapshot>()
+    const get = vi.fn<() => Promise<ClientStateSnapshot>>().mockReturnValueOnce(initial.promise).mockResolvedValue(snapshot('r2'))
+    const handler = vi.fn()
+    const errors = vi.fn()
+    let context!: ClientExtensionActivationContext
+    const host = createClientExtensionHost({
+      rendererHost, data: { state: { get } } as unknown as ClientExtensionDataApi,
+      loadModule: async () => ({ activate: value => {
+        context = value
+        value.renderers.register(pkg.modules[0]!.contributions.renderers![0]!, { mount() {} })
+        value.state.subscribe(target, handler, errors)
+      } }),
+    })
+    try {
+      await host.reconcile([pkg], { timeline: {
+        target, leases: [{ timelineId: 'story', installationId: extensionInstallationId(pkg.packageId, { kind: 'global' }), installationVersion: 1, generation: 'a' }],
+      } })
+      await host.notifyStateChanged()
+      initial.resolve(snapshot('r1'))
+      await new Promise(resolve => setImmediate(resolve))
+      expect(handler.mock.calls.map(([value]) => value.revisionId)).toEqual(['r2'])
+      await host.notifyStateChanged()
+      expect(handler).toHaveBeenCalledOnce()
+      get.mockRejectedValueOnce(new Error('temporary read failure'))
+      await host.notifyStateChanged()
+      expect(errors).toHaveBeenCalledOnce()
+      await host.notifyStateChanged()
+      expect(handler).toHaveBeenCalledTimes(2)
+      const pending = Promise.withResolvers<ClientStateSnapshot>()
+      get.mockReturnValue(pending.promise)
+      const refreshed = host.notifyStateChanged()
+      const oldRead = context.state.get(target)
+      const rejected = expect(oldRead).rejects.toThrow()
+      await host.reconcile([pkg])
+      pending.resolve(snapshot('r3'))
+      await Promise.all([refreshed, rejected])
+      expect(handler).toHaveBeenCalledTimes(2)
+      expect(errors).toHaveBeenCalledOnce()
+      const calls = get.mock.calls.length
+      await host.notifyStateChanged()
+      expect(get).toHaveBeenCalledTimes(calls)
+    } finally { await host.dispose() }
+  })
+
   it.each(['disable', 'reload', 'dispose'])('aborts pending activation immediately on %s and cleans up its late handle', async action => {
     const entered = Promise.withResolvers<AbortSignal>()
     const finish = Promise.withResolvers<void>()

@@ -83,6 +83,8 @@ export function AgentComposer(props: AgentComposerProps) {
         canRetry={props.canRetryNarrativeInput && !disconnected && !props.runRecoveryBusy}
         onRetry={props.onRetryNarrativeInput}
         sheet={recovery ? <><RunRecoveryControls {...props} runRecovery={recovery} />{props.composerSheet}</> : props.composerSheet}
+        pauseLabel={props.t('agent.run.pause')}
+        resumeLabel={props.t('agent.run.resume')}
         sendLabel={props.t('composer.send')}
         textareaDisabled={!disconnected && props.narrativeTextareaDisabled}
         textareaLabel={props.t('composer.inputLabel')}

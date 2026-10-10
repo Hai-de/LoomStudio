@@ -211,6 +211,13 @@ export function materializeStateContribution(contribution: StateContribution): M
   const bindings = [...mountBindings, ...structuredClone(contribution.bindings)]
   const snapshot = materializeTimelineState({ base, bindings, templates })
   const concreteBindings = expandTimelineStateBindings(bindings, snapshot)
+  const concretePaths = new Set<string>()
+  for (const binding of concreteBindings) {
+    if (concretePaths.has(binding.path)) {
+      throw new StateContributionError('state.binding_path_conflict', `Timeline state binding path is duplicated after expansion: ${binding.path}`)
+    }
+    concretePaths.add(binding.path)
+  }
   const references: MaterializedStateContribution['references'] = []
   const referenceDiagnostics: StateReferenceDiagnostic[] = []
   for (const binding of concreteBindings) {

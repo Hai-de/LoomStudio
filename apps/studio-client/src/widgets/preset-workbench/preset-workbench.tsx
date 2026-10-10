@@ -258,7 +258,7 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
         : preset.rootNode.children ?? []) as ContextAssetNode[]
 
       return {
-        id: preset.id,
+        id: preset.rootNode.id,
         label: preset.rootNode.label,
         kind: 'folder',
         category: 'preset-root',
@@ -272,11 +272,12 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
     if (!id) return
     setAssetPane('preset', props.workspaceId, 'detail')
 
-    const clickedPreset = presetResources.find(p => p.id === id)
+    const clickedPreset = presetResources.find(p => p.id === id || p.rootNode.id === id)
     if (clickedPreset) {
       setSelectedResourceId(clickedPreset.id)
       setIsOverviewSelected(true)
       setActivePresetView('assets')
+      openAssetDetail('preset', props.workspaceId, clickedPreset.rootNode.id)
       return
     }
 
@@ -288,6 +289,12 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
     setActivePresetView('assets')
 
     openAssetDetail('preset', props.workspaceId, id)
+  }
+
+  const handleRenameNode = async (id: string, label: string) => {
+    const matchedPreset = presetResources.find(p => p.id === id || p.rootNode.id === id)
+    const targetId = matchedPreset ? matchedPreset.rootNode.id : id
+    await props.onRenameNode(targetId, label)
   }
 
   if ((selectedResourceId || props.routeAssetId) && (!selectedResource || (props.routeAssetId && !findContextNode([selectedResource.rootNode], props.routeAssetId)))) {
@@ -337,7 +344,7 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
             onChange={setActivePresetView}
           />
           {activePresetView === 'assets' && toolProjection.unavailableMounts.length > 0 ? (
-            <div className={styles.statusMessages}>
+            <div>
               {toolProjection.unavailableMounts.map(mount => <p key={`tool:${mount.id}`} role="status">{props.t('preset.tools.unavailable', { id: mount.toolId })}</p>)}
             </div>
           ) : null}
@@ -377,7 +384,7 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
           onAddMessageBlockNode={props.onAddMessageBlockNode}
           onDeleteNode={props.onDeleteNode}
           onDuplicateNode={props.onDuplicateNode}
-          onRenameNode={props.onRenameNode}
+          onRenameNode={handleRenameNode}
           onExpandedIdsChange={expandedIds => setAssetExpandedIds('preset', props.workspaceId, expandedIds)}
           onMoveNode={props.onMoveNode}
           onQueryChange={props.onSearchQueryChange}
@@ -452,7 +459,7 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
             {declarations ? <section className={styles.declarations}>
               <h3>声明注入此处的资源</h3>
               <p>静态候选；本轮是否触发由运行时决定。</p>
-              {detailNode?.label === '@chat.tools' ? <p>工具内容由运行时及当前工具挂载决定；这里不展示实际激活结果。</p> : null}
+              {detailNode?.kind === 'virtual' && (detailNode.capabilities?.targetAnchorId === '@chat.tools' || detailNode.label === '@chat.tools') ? <p>工具内容由运行时及当前工具挂载决定；这里不展示实际激活结果。</p> : null}
               <FileTree ariaLabel="声明注入此处的资源" nodes={declarationNodes}
                 expandedIds={declarationExpandedIds} onExpandedIdsChange={setDeclarationExpandedIds}
                 getDisclosureLabel={item => item.label} getDragLabel={item => item.label}
@@ -489,10 +496,10 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
               />
             </section> : null}
             {detailNode?.kind === 'virtual'
-              && (detailNode.capabilities?.targetAnchorId === '@chat.narrative'
-                || detailNode.capabilities?.targetAnchorId === '@memory.narrative')
+              && ((detailNode.capabilities?.targetAnchorId === '@chat.narrative' || detailNode.label === '@chat.narrative')
+                || (detailNode.capabilities?.targetAnchorId === '@memory.narrative' || detailNode.label === '@memory.narrative'))
               ? <NarrativeRangePreview key={detailNode.id} api={props.previewApi}
-                  timelineId={props.previewTimelineId} branchId={props.previewBranchId} />
+                  timelineId={props.previewTimelineId} branchId={props.previewBranchId} t={props.t} />
               : null}
           </div>
         </div>

@@ -72,6 +72,7 @@ function ProviderAccountItem(props: {
   const copyRequestRef = useRef(0)
   const pickerRef = useRef<HTMLDivElement>(null)
   const mountedRef = useRef(true)
+  const catalogRequestRef = useRef(0)
   const baseUrl = typeof props.account.config.baseUrl === 'string' ? props.account.config.baseUrl : ''
   const catalog = mergeModelCatalog(props.models.map(profile => profile.providerModelId), fetchedModels, query)
   const providerBrand = resolveProviderBrand(props.account.displayName, baseUrl, props.account.providerExtensionId)
@@ -145,14 +146,15 @@ function ProviderAccountItem(props: {
 
   async function loadModelCatalog() {
     if (modelCatalogState === 'loading' || modelCatalogState === 'loaded') return
+    const request = ++catalogRequestRef.current
     setModelCatalogState('loading')
     try {
       const modelIds = await props.onListModels(props.account.id)
-      if (!mountedRef.current) return
+      if (!mountedRef.current || request !== catalogRequestRef.current) return
       setFetchedModels(modelIds)
       setModelCatalogState('loaded')
     } catch {
-      if (mountedRef.current) setModelCatalogState('error')
+      if (mountedRef.current && request === catalogRequestRef.current) setModelCatalogState('error')
     }
   }
 
@@ -167,6 +169,7 @@ function ProviderAccountItem(props: {
         ...(apiKey ? { apiKey } : {}),
       })
       if (!succeeded || !mountedRef.current) return
+      catalogRequestRef.current++
       setApiKeyDraft('')
       setFetchedModels([])
       setModelCatalogState('idle')
@@ -306,13 +309,13 @@ function ProviderAccountItem(props: {
                 <Toggle checked className={styles.enabledToggle} disabled label={`${profile.providerModelId} · ${props.t('provider.modelEnabled')}`} onChange={() => {}} />
                 <ModelBrandIcon brand={resolveModelBrand(profile.providerModelId)} fallback={<Bot aria-hidden="true" className={styles.brandIconFallback} />} />
                 <span>{profile.providerModelId}</span>
-                {props.onUpdateTokenMultiplier ? <label title="o200k_base 基础计数的估算系数">
-                  Token × <input key={`${profile.id}:${profile.version}`} aria-label={`${profile.providerModelId} Token 估算系数`}
+                {props.onUpdateTokenMultiplier ? <label title={props.t('tokens.modelMultiplierHelp')}>
+                  Token × <input key={`${profile.id}:${profile.version}`} aria-label={props.t('tokens.modelMultiplierLabel', { name: profile.providerModelId })}
                     type="number" min="0.01" step="0.05" defaultValue={profile.tokenMultiplier ?? 1}
                     style={{ width: 64 }} disabled={props.busy} onBlur={event => {
                       const value = event.currentTarget.valueAsNumber
                       if (!Number.isFinite(value) || value <= 0) {
-                        setActionError('Token 系数必须为正数')
+                        setActionError(props.t('tokens.multiplierPositive'))
                         return
                       }
                       if (value !== (profile.tokenMultiplier ?? 1)) void props.onUpdateTokenMultiplier!(profile.id, value)

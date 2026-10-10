@@ -10,6 +10,16 @@ Preset contribution 的 `settingMounts` / `textUses` 表达资源使用关系，
 
 Server Module 可用授权的 `ctx.prompt.build` 构建本安装资源或逐次 Anchor 内容，也可用 `ctx.ai.invokeModel` 显式指定模型进行直接调用；两者不要求 Session，不选择默认预设或绕过安装资源/凭据边界。接口详情见[Provider 与 PromptBuild](../../docs/architecture/application/agent/provider-and-prompt-build.md#extension-直接构建与模型调用)。
 
+Server Module 还可用 `ctx.prompt.registerProcessor` 注册作者正文的候选准备/有序渲染会话，
+由资源 `capabilities.processorId` 显式采用；需 `prompt.process`，读取 Timeline 快照另需 `state.read`。
+处理器不接管 Session/工具消息；新 Run 构建一次，后续工具 Step 和恢复不重跑已接受模板。
+
+`ctx.state.contribute(contribution, { initialize })` 可在新 Timeline 创建前根据所选开场和关联世界书计算本 Contribution
+的模板初值，不覆盖已有 Timeline。`ctx.state.registerContentHandler` 则处理完整无工具助手回复，需
+`state.processContent`、`state.read`、`state.write`；声明 Contribution 和非根 JSON Pointer，
+只返回数据和诊断，不获取 Store。平台负责采用过滤、取消、CAS、操作检查点和幂等提交。
+这些都是可信扩展入口，不是直接执行不可信作者脚本的许可；语言扩展自行提供隔离运行环境。
+
 ## 公共入口
 
 唯一入口是 [`src/index.ts`](./src/index.ts)。除 `defineServerExtension(module)` identity helper 外，也提供 iframe 作者侧连接代理；其余导出以类型合同为主：
@@ -33,6 +43,61 @@ export default defineServerExtension({
 ```
 
 SDK 不读取 Manifest 文件、不动态导入模块、不创建 Host、不执行 grant/lifecycle，也不暴露 Kernel、SQL connection 或内部 Registry。Server Module 当前仍是受信任的同进程 Node.js 代码；Capability contract 不等于恶意代码安全沙箱。
+
+## Timeline 采用
+
+故事相关扩展在 Manifest 声明 `participation: "timeline"`。安装提供能力，不自动让每个故事采用它；
+Card 默认配置只影响新 Timeline，已有故事由平台显式加入、暂停或恢复。同一 Timeline 的 Branch 共用采用关系，
+State 仍按 Branch 修订。暂停、卸载不删除已保存的 State。
+
+Studio 的 State“来源”页分别检查当前注册声明、Timeline 接受时的声明、采用资格与当前 Branch 的数据路径。
+解除注册不会抹去接受时的声明；查询不调用 `initialize`。来源、版本和采用 metadata 由平台 Runtime Context
+保存，不需要扩展在业务 Entity 中创建 metadata 组件。该诊断属于 Studio 查询，不是额外的 SDK 启用表。
+
+旧 checkpoint 缺少已采用扩展的数据时不会自动重建。用户可在 Timeline 采用面板预览并确认
+“补齐缺失 State”：平台核对原始声明及安装/采用版本，调用现有初始化器，只写缺失的实体或组件。
+已有值、其他 Branch 及采用配置不变；不执行组件内部字段迁移。预览不运行初始化器，
+确认期间暂停会取消工作并拒绝提交；恢复采用本身仍不会触发初始化。
+
+Server 自行发起的故事工作使用 `ctx.timeline.run(target, async ({ signal }) => ...)`，
+`target` 必须包含 `scope: "timeline"`、`timelineId`、`branchId`。`ctx.timeline.list()` 查询可参与目标，
+不能用前台焦点代替后台任务目标。受管工作核对采用、安装版本和执行代次；暂停再恢复也不会复活旧任务。
+状态读写、直接模型调用与 Prompt 构建使用这个执行范围，扩展应向自己的异步工作传递取消信号。
+
+`ctx.timeline.subscribe(listener)` 通知可参与目标可能变化；订阅后用 `list()` 对账，回调自身不获得故事权限。
+受管范围中的通用持久写入统一在 Data Engine 事务内复核原始凭据，覆盖 documents/storage/portable payload/assets；
+结束或暂停后的派生异步任务也不能迟到提交。故事 storage/binding 必须匹配当前 Timeline，列表要求显式 Scope；
+全局配置的普通编辑保持可用。原生文件或直接网络副作用不在事务保护内。
+
+工具处理器由 Host 自动绑定可信目标。宏与 Narrative context provider 由宿主按采用关系过滤后，
+再进入受管工作；宏上下文新增只读 `timelineTarget`，独立资源或 Card 编辑预览没有此目标，
+不会执行 Timeline 宏来源。Narrative 的读取和 Session handoff 均保持实际 Timeline/Branch，
+未采用来源不参与候选冲突判断。
+
+State content 回调也按采用关系过滤并进入受管工作，接收只读目标。平台将实际产生修改的来源执行代次随
+可恢复操作保存；最终 State 事务统一核对，暂停、重装或暂停后再启用都不能让旧结果重新获得提交资格。
+恢复只重放已接受操作，不重跑处理器或模型。
+
+Timeline Prompt processor 从工厂创建到 prepare/render 持有同一受管范围，每次回调前后核对原始凭据，
+dispose 释放范围。暂停时拒绝迟到结果；创建失败仍清理已创建的会话。无目标或未采用时不能调用声明为
+Timeline 的处理器，模块没有 `state.read` 时仍不会收到 State 快照。
+
+Agent 检查点保存 Prompt 准备和工具间接消费的原始扩展凭据，后续 Step/恢复不重新授予旧 Prompt 新代次资格。
+暂停来源的工具被过滤并记录诊断，挂载保留；其他 Card 的私有工具引用仍拒绝。扩展管理页“携带资源”
+可查看 Settings、工具、文本规则与脚本的来源资格；资格不等于挂载或授权。
+
+声明 Timeline 参与的 Client Module 只在当前故事已采用且安装/版本匹配时激活，
+`ctx.timeline.target` 提供本实例固定的 Timeline/Branch。切换目标、暂停或执行代次变化时，
+Host abort 并清理旧实例，再按新目标建立实例；不修改用户的全局模块开关。
+`ctx.state.subscribe(target, handler, onError?)` 立即读取权威快照，并复用 SSE 按 revision 更新。
+相同 revision 去重，切换后的迟到结果不投递；读失败后再次成功仍可投递相同 revision。
+这不是全部历史修订的事件流。未声明 Timeline 参与的共享模块不会因故事切换而重建，目标为空。
+扩展异步处理和直接 DOM/定时器必须使用 `ctx.signal` 并在取消或 dispose 时清理。
+
+这不是已完成的所有入口隔离声明：已接受 Prompt 快照的后续消费、
+通用存储/资产写回及模块全局停用仍在实施，进度以
+[故事级采用计划](../../docs/workbench/plans/extension-story-participation-plan.md)为准。
+原生 Node.js 的定时器、网络和文件操作不是安全沙箱内的能力，平台取消不能强杀任意扩展代码。
 
 ## 开发与发行
 

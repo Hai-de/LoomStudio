@@ -29,6 +29,7 @@ export type ClientRendererInstanceHandle = ClientRendererHandle & {
 }
 
 export type ClientRendererRegistration = RegisteredRendererContribution & {
+  isAvailable?: () => boolean
   mount: ClientRenderer['mount']
   update?: ClientRenderer['update']
   projectNode?: ClientRenderer['projectNode']
@@ -45,6 +46,7 @@ type ClientRendererScopeSnapshot = {
   workspace: string
   cardId?: string
   timelineId?: string
+  branchId?: string
   agentSessionId?: string
 }
 
@@ -56,6 +58,7 @@ type ClientRendererInstanceSummary = {
 
 export type ClientRendererHost = {
   register(input: {
+    isAvailable?: () => boolean
     owner: RendererContributionOwner
     definition: RendererContributionDefinition
     mount: ClientRendererRegistration['mount']
@@ -104,11 +107,13 @@ export function createClientRendererHost(): ClientRendererHost {
   }
 
   function isAvailable(registration: ClientRendererRegistration): boolean {
+    if (registration.isAvailable && !registration.isAvailable()) return false
     const owner = registration.owner
     return owner.kind !== 'extension' || owner.target?.kind !== 'card' || owner.target.cardId === currentScopes.cardId
   }
 
   function scopeAvailable(registration: ClientRendererRegistration, scope: ClientRendererScope): boolean {
+    if (!isAvailable(registration)) return false
     if (registration.owner.kind !== 'extension' || registration.owner.target?.kind !== 'card') return true
     let matches: boolean
     switch (scope.kind) {
@@ -150,6 +155,7 @@ export function createClientRendererHost(): ClientRendererHost {
       const key = rendererContributionKey(identity)
       if (registrations.has(key)) throw new Error(`Renderer contribution is already registered: ${key}`)
       const registration: ClientRendererRegistration = {
+        ...(input.isAvailable ? { isAvailable: input.isAvailable } : {}),
         ...identity,
         definition: input.definition,
         mount: input.mount,
@@ -234,8 +240,15 @@ export function createClientRendererHost(): ClientRendererHost {
       activeManaged.delete(claimKey)
       emit()
     },
-    activeContributionKey: (surface, scopeKey) => activeManaged.get(managedClaimKey(surface, scopeKey)),
-    activeClaims: () => [...activeManaged.entries()].map(([key, contributionKey]) => {
+    activeContributionKey: (surface, scopeKey) => {
+      const key = activeManaged.get(managedClaimKey(surface, scopeKey))
+      const registration = key ? registrations.get(key) : undefined
+      return registration && isAvailable(registration) ? key : undefined
+    },
+    activeClaims: () => [...activeManaged.entries()].filter(([, key]) => {
+      const registration = registrations.get(key)
+      return registration && isAvailable(registration)
+    }).map(([key, contributionKey]) => {
       const separator = key.indexOf('@')
       return {
         surface: key.slice(0, separator) as RendererSurface,

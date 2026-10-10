@@ -1,5 +1,6 @@
 import type { EffectCallback } from 'react'
-import type { ClientExtensionModule } from '@loom-studio/extension-sdk'
+import { extensionInstallationId, type ClientExtensionModule } from '@loom-studio/extension-sdk'
+import type { ListExtensionInstallationsResult, TimelineExtensionParticipation } from '../../../apps/studio-client/src/entities/extension.js'
 import { createMemoryLogSink, createRootLogger } from '@loom-studio/logging'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useClientExtensionRuntime } from '../../../apps/studio-client/src/features/extension-renderers/model/use-client-extension-runtime.js'
@@ -67,18 +68,23 @@ async function drainTasks(): Promise<void> {
 function createHarness() {
   const list = vi.fn(async () => ({ items: [extensionPackage] }))
   const listRules = vi.fn(async () => ({ rules: [] }))
+  const getParticipation = vi.fn<() => Promise<TimelineExtensionParticipation>>()
+  const listInstallations = vi.fn<() => Promise<ListExtensionInstallationsResult>>()
+  const getState = vi.fn()
   const api = {
     extensions: { list, diagnostics: async () => ({ diagnostics: [] }) },
     textTransforms: { listRules, listExtractors: async () => ({ extractors: [] }) },
     extensionRuntime: {},
-    states: {},
+    states: { get: getState },
+    timelineExtensions: { get: getParticipation },
+    extensionInstallations: { list: listInstallations },
   } as unknown as Parameters<typeof useClientExtensionRuntime>[0]['api']
   const rendererHost = createClientRendererHost()
   const clientLogs = createMemoryLogSink({ capacity: 50 })
   const logger = createRootLogger({ service: 'studio-client', instanceId: 'hook-test', sinks: [clientLogs] }).child('extension.loader')
   const runtime = useClientExtensionRuntime({ api, rendererHost, logger, clientLogs, notify: vi.fn() })
   const setup = hooks.effects.at(-1)!
-  return { runtime, rendererHost, list, listRules, setup }
+  return { runtime, rendererHost, list, listRules, setup, getParticipation, listInstallations, getState }
 }
 
 beforeEach(() => {
@@ -99,6 +105,106 @@ afterEach(() => {
 })
 
 describe('Client Extension Runtime Effect lifecycle', () => {
+  it('follows adoption and State through SSE, rejects changed installations and stops on disconnect', async () => {
+    class TestEvents extends EventTarget {
+      static instance: TestEvents
+      onerror?: () => void
+      constructor() { super(); TestEvents.instance = this }
+      close() {}
+    }
+    vi.stubGlobal('EventSource', TestEvents)
+    const harness = createHarness()
+    const { runtime, rendererHost, list, setup, getParticipation, listInstallations, getState } = harness
+    const pkg = { ...extensionPackage, participation: 'timeline' as const }
+    list.mockResolvedValue({ items: [pkg] })
+    const target = { scope: 'timeline' as const, timelineId: 'story', branchId: 'main' }
+    const installationId = extensionInstallationId(pkg.packageId, { kind: 'global' })
+    const entry = { installationId, packageId: pkg.packageId, packageVersion: pkg.version, installationVersion: 1, enabled: true, generation: 'a' }
+    getParticipation.mockResolvedValue({ timelineId: 'story', version: 1, entries: [] })
+    listInstallations.mockResolvedValue({ installations: [{
+      id: installationId, version: 1, packageId: pkg.packageId, packageVersion: pkg.version,
+      participation: 'timeline', target: { kind: 'global' }, createdAt: '', updatedAt: '',
+    }] })
+    getState.mockResolvedValue({ snapshot: { target, scopeId: 'story:main', revisionId: 'r1', value: {}, createdAt: '' } })
+    const stateChanged = vi.fn()
+    const contexts: Parameters<ClientExtensionModule['activate']>[0][] = []
+    hooks.loadModule.mockResolvedValue({
+      activate: context => {
+        contexts.push(context)
+        context.renderers.register(pkg.modules[0]!.contributions.renderers![0]!, { mount() {} })
+        context.state.subscribe(context.timeline.target!, stateChanged)
+      },
+    } satisfies ClientExtensionModule)
+    rendererHost.setScopeSnapshot({ workspace: 'workspace', ...target })
+    const cleanup = setup() as () => void
+    try {
+      await drainTasks()
+      expect(hooks.loadModule).not.toHaveBeenCalled()
+      getParticipation.mockResolvedValue({ timelineId: 'story', version: 2, entries: [entry] })
+      TestEvents.instance.dispatchEvent(new Event('extensions.data.changed'))
+      await drainTasks()
+      expect(hooks.loadModule).toHaveBeenCalledOnce()
+      expect(stateChanged).toHaveBeenCalledOnce()
+      expect(list).toHaveBeenCalledOnce()
+      TestEvents.instance.dispatchEvent(new Event('extensions.data.changed'))
+      await drainTasks()
+      expect(hooks.loadModule).toHaveBeenCalledOnce()
+      expect(stateChanged).toHaveBeenCalledOnce()
+      getState.mockResolvedValue({ snapshot: { target, scopeId: 'story:main', revisionId: 'r2', value: {}, createdAt: '' } })
+      TestEvents.instance.dispatchEvent(new Event('extensions.data.changed'))
+      await drainTasks()
+      expect(stateChanged).toHaveBeenCalledTimes(2)
+      getParticipation.mockResolvedValue({ timelineId: 'story', version: 3, entries: [{ ...entry, enabled: false }] })
+      TestEvents.instance.dispatchEvent(new Event('extensions.data.changed'))
+      await drainTasks()
+      expect(contexts[0]!.signal.aborted).toBe(true)
+      expect(rendererHost.list('narrative.timeline.tail')).toEqual([])
+      getParticipation.mockResolvedValue({ timelineId: 'story', version: 4, entries: [{ ...entry, generation: 'b' }] })
+      TestEvents.instance.dispatchEvent(new Event('extensions.data.changed'))
+      await drainTasks()
+      expect(hooks.loadModule).toHaveBeenCalledTimes(2)
+      TestEvents.instance.onerror!()
+      expect(contexts[1]!.signal.aborted).toBe(true)
+      await drainTasks()
+      TestEvents.instance.dispatchEvent(new Event('open'))
+      await drainTasks()
+      expect(hooks.loadModule).toHaveBeenCalledTimes(3)
+      const installations = await listInstallations()
+      listInstallations.mockResolvedValue({ installations: installations.installations.map(item => ({ ...item, version: 2 })) })
+      TestEvents.instance.dispatchEvent(new Event('extensions.data.changed'))
+      await drainTasks()
+      expect(contexts[2]!.signal.aborted).toBe(true)
+      expect(runtime.host.isPackageAvailable(pkg)).toBe(false)
+      expect(hooks.loadModule).toHaveBeenCalledTimes(3)
+    } finally { cleanup(); await runtime.host.dispose() }
+  })
+
+  it('ignores a late adoption response for a previously selected Branch', async () => {
+    const { runtime, rendererHost, list, setup, getParticipation, listInstallations } = createHarness()
+    list.mockResolvedValue({ items: [{ ...extensionPackage, participation: 'timeline' }] })
+    const previous = Promise.withResolvers<TimelineExtensionParticipation>()
+    getParticipation.mockReturnValueOnce(previous.promise).mockResolvedValue({ timelineId: 'story', version: 2, entries: [] })
+    const id = extensionInstallationId(extensionPackage.packageId, { kind: 'global' })
+    listInstallations.mockResolvedValue({ installations: [{
+      id, version: 1, packageId: extensionPackage.packageId, packageVersion: extensionPackage.version,
+      participation: 'timeline', target: { kind: 'global' }, createdAt: '', updatedAt: '',
+    }] })
+    rendererHost.setScopeSnapshot({ workspace: 'workspace', timelineId: 'story', branchId: 'main' })
+    const cleanup = setup() as () => void
+    try {
+      await drainTasks()
+      rendererHost.setScopeSnapshot({ workspace: 'workspace', timelineId: 'story', branchId: 'fork' })
+      await drainTasks()
+      previous.resolve({ timelineId: 'story', version: 1, entries: [{
+        installationId: id, packageId: extensionPackage.packageId, packageVersion: extensionPackage.version,
+        installationVersion: 1, enabled: true, generation: 'old',
+      }] })
+      await drainTasks()
+      expect(hooks.loadModule).not.toHaveBeenCalled()
+      expect(rendererHost.list('narrative.timeline.tail')).toEqual([])
+    } finally { cleanup(); await runtime.host.dispose() }
+  })
+
   it('resynchronizes catalog and configs on reconnect without reloading unchanged modules', async () => {
     class TestEvents extends EventTarget {
       static instance: TestEvents

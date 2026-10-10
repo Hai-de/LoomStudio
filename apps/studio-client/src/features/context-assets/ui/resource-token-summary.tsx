@@ -1,6 +1,6 @@
 import type { ContextAssetNode } from '../../../entities/index.js'
 import { useResourceTokenCounts } from '../model/use-resource-token-counts.js'
-import type { Translator } from '../../../shared/i18n/index.js'
+import { formatNumber, type Translator } from '../../../shared/i18n/index.js'
 import styles from './resource-token-summary.module.scss'
 import { useTokenDisplaySettings } from '../../../shared/tokenizer/settings.js'
 import { Calculator } from 'lucide-react'
@@ -30,8 +30,8 @@ export function TokenSummary(props: {
   return <span className={styles.summary}
     title={`o200k_base × ${props.multiplier ?? 1} · gpt-tokenizer 4.0.0 · ${props.t('tokens.rawBasis')}`}>
     <span>Tokens {props.error ? <span role="alert">{props.error}</span>
-      : props.textTokens !== undefined ? `${props.textTokens.toLocaleString()}${props.pending ? ` · ${props.t('tokens.pending')}` : ''}`
-      : summary ? `${summary.enabled.toLocaleString()} · ${props.t('tokens.resident')} ${summary.resident.toLocaleString()} · ${props.t('tokens.nonresident')} ${summary.nonresident.toLocaleString()}${props.pending ? ` · ${props.t('tokens.pending')}` : ''}`
+      : props.textTokens !== undefined ? `${formatNumber(props.textTokens)}${props.pending ? ` · ${props.t('tokens.pending')}` : ''}`
+      : summary ? `${formatNumber(summary.enabled)} · ${props.t('tokens.resident')} ${formatNumber(summary.resident)} · ${props.t('tokens.nonresident')} ${formatNumber(summary.nonresident)}${props.pending ? ` · ${props.t('tokens.pending')}` : ''}`
         : props.t('tokens.pending')}{props.incomplete ? ` · ${props.t('tokens.incomplete')}` : ''}</span>
   </span>
 }

@@ -1,6 +1,6 @@
 import { Bot, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
-import type { Translator } from '../../shared/i18n/index.js'
+import { formatDate, formatDateTime, type Translator } from '../../shared/i18n/index.js'
 import type { AgentPreset, AgentSession, CardSummary, NarrativeTimeline } from '../../entities/index.js'
 import { cardMediaUrl, useCardMediaRevision } from '../../shared/lib/card-media.js'
 import styles from './play-panel.module.scss'
@@ -149,7 +149,7 @@ export function RecentPlayPanel(props: RecentPlayPanelProps) {
       ) : null}
       <div className={styles.content}>
         <div className={styles.recent}>
-          <section className={styles.characterStrip}>
+          <section>
             <h3>{props.t('play.recentCharacters')}</h3>
             <div className={styles.characterScroller}>
               {recentCards.slice(0, 10).map(card => {
@@ -190,7 +190,7 @@ export function RecentPlayPanel(props: RecentPlayPanelProps) {
           <section className={styles.sessionList}>
             <div className={styles.sectionTitleRow}>
               <h3>{props.t('play.recentSessions')}</h3>
-              <button className={styles.sectionToggle} type="button" aria-expanded={recentSessionsOpen} aria-label={recentSessionsOpen ? '收起最近会话' : '展开最近会话'} onClick={() => setRecentSessionsOpen(!recentSessionsOpen)}>
+              <button className={styles.sectionToggle} type="button" aria-expanded={recentSessionsOpen} aria-label={props.t(recentSessionsOpen ? 'play.collapseRecentSessions' : 'play.expandRecentSessions')} onClick={() => setRecentSessionsOpen(!recentSessionsOpen)}>
                 {recentSessionsOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
               </button>
             </div>
@@ -217,14 +217,12 @@ export function RecentPlayPanel(props: RecentPlayPanelProps) {
 }
 
 function formatRecentDate(value: string): string {
-  const date = new Date(value)
-  if (!Number.isFinite(date.getTime())) return value
-  return new Intl.DateTimeFormat(undefined, {
+  return formatDateTime(value, undefined, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(date)
+  })
 }
 
 function truncatePreview(value: string): string {
@@ -239,8 +237,7 @@ function dayKey(value: string): string {
 }
 
 function formatDay(value: string): string {
-  const date = new Date(`${value}T00:00:00`)
-  return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat(undefined, { month: 'long', day: 'numeric', weekday: 'short' }).format(date) : value
+  return formatDate(`${value}T00:00:00`, undefined, { month: 'long', day: 'numeric', weekday: 'short' })
 }
 
 function groupByDay<T extends { updatedAt: string }>(items: T[]): Array<{ key: string; items: T[] }> {

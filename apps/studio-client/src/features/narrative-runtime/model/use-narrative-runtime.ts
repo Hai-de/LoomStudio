@@ -695,8 +695,10 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
   async function pauseAgentRun() {
     const run = activeAgentRun
     if (!run || run.status !== 'running') return
-    const result = await input.api.agentSessions.pauseRun(run.runId)
-    if (result.accepted) setActiveAgentRun(current => current?.runId === run.runId ? { ...current, status: result.state } : current)
+    await input.runAgentAction(async () => {
+      const result = await input.api.agentSessions.pauseRun(run.runId)
+      if (result.accepted) setActiveAgentRun(current => current?.runId === run.runId ? { ...current, status: result.state } : current)
+    })
   }
 
   async function resumeAgentRun() {
@@ -911,15 +913,16 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
   async function approveAgentMutation(allow: boolean, reason?: string) {
     const run = activeAgentRun
     const approval = run?.approval
-    if (!run || !approval) return
+    if (!run || !approval) return false
     const result = await (approval.action
       ? input.api.agentSessions.approveHistoryRead
       : input.api.agentSessions.approveMutation)(run.runId, approval.requestId, allow, reason)
     if (result.accepted) {
-      setActiveAgentRun(current => current?.approval?.requestId === approval.requestId
+      setActiveAgentRun(current => current?.runId === run.runId && current.approval?.requestId === approval.requestId
         ? { ...current, approval: undefined }
         : current)
     }
+    return result.accepted
   }
 
   async function previewPrompt() {
@@ -1299,10 +1302,11 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
     return sessions
   }
 
-  async function activateAgentSession(sessionOrId: AgentSession | string) {
+  async function activateAgentSession(sessionOrId: AgentSession | string, canActivate?: () => boolean) {
+    if (canActivate && !canActivate()) return
     const sessionId = typeof sessionOrId === 'string' ? sessionOrId : sessionOrId.id
     const selection = beginAgentSelection(true)
-    let activated: AgentSession | undefined
+    let activated: { session: AgentSession; branchId?: string } | undefined
     await input.runAgentAction(async () => {
       try {
         const transcript = await loadTranscript(input.api, sessionId)
@@ -1314,6 +1318,7 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
           : undefined
         const sessions = await listAgentSessions(timelineId)
         if (selection !== agentSelectionRef.current || input.api !== cardSourceRef.current.api) return
+        if (canActivate && !canActivate()) return
         if (!sameNarrative) {
           publishPrimarySession(timelineId
             ? sessions.find(item => item.id === safeLocalStorage.getItem(primaryStorageKey(timelineId)))
@@ -1335,9 +1340,12 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
           setActiveAgentRun(undefined)
         }
         markAgentSessionReady(true)
-        activated = transcript.session
+        activated = { session: transcript.session, branchId: sameNarrative ? branch?.id : page?.branch.id }
       } finally {
-        if (selection === agentSelectionRef.current) setAgentSessionLoading(false)
+        if (selection === agentSelectionRef.current) {
+          setAgentSessionLoading(false)
+          if (canActivate && !canActivate()) markAgentSessionReady(true)
+        }
       }
     })
     return activated

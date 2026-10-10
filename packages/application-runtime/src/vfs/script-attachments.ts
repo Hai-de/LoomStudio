@@ -4,16 +4,19 @@ import { applicationDocumentTypes } from '../foundation/document-types.js'
 import type { LoomScriptContent, LoomScriptMountContent } from '../scripts/loom-script-contracts.js'
 import { vfsError } from './read.js'
 import type { VfsTextAttachment } from './resource-filesystem.js'
+import { isExtensionResourceAvailable } from '../runtime/extension-resource-access.js'
 
 export async function listPresetScriptAttachments(
   ctx: Pick<ApplicationRuntimeContext, 'documents' | 'blobs'>,
   presetId: string,
+  availableInstallations?: ReadonlyMap<string, string>,
 ): Promise<VfsTextAttachment[]> {
   const mounts = (await listDocuments<LoomScriptMountContent>(ctx.documents, applicationDocumentTypes.loomScriptMount))
     .filter(mount => mount.content.target.kind === 'preset' && mount.content.target.presetId === presetId)
     .sort((a, b) => a.content.orderIndex - b.content.orderIndex || a.id.localeCompare(b.id))
   const files: VfsTextAttachment[] = []
   for (const mount of mounts) {
+    if (!isExtensionResourceAvailable(mount.content.origin, availableInstallations)) continue
     const document = await ctx.documents.get(mount.content.scriptDocumentId,
       mount.content.pinnedDocumentVersion === undefined ? undefined : { version: mount.content.pinnedDocumentVersion })
     if (!document || document.type !== applicationDocumentTypes.loomScript) continue

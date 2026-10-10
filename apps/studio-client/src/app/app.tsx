@@ -22,6 +22,7 @@ import type { ClientRendererScope } from '../shared/extension-renderer-runtime/c
 import { NotificationToaster } from '../shared/ui/notification-toaster/notification-toaster.js'
 import type { StudioApi } from '../shared/api/studio-api.js'
 import { toast } from 'sonner'
+import { useQueryClient } from '@tanstack/react-query'
 import { createRendererNotifications } from '../shared/extension-renderer-runtime/renderer-notifications.js'
 import { hasCompleteProviderAccount } from '../features/provider-settings/model/provider-account-status.js'
 import { useStudioLayoutStore } from '../shared/studio-shell/studio-layout-store.js'
@@ -53,6 +54,10 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
   initializeMotionPreference()
   const appearance = useAppearanceStore()
   const state = useStudioState(props.transportLogger)
+  const queryClient = useQueryClient()
+  useEffect(() => {
+    document.documentElement.lang = state.locale
+  }, [state.locale])
   const appearanceCardId = state.narrativeTimeline?.createdFrom?.cardId ?? state.selectedCardId
   const effectiveMotion = useEffectiveMotion()
   useEffect(() => applyEffectiveMotion(effectiveMotion), [effectiveMotion])
@@ -61,6 +66,19 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
     toast[input.level ?? 'info'](input.message, { description: owner, duration: 4000 })
   }), [])
   const clientExtensions = useClientExtensionRuntime({ api: state.clientExtensionApi, rendererHost, logger: props.extensionLogger, clientLogs: props.clientLogs, notify: notifications.show })
+  const reportedExtensionError = useRef<string | undefined>(undefined)
+  const extensionError = clientExtensions.error?.message
+  useEffect(() => {
+    if (reportedExtensionError.current === extensionError) return
+    reportedExtensionError.current = extensionError
+    if (!extensionError) return
+    props.extensionLogger.warn('Client extension runtime synchronization failed', {
+      event: 'extension.sync.failed', error: extensionError,
+    })
+    toast.warning(state.t('renderer.runtimeUnavailable'), {
+      id: 'extension-runtime-unavailable', description: extensionError,
+    })
+  }, [extensionError, props.extensionLogger, state.t])
   const appearanceBackground = resolveBackground(
     appearance.scopedBackground && appearance.scopedBackground.cardId === appearanceCardId
       ? appearance.scopedBackground : appearance.background,
@@ -84,6 +102,16 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
   const uiState = useStudioUiState()
   const timelineRouteRequestRef = useRef(0)
   const navigation = useStudioNavigation({ endpoint: state.endpoint, api: state.api })
+  async function openAgentSession(sessionId: string) {
+    const activated = await state.activateAgentSession(sessionId, navigation.isCurrent)
+    if (!activated || !navigation.isCurrent()) return
+    void navigation.openNarrative(activated.session.timelineId, activated.branchId)
+    uiState.setAgentPanelOpen(true)
+  }
+  function onTextTransformsChanged() {
+    uiState.bumpLoomScriptRefreshToken()
+    void queryClient.invalidateQueries({ queryKey: ['user-resources', state.endpoint, 'rules'] })
+  }
   const [navigationFailure, setNavigationFailure] = useState<{ target: string; message: string }>()
   const narrativeTarget = JSON.stringify([state.endpoint, navigation.route.timelineId, navigation.route.branchId])
   const uiScale = useStudioLayoutStore(current => current.uiScale)
@@ -137,6 +165,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
   }
   const composerQuickActions = listClientActions({
     packages: [...clientExtensions.packages, ...clientExtensions.cardPackages],
+    isAvailable: clientExtensions.host.isPackageAvailable,
     surface: 'composer.quick-actions',
     context: composerCommandContext,
   }).map(action => ({
@@ -157,6 +186,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
   }))
   const headerActions = listClientActions({
     packages: [...clientExtensions.packages, ...clientExtensions.cardPackages],
+    isAvailable: clientExtensions.host.isPackageAvailable,
     surface: 'stage.header.actions',
     context: composerCommandContext,
   }).map(action => {
@@ -218,10 +248,11 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
     rendererHost.setScopeSnapshot({
       workspace: 'workspace',
       cardId: state.narrativeTimeline?.createdFrom?.cardId ?? state.selectedCardId,
-      ...(state.narrativeTimeline ? { timelineId: state.narrativeTimeline.id } : {}),
+      ...(!narrativeNavigating && state.narrativeTimeline && state.branch?.timelineId === state.narrativeTimeline.id
+        ? { timelineId: state.narrativeTimeline.id, branchId: state.branch.id } : {}),
       ...(state.agentChatSession ? { agentSessionId: state.agentChatSession.id } : {}),
     })
-  }, [rendererHost, state.agentChatSession?.id, state.narrativeTimeline?.id, state.narrativeTimeline?.createdFrom?.cardId, state.selectedCardId])
+  }, [rendererHost, narrativeNavigating, state.agentChatSession?.id, state.narrativeTimeline?.id, state.narrativeTimeline?.createdFrom?.cardId, state.branch?.id, state.branch?.timelineId, state.selectedCardId])
 
   useEffect(() => {
     let disposed = false
@@ -278,12 +309,13 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
     return () => { timelineRouteRequestRef.current++ }
   }, [narrativeTarget, state.bootstrapReady, navigation.route.targetUri])
   const resourcePanels = StudioResourcePanels({ state, uiState, navigation, assetWorkspaceId })
-  const panels = createStudioPanels({ state, uiState, navigation, rendererHost, clientExtensions, clientLogs: props.clientLogs, resourcePanels, assetWorkspaceId, cardsBusy, providerBusy, agentPresetBusy, activePresetId, sourceCardId, sessionBusy, openStateSource, uiScale, setUiScale, backgrounds: clientExtensions.host.backgrounds() })
+  const panels = createStudioPanels({ state, uiState, navigation, rendererHost, clientExtensions, clientLogs: props.clientLogs, resourcePanels, assetWorkspaceId, cardsBusy, providerBusy, agentPresetBusy, activePresetId, sourceCardId, sessionBusy, openStateSource, openAgentSession, onTextTransformsChanged, uiScale, setUiScale, backgrounds: clientExtensions.host.backgrounds() })
 
   const studio = (
     <StudioPage
       navigation={navigation}
       assetWorkspaceId={contextWorkspaceId}
+      wallpaperUrl={appearanceBackground?.image}
       background={(
         <RendererSurfaceHost
           host={rendererHost}
@@ -319,7 +351,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
       ) : undefined}
       onChangeInput={state.setAgentChatInput}
       onSelectProfile={state.selectAgentPreset}
-      onSelectSession={id => { void state.activateAgentSession(id) }}
+      onSelectSession={id => { void openAgentSession(id) }}
       onNewSession={state.newAgentSession}
       onCreateSession={state.createAgentSession}
       canMakePrimary={Boolean(state.narrativeTimeline || state.selectedCardId)}
@@ -332,7 +364,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
       onCancelRun={() => { void state.cancelAgentRun() }}
       onPauseRun={() => { void state.pauseAgentRun() }}
       onResumeRun={() => { void state.resumeAgentRun() }}
-      onApproveMutation={(allow, reason) => { void state.approveAgentMutation(allow, reason) }}
+      onApproveMutation={state.approveAgentMutation}
       providerAccounts={state.providerAccounts}
       rendererHost={rendererHost}
       selectedProfileId={state.selectedAgentPresetId}
@@ -499,7 +531,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
           }}>{state.t('navigation.returnToWorkspace')}</button>
         </section>
       ) : studio}
-      <ResourceReferenceDialog api={state.api} uri={navigation.referenceUri}
+      <ResourceReferenceDialog t={state.t} api={state.api} uri={navigation.referenceUri}
         onClose={() => { void navigation.closeReference() }}
         onNavigate={uri => { void navigation.openUri(uri) }}
         onOpenEditor={target => {

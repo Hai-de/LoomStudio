@@ -2,6 +2,7 @@ import type { ClientDisplayPart, ClientRendererFrameHostMessage, RendererSurface
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { rendererContributionKey, rendererSurfacePolicies } from '../../../shared/extension-renderer-runtime/renderer-registry.js'
 import type { ClientRendererContext, ClientRendererHost, ClientRendererRegistration, ClientRendererScope, ClientRendererInstanceHandle } from '../../../shared/extension-renderer-runtime/client-renderer-host.js'
+import { resolveCurrentLocale } from '../../../shared/i18n/index.js'
 import { readClientThemeSnapshot, subscribeClientTheme } from '../model/client-theme.js'
 import { mountIsolatedFrame } from '../../../shared/iframe-runtime/frame-lifecycle.js'
 import { isFrameRecord } from '../../../shared/iframe-runtime/frame-channel.js'
@@ -73,6 +74,7 @@ export function RendererInstanceRoot(props: {
         prefersReducedMotion: globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
         theme: 'inherit',
         themeSnapshot: readClientThemeSnapshot(),
+        locale: resolveCurrentLocale(),
       },
       signal: controller.signal,
       close: () => props.host.release(props.registration.definition.surface, stableScope.key, contributionKey),

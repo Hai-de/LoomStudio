@@ -1,4 +1,4 @@
-import { Checkbox, Field, TextInput, Textarea, type FieldControlProps } from '@loom-studio/ui'
+import { Button, Checkbox, Field, TextInput, Textarea, type FieldControlProps } from '@loom-studio/ui'
 import type {
   ExtensionConfigEntry,
   ExtensionSettingContribution,
@@ -12,24 +12,40 @@ import styles from './extension-settings-form.module.scss'
 
 const TEXT_COMMIT_DELAY_MS = 450
 
-export function ExtensionSettingsForm(props: {
+type ExtensionSettingsFormProps = {
   api: Pick<StudioApi['extensionRuntime'], 'getConfig' | 'listConfigs' | 'upsertConfig'>
   configRevision: number
   packageId: string
   scopeContext: { cardId?: string; timelineId?: string; agentSessionId?: string }
   settings: readonly ExtensionSettingContribution[]
   t: Translator
-}) {
+}
+
+export function ExtensionSettingsForm(props: ExtensionSettingsFormProps) {
+  const identity = JSON.stringify([props.packageId, props.settings.map(setting => resolveSettingScope(setting, props.scopeContext))])
+  return <ExtensionSettingsFields key={identity} {...props} />
+}
+
+function ExtensionSettingsFields(props: ExtensionSettingsFormProps) {
   const resolved = useMemo(() => props.settings
     .map(setting => ({ setting, scope: resolveSettingScope(setting, props.scopeContext) }))
     .sort((left, right) => (left.setting.suggestedOrder ?? 0) - (right.setting.suggestedOrder ?? 0)
       || left.setting.label.localeCompare(right.setting.label)), [props.scopeContext, props.settings])
-  const [entries, setEntries] = useState<Record<string, ExtensionConfigEntry>>({})
+  const [entries, setEntries] = useState<Record<string, ExtensionConfigEntry>>()
   const [loadError, setLoadError] = useState<string>()
+  const [loadAttempt, setLoadAttempt] = useState(0)
+  const mountedRef = useRef(false)
   const scopeSignature = JSON.stringify(resolved.flatMap(item => item.scope ? [item.scope] : []))
 
   useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
+  useEffect(() => {
     let disposed = false
+    setEntries(undefined)
+    setLoadError(undefined)
     const scopes = uniqueScopes(resolved.flatMap(item => item.scope ? [item.scope] : []))
     void Promise.all(scopes.map(async scope => await props.api.listConfigs({ packageId: props.packageId, scope })))
       .then(results => {
@@ -40,7 +56,7 @@ export function ExtensionSettingsForm(props: {
         if (!disposed) setLoadError(error instanceof Error ? error.message : String(error))
       })
     return () => { disposed = true }
-  }, [props.api, props.configRevision, props.packageId, scopeSignature])
+  }, [props.api, props.configRevision, props.packageId, scopeSignature, loadAttempt])
 
   const groups = groupSettings(resolved)
   return (
@@ -49,13 +65,17 @@ export function ExtensionSettingsForm(props: {
         <h3>{props.t('renderer.settings')}</h3>
         <p>{props.t('renderer.settingsDescription')}</p>
       </header>
-      {loadError ? <p className={styles.loadError} role="alert">{loadError}</p> : null}
+      {loadError ? <div role="alert">
+        <p className={styles.loadError}>{loadError}</p>
+        <Button type="button" onClick={() => setLoadAttempt(value => value + 1)}>{props.t('renderer.settingsRetry')}</Button>
+      </div> : !entries ? <p role="status">{props.t('renderer.settingsLoading')}</p> : null}
       {groups.map(group => (
         <section className={styles.group} key={group.name}>
           {group.label ? <h4>{group.label}</h4> : null}
           {group.items.map(({ setting, scope }) => scope ? (
             <SettingField
-              entry={entries[configKey(scope, setting.id)]}
+              disabled={!entries || Boolean(loadError)}
+              entry={entries?.[configKey(scope, setting.id)]}
               key={`${configKey(scope, setting.id)}:${setting.type}`}
               setting={setting}
               t={props.t}
@@ -68,12 +88,13 @@ export function ExtensionSettingsForm(props: {
                     value,
                     ...(expectedVersion === undefined ? {} : { expectedVersion }),
                   })
-                  setEntries(current => ({ ...current, [configKey(scope, setting.id)]: result.config }))
+                  if (mountedRef.current) setEntries(current => current ? { ...current, [configKey(scope, setting.id)]: result.config } : current)
                   return result.config
                 } catch (error) {
+                  if (!mountedRef.current) throw error
                   try {
                     const latest = await props.api.getConfig({ packageId: props.packageId, scope, key: setting.id })
-                    if (latest.config) setEntries(current => ({ ...current, [configKey(scope, setting.id)]: latest.config! }))
+                    if (mountedRef.current && latest.config) setEntries(current => current ? { ...current, [configKey(scope, setting.id)]: latest.config! } : current)
                   } catch {
                     // Preserve the write failure; refreshing the competing version is best-effort recovery.
                   }
@@ -93,6 +114,7 @@ export function ExtensionSettingsForm(props: {
 }
 
 function SettingField(props: {
+  disabled: boolean
   entry?: ExtensionConfigEntry
   setting: ExtensionSettingContribution
   t: Translator
@@ -110,10 +132,11 @@ function SettingField(props: {
   const queuedRef = useRef<JsonValue | undefined>(undefined)
   const hasQueuedRef = useRef(false)
   const savingRef = useRef(false)
+  const mountedRef = useRef(false)
 
   useEffect(() => {
-    versionRef.current = props.entry?.version
     if (dirtyRef.current || savingRef.current) return
+    versionRef.current = props.entry?.version
     const nextDraft = toDraft(props.setting, props.entry?.value ?? props.setting.default)
     draftRef.current = nextDraft
     dirtyRef.current = false
@@ -121,8 +144,13 @@ function SettingField(props: {
     setDirty(false)
   }, [props.entry?.value, props.entry?.version, props.setting])
 
-  useEffect(() => () => {
-    if (timerRef.current) clearTimeout(timerRef.current)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      hasQueuedRef.current = false
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
   }, [])
 
   function setDraft(value: boolean | string): void {
@@ -134,15 +162,16 @@ function SettingField(props: {
   }
 
   async function drainQueue(): Promise<void> {
-    if (savingRef.current) return
+    if (savingRef.current || !mountedRef.current) return
     savingRef.current = true
     setSaving(true)
     try {
-      while (hasQueuedRef.current) {
+      while (hasQueuedRef.current && mountedRef.current) {
         const value = queuedRef.current!
         hasQueuedRef.current = false
         try {
           const entry = await props.onCommit(value, versionRef.current)
+          if (!mountedRef.current) return
           versionRef.current = entry.version
           if (!hasQueuedRef.current && sameDraftValue(props.setting, draftRef.current, value)) {
             dirtyRef.current = false
@@ -151,18 +180,19 @@ function SettingField(props: {
           setError(undefined)
         } catch (reason) {
           hasQueuedRef.current = false
+          if (!mountedRef.current) return
           setError(reason instanceof Error ? reason.message : String(reason))
         }
       }
     } finally {
       savingRef.current = false
-      setSaving(false)
+      if (mountedRef.current) setSaving(false)
     }
   }
 
   function commit(): void {
     if (timerRef.current) clearTimeout(timerRef.current)
-    if (!dirtyRef.current) return
+    if (props.disabled || !mountedRef.current || !dirtyRef.current) return
     const parsed = parseSettingValue(props.setting, draftRef.current, props.t)
     if (!parsed.ok) {
       setError(parsed.error)
@@ -182,7 +212,7 @@ function SettingField(props: {
   function renderControl(fieldControlProps: FieldControlProps) {
     const common = {
       ...fieldControlProps,
-      disabled: props.setting.readOnly,
+      disabled: props.disabled || props.setting.readOnly,
       'aria-busy': saving || undefined,
     }
     if (props.setting.type === 'boolean') {

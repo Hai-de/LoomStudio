@@ -1,5 +1,6 @@
 import type { MemoryLogSink } from '@loom-studio/logging'
 import React, { type ReactNode } from 'react'
+import { formatEntityReference } from '@loom-studio/shared'
 import type { ClientRendererHost } from '../shared/extension-renderer-runtime/client-renderer-host.js'
 import type { StudioPanelId } from '../shared/studio-shell/studio-layout-store.js'
 import { useClientExtensionRuntime } from '../features/extension-renderers/model/use-client-extension-runtime.js'
@@ -45,6 +46,8 @@ export function createStudioPanels(input: {
   sourceCardId?: string
   sessionBusy: boolean
   openStateSource: (scope: 'global' | 'timeline') => void
+  openAgentSession: (sessionId: string) => Promise<void>
+  onTextTransformsChanged: () => void
   uiScale: number
   setUiScale: (scale: number) => void
   backgrounds: readonly RegisteredClientBackground[]
@@ -93,7 +96,7 @@ export function createStudioPanels(input: {
         t={state.t}
         cards={state.cards}
         timelines={state.allTimelines.length > 0 ? state.allTimelines : state.cardTimelines}
-        agentSessions={state.agentChatSessions}
+        agentSessions={state.allAgentSessions}
         agentPresets={state.agentPresets}
         onOpenCard={card => {
           void state.selectCardTimeline(card.id, true).then(activated => {
@@ -106,8 +109,7 @@ export function createStudioPanels(input: {
           })
         }}
         onOpenAgentSession={session => {
-          void state.activateAgentSession(session)
-          uiState.setAgentPanelOpen(true)
+          void input.openAgentSession(session.id)
         }}
       />
     ) : null,
@@ -136,8 +138,7 @@ export function createStudioPanels(input: {
           return deleted
         }}
         onOpenAgentSessionInSidebar={session => {
-          void state.activateAgentSession(session)
-          uiState.setAgentPanelOpen(true)
+          void input.openAgentSession(session.id)
         }}
         onOpenTimeline={timeline => {
           void state.activateTimeline(timeline.id).then(branchId => {
@@ -148,7 +149,9 @@ export function createStudioPanels(input: {
         onRenameTimeline={state.renameTimeline}
         onArchiveImported={async timelineId => {
           await state.refreshAllTimelines()
-          await state.activateTimeline(timelineId)
+          if (navigation.isCurrent()) {
+            await navigation.openUri(formatEntityReference({ kind: 'entity', type: 'timeline', id: timelineId }))
+          }
         }}
       />
     ),
@@ -174,6 +177,7 @@ export function createStudioPanels(input: {
         onDeleteCards={state.deleteCards}
         onPreviewCardDeletion={state.previewCardDeletion}
         onExportCard={state.exportCard}
+        onForkCard={state.forkCard}
         directoryApi={state.directoryApi}
         resourceApi={state.api}
         endpoint={state.endpoint}
@@ -221,10 +225,12 @@ export function createStudioPanels(input: {
     state: () => <LazyStudioStatePanel
       hasTimeline={Boolean(state.narrativeTimeline)}
       variableView={uiState.variableView}
-      card={state.narrativeTimeline && state.selectedCardDetails?.id === sourceCardId ? state.selectedCardDetails : undefined}
+      card={!state.narrativeTimeline || state.selectedCardDetails?.id === sourceCardId ? state.selectedCardDetails : undefined}
       statesApi={state.statesApi}
       refreshToken={state.lastRun?.runId}
-      timelineTarget={state.narrativeTimeline && state.branch ? { scope: 'timeline', timelineId: state.narrativeTimeline.id, branchId: state.branch.id } : undefined}
+      sourceRefreshToken={`${clientExtensions.configRevision}:${clientExtensions.refreshSequence}`}
+      timelineTarget={state.narrativeTimeline && state.branch?.timelineId === state.narrativeTimeline.id
+        ? { scope: 'timeline', timelineId: state.narrativeTimeline.id, branchId: state.branch.id } : undefined}
       t={state.t}
       onSaveCard={state.updateCardStateConfig}
       onOpenSource={openStateSource}
@@ -297,7 +303,7 @@ export function createStudioPanels(input: {
         temporaryTarget={navigation.searchParams.get('temporary') === '1'}
         api={state.textTransformsApi}
         loomScriptsApi={state.api.loomScripts}
-        onRuntimeChanged={uiState.bumpLoomScriptRefreshToken}
+        onRuntimeChanged={input.onTextTransformsChanged}
         rendererHost={rendererHost}
         runtimeScriptContext={{
           workspaceId: 'workspace',
@@ -357,6 +363,7 @@ export function createStudioPanels(input: {
         searchParams={navigation.searchParams}
         onNavigate={path => { void navigation.openPath(path) }}
         configRevision={clientExtensions.configRevision}
+        runtimeError={clientExtensions.error?.message}
         extensionRuntime={state.api.extensionRuntime}
         extensionApi={state.api.extensions}
         onRefreshExtensions={async () => {
@@ -385,6 +392,17 @@ export function createStudioPanels(input: {
         onUninstallCardPackage={state.uninstallCardPackage}
         onRemoveCardResources={state.removeCardPackageResources}
         installations={state.extensionInstallations}
+        timelineParticipation={{
+          api: state.api.timelineExtensions,
+          card: state.selectedCardDetails,
+          timeline: state.narrativeTimeline && state.branch ? {
+            id: state.narrativeTimeline.id, branchId: state.branch.id,
+            title: state.narrativeTimeline.title, cardId: state.narrativeTimeline.createdFrom?.cardId,
+          } : undefined,
+          refreshToken: clientExtensions.configRevision,
+          onSaveDefaults: state.updateCardExtensionAdoptions,
+          onChanged: async () => { await Promise.all([state.refreshStates(), state.refreshResourceConsumers()]) },
+        }}
         promptResources={state.promptResources}
         onOpenPromptResource={resource => {
           void navigation.openResource(resource.resourceKind === 'preset' ? 'agent' : 'resource', resource.id, resource.rootNode.id)

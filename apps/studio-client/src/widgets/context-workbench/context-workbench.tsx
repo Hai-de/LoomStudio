@@ -136,7 +136,7 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
 
       const isGlobal = globalMountIds.has(resource.id)
       const isCurrent = cardResourceIds.has(resource.id)
-      const scopeBadge = isGlobal && isCurrent ? '全局 · 当前' : isGlobal ? '全局默认' : isCurrent ? '当前卡片' : undefined
+      const scopeBadge = isGlobal && isCurrent ? props.t('context.scope.globalAndCurrent') : isGlobal ? props.t('context.scope.globalDefault') : isCurrent ? props.t('context.scope.currentCard') : undefined
       const meta = [scopeBadge, originLabel].filter(Boolean).join(' · ')
 
       const root = readPromptResourceWorkbenchRoot(resource)
@@ -252,8 +252,8 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
           activeId={scopeFilter}
           ariaLabel={props.t('context.authoring.views')}
           items={[
-            { id: 'current', label: '当前角色' },
-            { id: 'global', label: '全局' },
+            { id: 'current', label: props.t('context.scope.currentCharacter') },
+            { id: 'global', label: props.t('context.scope.global') },
           ]}
           onChange={id => {
             setBindingOpen(false)

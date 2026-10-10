@@ -61,7 +61,7 @@ export function useStudioShortcuts(options: UseStudioShortcutsOptions) {
       if (key === 'z' && event.shiftKey && canRedo) {
         event.preventDefault()
         onRedo()
-      } else if (key === 'z' && canUndo) {
+      } else if (key === 'z' && !event.shiftKey && canUndo) {
         event.preventDefault()
         onUndo()
       } else if (key === 'y' && canRedo) {

@@ -1,4 +1,5 @@
 export { applicationDocumentTypes } from './foundation/document-types.js'
+export { parseCardExtensionAdoptions } from './cards/card.js'
 export { officialPromptResourceIds } from './prompt/prompt-resource-defaults.js'
 export * from './transforms/history-text.js'
 export { createApplicationRuntime } from './runtime/runtime.js'
@@ -77,6 +78,8 @@ export {
 } from './providers/provider-payload.js'
 export { createAgentToolRegistry } from './agents/tool-registry.js'
 export { createMacroProviderRegistry } from './prompt/macro-provider-registry.js'
+export { createPromptProcessorRegistry, type PromptProcessorRegistry } from './prompt/prompt-processor-registry.js'
+export { createStateContentRegistry, type StateContentRegistry } from './state/state-content-registry.js'
 export type { TimelinePresetConfig } from './prompt/timeline-preset-config.js'
 export type { MacroProviderRegistry, MacroStaticSource } from './prompt/macro-provider-registry.js'
 export type {

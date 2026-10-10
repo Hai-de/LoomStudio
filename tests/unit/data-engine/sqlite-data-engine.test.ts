@@ -12,6 +12,43 @@ function createTestEngine() {
 }
 
 describe('sqlite data engine', () => {
+  it('does not pass a writers transaction guard to independently subscribed work', async () => {
+    const engine = createTestEngine()
+    let active = true
+    let followup: Promise<unknown> | undefined
+    const write = (id: string) => engine.transact({ actor: { kind: 'system', id: 'test' } }, async tx => {
+      tx.recordOperations([{ store: 'test', kind: 'create', entityId: id, entityType: 'test' }])
+    })
+    engine.subscribeCommits(commit => {
+      if (commit.operations[0]?.entityId !== 'parent') return
+      active = false
+      followup = write('subscriber')
+    })
+    try {
+      await engine.withTransactionGuard(async () => { if (!active) throw new Error('Revoked') }, () => write('parent'))
+      await followup
+      expect(engine.database.prepare('SELECT id FROM changesets').all()).toHaveLength(2)
+    } finally { await engine.close() }
+  })
+
+  it('rolls back a task whose guard is revoked during its transaction without affecting other tasks', async () => {
+    const engine = createTestEngine()
+    engine.database.exec('CREATE TABLE guarded_writes (id TEXT)')
+    let active = true
+    const guard = async () => { if (!active) throw new Error('Revoked') }
+    const write = (id: string, revoke = false) => engine.transact({ actor: { kind: 'system', id: 'test' } }, async tx => {
+      tx.database.prepare('INSERT INTO guarded_writes VALUES (?)').run(id)
+      tx.recordOperations([{ store: 'test', kind: 'create', entityId: id, entityType: 'test' }])
+      if (revoke) active = false
+    })
+    try {
+      await expect(engine.withTransactionGuard(guard, () => write('rolled-back', true))).rejects.toThrow('Revoked')
+      await write('independent')
+      expect(engine.database.prepare('SELECT id FROM guarded_writes').all()).toEqual([{ id: 'independent' }])
+      expect(engine.database.prepare('SELECT id FROM changesets').all()).toHaveLength(1)
+    } finally { await engine.close() }
+  })
+
   it('commits one journal fact after a successful transaction without storing entity content', async () => {
     const engine = createTestEngine()
     engine.migrate({

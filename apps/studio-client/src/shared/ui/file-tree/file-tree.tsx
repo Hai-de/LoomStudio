@@ -31,6 +31,7 @@ type FileTreeProps = {
   onExpandedIdsChange: (expandedIds: string[]) => void
   onSelect: (node: FileTreeNode) => void
   renderIcon?: (node: FileTreeNode, expanded: boolean) => ReactNode
+  renderLabelSuffix?: (node: FileTreeNode) => ReactNode
   renderMetaLeading?: (node: FileTreeNode) => ReactNode
   renderTrailing?: (node: FileTreeNode) => ReactNode
   renderExpandedRow?: (node: FileTreeNode) => ReactNode
@@ -295,6 +296,7 @@ export function FileTree(props: FileTreeProps) {
         onToggleExpand={toggleExpand}
         renderChildren={renderChildren}
         renderIcon={props.renderIcon}
+        renderLabelSuffix={props.renderLabelSuffix}
         renderMetaLeading={props.renderMetaLeading}
         renderTrailing={props.renderTrailing}
         renderExpandedRow={props.renderExpandedRow}
@@ -391,6 +393,7 @@ function FileTreeRow(props: {
   onToggleExpand: (id: string) => void
   renderChildren: boolean
   renderIcon?: (node: FileTreeNode, expanded: boolean) => ReactNode
+  renderLabelSuffix?: (node: FileTreeNode) => ReactNode
   renderMetaLeading?: (node: FileTreeNode) => ReactNode
   renderTrailing?: (node: FileTreeNode) => ReactNode
   renderExpandedRow?: (node: FileTreeNode) => ReactNode
@@ -407,6 +410,7 @@ function FileTreeRow(props: {
   const [actionsOpen, setActionsOpen] = useState(false)
   const actions = actionsOpen ? props.getActions?.(props.node) ?? [] : []
   const metaLeading = props.renderMetaLeading?.(props.node)
+  const labelSuffixElement = props.renderLabelSuffix?.(props.node)
   const trailingElement = props.renderTrailing?.(props.node)
   const expandedRowElement = props.renderExpandedRow?.(props.node)
   const labelId = useId()
@@ -470,7 +474,7 @@ function FileTreeRow(props: {
           onDragOver={event => props.onDragOver(event, props.node)}
           onDrop={event => props.onDrop(event, props.node)}
           onKeyDown={event => {
-            if (!event.defaultPrevented) props.onTreeItemKeyDown(event, props.node)
+            if (!event.defaultPrevented && event.target === event.currentTarget) props.onTreeItemKeyDown(event, props.node)
           }}
         >
           {props.variant !== 'flat' && props.level > 1 ? (
@@ -534,6 +538,7 @@ function FileTreeRow(props: {
                   onClick={e => e.stopPropagation()}
                   onKeyDown={e => {
                     e.stopPropagation()
+                    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return
                     if (e.key === 'Enter') {
                       e.preventDefault()
                       commitEdit()
@@ -544,9 +549,12 @@ function FileTreeRow(props: {
                   }}
                 />
               ) : (
-                <span className={styles.label} id={labelId}>
-                  {props.formatLabel ? props.formatLabel(props.node) : props.node.label}
-                  {hasCount ? <sup className={styles.childCountSup}>{childCount}</sup> : null}
+                <span className={styles.labelRow}>
+                  <span className={styles.label} id={labelId}>
+                    {props.formatLabel ? props.formatLabel(props.node) : props.node.label}
+                    {hasCount ? <sup className={styles.childCountSup}>{childCount}</sup> : null}
+                  </span>
+                  {labelSuffixElement}
                 </span>
               )}
               {showMeta ? (

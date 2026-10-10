@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import type { StudioApi } from '../../shared/api/studio-api.js'
+import type { Translator } from '../../shared/i18n/index.js'
 import styles from './preset-workbench.module.scss'
 
 type Preview = Awaited<ReturnType<StudioApi['narratives']['getEffectivePreview']>>
@@ -9,6 +10,7 @@ export function NarrativeRangePreview(props: {
   api: StudioApi['narratives']
   timelineId?: string
   branchId?: string
+  t: Translator
 }) {
   const [result, setResult] = useState<Preview>()
   const [error, setError] = useState<string>()
@@ -37,24 +39,24 @@ export function NarrativeRangePreview(props: {
     }
   }
 
-  return <section className={styles.anchorPreview} aria-label="Narrative 有效范围预览">
-    <h3>Narrative 有效范围</h3>
-    <p>当前 Timeline / Branch 的已发布范围；不是本轮 PromptBuild 或关键词激活结果。</p>
+  return <section className={styles.anchorPreview} aria-label={props.t('narrative.preview.ariaLabel')}>
+    <h3>{props.t('narrative.preview.title')}</h3>
+    <p>{props.t('narrative.preview.description')}</p>
     {props.timelineId && props.branchId ? <>
-      <button className={styles.previewLoad} type="button" disabled={busy} onClick={() => void load()}>{busy ? '读取中…' : '查看有效范围'}</button>
-    </> : <p role="status">当前没有明确的 Timeline / Branch。</p>}
+      <button className={styles.previewLoad} type="button" disabled={busy} onClick={() => void load()}>{busy ? props.t('narrative.preview.loading') : props.t('narrative.preview.load')}</button>
+    </> : <p role="status">{props.t('narrative.preview.noTarget')}</p>}
     {error ? <p role="alert">{error}</p> : null}
     {result ? <div className={styles.previewResult}>
       <p className={styles.previewScope}>{result.sourceId === 'runtime.recent-100'
-        ? '未发布 Narrative 范围，当前显示最近 100 个节点的采样。'
-        : `本次预览 · ${result.memory.length} 条 Memory · ${result.nodes.length} 条原文`}</p>
+        ? props.t('narrative.preview.sampleRecent')
+        : props.t('narrative.preview.summary', { memories: result.memory.length, nodes: result.nodes.length })}</p>
       {result.memory.map((entry, index) => <details className={styles.previewFragment} key={entry.id}>
-        <summary><ChevronRight aria-hidden="true" />Memory {index + 1}</summary><pre>{entry.content}</pre>
+        <summary><ChevronRight aria-hidden="true" />{props.t('narrative.preview.memoryIndex', { index: index + 1 })}</summary><pre>{entry.content}</pre>
       </details>)}
       {result.nodes.map((node, index) => <details className={styles.previewFragment} key={node.id}>
-        <summary><ChevronRight aria-hidden="true" />原文 {index + 1}</summary><pre>{node.text}</pre>
+        <summary><ChevronRight aria-hidden="true" />{props.t('narrative.preview.nodeIndex', { index: index + 1 })}</summary><pre>{node.text}</pre>
       </details>)}
-      {!result.complete ? <p role="status">仅显示范围末端最多 40 个节点；更早内容未在此视图加载。</p> : null}
+      {!result.complete ? <p role="status">{props.t('narrative.preview.tailNotice')}</p> : null}
     </div> : null}
   </section>
 }

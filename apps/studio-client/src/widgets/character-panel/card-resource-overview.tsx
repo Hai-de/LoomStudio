@@ -4,7 +4,7 @@ import { Dialog, IconButton } from '@loom-studio/ui'
 import type { CardDirectoryAttachment, CardDirectoryCatalog, CardDirectoryPreview, OpenCardDirectoryResult } from '@loom-studio/shared'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { Translator } from '../../shared/i18n/index.js'
+import { formatNumber, type Translator } from '../../shared/i18n/index.js'
 import { ImageViewer } from '../../shared/ui/media-viewer/image-viewer.js'
 import styles from './card-resource-overview.module.scss'
 
@@ -173,5 +173,5 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   const units = ['KiB', 'MiB', 'GiB']
   const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)) - 1, units.length - 1)
-  return `${(bytes / 1024 ** (index + 1)).toLocaleString(undefined, { maximumFractionDigits: 1 })} ${units[index]}`
+  return `${formatNumber(bytes / 1024 ** (index + 1), undefined, { maximumFractionDigits: 1 })} ${units[index]}`
 }

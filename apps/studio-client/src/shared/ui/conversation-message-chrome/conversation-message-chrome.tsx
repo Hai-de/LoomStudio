@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { IconButton } from '@loom-studio/ui'
+import { formatDateTime, formatTime } from '../../i18n/index.js'
 import styles from './conversation-message-chrome.module.scss'
 
 export function ConversationMessageChrome(props: { actions: ReactNode; createdAt: string; index: number; metadata?: ReactNode }) {
@@ -22,13 +23,10 @@ export function ConversationMessageAction(props: { children: ReactNode; disabled
   )
 }
 
-export function formatConversationTimestamp(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '--:--'
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+export function formatConversationTimestamp(value: string, locale?: string): string {
+  return formatTime(value, locale, { hour: '2-digit', minute: '2-digit' })
 }
 
-function formatFullTimestamp(value: string): string {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
+function formatFullTimestamp(value: string, locale?: string): string {
+  return formatDateTime(value, locale)
 }

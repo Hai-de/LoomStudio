@@ -4,10 +4,11 @@ import type {
   RuntimeRequestContext,
   SettingLayerInput,
 } from '@loom-studio/application-runtime'
-import { isCardBundleArtifact, isPromptActivation } from '@loom-studio/application-runtime'
+import { isCardBundleArtifact, isPromptActivation, parseCardExtensionAdoptions } from '@loom-studio/application-runtime'
 import type { JsonValue } from '@loom-studio/shared'
 import {
   isRecord,
+  readNumber,
   readOptionalBoolean,
   readOptionalNumber,
   readOptionalObject,
@@ -69,6 +70,11 @@ export async function handleCardsRpc(
         limit: readOptionalNumber(params, 'limit'),
       }) as unknown as JsonValue
 
+    case 'application.forkCard':
+      return await runtime.forkCard({
+        cardId: readString(params, 'cardId'), expectedVersion: readNumber(params, 'expectedVersion'),
+      }, context) as unknown as JsonValue
+
     case 'application.updateCard':
       return await runtime.updateCard({
         cardId: readString(params, 'cardId'),
@@ -86,6 +92,8 @@ export async function handleCardsRpc(
         timelineStateEntities: readOptionalStateEntities(params, 'timelineStateEntities'),
         timelineComponentMounts: readOptionalComponentMounts(params, 'timelineComponentMounts'),
         stateContributionIds: readOptionalStringArray(params, 'stateContributionIds'),
+        ...(isRecord(params) && params.extensionAdoptions !== undefined
+          ? { extensionAdoptions: parseCardExtensionAdoptions(params.extensionAdoptions) } : {}),
         timelineStateBindings: readOptionalTimelineStateBindings(params, 'timelineStateBindings'),
         macros: readOptionalStringRecord(params, 'macros'),
         macroOptions: readOptionalObject(params, 'macroOptions') as import('@loom-studio/shared').MacroOptions | undefined,

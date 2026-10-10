@@ -1,9 +1,24 @@
-import { isValidElement, type ReactNode } from 'react'
+import { createElement, isValidElement, type ReactNode } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { highlightCode } from '../../../apps/studio-client/src/shared/ui/markdown-content/markdown-content.js'
+import { highlightCode, MarkdownContent } from '../../../apps/studio-client/src/shared/ui/markdown-content/markdown-content.js'
 import { prepareLoomMarkdown, readLoomToken } from '../../../apps/studio-client/src/shared/ui/markdown-content/markdown-content-model.js'
 
+const codeBlockLabels = { copied: 'Copied', copy: 'Copy', copyFailed: 'Failed', disableWrap: 'Unwrap', enableWrap: 'Wrap' }
+
 describe('Loom Markdown preview tokens', () => {
+  it.each([
+    ['| A | B |\n| --- | --- |\n| 1 | 2 |', '<table>'],
+    ['Heading\n=======', '<h1>'],
+    ['- first\n- second', '<ul>'],
+    ['```text\nfirst\nsecond\n```', '<pre>'],
+  ])('preserves Markdown block structure for %s', (value, tag) => {
+    expect(renderToStaticMarkup(createElement(MarkdownContent, { value, codeBlockLabels }))).toContain(tag)
+  })
+
+  it('preserves soft line breaks in the parsed paragraph', () => {
+    expect(renderToStaticMarkup(createElement(MarkdownContent, { value: 'first\nsecond', codeBlockLabels }))).toContain('<p>first\nsecond</p>')
+  })
   it('turns macros and resource paths into semantic links', () => {
     const rendered = prepareLoomMarkdown('读取 @assets/maps/城区地图.png，并检查 {{player.location}}。')
 

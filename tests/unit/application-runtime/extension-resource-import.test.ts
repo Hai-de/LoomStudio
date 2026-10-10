@@ -499,6 +499,25 @@ describe('Extension prompt resource import', () => {
     }
   })
 
+  it('retains package resources on uninstall and reuses them when the same package is installed again', async () => {
+    const { engine, runtime, input } = fixture()
+    try {
+      const first = await runtime.importExtensionPackageResources(input)
+      const before = await runtime.getAgentPreset({ agentPresetId: first.promptResources[0]!.resourceId })
+      const installation = (await runtime.listExtensionInstallations()).installations.find(item => item.id === first.installationId)!
+      const removed = await runtime.removeExtensionPackageResources({
+        packageId: input.packageId, uninstall: true, expectedInstallationVersion: installation.version,
+      })
+      expect(removed.promptResourceIds).toEqual([])
+      expect((await runtime.listExtensionInstallations()).installations).toEqual([])
+      expect(await runtime.getAgentPreset({ agentPresetId: first.promptResources[0]!.resourceId })).toEqual(before)
+      const second = await runtime.importExtensionPackageResources(input)
+      expect(second.promptResources).toEqual(first.promptResources)
+      expect(await runtime.getAgentPreset({ agentPresetId: first.promptResources[0]!.resourceId })).toEqual(before)
+      expect((await runtime.listExtensionInstallations()).installations[0]!.version).toBeGreaterThan(installation.version)
+    } finally { await engine.close() }
+  })
+
   it('adopts an existing global origin without reclassifying it as Card-owned', async () => {
     const { engine, promptResources, runtime, input } = fixture()
     try {

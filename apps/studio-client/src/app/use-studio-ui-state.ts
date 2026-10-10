@@ -1,11 +1,12 @@
 import { useState } from 'react'
+import type { VariableView } from './studio-state-panel.js'
 
 export function useStudioUiState() {
   const [loomScriptRefreshToken, setLoomScriptRefreshToken] = useState(0)
   const [composerHeight, setComposerHeight] = useState(0)
   const [agentPanelOpen, setAgentPanelOpen] = useState(false)
   const [selectedPresetId, setSelectedPresetId] = useState<string>()
-  const [variableView, setVariableView] = useState<'state' | 'authoring'>('authoring')
+  const [variableView, setVariableView] = useState<VariableView>('sources')
 
   return {
     loomScriptRefreshToken,

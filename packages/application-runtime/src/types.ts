@@ -121,6 +121,8 @@ import type { NarrativeSampleResult } from './narrative/sampling.js'
 import type { NarrativeContextRegistry } from './narrative/context-provider.js'
 export type { SampleNarrativeInput } from './runtime/transforms-runtime.js'
 import type { MacroProviderRegistry } from './prompt/macro-provider-registry.js'
+import type { PromptProcessorRegistry } from './prompt/prompt-processor-registry.js'
+import type { StateContentRegistry } from './state/state-content-registry.js'
 import type { StateContributionRegistry } from './state/state-contribution-registry.js'
 import type { TimelineArchive, TimelineArchiveParticipant } from './archive/timeline-archive.js'
 import type {
@@ -184,6 +186,7 @@ export type ApplicationRuntime = {
   initialize(): Promise<void>
   installOfficialContent(input: InstallOfficialContentInput, context?: RuntimeRequestContext): Promise<InstallOfficialContentResult>
   getStateSnapshot(input: GetStateSnapshotInput): Promise<GetStateSnapshotResult>
+  inspectStateSources(input: InspectStateSourcesInput): Promise<StateSourcesInspection>
   applyStateMutation(input: ApplyStateMutationInput, context?: RuntimeRequestContext): Promise<ApplyStateMutationResult>
   listStateDefinitions(input?: ListStateDefinitionsInput): Promise<ListStateDefinitionsResult>
   getStateDefinition(input: GetStateDefinitionInput): Promise<GetStateDefinitionResult>
@@ -220,6 +223,7 @@ export type ApplicationRuntime = {
   getExtensionConfig(input: { packageId: string; target?: ExtensionInstallationTarget; scope: ExtensionStorageScope; key: string }): Promise<{ config: ExtensionConfigEntry | null }>
   upsertExtensionConfig(input: { packageId: string; target?: ExtensionInstallationTarget; scope: ExtensionStorageScope; key: string; value: JsonValue; expectedVersion?: number }, context?: RuntimeRequestContext): Promise<{ config: ExtensionConfigEntry; mutation: MutationReceipt }>
   createCard(input: CreateCardInput, context?: RuntimeRequestContext): Promise<CreateCardResult>
+  forkCard(input: { cardId: string; expectedVersion: number }, context?: RuntimeRequestContext): Promise<ImportCardBundleResult>
   getCard(input: GetCardInput): Promise<GetCardResult>
   listCards(input?: ListCardsInput): Promise<ListCardsResult>
   updateCard(input: UpdateCardInput, context?: RuntimeRequestContext): Promise<UpdateCardResult>
@@ -230,6 +234,39 @@ export type ApplicationRuntime = {
   deleteCard(input: DeleteCardInput, context?: RuntimeRequestContext): Promise<DeleteCardResult>
   deleteCards(input: DeleteCardsInput, context?: RuntimeRequestContext): Promise<DeleteCardsResult>
   listExtensionInstallations(): Promise<ListExtensionInstallationsResult>
+  inspectTimelineExtensionResources(input: { timelineId: string; installationId: string }): Promise<TimelineExtensionResourceInspection>
+  beginTimelineExtensionWork(
+    input: { timelineId: string; installationId: string; packageVersion?: string; signal?: AbortSignal },
+  ): Promise<{ lease: TimelineExtensionLease; signal: AbortSignal; dispose(): void; run<T>(work: () => T): T }>
+  runTimelineExtensionWork<T>(
+    input: { timelineId: string; installationId: string; packageVersion?: string; signal?: AbortSignal },
+    work: (execution: { lease: TimelineExtensionLease; signal: AbortSignal }) => Promise<T>,
+  ): Promise<T>
+  assertTimelineExtensionWork(lease: TimelineExtensionLease): Promise<void>
+  isTimelineExtensionActive(input: { timelineId: string; installationId: string }): Promise<boolean>
+  listTimelineExtensionTargets(input: { installationId: string }): Promise<import('@loom-studio/extension-sdk').ExtensionTimelineTarget[]>
+  subscribeTimelineExtensionTargets(input: { installationId: string }, listener: () => void): { dispose(): void }
+  getTimelineExtensionParticipation(input: { timelineId: string }): Promise<TimelineExtensionParticipation>
+  previewTimelineExtensionRecovery(input: { timelineId: string; installationId: string }): Promise<TimelineExtensionRecoveryPreview>
+  previewTimelineExtensionAdoption(input: PreviewTimelineExtensionAdoptionInput): Promise<TimelineExtensionAdoptionPreview>
+  previewTimelineExtensionStateInitialization(input: PreviewTimelineExtensionAdoptionInput): Promise<TimelineExtensionAdoptionPreview>
+  initializeTimelineExtensionState(input: AdoptTimelineExtensionInput, context?: RuntimeRequestContext): Promise<{
+    revisionId: string
+    mutation: MutationReceipt
+  }>
+  adoptTimelineExtension(input: AdoptTimelineExtensionInput, context?: RuntimeRequestContext): Promise<{
+    participation: TimelineExtensionParticipation
+    revisionId: string
+    mutation: MutationReceipt
+  }>
+  recoverTimelineExtension(input: RecoverTimelineExtensionInput, context?: RuntimeRequestContext): Promise<{
+    participation: TimelineExtensionParticipation
+    mutation: MutationReceipt
+  }>
+  updateTimelineExtensionParticipation(input: UpdateTimelineExtensionParticipationInput, context?: RuntimeRequestContext): Promise<{
+    participation: TimelineExtensionParticipation
+    mutation: MutationReceipt
+  }>
   listPortableExtensionPayloads(input?: ListPortableExtensionPayloadsInput): Promise<ListPortableExtensionPayloadsResult>
   getPortableExtensionPayload(input: GetPortableExtensionPayloadInput): Promise<GetPortableExtensionPayloadResult>
   createPortableExtensionPayload(input: CreatePortableExtensionPayloadInput, context?: RuntimeRequestContext): Promise<CreatePortableExtensionPayloadResult>
@@ -271,7 +308,7 @@ export type ApplicationRuntime = {
   invokeAgentTurn(input: InvokeAgentTurnInput, context?: RuntimeRequestContext): Promise<InvokeAgentTurnResult>
   prepareAgentRunRecovery(input: { agentSessionId: string; runId?: string }): Promise<import('./agents/run-recovery.js').AgentRunRecovery | undefined>
   previewAgentTurn(input: PreviewAgentTurnInput, context?: RuntimeRequestContext): Promise<PreviewAgentTurnResult>
-  buildExtensionPrompt(input: import('@loom-studio/extension-sdk').ExtensionPromptBuildInput, target: import('@loom-studio/extension-sdk').ExtensionInstallationTarget, packageId: string): Promise<import('@loom-studio/extension-sdk').ExtensionPromptBuildResult>
+  buildExtensionPrompt(input: import('@loom-studio/extension-sdk').ExtensionPromptBuildInput, target: import('@loom-studio/extension-sdk').ExtensionInstallationTarget, packageId: string, lease?: TimelineExtensionLease): Promise<import('@loom-studio/extension-sdk').ExtensionPromptBuildResult>
   inspectMacros(input: InspectMacrosInput): Promise<InspectMacrosResult>
   createNarrativeTimeline(input: CreateNarrativeTimelineInput, context?: RuntimeRequestContext): Promise<CreateNarrativeTimelineResult>
   getNarrativeTimeline(input: GetNarrativeTimelineInput): Promise<GetNarrativeTimelineResult>
@@ -309,6 +346,7 @@ export type ApplicationRuntime = {
 }
 
 export type RuntimeRequestContext = {
+  extensionLeases?: TimelineExtensionLease[]
   actor?: DataActorRef
   clientId?: string
   correlationId?: string
@@ -331,6 +369,8 @@ export type RuntimeRequestContext = {
       messages: ChatMessage[]
       userEntry: import('@loom-studio/application-data').AgentTranscriptEntry
       partialEntryId?: string
+      recovery?: import('./agents/run-recovery.js').AgentRunRecoveryCheckpoint
+      expectedEntryCount?: number
     }) => void
     onMutationApproval?: (
       preview: VfsMutationPreview,
@@ -471,16 +511,58 @@ export type TimelineRuntimeContextContent = {
   stateComponents: MaterializedStateContribution['components']
   stateReferences: MaterializedStateContribution['references']
   stateContributionSources: Array<{
+    installationId: string
     contributionId: string
     packageId: string
     moduleId: string
     packageVersion: string
+    declaration: import('@loom-studio/shared').StateContribution
   }>
   stateBindings: Array<{
+    installationId?: string
     path: string
     schema: JsonObject
   }>
   createdAt: string
+}
+
+export type InspectStateSourcesInput = {
+  cardId?: string
+  target?: Extract<StateTarget, { scope: 'timeline' }>
+}
+
+export type StateSourcesInspection = {
+  card: {
+    id: string
+    version: number
+    name: string
+    declaration: import('@loom-studio/shared').StateContribution
+    definitionIds: string[]
+    contributionIds: string[]
+  } | null
+  definitions: StateDefinitionEntry[]
+  extensions: Array<{
+    installationId: string
+    packageId: string
+    target: ExtensionInstallationTarget | null
+    installation: (ExtensionInstallationContent & { version: number }) | null
+    cardDefault: boolean
+    adoption: TimelineExtensionParticipationContent['entries'][number] | null
+    eligible: boolean
+    registered: TimelineRuntimeContextContent['stateContributionSources']
+    accepted: TimelineRuntimeContextContent['stateContributionSources']
+  }>
+  timeline: {
+    target: Extract<StateTarget, { scope: 'timeline' }>
+    revisionId: string
+    context: TimelineRuntimeContextContent | null
+    paths: Array<{
+      path: string
+      kind: 'entity' | 'component' | 'binding'
+      installationId?: string
+      present: boolean
+    }>
+  } | null
 }
 
 export type ListStateDefinitionsInput = {
@@ -826,6 +908,8 @@ export type ApplicationRuntimeOptions = {
   providerAdapters?: ProviderAdapterRegistry
   aiCapabilities?: AiGatewayCapabilityRegistry
   macroProviders?: MacroProviderRegistry
+  promptProcessors?: PromptProcessorRegistry
+  stateContent?: StateContentRegistry
   narrativeContext?: NarrativeContextRegistry
   stateContributions?: StateContributionRegistry
   timelineArchiveParticipants?: TimelineArchiveParticipant[]
@@ -992,6 +1076,8 @@ export type ListCardsResult = {
 
 export type CardSummary = {
   id: string
+  artifactId: string
+  derivedFrom?: { artifactId: string }
   version: number
   name: string
   userName?: string
@@ -1004,6 +1090,7 @@ export type CardSummary = {
 
 export type UpdateCardInput = {
   cardId: string
+  extensionAdoptions?: CardExtensionAdoption[]
   expectedVersion?: number
   name?: string
   userName?: string
@@ -1549,17 +1636,102 @@ export type ExtensionInstallationTarget = import('@loom-studio/extension-sdk').E
 export type ExtensionInstallationContent = {
   packageId: string
   packageVersion: string
+  participation?: 'timeline'
+  source?: ExtensionInstallationSource
   target: ExtensionInstallationTarget
   archiveBlobId?: string
   createdAt: string
   updatedAt: string
 }
 
+export type ExtensionInstallationSource =
+  | { kind: 'git' | 'zip'; url: string }
+  | { kind: 'local'; directory: string }
+  | { kind: 'card' }
+
+export type TimelineExtensionParticipationContent = {
+  timelineId: string
+  entries: Array<{
+    installationId: string
+    packageId: string
+    packageVersion: string
+    installationVersion: number
+    source?: ExtensionInstallationSource
+    enabled: boolean
+    generation: string
+  }>
+}
+
+export type CardExtensionAdoption = {
+  packageId: string
+  target: 'global' | 'card'
+}
+
+export type TimelineExtensionParticipation = TimelineExtensionParticipationContent & { version: number }
+
+export type TimelineExtensionResourceInspection = {
+  timelineId: string
+  installationId: string
+  resources: Array<{ id: string; kind: string; label: string; contributionId: string; packageId: string; eligible: boolean }>
+}
+
+export type TimelineExtensionRecoveryPreview = {
+  timelineId: string
+  installationId: string
+  expectedVersion: number
+  expectedInstallationVersion: number
+  packageId: string
+  packageVersion: string
+  previousSource: ExtensionInstallationSource
+  source: ExtensionInstallationSource
+  sourceChanged: boolean
+}
+
+export type PreviewTimelineExtensionAdoptionInput = {
+  timelineId: string
+  branchId: string
+  installationId: string
+}
+
+export type AdoptTimelineExtensionInput = PreviewTimelineExtensionAdoptionInput & {
+  expectedVersion: number
+  expectedInstallationVersion: number
+  expectedStateRevisionId: string
+  expectedRuntimeContextVersion: number
+  contributionInstances: Array<{ contributionId: string; instanceId: string }>
+}
+
+export type TimelineExtensionAdoptionPreview = AdoptTimelineExtensionInput & {
+  packageId: string
+  packageVersion: string
+  source: ExtensionInstallationSource
+  paths: string[]
+}
+
+export type RecoverTimelineExtensionInput = {
+  timelineId: string
+  installationId: string
+  expectedVersion: number
+  expectedInstallationVersion: number
+  acceptSourceChange?: boolean
+}
+
+export type UpdateTimelineExtensionParticipationInput = {
+  timelineId: string
+  installationId: string
+  expectedVersion: number
+  enabled: boolean
+}
+
+export type TimelineExtensionLease = import('@loom-studio/extension-sdk').ExtensionTimelineLease
+
 export type ListExtensionInstallationsResult = {
   installations: Array<ExtensionInstallationContent & { id: string; version: number }>
 }
 
 export type ImportExtensionPackageResourcesInput = {
+  participation?: 'timeline'
+  source?: ExtensionInstallationSource
   loomScripts?: Array<{ contribution: { id: string; source: string }; source: string }>
   expectedCardVersion?: number
   update?: { expectedInstallationVersion: number }
@@ -1618,6 +1790,9 @@ export type RemoveExtensionPackageResourcesResult = {
 }
 
 export type CardSourceContent = {
+  artifactId: string
+  derivedFrom?: { artifactId: string }
+  extensionAdoptions?: CardExtensionAdoption[]
   name: string
   userName?: string
   description?: string

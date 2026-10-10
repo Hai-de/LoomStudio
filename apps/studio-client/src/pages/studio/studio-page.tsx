@@ -38,6 +38,7 @@ type StudioPageProps = {
   recentSessions?: ReactNode
   t: Translator
   uiScale: number
+  wallpaperUrl?: string
   onRedo(): void
   onToggleAgentPanel?(): void
   onUndo(): void
@@ -48,6 +49,60 @@ export function StudioPage(props: StudioPageProps) {
   const dockRef = useRef<HTMLElement>(null)
   const agentPanelToggleRef = useRef<HTMLButtonElement>(null)
   useStudioLayoutAnchors(stageRef)
+  const [currentWallpaper, setCurrentWallpaper] = useState<string | undefined>(props.wallpaperUrl)
+  const [previousWallpaper, setPreviousWallpaper] = useState<string | undefined>(undefined)
+  const wallpaperTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (wallpaperTimerRef.current) clearTimeout(wallpaperTimerRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (props.wallpaperUrl === currentWallpaper) return
+
+    if (!props.wallpaperUrl) {
+      if (currentWallpaper) {
+        setPreviousWallpaper(currentWallpaper)
+        setCurrentWallpaper(undefined)
+        if (wallpaperTimerRef.current) clearTimeout(wallpaperTimerRef.current)
+        wallpaperTimerRef.current = setTimeout(() => {
+          setPreviousWallpaper(undefined)
+          wallpaperTimerRef.current = null
+        }, 1250)
+      }
+      return
+    }
+
+    const img = new Image()
+    img.src = props.wallpaperUrl
+    let active = true
+
+    const apply = () => {
+      if (!active) return
+      if (currentWallpaper && currentWallpaper !== props.wallpaperUrl) {
+        setPreviousWallpaper(currentWallpaper)
+        if (wallpaperTimerRef.current) clearTimeout(wallpaperTimerRef.current)
+        wallpaperTimerRef.current = setTimeout(() => {
+          setPreviousWallpaper(undefined)
+          wallpaperTimerRef.current = null
+        }, 1250)
+      }
+      setCurrentWallpaper(props.wallpaperUrl)
+    }
+
+    if (img.complete) {
+      apply()
+    } else {
+      img.onload = apply
+    }
+
+    return () => {
+      active = false
+    }
+  }, [props.wallpaperUrl, currentWallpaper])
+
   const activePanel = props.navigation.route.panel
   const effectiveMotion = useEffectiveMotion()
   const [displayedPanel, setDisplayedPanel] = useState(activePanel)
@@ -367,6 +422,22 @@ export function StudioPage(props: StudioPageProps) {
         className={styles.studioStage}
         data-loom-component="application-layer-stage"
       >
+        <div className={styles.stageWallpaperBackdrop} aria-hidden="true">
+          {previousWallpaper ? (
+            <div
+              key={previousWallpaper}
+              className={currentWallpaper ? styles.stageWallpaperPrevious : styles.stageWallpaperExit}
+              style={{ backgroundImage: `url(${JSON.stringify(previousWallpaper)})` }}
+            />
+          ) : null}
+          {currentWallpaper ? (
+            <div
+              key={currentWallpaper}
+              className={styles.stageWallpaperLayer}
+              style={{ backgroundImage: `url(${JSON.stringify(currentWallpaper)})` }}
+            />
+          ) : null}
+        </div>
         {props.background ? (
           <div className={styles.stageBackground} data-loom-component="shell-background-layer">
             {props.background}

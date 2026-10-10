@@ -7,6 +7,7 @@ import { isObject } from '../foundation/json.js'
 import { validateStateDefinitionDraft, validateTimelineStateBinding } from '../state/state-definition.js'
 import { parseStateArtifact } from '../state/state-contribution.js'
 import { parseLoomScriptSource } from '../scripts/loom-script-codec.js'
+import { parseCardExtensionAdoptions } from './card.js'
 import { validateTextExtractorDraft, validateTextTransformRuleDraft, type TextExtractorDraft, type TextTransformRuleDraft } from '../transforms/history-text.js'
 import type { StateDefinitionDraft, TimelineStateBinding } from '../types.js'
 import type {
@@ -110,13 +111,14 @@ export function collectPromptInputs(input: {
     const effectiveActivation = combineActivationGates(activationGates)
     const inlineEntry = category === 'preset' && node.kind === 'entry' && !node.capabilities?.targetAnchorId
     const body = effectiveEnabled && node.kind === 'entry' && typeof node.body === 'string'
-      ? renderVariableMacros(node.body, input.variables)
+      ? node.capabilities?.processorId ? node.body : renderVariableMacros(node.body, input.variables)
       : undefined
     input.sourceNodes.push({
       id: node.id,
       sourceId,
       parentId: input.parentId,
       displayName: node.label,
+      ...(node.extra ? { metadata: structuredClone(node.extra) } : {}),
       orderIndex: index + 1,
       kind: node.kind,
       enabled: effectiveEnabled,
@@ -140,6 +142,7 @@ export function collectPromptInputs(input: {
           },
           content: body,
           capabilities: {
+            ...(node.capabilities?.processorId ? { processorId: node.capabilities.processorId } : {}),
             ...(effectiveActivation ? { activation: effectiveActivation } : {}),
             ...(node.capabilities?.targetAnchorId ? { targetAnchorId: node.capabilities.targetAnchorId } : {}),
             ...(node.capabilities?.localDepth !== undefined ? { localDepth: node.capabilities.localDepth } : {}),
@@ -257,6 +260,11 @@ function assertCardBundleArtifact(value: unknown): asserts value is CardBundleAr
   if (!isObject(value)) throw new Error('Card bundle must be an object')
   if (value.schemaVersion !== 4) throw new Error(`Unsupported card bundle schemaVersion: ${String(value.schemaVersion)}`)
   assertNonEmptyString(value.artifactId, 'Card bundle artifactId')
+  if (value.derivedFrom !== undefined) {
+    if (!isObject(value.derivedFrom)) throw new Error('Card bundle derivedFrom must be an object')
+    assertNonEmptyString(value.derivedFrom.artifactId, 'Card bundle derivedFrom.artifactId')
+    if (value.derivedFrom.artifactId === value.artifactId) throw new Error('A derived Card must have a different artifactId')
+  }
   assertNonEmptyString(value.displayName, 'Card bundle displayName')
   if (value.description !== undefined && typeof value.description !== 'string') throw new Error('Card bundle description must be a string')
   assertCardBundleCard(value.card)
@@ -488,6 +496,7 @@ function assertCardBundleCard(value: unknown): asserts value is CardBundleArtifa
   assertOptionalString(value.description, 'Card bundle card.description')
   if (value.macros !== undefined) validateBundleMacros(value.macros)
   if (value.macroOptions !== undefined) normalizeMacroOptions(value.macroOptions)
+  if (value.extensionAdoptions !== undefined) parseCardExtensionAdoptions(value.extensionAdoptions)
   if (value.stateContributionIds !== undefined
     && (!Array.isArray(value.stateContributionIds) || !value.stateContributionIds.every(id => typeof id === 'string' && id.trim().length > 0))) {
     throw new Error('Card bundle card.stateContributionIds must be non-empty strings')
@@ -597,6 +606,7 @@ function assertUniquePromptResourceNodeIds(rootNode: PromptResourceNode): void {
 function assertPromptResourceCapabilities(value: JsonValue | undefined, path: string): void {
   if (value === undefined) return
   if (!isObject(value)) throw new Error(`Prompt resource capabilities must be an object: ${path}`)
+  if (value.processorId !== undefined) assertNonEmptyString(value.processorId, `Prompt processor ID: ${path}`)
   if (value.activation !== undefined && !isPromptActivation(value.activation)) throw new Error(`Prompt resource activation is invalid: ${path}`)
   if (value.content !== undefined && (!isObject(value.content) || value.content.kind !== 'text')) throw new Error(`Prompt resource content capability is invalid: ${path}`)
   if (value.lifecycle !== undefined && (!isObject(value.lifecycle) || typeof value.lifecycle.lifecycle !== 'string')) throw new Error(`Prompt resource lifecycle is invalid: ${path}`)

@@ -132,9 +132,10 @@ export function RendererNodeMountHost(props: RendererNodeMountHostProps) {
         />
       ))}
       <div ref={contentRef}>{props.children}</div>
-      {projection.inline.map(projected => (
+      {[...projection.inline].reverse().map(projected => (
         <InlineRendererPortal
           contentRoot={contentRef.current}
+          sourceText={props.displayText ?? props.rawText}
           host={props.host}
           key={mountIdentity(projected, entryId)}
           mount={projected}
@@ -159,6 +160,7 @@ export function RendererNodeMountHost(props: RendererNodeMountHostProps) {
 
 function InlineRendererPortal(props: {
   contentRoot: HTMLElement | null
+  sourceText: string
   entryId: string
   host: ClientRendererHost
   mount: ResolvedInlineNodeRenderMount
@@ -170,12 +172,12 @@ function InlineRendererPortal(props: {
   const [target, setTarget] = useState<HTMLElement>()
   useLayoutEffect(() => {
     if (!props.contentRoot || props.mount.mount.target.slot !== 'node.inline') return
-    const anchor = insertRangeMountAnchor(props.contentRoot, props.mount.start, props.mount.end, props.mount.placement)
+    const anchor = insertRangeMountAnchor(props.contentRoot, props.mount.start, props.mount.end, props.mount.placement, props.sourceText)
     if (!anchor) {
       props.host.reportDiagnostic({
         code: 'renderer.anchor_unresolved',
         contributionKey: rendererContributionKey(props.mount.registration),
-        message: `Rendered text range was not found: ${props.mount.start}-${props.mount.end}`,
+        message: `Rendered text does not preserve source offsets or the range is unavailable: ${props.mount.start}-${props.mount.end}`,
       })
       return
     }
@@ -184,7 +186,7 @@ function InlineRendererPortal(props: {
       setTarget(undefined)
       anchor.dispose()
     }
-  }, [props.contentRoot, props.entryId, props.host, props.mount])
+  }, [props.contentRoot, props.entryId, props.host, props.mount, props.sourceText])
 
   return target ? createPortal((
     <RendererInstanceRoot
@@ -203,9 +205,12 @@ function insertRangeMountAnchor(
   start: number,
   end: number,
   placement: 'before' | 'after' | 'replace',
+  sourceText: string,
 ): { element: HTMLSpanElement; dispose(): void } | undefined {
   // HTML source offsets cannot address rendered DOM text or an isolated document.
   if (root.querySelector('[data-loom-html-preview], [data-loom-safe-html], [data-loom-html-pending]')) return undefined
+  // ponytail: 完整源位置映射尚未实现；仅接受前缀逐字符相同的坐标，倒序挂载避免后方替换移动前方偏移。
+  if (root.textContent?.slice(0, end) !== sourceText.slice(0, end)) return undefined
   const boundaries = locateTextBoundaries(root, start, end)
   if (!boundaries) return undefined
   const range = document.createRange()

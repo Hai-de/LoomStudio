@@ -23,6 +23,14 @@ export async function handleStatesRpc(
   context?: RuntimeRequestContext,
 ): Promise<JsonValue | undefined> {
   switch (method) {
+    case 'application.inspectStateSources': {
+      const target = readOptionalObject(params, 'target') ? readStateTarget(params) : undefined
+      if (target?.scope === 'global') throw new Error('State source inspection requires a Timeline target')
+      return await runtime.inspectStateSources({
+        cardId: readOptionalString(params, 'cardId'), target,
+      }) as unknown as JsonValue
+    }
+
     case 'application.getStateSnapshot':
       return await runtime.getStateSnapshot({
         extensionTarget: readOptionalInstallationTarget(params, 'extensionTarget'),

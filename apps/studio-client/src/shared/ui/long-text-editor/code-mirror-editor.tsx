@@ -1,4 +1,4 @@
-import { defaultKeymap, history, historyKeymap, undo as undoChange } from '@codemirror/commands'
+import { defaultKeymap, history, historyKeymap, undo as undoChange, undoDepth } from '@codemirror/commands'
 import { javascript } from '@codemirror/lang-javascript'
 import { markdown } from '@codemirror/lang-markdown'
 import { xml } from '@codemirror/lang-xml'
@@ -43,6 +43,7 @@ type CodeMirrorEditorProps = {
   labelledBy: string
   onCancel?(): void
   onChange(value: string): void
+  onUndoAvailabilityChange?(available: boolean): void
   onCommit(value: string): void
   onSubmit?(value: string): void
   placeholder?: string
@@ -300,6 +301,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
   const callbacksRef = useRef({
     onCancel: props.onCancel,
     onChange: props.onChange,
+    onUndoAvailabilityChange: props.onUndoAvailabilityChange,
     onCommit: props.onCommit,
     onSubmit: props.onSubmit,
   })
@@ -310,6 +312,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
   callbacksRef.current = {
     onCancel: props.onCancel,
     onChange: props.onChange,
+    onUndoAvailabilityChange: props.onUndoAvailabilityChange,
     onCommit: props.onCommit,
     onSubmit: props.onSubmit,
   }
@@ -369,6 +372,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             spellcheck: props.spellCheck ? 'true' : 'false',
           })),
           EditorView.updateListener.of(update => {
+            callbacksRef.current.onUndoAvailabilityChange?.(undoDepth(update.state) > 0)
             if (!update.docChanged || update.transactions.some(transaction => transaction.annotation(externalValueUpdate))) return
             callbacksRef.current.onChange(update.state.doc.toString())
           }),
@@ -380,6 +384,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     })
 
     viewRef.current = view
+    callbacksRef.current.onUndoAvailabilityChange?.(undoDepth(view.state) > 0)
     return () => {
       view.destroy()
       viewRef.current = null

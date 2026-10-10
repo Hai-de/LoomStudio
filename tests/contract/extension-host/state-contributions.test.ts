@@ -43,6 +43,49 @@ function fixture(capabilities: Record<string, boolean>, id = contribution.id, ac
 }
 
 describe('Extension State contribution contract', () => {
+  it('requires all content-processing grants and stops handlers when their installation is disposed', async () => {
+    const source = `export function activate(ctx) {
+      ctx.state.registerContentHandler({
+        id: 'example.state/mvu', contributionId: 'example.state.data', path: '/data',
+        process: async ({ value, signal }) => {
+          signal.throwIfAborted();
+          return { value };
+        }
+      });
+    }`
+    const registerStateContentHandler = vi.fn<NonNullable<ExtensionHostOptions['registerStateContentHandler']>>(() => ({ dispose() {} }))
+    const harness = createExtensionHostHarness({ registerStateContentHandler })
+    const directory = createExtensionFixture('state-content-grants', {
+      source,
+      manifest: {
+        manifestVersion: 2, id: 'example.state', version: '1.0.0', displayName: 'Content',
+        engines: { studio: '^0.1.0' }, modules: [{
+          id: 'server', runtime: 'server', entry: './dist/index.js',
+          capabilities: { 'state.processContent': true, 'state.read': true, 'state.write': true },
+        }],
+      },
+    })
+    await harness.extensionHost.discover(directory)
+    await expect(harness.extensionHost.activate('example.state', 'server')).resolves.toMatchObject({ instance: { state: 'active' } })
+    const handler = registerStateContentHandler.mock.calls[0]![0]
+    await expect(handler.process({ text: 'body', value: { hp: 1 }, signal: new AbortController().signal })).resolves.toEqual({ value: { hp: 1 } })
+    await harness.extensionHost.dispose('example.state', 'server')
+    await expect(handler.process({ text: 'body', value: {}, signal: new AbortController().signal })).rejects.toThrow()
+
+    const denied = createExtensionHostHarness({ registerStateContentHandler: vi.fn(() => ({ dispose() {} })) })
+    await denied.extensionHost.discover(createExtensionFixture('state-content-denied', {
+      source,
+      manifest: {
+        manifestVersion: 2, id: 'example.state', version: '1.0.0', displayName: 'Content',
+        engines: { studio: '^0.1.0' }, modules: [{
+          id: 'server', runtime: 'server', entry: './dist/index.js',
+          capabilities: { 'state.processContent': true, 'state.read': true },
+        }],
+      },
+    }))
+    await expect(denied.extensionHost.activate('example.state', 'server')).resolves.toMatchObject({ instance: { state: 'activation_failed' } })
+  })
+
   it('attributes contribution ownership and disposes the registration with the Extension scope', async () => {
     const dispose = vi.fn()
     const registerStateContribution = vi.fn<NonNullable<ExtensionHostOptions['registerStateContribution']>>(() => ({ dispose }))
@@ -53,6 +96,7 @@ describe('Extension State contribution contract', () => {
     expect(registerStateContribution).toHaveBeenCalledWith(
       expect.objectContaining({ id: contribution.id }),
       expect.objectContaining({ packageId: 'example.state', moduleId: 'server', packageVersion: '1.2.3' }),
+      undefined,
     )
     await extensionHost.dispose('example.state', 'server')
     expect(dispose).toHaveBeenCalledOnce()

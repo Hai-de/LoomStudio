@@ -348,6 +348,7 @@ export async function resolveEffectiveTextPipeline(
   const extractors = extractorDocuments.map(document => toVersioned(document))
   let presetId = consumerPresetId
   let cardId: string | undefined
+  let timelineId: string | null = null
   let consumer: TextPipelineConsumer | undefined
 
   if (source.kind === 'agent-session') {
@@ -355,12 +356,14 @@ export async function resolveEffectiveTextPipeline(
     if (!session) throw new Error(`Agent Session not found: ${source.sessionId}`)
     presetId = session.agentPresetId
     if (session.timelineId) {
+      timelineId = session.timelineId
       const timeline = await ctx.narratives?.getTimeline(session.timelineId)
       if (!timeline) throw new Error(`Narrative Timeline not found: ${session.timelineId}`)
       cardId = timeline.createdFrom?.cardId
     }
     consumer = { agentSessionId: session.id, agentPresetId: session.agentPresetId, presetId }
   } else {
+    timelineId = source.timelineId
     if (phase === 'prompt' && !consumerAgentSessionId && !consumerPresetId) {
       throw new Error('Narrative prompt projection requires consumerAgentSessionId or presetId')
     }
@@ -375,7 +378,7 @@ export async function resolveEffectiveTextPipeline(
     }
   }
 
-  const availableInstallations = await readAvailableExtensionInstallations(ctx.documents, cardId)
+  const availableInstallations = await readAvailableExtensionInstallations(ctx.documents, cardId, timelineId)
   const preset = presetId ? await ctx.promptResources.getResource(presetId) : null
   const uses = Array.isArray(preset?.metadata.textUses)
     ? preset.metadata.textUses as Array<{ id: string; kind: 'rule' | 'extractor'; enabled: boolean; orderIndex?: number; reference?: { kind: string; origin?: { packageId: string; contributionId: string } } }>

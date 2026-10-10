@@ -44,6 +44,13 @@ const records: LogRecord[] = [
 ]
 
 describe('log viewer model', () => {
+  it('uses the same module and event criteria for incoming and displayed logs', () => {
+    const matching = { ...records[0]!, extension: { packageId: 'example', moduleId: 'main' }, event: 'updated' }
+    const input = [matching, { ...matching, event: 'other' }, { ...matching, extension: { packageId: 'example', moduleId: 'other' } }]
+    expect(filterLogRecords(input, {
+      query: '', level: 'all', technical: true, packageId: 'example', moduleId: 'main', event: 'updated',
+    })).toEqual([matching])
+  })
   it('copies bounded failure context with causal IDs, gaps, and no raw private payload', () => {
     const context = selectDiagnosticContext(records)
     expect(context).toEqual(records)

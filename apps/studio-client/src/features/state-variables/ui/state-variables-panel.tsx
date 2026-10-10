@@ -7,6 +7,7 @@ import type { StudioApi } from '../../../shared/api/studio-api.js'
 import type { Translator } from '../../../shared/i18n/index.js'
 import { Button, type MenuAction } from '@loom-studio/ui'
 import { FileTree, type FileTreeNode } from '../../../shared/ui/file-tree/file-tree.js'
+import { tryWriteClipboardText } from '../../../shared/browser/clipboard.js'
 import { MasterDetailWorkbench } from '../../../shared/ui/master-detail-workbench/master-detail-workbench.js'
 import styles from './state-variables-panel.module.scss'
 import { createBatchSetStatePropertiesInput, stateSnapshotToTreeNodes, type StateTreeNodeCapabilities } from '../model/state-variable-editor.js'
@@ -30,6 +31,7 @@ export function StateVariablesPanel(props: Props) {
   const [scope, setScope] = useState<RuntimeScope>(props.timelineTarget ? 'timeline' : 'global')
   const [mobilePane, setMobilePane] = useState<'master' | 'detail'>('master')
   const [editedProperties, setEditedProperties] = useState<Record<string, unknown>>({})
+  const [arrayDrafts, setArrayDrafts] = useState<Record<string, string>>({})
   const [draftContextKey, setDraftContextKey] = useState('')
   const [snapshotSource, setSnapshotSource] = useState<SnapshotSource>()
   const [treeExpandedIds, setTreeExpandedIds] = useState<string[]>([])
@@ -45,6 +47,7 @@ export function StateVariablesPanel(props: Props) {
     sourceRef.current = { api: props.api, key: targetKey }
   }
   const source = sourceRef.current
+  const expandedSourceRef = useRef<{ source: SnapshotSource; scope: RuntimeScope } | undefined>(undefined)
 
   const currentSnapshot = snapshotSource === source
     ? (scope === 'timeline' ? timelineSnapshot : globalSnapshot)
@@ -55,10 +58,10 @@ export function StateVariablesPanel(props: Props) {
   const editContextRef = useRef(editContextKey)
   editContextRef.current = editContextKey
   const treeNodes = useMemo(
-    () => stateSnapshotToTreeNodes(currentSnapshot?.value),
-    [currentSnapshot?.value],
+    () => stateSnapshotToTreeNodes(currentSnapshot?.value, props.t),
+    [currentSnapshot?.value, props.t],
   )
-  const dirtyCount = Object.keys(editedProperties).length
+  const dirtyCount = Object.keys(editedProperties).length + Object.keys(arrayDrafts).length
 
   useEffect(() => {
     mountedRef.current = true
@@ -77,13 +80,15 @@ export function StateVariablesPanel(props: Props) {
     setSaving(false)
     setDraftContextKey(editContextKey)
     setEditedProperties({})
+    setArrayDrafts({})
   }, [source, editContextKey])
 
   useEffect(() => {
-    if (treeNodes.length > 0 && treeExpandedIds.length === 0) {
+    if (treeNodes.length > 0 && (expandedSourceRef.current?.source !== source || expandedSourceRef.current.scope !== scope)) {
       setTreeExpandedIds(treeNodes.map(node => node.id))
+      expandedSourceRef.current = { source, scope }
     }
-  }, [treeExpandedIds.length, treeNodes])
+  }, [source, scope, treeNodes])
 
   async function refresh() {
     const requestId = ++requestIdRef.current
@@ -118,7 +123,6 @@ export function StateVariablesPanel(props: Props) {
   async function saveAllDirtyProperties() {
     const snapshot = currentSnapshot
     const saveContextKey = draftContextKey
-    const changes = editedProperties as Record<string, ClientJsonValue>
     if (!snapshot || dirtyCount === 0 || saveRequestRef.current || sourceRef.current !== source
       || saveContextKey !== editContextRef.current) return
     const expectedTarget: StateTarget | undefined = scope === 'global' ? { scope: 'global' } : props.timelineTarget
@@ -132,9 +136,17 @@ export function StateVariablesPanel(props: Props) {
     saveRequestRef.current = request
     setSaving(true)
     try {
+      const changes = { ...editedProperties } as Record<string, ClientJsonValue>
+      for (const [path, text] of Object.entries(arrayDrafts)) {
+        let value: ClientJsonValue
+        try { value = JSON.parse(text) } catch { throw new Error(props.t('stateVariables.invalidArray', { path })) }
+        if (!Array.isArray(value)) throw new Error(props.t('stateVariables.invalidArray', { path }))
+        changes[path] = value
+      }
       await props.api.apply(createBatchSetStatePropertiesInput(snapshot.target, snapshot.revisionId, changes))
       if (!mountedRef.current || sourceRef.current !== source || saveRequestRef.current !== request || editContextRef.current !== saveContextKey) return
       setEditedProperties({})
+      setArrayDrafts({})
       toast.success(`${props.t('stateVariables.savedProperties')} ${Object.keys(changes).length}`)
       await refresh()
       if (mountedRef.current && sourceRef.current === source) void props.onStateMutated?.()
@@ -157,10 +169,13 @@ export function StateVariablesPanel(props: Props) {
     })
   }
 
+  async function copyValue(value: string, successMessage = props.t('longTextEditor.copied')) {
+    if (await tryWriteClipboardText(value)) toast.success(successMessage)
+    else toast.error(props.t('longTextEditor.copyFailed'))
+  }
+
   function copyMacro(token: string) {
-    void navigator.clipboard.writeText(token).then(() => {
-      toast.success(`${props.t('stateVariables.copiedMacro')}: ${token}`)
-    })
+    void copyValue(token, `${props.t('stateVariables.copiedMacro')}: ${token}`)
   }
 
   function setProperty(path: string, value: unknown) {
@@ -228,13 +243,16 @@ export function StateVariablesPanel(props: Props) {
       )
     }
 
-    if (capabilities.isLongText) {
+    if (capabilities.isLongText || Array.isArray(capabilities.value)) {
       const expanded = expandedLongTextPaths.has(capabilities.path)
+      const text = Array.isArray(capabilities.value)
+        ? arrayDrafts[capabilities.path] ?? JSON.stringify(capabilities.value, null, 2)
+        : String(currentValue ?? '')
       return (
         <div className={styles.treeTrailingControl}>
-          <span className={styles.treePreviewText} title={String(currentValue ?? '')}>
-            {String(currentValue ?? '').replace(/\n/g, ' ').slice(0, 24)}
-            {String(currentValue ?? '').length > 24 ? '…' : ''}
+          <span className={styles.treePreviewText} title={text}>
+            {text.replace(/\n/g, ' ').slice(0, 24)}
+            {text.length > 24 ? '…' : ''}
           </span>
           <button
             aria-label={expanded ? props.t('stateVariables.collapseEditor') : props.t('stateVariables.expandEditor')}
@@ -265,21 +283,30 @@ export function StateVariablesPanel(props: Props) {
 
   function renderExpandedRow(node: FileTreeNode) {
     const capabilities = node.capabilities as StateTreeNodeCapabilities | undefined
-    if (!capabilities?.isLongText || !expandedLongTextPaths.has(capabilities.path)) return null
+    if (!capabilities || (!capabilities.isLongText && !Array.isArray(capabilities.value)) || !expandedLongTextPaths.has(capabilities.path)) return null
     const currentValue = editedProperties[capabilities.path] !== undefined
       ? editedProperties[capabilities.path]
       : capabilities.value
+    const text = Array.isArray(capabilities.value)
+      ? arrayDrafts[capabilities.path] ?? JSON.stringify(capabilities.value, null, 2)
+      : String(currentValue ?? '')
     return (
       <div className={styles.treeLongTextDrawer}>
         <textarea
           aria-label={capabilities.path}
           className={styles.treeLongTextarea}
           rows={4}
-          value={typeof currentValue === 'string' ? currentValue : String(currentValue ?? '')}
-          onChange={event => setProperty(capabilities.path, event.target.value)}
+          value={text}
+          onChange={event => {
+            if (Array.isArray(capabilities.value)) {
+              if (saveRequestRef.current || sourceRef.current !== source || editContextRef.current !== editContextKey) return
+              const text = event.target.value
+              setArrayDrafts(previous => ({ ...previous, [capabilities.path]: text }))
+            } else setProperty(capabilities.path, event.target.value)
+          }}
         />
         <div className={styles.treeLongTextActions}>
-          <span className={styles.cardFooterMeta}>{props.t('stateVariables.macro')}: {capabilities.macroToken} · {String(currentValue ?? '').length}</span>
+          <span className={styles.cardFooterMeta}>{props.t('stateVariables.macro')}: {capabilities.macroToken} · {text.length}</span>
           <button className={styles.iconButton} type="button" onClick={() => copyMacro(capabilities.macroToken)}>
             <Copy aria-hidden="true" size={12} />
             <span>{props.t('stateVariables.copyMacro')}</span>
@@ -303,7 +330,7 @@ export function StateVariablesPanel(props: Props) {
         id: 'copy-pointer',
         label: `${props.t('stateVariables.copyPointer')} (${capabilities.path})`,
         icon: <Code2 aria-hidden="true" />,
-        onSelect: () => void navigator.clipboard.writeText(capabilities.path),
+        onSelect: () => void copyValue(capabilities.path),
       },
     ]
     if (capabilities.value !== undefined && !node.container && node.kind !== 'object') {
@@ -311,10 +338,10 @@ export function StateVariablesPanel(props: Props) {
         id: 'copy-value',
         label: props.t('stateVariables.copyValue'),
         icon: <FileText aria-hidden="true" />,
-        onSelect: () => void navigator.clipboard.writeText(String(capabilities.value)),
+        onSelect: () => void copyValue(Array.isArray(capabilities.value) ? JSON.stringify(capabilities.value, null, 2) : String(capabilities.value)),
       })
     }
-    if (capabilities.isLongText) {
+    if (capabilities.isLongText || Array.isArray(capabilities.value)) {
       actions.push(
         { id: 'longtext-separator', type: 'separator' },
         {

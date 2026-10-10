@@ -20,12 +20,18 @@ export function filterLogRecords(records: LogRecord[], input: {
   level: LogLevel | 'all'
   technical: boolean
   runId?: string
+  packageId?: string
+  moduleId?: string
+  event?: string
 }): LogRecord[] {
   const query = normalizeSearchText(input.query)
   return records.filter(record =>
     (input.level === 'all' || record.level === input.level)
     && (input.technical || input.level === 'debug' || !readLogPresentation(record).technical)
     && (!input.runId || record.data?.runId === input.runId)
+    && (!input.packageId || record.extension?.packageId === input.packageId)
+    && (!input.moduleId || record.extension?.moduleId === input.moduleId)
+    && (!input.event || record.event === input.event)
     && (!query || JSON.stringify(record).toLocaleLowerCase().includes(query)),
   )
 }

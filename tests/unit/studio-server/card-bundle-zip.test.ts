@@ -7,6 +7,20 @@ import { decodeCardBundleZip, encodeCardBundleZip, loadCardBundleFiles } from '.
 import { defaultCardPng, encodeCardBundlePng, readCardPngArchive } from '../../../apps/studio-server/src/codecs/card-png.js'
 
 describe('Loom Card ZIP', () => {
+  it('preserves work identity and derivation through files, ZIP and PNG', async () => {
+    const artifact: CardBundleArtifact = {
+      schemaVersion: 4, artifactId: 'derived-work', derivedFrom: { artifactId: 'original-work' },
+      displayName: 'Derived', card: { name: 'Derived' }, contextAssets: [],
+    }
+    const zip = encodeCardBundleZip({ artifact, avatar: { bytes: defaultCardPng, mediaType: 'image/png' } })
+    const files = unzipSync(zip)
+    const loaded = await loadCardBundleFiles(async path => files[path]!)
+    expect(loaded.bundle.artifact).toMatchObject({ artifactId: artifact.artifactId, derivedFrom: artifact.derivedFrom })
+    const png = encodeCardBundlePng(defaultCardPng, zip)
+    const decoded = await decodeCardBundleZip(readCardPngArchive(png)!)
+    expect(decoded.artifact).toMatchObject({ artifactId: artifact.artifactId, derivedFrom: artifact.derivedFrom })
+  })
+
   it('carries embedded extension archives as binary files without extracting them', async () => {
     const archive = zipSync({
       'manifest.json': Buffer.from(JSON.stringify({ id: 'example.offline', version: '1.0.0' })),

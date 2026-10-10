@@ -5,8 +5,15 @@ import { applicationDocumentTypes } from '../foundation/document-types.js'
 import { listDocuments, readDocument, writeDocument } from '../foundation/document-store.js'
 import { normalizeCardContent, readOpeningEntries } from '../cards/card.js'
 import { composeStateContributions, createCardStateContribution, materializeStateContribution } from '../state/state-contribution.js'
+import { expandTimelineStateBindings } from '../state/state-definition.js'
 import type { StateContributionSource } from '../state/state-contribution-registry.js'
-import { createVariableRenderContext, type VariableRenderContext } from '../prompt/variables.js'
+import { createVariableRenderContext, renderVariableMacros, type VariableRenderContext } from '../prompt/variables.js'
+import { fromStoredResource } from '../prompt/prompt-resource-mapper.js'
+import type { PromptResourceNode } from '../cards/workspace-types.js'
+import { readAvailableExtensionInstallations, isExtensionResourceAvailable } from './extension-resource-access.js'
+import type { ExtensionStateInitializationContext } from '@loom-studio/extension-sdk'
+import { extensionInstallationId } from '@loom-studio/extension-sdk'
+import { timelineExtensionParticipationId } from '../extensions/timeline-participation.js'
 import { timelineRuntimeContextId } from '../narrative/timeline-runtime-context.js'
 import { deleteTimelinePresetConfigs, listTimelinePresetConfigs, timelinePresetConfigId } from '../prompt/timeline-preset-config.js'
 import { normalizeMacroSelections } from '@loom-studio/shared'
@@ -37,6 +44,8 @@ import type {
   SwitchNarrativeBranchInput,
   SwitchNarrativeBranchResult,
   TimelineRuntimeContextContent,
+  ExtensionInstallationContent,
+  TimelineExtensionParticipationContent,
 } from '../types.js'
 import {
   narrativeWriteContext,
@@ -47,7 +56,7 @@ import {
 import { executeDocumentMutation } from '../foundation/mutation.js'
 
 type NarrativeRuntimeContext = Pick<ApplicationRuntimeContext,
-  'agents' | 'createId' | 'dataEngine' | 'documents' | 'narratives' | 'narrativeContext' | 'now' | 'stateContributions' | 'states' | 'timelineArchiveParticipants'
+  'agents' | 'createId' | 'dataEngine' | 'documents' | 'narratives' | 'narrativeContext' | 'now' | 'promptResources' | 'stateContributions' | 'states' | 'timelineArchiveParticipants'
 >
 
 export function createNarrativeRuntimeMethods(ctx: NarrativeRuntimeContext) {
@@ -349,6 +358,18 @@ async function createTimelineFromCard(
     throw new Error('Card changed while choosing an opening; reload the Card before starting')
   }
   const cardContent = normalizeCardContent(card.content)
+  const adoptedInstallations = await Promise.all((cardContent.extensionAdoptions ?? []).map(async reference => {
+    const target = reference.target === 'card' ? { kind: 'card' as const, cardId: card.id } : { kind: 'global' as const }
+    const installation = await readDocument<ExtensionInstallationContent>(
+      ctx.documents, extensionInstallationId(reference.packageId, target), applicationDocumentTypes.extensionInstallation,
+    )
+    if (installation.content.participation !== 'timeline') throw new Error(`Extension does not declare Timeline participation: ${reference.packageId}`)
+    if (extensionInstallationId(installation.content.packageId, installation.content.target) !== installation.id) {
+      throw new Error('Extension installation identity does not match its content')
+    }
+    return installation
+  }))
+  const adoptedIds = new Set(adoptedInstallations.map(installation => installation.id))
   const templates = new Map<string, Extract<StateDefinitionDraft, { kind: 'timeline-template' }>>()
   for (const template of cardContent.stateTemplates ?? []) {
     templates.set(template.id, {
@@ -372,7 +393,11 @@ async function createTimelineFromCard(
       // Global definition may be omitted if template is self-contained
     }
   }
-  const contributionSources = (cardContent.stateContributionIds ?? []).map(contributionId => {
+  const contributionIds = new Set([
+    ...(cardContent.stateContributionIds ?? []),
+    ...ctx.stateContributions.list().filter(source => adoptedIds.has(source.installationId)).map(source => source.contributionId),
+  ])
+  const contributionSources = [...contributionIds].map(contributionId => {
     const source = ctx.stateContributions.get(contributionId)
     if (!source) throw new Error(`Card State contribution is not registered: ${contributionId}`)
     if (source.target.kind === 'card' && source.target.cardId !== card.id) {
@@ -380,9 +405,44 @@ async function createTimelineFromCard(
     }
     return source
   })
+  for (const source of contributionSources) {
+    const installation = await ctx.documents.get(source.installationId)
+    if (!installation) continue
+    const content = installation.content as ExtensionInstallationContent
+    if (content.participation === 'timeline' && !adoptedIds.has(source.installationId)) {
+      throw new Error(`State contribution requires explicit Timeline adoption: ${source.contributionId}`)
+    }
+    if (adoptedIds.has(source.installationId) && content.packageVersion !== source.packageVersion) {
+      throw new Error(`State contribution does not match the installed extension version: ${source.contributionId}`)
+    }
+  }
+  if (input.openingIndex !== undefined && input.openingNodes !== undefined)
+    throw new Error('Choose an opening index or custom opening nodes, not both')
+  const baseContribution = createCardStateContribution(card.id, cardContent, templates)
+  const baseState = materializeStateContribution(composeStateContributions(`initial:${card.id}`, [
+    baseContribution, ...contributionSources.map(source => source.contribution),
+  ])).snapshot
+  const variables = await readAgentTurnVariables(ctx, cardContent.userName, baseState, cardContent.name)
+  const initialOpening = input.openingNodes?.map(entry => renderVariableMacros(entry.content, variables))
+    ?? readOpeningEntries(cardContent, variables, input.openingIndex).map(entry => entry.content)
+  const initializationInstallations = new Map(await readAvailableExtensionInstallations(ctx.documents, card.id, null))
+  for (const installation of adoptedInstallations) initializationInstallations.set(installation.id, installation.content.packageId)
+  const initializationResources = contributionSources.length
+    ? await readStateInitializationResources(ctx, initializationInstallations, cardContent.promptResourceIds ?? [], variables)
+    : []
+  const initializedContributions = []
+  for (const source of contributionSources) {
+    initializedContributions.push(await ctx.stateContributions.initialize(source.contributionId, {
+      cardId: card.id,
+      characterName: cardContent.name,
+      opening: initialOpening,
+      resources: initializationResources,
+      signal: requestContext?.abortSignal ?? new AbortController().signal,
+    }))
+  }
   const composedContribution = composeStateContributions(`timeline:${card.id}`, [
-    createCardStateContribution(card.id, cardContent, templates),
-    ...contributionSources.map(source => source.contribution),
+    baseContribution,
+    ...initializedContributions,
   ])
   templates.clear()
   for (const template of composedContribution.templates) {
@@ -410,23 +470,49 @@ async function createTimelineFromCard(
     materializedState,
     contributionSources,
   })
-  const variables = await readAgentTurnVariables(ctx, runtimeContext.fallbackUserName, initialState, cardContent.name)
-  if (input.openingIndex !== undefined && input.openingNodes !== undefined) {
-    throw new Error('Choose an opening index or custom opening nodes, not both')
-  }
+  const openingVariables = createVariableRenderContext({ ...variables.snapshot, timeline: initialState })
   const openingEntries = input.openingNodes?.map(entry => ({
     content: entry.content,
     ...(entry.createdAt ? { createdAt: entry.createdAt } : {}),
-  })) ?? readOpeningEntries(cardContent, variables, input.openingIndex)
+  })) ?? readOpeningEntries(cardContent, openingVariables, input.openingIndex)
+  requestContext?.abortSignal?.throwIfAborted()
   const transaction = await ctx.dataEngine.transact(
     narrativeWriteContext(requestContext, reason),
     async dataTx => requireDocumentParticipant(ctx).participateTransaction(dataTx, async documents => {
+      const currentCard = await readDocument<CardSourceContent>(documents, card.id, applicationDocumentTypes.cardSource)
+      if (currentCard.version !== card.version) throw new Error('Card changed during Timeline initialization')
+      for (const installation of adoptedInstallations) {
+        const current = await documents.get(installation.id)
+        if (!current || current.version !== installation.version) throw new Error('Extension installation changed during Timeline initialization')
+      }
+      for (const source of contributionSources) {
+        if (ctx.stateContributions.get(source.contributionId)?.instanceId !== source.instanceId) {
+          throw new Error(`State contribution changed during Timeline initialization: ${source.contributionId}`)
+        }
+      }
       const stateTx = ctx.states.transaction(dataTx)
       const narrativeTx = narratives.transaction(dataTx)
       await writeDocument<TimelineRuntimeContextContent>(documents, {
         id: timelineRuntimeContextId(timelineId),
         type: applicationDocumentTypes.timelineRuntimeContext,
         content: runtimeContext,
+        expectedVersion: 'new',
+      })
+      await writeDocument<TimelineExtensionParticipationContent>(documents, {
+        id: timelineExtensionParticipationId(timelineId),
+        type: applicationDocumentTypes.timelineExtensionParticipation,
+        content: {
+          timelineId,
+          entries: adoptedInstallations.map(installation => ({
+            installationId: installation.id,
+            packageId: installation.content.packageId,
+            packageVersion: installation.content.packageVersion,
+            installationVersion: installation.version,
+            ...(installation.content.source ? { source: structuredClone(installation.content.source) } : {}),
+            enabled: true,
+            generation: ctx.createId('extension-participation'),
+          })),
+        },
         expectedVersion: 'new',
       })
       stateTx.createScope({ id: stateScopeId, kind: 'timeline', ownerId: timelineId })
@@ -453,6 +539,33 @@ async function createTimelineFromCard(
     ...transaction.value.value,
     mutation: { changesetId: transaction.commit.changesetId },
   }
+}
+
+export async function readStateInitializationResources(
+  ctx: Pick<ApplicationRuntimeContext, 'documents' | 'promptResources'>,
+  installations: ReadonlyMap<string, string>,
+  resourceIds: string[],
+  variables: VariableRenderContext,
+): Promise<ExtensionStateInitializationContext['resources']> {
+  const resources: Array<ExtensionStateInitializationContext['resources'][number]> = []
+  for (const id of new Set(resourceIds)) {
+    const resource = await ctx.promptResources.getResource(id)
+    if (!resource || resource.resourceKind !== 'setting') continue
+    if (!isExtensionResourceAvailable(resource.metadata.origin, installations))
+      throw new Error(`State initialization resource is unavailable: ${id}`)
+    const root = fromStoredResource(resource).rootNode
+    const entries: Array<ExtensionStateInitializationContext['resources'][number]['entries'][number]> = []
+    const visit = (node: PromptResourceNode, parentEnabled: boolean) => {
+      const enabled = parentEnabled && node.enabled !== false
+      if (node.kind === 'entry' && typeof node.body === 'string') entries.push({
+        id: node.id, label: node.label, content: renderVariableMacros(node.body, variables), enabled,
+      })
+      for (const child of node.children ?? []) visit(child, enabled)
+    }
+    visit(root, true)
+    resources.push({ id, name: root.label, ...(root.extra ? { metadata: structuredClone(root.extra) } : {}), entries })
+  }
+  return resources
 }
 
 export async function readAgentTurnVariables(
@@ -496,6 +609,22 @@ async function buildTimelineRuntimeContext(
     contributionSources: StateContributionSource[]
   },
 ): Promise<TimelineRuntimeContextContent> {
+  // Ownership follows the mount/binding declaration, not the reusable template's author.
+  const bindingOwners = new Map<string, string>()
+  for (const source of input.contributionSources) {
+    for (const binding of expandTimelineStateBindings(source.contribution.bindings, input.materializedState.snapshot)) {
+      bindingOwners.set(binding.path, source.installationId)
+    }
+    for (const mount of source.contribution.componentMounts) {
+      const target = mount.target
+      const entities = target.kind === 'entity' ? [target.entity]
+        : input.materializedState.entities.filter(entity => entity.typeId === target.typeId)
+      for (const entity of entities) {
+        const type = input.materializedState.entityTypes.find(candidate => candidate.id === entity.typeId)!
+        bindingOwners.set(`${type.collectionPath}.${entity.entityId}.components.${mount.componentKey}`, source.installationId)
+      }
+    }
+  }
   return {
     timelineId: input.timelineId,
     sourceCardId: input.card.id,
@@ -507,15 +636,18 @@ async function buildTimelineRuntimeContext(
     stateComponents: structuredClone(input.materializedState.components),
     stateReferences: structuredClone(input.materializedState.references),
     stateContributionSources: input.contributionSources.map(source => ({
+      installationId: source.installationId,
       contributionId: source.contributionId,
       packageId: source.packageId,
       moduleId: source.moduleId,
       packageVersion: source.packageVersion,
+      declaration: structuredClone(source.contribution),
     })),
     stateBindings: input.materializedState.bindings.map(binding => {
       const template = input.templates.get(binding.templateId)
       if (!template) throw new Error(`Timeline State template not found: ${binding.templateId}`)
-      return { path: binding.path, schema: structuredClone(template.schema) }
+      const installationId = bindingOwners.get(binding.path)
+      return { path: binding.path, schema: structuredClone(template.schema), ...(installationId ? { installationId } : {}) }
     }),
     createdAt: ctx.now(),
   }

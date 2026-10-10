@@ -4,7 +4,11 @@ import type {
 } from '@loom-studio/application-runtime'
 import type { JsonValue } from '@loom-studio/shared'
 import {
+  isRecord,
   readNullableString,
+  readBoolean,
+  readOptionalBoolean,
+  readNumber,
   readOptionalNumber,
   readOptionalString,
   readString,
@@ -17,6 +21,69 @@ export async function handleTimelineRpc(
   context?: RuntimeRequestContext,
 ): Promise<JsonValue | undefined> {
   switch (method) {
+    case 'application.previewTimelineExtensionStateInitialization':
+      return await runtime.previewTimelineExtensionStateInitialization({
+        timelineId: readString(params, 'timelineId'),
+        branchId: readString(params, 'branchId'),
+        installationId: readString(params, 'installationId'),
+      }) as unknown as JsonValue
+    case 'application.initializeTimelineExtensionState':
+      return await runtime.initializeTimelineExtensionState({
+        timelineId: readString(params, 'timelineId'),
+        branchId: readString(params, 'branchId'),
+        installationId: readString(params, 'installationId'),
+        expectedVersion: readNumber(params, 'expectedVersion'),
+        expectedInstallationVersion: readNumber(params, 'expectedInstallationVersion'),
+        expectedStateRevisionId: readString(params, 'expectedStateRevisionId'),
+        expectedRuntimeContextVersion: readNumber(params, 'expectedRuntimeContextVersion'),
+        contributionInstances: readContributionInstances(params),
+      }, context) as unknown as JsonValue
+    case 'application.previewTimelineExtensionAdoption':
+      return await runtime.previewTimelineExtensionAdoption({
+        timelineId: readString(params, 'timelineId'),
+        branchId: readString(params, 'branchId'),
+        installationId: readString(params, 'installationId'),
+      }) as unknown as JsonValue
+    case 'application.adoptTimelineExtension':
+      return await runtime.adoptTimelineExtension({
+        timelineId: readString(params, 'timelineId'),
+        branchId: readString(params, 'branchId'),
+        installationId: readString(params, 'installationId'),
+        expectedVersion: readNumber(params, 'expectedVersion'),
+        expectedInstallationVersion: readNumber(params, 'expectedInstallationVersion'),
+        expectedStateRevisionId: readString(params, 'expectedStateRevisionId'),
+        expectedRuntimeContextVersion: readNumber(params, 'expectedRuntimeContextVersion'),
+        contributionInstances: readContributionInstances(params),
+      }, context) as unknown as JsonValue
+    case 'application.previewTimelineExtensionRecovery':
+      return await runtime.previewTimelineExtensionRecovery({
+        timelineId: readString(params, 'timelineId'),
+        installationId: readString(params, 'installationId'),
+      }) as unknown as JsonValue
+    case 'application.recoverTimelineExtension':
+      return await runtime.recoverTimelineExtension({
+        timelineId: readString(params, 'timelineId'),
+        installationId: readString(params, 'installationId'),
+        expectedVersion: readNumber(params, 'expectedVersion'),
+        expectedInstallationVersion: readNumber(params, 'expectedInstallationVersion'),
+        acceptSourceChange: readOptionalBoolean(params, 'acceptSourceChange'),
+      }, context) as unknown as JsonValue
+    case 'application.inspectTimelineExtensionResources':
+      return await runtime.inspectTimelineExtensionResources({
+        timelineId: readString(params, 'timelineId'),
+        installationId: readString(params, 'installationId'),
+      }) as unknown as JsonValue
+    case 'application.getTimelineExtensionParticipation':
+      return await runtime.getTimelineExtensionParticipation({
+        timelineId: readString(params, 'timelineId'),
+      }) as unknown as JsonValue
+    case 'application.updateTimelineExtensionParticipation':
+      return await runtime.updateTimelineExtensionParticipation({
+        timelineId: readString(params, 'timelineId'),
+        installationId: readString(params, 'installationId'),
+        expectedVersion: readNumber(params, 'expectedVersion'),
+        enabled: readBoolean(params, 'enabled'),
+      }, context) as unknown as JsonValue
     case 'application.appendNarrativeInput':
       return await runtime.appendNarrativeInput({
         timelineId: readString(params, 'timelineId'),
@@ -104,6 +171,13 @@ export async function handleTimelineRpc(
     default:
       return undefined
   }
+}
+
+function readContributionInstances(params: JsonValue | undefined): Array<{ contributionId: string; instanceId: string }> {
+  if (!isRecord(params) || !Array.isArray(params.contributionInstances)) throw new Error('Expected contributionInstances array')
+  return params.contributionInstances.map(item => ({
+    contributionId: readString(item, 'contributionId'), instanceId: readString(item, 'instanceId'),
+  }))
 }
 
 function readOpeningNodes(params: JsonValue | undefined): Array<{ content: string; createdAt?: string }> | undefined {

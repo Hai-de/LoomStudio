@@ -2,6 +2,7 @@ import { isValidElement, type FunctionComponent, type ReactElement } from 'react
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentSessionPicker } from '../../../apps/studio-client/src/widgets/agent-chat-panel/agent-session-picker.js'
 import type { AgentPreset, AgentSession } from '../../../apps/studio-client/src/entities/index.js'
+import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/index.js'
 
 const hooks = vi.hoisted(() => ({ cursor: 0, values: [] as unknown[] }))
 vi.mock('react', async original => ({
@@ -41,7 +42,7 @@ function fixture() {
   const props = {
     session: sessions[0], sessions, primarySessionId: 'a', timelineId: 'timeline', disabled: false,
     presets: [{ id: 'writer', rootNode: { label: 'Writing' } }, { id: 'summary', rootNode: { label: 'Memory Summary' } }] as AgentPreset[],
-    t: (key: string) => key, onSelect: vi.fn(), onRename: vi.fn(async () => sessions[0]),
+    t: createTranslator('zh-CN'), onSelect: vi.fn(), onRename: vi.fn(async () => sessions[0]),
     onSetPrimary: vi.fn(async () => {}),
   } as Parameters<typeof AgentSessionPicker>[0]
   const render = () => { hooks.cursor = 0; return elements(AgentSessionPicker(props)) }
@@ -51,6 +52,15 @@ function fixture() {
 }
 
 describe('Agent session picker', () => {
+  it.each([{ isComposing: true, keyCode: 13 }, { isComposing: false, keyCode: 229 }])('does not commit composition Enter: %j', nativeEvent => {
+    const f = fixture()
+    f.control('会话名称').props.onChange({ target: { value: 'Draft' } })
+    const blur = vi.fn()
+    f.control('会话名称').props.onKeyDown({ key: 'Enter', nativeEvent, currentTarget: { blur } })
+    expect(blur).not.toHaveBeenCalled()
+    expect(f.props.onRename).not.toHaveBeenCalled()
+    expect(f.control('会话名称').props.value).toBe('Draft')
+  })
   it('searches by preset and opens a session without changing the primary receiver', () => {
     const f = fixture()
     f.open()

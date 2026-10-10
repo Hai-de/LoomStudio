@@ -1,4 +1,5 @@
 import type { ClientBridge, ClientJsonValue } from '@loom-studio/client-bridge'
+import type { TimelineExtensionAdoptionPreview, TimelineExtensionParticipation, TimelineExtensionRecoveryPreview, TimelineExtensionResourceInspection } from '../../entities/extension.js'
 import type { AiGatewayEvent, AiGatewayRunState } from '@loom-studio/ai-gateway/contracts'
 type TimelineArchiveClient = Record<string, ClientJsonValue>
 type AgentRunEvent = {
@@ -82,6 +83,8 @@ import type {
   ManagedExtensionModule,
   ManagedExtensionPackage,
   ListStateDefinitionsResult,
+  InspectStateSourcesInput,
+  StateSourcesInspection,
   LoomScript,
   LoomScriptMount,
   LoomScriptOwner,
@@ -192,6 +195,7 @@ type UpdateCardInput = {
     initial?: Record<string, ClientJsonValue>
   }>
   stateContributionIds?: string[]
+  extensionAdoptions?: Array<{ packageId: string; target: 'global' | 'card' }>
   timelineStateBindings?: Array<{ path: string; templateId: string; templateVersion: number; initial?: Record<string, ClientJsonValue> }>
 }
 
@@ -446,6 +450,7 @@ export type StudioApi = {
     revert(changesetId: string): Promise<MutationReceipt>
   }
   states: {
+    inspectSources(input: InspectStateSourcesInput): Promise<StateSourcesInspection>
     get(target: StateTarget, extensionTarget?: ExtensionInstallationTarget): Promise<GetStateSnapshotResult>
     apply(input: ApplyStateMutationInput): Promise<ApplyStateMutationResult>
     listDefinitions(kind?: StateDefinitionDraft['kind'], ids?: string[]): Promise<ListStateDefinitionsResult>
@@ -484,6 +489,7 @@ export type StudioApi = {
     get(cardId: string): Promise<GetCardResult>
     list(input?: { cursor?: string; limit?: number }): Promise<ListCardsResult>
     create(input: CreateCardInput): Promise<CreateCardResult>
+    fork(input: { cardId: string; expectedVersion: number }): Promise<ImportCardBundleResult>
     update(input: UpdateCardInput): Promise<UpdateCardResult>
     updatePromptResources(input: UpdateCardPromptResourcesInput): Promise<UpdateCardResult>
     attachExtensionPackage(input: { cardId: string; expectedVersion: number; archive: { packageId: string; version: string; archiveBase64: string } }): Promise<UpdateCardResult>
@@ -605,6 +611,17 @@ export type StudioApi = {
   extensionInstallations: {
     list(): Promise<ListExtensionInstallationsResult>
   }
+  timelineExtensions: {
+    inspectResources(input: { timelineId: string; installationId: string }): Promise<TimelineExtensionResourceInspection>
+    get(input: { timelineId: string }): Promise<TimelineExtensionParticipation>
+    update(input: { timelineId: string; installationId: string; expectedVersion: number; enabled: boolean }): Promise<{ participation: TimelineExtensionParticipation; mutation: MutationReceipt }>
+    previewAdoption(input: { timelineId: string; branchId: string; installationId: string }): Promise<TimelineExtensionAdoptionPreview>
+    previewStateInitialization(input: { timelineId: string; branchId: string; installationId: string }): Promise<TimelineExtensionAdoptionPreview>
+    initializeState(input: TimelineExtensionAdoptionPreview): Promise<{ revisionId: string; mutation: MutationReceipt }>
+    adopt(input: TimelineExtensionAdoptionPreview): Promise<{ participation: TimelineExtensionParticipation; revisionId: string; mutation: MutationReceipt }>
+    previewRecovery(input: { timelineId: string; installationId: string }): Promise<TimelineExtensionRecoveryPreview>
+    recover(input: TimelineExtensionRecoveryPreview & { acceptSourceChange?: boolean }): Promise<{ participation: TimelineExtensionParticipation; mutation: MutationReceipt }>
+  }
   portableExtensionPayloads: {
     list(packageId?: string): Promise<ListPortableExtensionPayloadsResult>
     get(payloadId: string): Promise<GetPortableExtensionPayloadResult>
@@ -694,6 +711,7 @@ export function createStudioApi(bridge: ClientBridge): StudioApi {
       },
     },
     states: {
+      inspectSources: input => rpc.call<StateSourcesInspection>('application.inspectStateSources', input),
       get: (target, extensionTarget) => rpc.call<GetStateSnapshotResult>('application.getStateSnapshot', { target, ...(extensionTarget ? { extensionTarget } : {}) }),
       apply: input => rpc.call<ApplyStateMutationResult>('application.applyStateMutation', input),
       listDefinitions: (kind, ids) => rpc.call<ListStateDefinitionsResult>('application.listStateDefinitions', {
@@ -749,6 +767,7 @@ export function createStudioApi(bridge: ClientBridge): StudioApi {
     cards: {
       get: cardId => rpc.call<GetCardResult>('application.getCard', { cardId }),
       list: input => rpc.call<ListCardsResult>('application.listCards', (input ?? {})),
+      fork: input => rpc.call<ImportCardBundleResult>('application.forkCard', input),
       create: input => rpc.call<CreateCardResult>('application.createCard', input),
       update: input => rpc.call<UpdateCardResult>('application.updateCard', input),
       updatePromptResources: input => rpc.call<UpdateCardResult>('application.updateCardPromptResources', input),
@@ -878,6 +897,17 @@ export function createStudioApi(bridge: ClientBridge): StudioApi {
     },
     extensionInstallations: {
       list: () => rpc.call<ListExtensionInstallationsResult>('application.listExtensionInstallations', {}),
+    },
+    timelineExtensions: {
+      inspectResources: input => rpc.call('application.inspectTimelineExtensionResources', input),
+      get: input => rpc.call('application.getTimelineExtensionParticipation', input),
+      update: input => rpc.call('application.updateTimelineExtensionParticipation', input),
+      previewAdoption: input => rpc.call('application.previewTimelineExtensionAdoption', input),
+      previewStateInitialization: input => rpc.call('application.previewTimelineExtensionStateInitialization', input),
+      initializeState: input => rpc.call('application.initializeTimelineExtensionState', input),
+      adopt: input => rpc.call('application.adoptTimelineExtension', input),
+      previewRecovery: input => rpc.call('application.previewTimelineExtensionRecovery', input),
+      recover: input => rpc.call('application.recoverTimelineExtension', input),
     },
     portableExtensionPayloads: {
       list: packageId => rpc.call<ListPortableExtensionPayloadsResult>('application.listPortableExtensionPayloads', packageId ? { packageId } : {}),

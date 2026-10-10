@@ -63,6 +63,7 @@ export type SqliteDataEngine = {
   readonly database: DatabaseSync
   migrate(set: SqliteMigrationSet): void
   read<T>(operation: (database: DatabaseSync) => Promise<T> | T): Promise<T>
+  withTransactionGuard<T>(guard: (tx: SqliteDataTransaction) => Promise<void>, work: () => T): T
   transact<T>(
     input: DataTransactionInput,
     operation: (tx: SqliteDataTransaction) => Promise<T>,
@@ -86,6 +87,7 @@ export function createSqliteDataEngine(options: SqliteDataEngineOptions): Sqlite
 
   const commitNotifier = createDataCommitNotifier<DataCommitFact>()
   const activeTransactionContext = new AsyncLocalStorage<SqliteDataTransaction>()
+  const transactionGuards = new AsyncLocalStorage<ReadonlyArray<(tx: SqliteDataTransaction) => Promise<void>>>()
   let operationQueue = Promise.resolve()
   let isClosed = false
   let closePromise: Promise<void> | undefined
@@ -123,6 +125,9 @@ export function createSqliteDataEngine(options: SqliteDataEngineOptions): Sqlite
       migrateNamespace(database, set)
     },
     read: operation => serialize(() => operation(database)),
+    withTransactionGuard: (guard, work) => transactionGuards.run(
+      [...(transactionGuards.getStore() ?? []), guard], work,
+    ),
     transact: (input, operation) => serialize(async () => {
       const changesetId = options.createId('chg')
       const createdAt = options.now()
@@ -142,7 +147,13 @@ export function createSqliteDataEngine(options: SqliteDataEngineOptions): Sqlite
           recordOperations: recorded => operations.push(...structuredClone(recorded) as DataCommitOperation[]),
         }
 
-        const value = await activeTransactionContext.run(tx, () => operation(tx))
+        const value = await activeTransactionContext.run(tx, async () => {
+          const guards = transactionGuards.getStore() ?? []
+          for (const guard of guards) await guard(tx)
+          const result = await operation(tx)
+          for (const guard of guards) await guard(tx)
+          return result
+        })
 
         if (operations.length === 0) {
           throw new DataEngineError('data.transaction_empty', 'Data transaction produced no changes')
@@ -161,7 +172,8 @@ export function createSqliteDataEngine(options: SqliteDataEngineOptions): Sqlite
         }
         insertCommit(database, commit)
         database.exec('COMMIT')
-        commitNotifier.notify(commit)
+        // Observers start independent work; they must not inherit the writer's authority.
+        transactionGuards.run([], () => commitNotifier.notify(commit))
         return { value, commit }
       } catch (error) {
         database.exec('ROLLBACK')

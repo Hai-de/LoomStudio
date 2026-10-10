@@ -13,6 +13,16 @@ import styles from './settings-panel.module.scss'
 
 type SettingsCategory = 'general' | 'network' | 'appearance' | 'about'
 
+export function resolveNetworkSettingsPayload(
+  proxyMode: NetworkSettings['proxyMode'],
+  proxyUrl?: string,
+): { proxyMode: NetworkSettings['proxyMode']; proxyUrl?: string } {
+  return {
+    proxyMode,
+    ...(proxyMode === 'manual' ? { proxyUrl } : {}),
+  }
+}
+
 export function SettingsPanel(props: {
   busy: boolean
   customCss: string
@@ -52,7 +62,7 @@ export function SettingsPanel(props: {
     { id: 'general', label: props.t('settings.general'), icon: Globe },
     { id: 'network', label: props.t('settings.network'), icon: Network },
     { id: 'appearance', label: props.t('settings.appearance'), icon: Palette },
-    { id: 'about', label: '关于', icon: Info },
+    { id: 'about', label: props.t('settings.about'), icon: Info },
   ] as const
 
   useEffect(() => {
@@ -62,10 +72,7 @@ export function SettingsPanel(props: {
 
   function saveNetworkSettings(event: FormEvent) {
     event.preventDefault()
-    props.onUpdateNetworkSettings({
-      proxyMode,
-      ...(proxyMode === 'manual' ? { proxyUrl } : {}),
-    })
+    props.onUpdateNetworkSettings(resolveNetworkSettingsPayload(proxyMode, proxyUrl))
   }
 
   return (
@@ -74,11 +81,11 @@ export function SettingsPanel(props: {
         className={styles.workbench}
         defaultMasterWidth={200}
         masterMinWidth={160}
-        backLabel="返回设置"
+        backLabel={props.t('settings.back')}
         mobilePane={mobilePane}
         onMobilePaneChange={setMobilePane}
         master={(
-          <nav aria-label="设置分类" className={styles.masterNav}>
+          <nav aria-label={props.t('settings.categories')} className={styles.masterNav}>
             {categories.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
@@ -109,7 +116,7 @@ export function SettingsPanel(props: {
                 </label>
               </section>
               <section className={styles.settingSection}>
-                <label className={styles.settingRow} title="o200k_base · 仅用于资源原文展示，不修改模型运行系数">
+                <label className={styles.settingRow} title={props.t('tokens.displayMultiplierHelp')}>
                   <span>{props.t('tokens.displayMultiplier')}</span>
                   <input aria-label={props.t('tokens.displayMultiplier')} type="number" min="0.01" step="0.05"
                     value={tokenMultiplier} onChange={event => {
@@ -146,6 +153,7 @@ export function SettingsPanel(props: {
             </form>
           ) : category === 'appearance' ? (
             <BackgroundMaterialsView
+              t={props.t}
               backgrounds={backgrounds}
               followState={previewFollowState}
               material={previewMaterial}
@@ -188,7 +196,7 @@ export function SettingsPanel(props: {
                   </section>
                   <section className={styles.settingSection}>
                     <label className={styles.settingRow}>
-                      <span>自定义 CSS</span>
+                      <span>{props.t('settings.customCss')}</span>
                       <textarea className={styles.customCssTextarea} placeholder={props.t('settings.customCssPlaceholder')}
                         spellCheck={false} value={props.customCss} onChange={event => props.onChangeCustomCss(event.target.value)} />
                     </label>

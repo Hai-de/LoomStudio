@@ -22,7 +22,7 @@ export function buildPresetTokenProjection(input: {
     const children = (node.children ?? []).map(project)
     let incomplete = children.some(child => incompleteIds.has(child.id))
     if (node.kind === 'virtual') {
-      const anchorId = node.label.startsWith('@') ? node.label : node.capabilities?.targetAnchorId ?? node.label
+      const anchorId = node.capabilities?.targetAnchorId || (node.label.startsWith('@') ? node.label : node.label)
       for (const resource of settings) {
         function select(source: ContextAssetNode): ContextAssetNode | undefined {
           if (source.kind === 'entry' && (source.capabilities?.targetAnchorId ?? '@setting.stable') !== anchorId) return undefined

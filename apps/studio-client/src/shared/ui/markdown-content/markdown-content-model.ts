@@ -16,37 +16,7 @@ export function prepareLoomMarkdown(value: string): string {
     )).join('')
   })
 
-  let inCode = false
-  const output: string[] = []
-  for (let i = 0; i < processedLines.length; i++) {
-    const line = processedLines[i]!
-    const fenceMatch = line.match(/^\s{0,3}(```|~~~)/)
-    if (fenceMatch) {
-      inCode = !inCode
-      output.push(line)
-      continue
-    }
-    if (inCode) {
-      output.push(line)
-      continue
-    }
-
-    output.push(line)
-    const nextLine = processedLines[i + 1]
-    const isList = /^\s*([-*+]|\d+\.)\s/.test(line)
-    const nextIsList = nextLine !== undefined && /^\s*([-*+]|\d+\.)\s/.test(nextLine)
-    if (
-      line.trim() !== '' &&
-      nextLine !== undefined &&
-      nextLine.trim() !== '' &&
-      !nextLine.match(/^\s{0,3}(```|~~~)/) &&
-      !(isList && nextIsList)
-    ) {
-      output.push('')
-    }
-  }
-
-  return output.join('\n')
+  return processedLines.join('\n')
 }
 
 function replaceLoomTokens(value: string): string {

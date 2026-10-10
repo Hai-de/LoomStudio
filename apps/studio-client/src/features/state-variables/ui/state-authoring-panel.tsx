@@ -32,6 +32,10 @@ type Selection =
   | { kind: 'source' }
 
 export function StateAuthoringPanel(props: StateAuthoringPanelProps) {
+  return <StateAuthoringEditor key={props.card?.id} {...props} />
+}
+
+function StateAuthoringEditor(props: StateAuthoringPanelProps) {
   const initial = cardToConfig(props.card)
   const [config, setConfig] = useState(initial)
   const [sourceText, setSourceText] = useState(() => configToYaml(initial))
@@ -41,32 +45,24 @@ export function StateAuthoringPanel(props: StateAuthoringPanelProps) {
   const [expandedIds, setExpandedIds] = useState<string[]>(['/entities'])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const cardIdRef = useRef(props.card?.id)
   const versionRef = useRef(props.card?.version)
   const baselineRef = useRef(configToYaml(initial))
+  const mountedRef = useRef(false)
+  const savingRef = useRef(false)
 
   useEffect(() => {
-    if (cardIdRef.current === props.card?.id) return
-    const next = cardToConfig(props.card)
-    const yaml = configToYaml(next)
-    cardIdRef.current = props.card?.id
-    versionRef.current = props.card?.version
-    baselineRef.current = yaml
-    setConfig(next)
-    setSourceText(yaml)
-    setSourceError('')
-    setError('')
-    setSelection(defaultSelection(next))
-    setMobilePane('master')
-  }, [props.card])
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
   const preview = useMemo(() => buildAssemblyPreview(config, props.t), [config, props.t])
-  const previewNodes = useMemo(() => stateSnapshotToTreeNodes(preview.snapshot), [preview.snapshot])
+  const previewNodes = useMemo(() => stateSnapshotToTreeNodes(preview.snapshot, props.t), [preview.snapshot, props.t])
   const dirty = sourceText !== baselineRef.current
 
   if (!props.card) return <section className={styles.panel}><div className={styles.emptyState}>{props.t('stateAuthoring.noCard')}</div></section>
 
   function commit(next: DraftConfig) {
+    if (savingRef.current) return
     setConfig(next)
     setSourceText(configToYaml(next))
     setSourceError('')
@@ -79,6 +75,7 @@ export function StateAuthoringPanel(props: StateAuthoringPanelProps) {
   }
 
   function updateSource(text: string) {
+    if (savingRef.current) return
     setSourceText(text)
     try {
       const parsed = parseCardStateConfig(text)
@@ -90,7 +87,8 @@ export function StateAuthoringPanel(props: StateAuthoringPanelProps) {
   }
 
   async function save() {
-    if (saving || sourceError) return
+    if (savingRef.current || sourceError) return
+    savingRef.current = true
     setSaving(true)
     setError('')
     try {
@@ -106,6 +104,7 @@ export function StateAuthoringPanel(props: StateAuthoringPanelProps) {
         stateContributionIds: parsed.stateContributionIds,
         timelineStateBindings: parsed.timelineStateBindings,
       })
+      if (!mountedRef.current) return
       const next = cardToConfig(saved)
       const yaml = configToYaml(next)
       versionRef.current = saved.version
@@ -114,9 +113,10 @@ export function StateAuthoringPanel(props: StateAuthoringPanelProps) {
       setSourceText(yaml)
       toast.success(props.t('stateAuthoring.savedCard'))
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
+      if (mountedRef.current) setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
-      setSaving(false)
+      savingRef.current = false
+      if (mountedRef.current) setSaving(false)
     }
   }
 
@@ -129,7 +129,7 @@ export function StateAuthoringPanel(props: StateAuthoringPanelProps) {
         </Button>
       </header>
       {error ? <div className={styles.errorBanner} role="alert">{error}</div> : null}
-      <div className={styles.stateAuthoringBody}>
+      <fieldset className={styles.stateAuthoringBody} disabled={saving} aria-busy={saving} aria-label={props.t('stateAuthoring.title')}>
         <MasterDetailWorkbench
           backLabel={props.t('stateAuthoring.backToList')}
           resizeLabel={props.t('stateVariables.resizeSidebar')}
@@ -162,7 +162,7 @@ export function StateAuthoringPanel(props: StateAuthoringPanelProps) {
             </section>
           </div>
         </MasterDetailWorkbench>
-      </div>
+      </fieldset>
     </section>
   )
 }

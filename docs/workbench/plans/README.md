@@ -11,7 +11,8 @@
 | -------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------- |
 | [审查归档后续](../issues/audit-follow-ups.md) | Deferred / Backlog | 远端 CI、旧计划接续及精简后的用户 UI 验收/独立测试维护；完整修复账目已移出活跃目录 |
 | [扩展模块补全](./extension-module-completion-plan.md) | 待调研 / 未实施 | 远程安装与独立官方扩展发行接续；来源、构建脚本与权限合同待决定 |
-| [The World 世界状态与 AI 接入](./the-world-state-and-agent-plan.md) | In Progress / State v2 与工具接入已实现 | 显式升级、分支与幂等验证通过，dist 可跟踪；Client 自动目标与刷新仍待合同 |
+| [扩展的故事级采用与运行隔离](./extension-story-participation-plan.md) | 首版实现完成 / 待人工验收 | Prompt/恢复凭据、通用事务守卫、间接资源过滤与来源诊断已接通；Package 总开关与跨声明迁移未纳入首版 |
+| [The World 世界状态与 AI 接入](./the-world-state-and-agent-plan.md) | 首版实现完成 / 待人工与发行验收 | 原生 EC、可信工具、Client 与来源诊断已接通，确定性 Provider/真实 Server 工具链通过；外部模型、公网安装与人工界面尚未验收 |
 | [`agent-preset-resources-and-usage-plan.md`](./agent-preset-resources-and-usage-plan.md) | 阶段实施完成 / 待人工验收 | 使用配置与空引用、固定 Session、主接收方与临时编辑；官方助手资源实验通过，未做真实模型或浏览器验收 |
 | [`ui/README.md`](./ui/README.md) | UI 计划子索引 | Shell 动画、资源 Diff 与 Provider 展示等实施及延期入口 |
 | [`opening-swipes-and-runtime-swipe-plan.md`](./opening-swipes-and-runtime-swipe-plan.md) | 多开场已实施 / 人工验收待办；运行时未实施 | 多开场初始化、ST 备选开场兼容；最新 Narrative Swipe 与 Session 工作历史隔离 |
@@ -32,6 +33,8 @@
 ---
 
 ## 历史已归档计划
+
+2026-10-09：[测试套件真实度与编译基线对齐](../../archive/plans/test-suite-and-compiler-baseline-remediation-plan.md)已完成并归档。Linux 源码构建与 Preset 重命名问题已修复；tsconfig 基线与 lib 统一升级对齐至 ES2024；本地 check:types 与 check:all 类型检查门禁已建立；轻量 happy-dom 与零外部依赖 renderHook 基建已落地并通过真实单测验证；剩余历史测试的假 Mock 清理按规范列入日常渐进维护，未假称全仓旧测试全部重写。
 
 2026-10-07：[AI 开发文档导航优化](../../archive/plans/documentation-navigation-2026-10-07.md)已完成。需求词路由、Client / Runtime 文件与验证入口、RPC / 类型导航及已核实的架构摘要已更新；9 个定位样本、18 个注册类型和 25 个 RPC 示例静态核对通过，不代表全仓架构或产品验收。
 

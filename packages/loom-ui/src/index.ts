@@ -31,6 +31,8 @@ export {
 } from './component/dropdown-menu.js'
 export type { MenuAction } from './component/menu-action.js'
 export { SkeletonText } from './component/skeleton.js'
+export { LoadingText } from './component/loading-text.js'
+export type { LoadingTextProps } from './component/loading-text.js'
 export { StatusIndicator } from './component/status-indicator.js'
 export { Toggle } from './component/toggle.js'
 export type { ToggleProps } from './component/toggle.js'

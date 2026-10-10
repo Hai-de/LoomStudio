@@ -1,6 +1,6 @@
 import { createAgentStore, createNarrativeStore, createPromptResourceStore } from '@loom-studio/application-data'
 import type { AiGatewayRequest } from '@loom-studio/ai-gateway'
-import { createAgentToolRegistry, createApplicationRuntime, composeAgentTurnPrompt, type ToolDefinition } from '@loom-studio/application-runtime'
+import { createAgentToolRegistry, createApplicationRuntime, composeAgentTurnPrompt, createPromptProcessorRegistry, type ToolDefinition } from '@loom-studio/application-runtime'
 import { createSqliteDataEngine } from '@loom-studio/data-engine'
 import { createSqliteDocumentStore } from '@loom-studio/document-store'
 import type { PromptResourceNode } from '../../../packages/application-runtime/src/cards/workspace-types.js'
@@ -14,12 +14,14 @@ function createFixture(tools: ToolDefinition[] = []) {
   const engine = createSqliteDataEngine({ filename: ':memory:', createId, now })
   const promptResources = createPromptResourceStore({ engine, createId, now })
   const calls: Array<Pick<AiGatewayRequest, 'messages' | 'tools'>> = []
+  const promptProcessors = createPromptProcessorRegistry()
   const runtime = createApplicationRuntime({
     dataEngine: engine,
     documents: createSqliteDocumentStore({ engine }),
     agents: createAgentStore({ engine, createId, now }),
     narratives: createNarrativeStore({ engine, createId, now }),
     promptResources,
+    promptProcessors,
     agentTools: createAgentToolRegistry(tools, tools.map(tool => ({
       toolId: tool.id,
       execute: ({ invocation }) => ({
@@ -36,7 +38,7 @@ function createFixture(tools: ToolDefinition[] = []) {
       },
     },
   })
-  return { engine, runtime, promptResources, calls }
+  return { engine, runtime, promptResources, calls, promptProcessors }
 }
 
 function flatten(node: PromptResourceNode): PromptResourceNode[] {
@@ -44,6 +46,66 @@ function flatten(node: PromptResourceNode): PromptResourceNode[] {
 }
 
 describe('bundled default preset', () => {
+  it('runs registered processing in Preview and real Agent requests without changing stored resources', async () => {
+    const { engine, runtime, calls, promptProcessors, promptResources } = createFixture()
+    const modes: string[] = []
+    promptProcessors.register({
+      id: 'test/template',
+      create: context => {
+        modes.push(context.mode)
+        return {
+          prepare: entries => entries.map(entry => ({ id: entry.id, active: true })),
+          render: entry => `PROCESSED:${entry.content}`,
+        }
+      },
+    })
+    try {
+      const { resource: preset } = await runtime.createPromptResource({ resourceKind: 'preset', name: 'Processed' })
+      await runtime.createPromptResourceAsset({
+        resourceId: preset.id, targetAssetId: preset.rootNode.id, position: 'inside',
+        asset: { id: 'template', kind: 'entry', label: 'Template', body: 'AUTHOR_SOURCE',
+          capabilities: { processorId: 'test/template', activation: { kind: 'manual' } } },
+      })
+      const { providerProfile } = await runtime.createProviderProfile({
+        providerExtensionId: 'official.openai-compatible', displayName: 'Test', config: {}, enabledModelIds: ['test-model'],
+      })
+      const { agentPreset } = await runtime.updateAgentPreset({
+        name: 'Writer', agentPresetId: preset.id,
+        expectedVersion: (await runtime.getPromptResource({ resourceId: preset.id })).resource.version,
+        model: { providerProfileId: providerProfile.id, modelId: 'test-model' },
+      })
+      const { session } = await runtime.createAgentSession({ agentPresetId: agentPreset.id })
+      const preview = await runtime.previewAgentTurn({ agentSessionId: session.id, input: 'hello' })
+      const result = await runtime.invokeAgentTurn({ agentSessionId: session.id, input: 'hello' })
+      expect(modes).toEqual(['preview', 'runtime'])
+      expect(preview.messages.some(message => message.content?.includes('PROCESSED:AUTHOR_SOURCE'))).toBe(true)
+      expect(calls[0]!.messages).toEqual(preview.messages)
+      expect(result.promptBuildTrace.executions).toEqual([
+        { processorId: 'test/template', stage: 'prepare' },
+        { processorId: 'test/template', stage: 'render', entryId: expect.any(String) },
+      ])
+      const stored = await runtime.getPromptResource({ resourceId: preset.id })
+      expect(flatten(stored.resource.rootNode).find(node => node.label === 'Template')?.body).toBe('AUTHOR_SOURCE')
+      const accepted = await composeAgentTurnPrompt({
+        agentMessages: [], promptResources, contextResourceIds: [],
+        preset: stored.resource, userInput: 'hello',
+        processing: { registry: promptProcessors, context: { mode: 'runtime', signal: new AbortController().signal } },
+      })
+      const resumed = await composeAgentTurnPrompt({
+        agentMessages: [], promptResources, contextResourceIds: [],
+        preset: stored.resource, userInput: 'hello',
+        processing: { registry: promptProcessors, context: { mode: 'runtime', signal: new AbortController().signal } },
+        resumeMessages: [{ role: 'user', content: 'CHECKPOINT' }],
+        resumeProcessingSnapshot: accepted.processingSnapshot,
+      })
+      expect(modes).toEqual(['preview', 'runtime', 'runtime'])
+      expect(resumed.messages.map(message => message.content)).toEqual(['CHECKPOINT'])
+      expect(resumed.promptBuildTrace.executions).toEqual([])
+      expect(resumed.toolExecutionScope.context).toEqual(accepted.toolExecutionScope.context)
+    } finally {
+      engine.close()
+    }
+  })
   it.each(['ordered', 'empty'] as const)('uses effective history transforms in provider requests (%s)', async mode => {
     const { engine, runtime, calls } = createFixture()
     try {

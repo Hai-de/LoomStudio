@@ -114,18 +114,26 @@ export function resolveContextAssetUri(node: ContextAssetNode, pathNodes?: Conte
 }
 
 export function findContextAssetByVirtualPath(nodes: ContextAssetNode[], path: string): ContextAssetNode | undefined {
-  const flat = flattenContextAssetNodes(nodes)
   const normalized = path.replace(/^@/, '').replace(/^\//, '')
 
-  for (const node of flat) {
+  if (path.startsWith('@/') || path.startsWith('/') || normalized.includes('/')) {
+    const matches: ContextAssetNode[] = []
+    function visit(items: ContextAssetNode[], parents: ContextAssetNode[]) {
+      for (const node of items) {
+        const pathNodes = [...parents, node]
+        const uri = resolveContextAssetUri(node, pathNodes)
+        if (uri.replace(/^@/, '').replace(/^\//, '') === normalized) matches.push(node)
+        if (node.children) visit(node.children, pathNodes)
+      }
+    }
+    visit(nodes, [])
+    return matches.length === 1 ? matches[0] : undefined
+  }
+
+  for (const node of flattenContextAssetNodes(nodes)) {
     if (resolveVirtualPath(node) === path || resolveVirtualPath(node) === `/${normalized}`) return node
     const displayName = resolveVirtualDisplayName(node.label, node.kind)
     if (displayName === normalized || node.label === normalized) return node
-  }
-
-  for (const node of flat) {
-    const displayName = resolveVirtualDisplayName(node.label, node.kind)
-    if (normalized.endsWith(`/${displayName}`) || normalized.endsWith(`/${node.label}`)) return node
   }
 
   return undefined

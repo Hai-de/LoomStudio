@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ToggleLeft, ToggleRight } from 'lucide-react'
 import type { ContextAssetNode, PromptResource } from '../../../entities/index.js'
 import { useRestorableScroll } from '../../../shared/hooks/use-restorable-scroll.js'
-import type { Translator } from '../../../shared/i18n/index.js'
+import { formatNumber, type Translator } from '../../../shared/i18n/index.js'
 import { FileTree } from '../../../shared/ui/file-tree/file-tree.js'
 import type { LongTextEditorMode } from '../../../shared/ui/long-text-editor/long-text-editor-model.js'
 import { ContextAssetDetail, isReadOnlyDetailNode } from './context-asset-detail/context-asset-detail.js'
@@ -101,7 +101,7 @@ export function ContextAssetExplorer(props: {
       onQueryChange={props.onQueryChange}
       onSelect={selectNode}
     >
-      <div ref={scroll.ref} className={styles.explorerContent} onScroll={scroll.onScroll}>
+      <div ref={scroll.attach} className={styles.explorerContent} onScroll={scroll.onScroll}>
         {error ? <p role="alert">{error}</p> : null}
         <FileTree
           active={props.active}
@@ -133,7 +133,7 @@ export function ContextAssetExplorer(props: {
             const meta = props.formatMeta?.(node as ContextAssetNode)
             const count = props.tokenSnapshot?.summary?.nodes.get(node.id)
             const countLabel = count && (node as ContextAssetNode).kind !== 'virtual'
-              ? `${count.enabled.toLocaleString()} tokens`
+              ? `${formatNumber(count.enabled)} tokens`
               : undefined
             return [meta, countLabel].filter(Boolean).join(' · ') || undefined
           }}
@@ -143,6 +143,14 @@ export function ContextAssetExplorer(props: {
           onMoveNode={props.onMoveNode}
           onSelect={item => selectNode(item as ContextAssetNode)}
           renderIcon={(item, expanded) => renderContextAssetTreeIcon(item as ContextAssetNode, expanded)}
+          renderLabelSuffix={item => {
+            const node = item as ContextAssetNode
+            if (node.kind !== 'virtual') return null
+            const anchorId = node.capabilities?.targetAnchorId
+              || (node.label.startsWith('@') ? node.label : undefined)
+            if (!anchorId || anchorId === node.label) return null
+            return <span className={styles.treeAnchorBadge} title={anchorId}>{anchorId}</span>
+          }}
           renderMetaLeading={item => renderContextAssetLifecycleIndicator(item as ContextAssetNode, props.t)}
           renderTrailing={item => {
             const node = item as ContextAssetNode

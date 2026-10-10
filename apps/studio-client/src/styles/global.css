@@ -8,6 +8,8 @@
   font-size: var(--loom-font-size-body);
 
   --loom-ui-scale: 1;
+  --loom-viewport-height: 100dvh;
+  --loom-keyboard-inset: 0px;
 
   /* ── 颜色：背景与表面 ──
    * 默认视觉层级索引仅用于设计沟通，不属于变量名，也不规定亮色主题中的明暗方向：
@@ -139,6 +141,9 @@
   --loom-motion-duration-standard: 180ms;
   --loom-motion-duration-loading: 1.4s;
   --loom-motion-easing-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --loom-motion-ease-out: cubic-bezier(0.215, 0.61, 0.355, 1);
+  --loom-motion-ease-in-out: cubic-bezier(0.645, 0.045, 0.355, 1);
+  --loom-motion-elastic: cubic-bezier(0.68, -0.55, 0.265, 1.55);
   --loom-shell-motion-duration-enter: 320ms;
   --loom-shell-motion-duration-exit: 240ms;
   --loom-shell-motion-easing: cubic-bezier(0.2, 0, 0.2, 1);
@@ -298,6 +303,8 @@ body,
 #root {
   width: 100%;
   height: 100%;
+  height: var(--loom-viewport-height, 100dvh);
+  max-height: var(--loom-viewport-height, 100dvh);
 }
 
 body {
@@ -376,6 +383,14 @@ input {
   border-radius: var(--loom-radius-control);
   color: var(--loom-color-text);
   background: transparent;
+}
+
+@media (max-width: 820px) {
+  input:not([type='checkbox']):not([type='radio']),
+  textarea,
+  select {
+    font-size: 16px;
+  }
 }
 
 input:-webkit-autofill,

@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react'
 import { StateAuthoringPanel } from '../features/state-variables/ui/state-authoring-panel.js'
 import { StateVariablesPanel } from '../features/state-variables/ui/state-variables-panel.js'
+import { StateSourcesPanel } from '../features/state-variables/ui/state-sources-panel.js'
 import type { Translator } from '../shared/i18n/index.js'
 import { PanelTabs } from '../shared/ui/panel-tabs/index.js'
 import styles from './studio-state-panel.module.scss'
 
-export type VariableView = 'state' | 'authoring'
+export type VariableView = 'state' | 'authoring' | 'sources'
 
 type StudioStatePanelProps = {
   hasTimeline: boolean
@@ -14,6 +15,7 @@ type StudioStatePanelProps = {
   statesApi: Parameters<typeof StateVariablesPanel>[0]['api']
   timelineTarget?: Parameters<typeof StateVariablesPanel>[0]['timelineTarget']
   refreshToken?: string
+  sourceRefreshToken?: string
   t: Translator
   onSaveCard: Parameters<typeof StateAuthoringPanel>[0]['onSaveCard']
   onOpenSource: (scope: 'global' | 'timeline') => void
@@ -29,6 +31,7 @@ export function StudioStatePanel(props: StudioStatePanelProps): ReactNode {
           activeId={props.variableView}
           ariaLabel={props.t('character.stateVariables')}
           items={[
+            { id: 'sources', label: props.t('stateSources.tab') },
             { id: 'authoring', label: props.t('stateAuthoring.tab') },
             { id: 'state', label: props.t('stateVariables.title') },
           ]}
@@ -36,7 +39,15 @@ export function StudioStatePanel(props: StudioStatePanelProps): ReactNode {
         />
       </header>
       <div className={styles.content}>
-        {!props.hasTimeline && props.variableView === 'state' ? (
+        {props.variableView === 'sources' ? (
+          <StateSourcesPanel
+            api={props.statesApi}
+            card={props.card}
+            timelineTarget={props.timelineTarget}
+            refreshToken={`${props.refreshToken ?? ''}:${props.sourceRefreshToken ?? ''}`}
+            t={props.t}
+          />
+        ) : !props.hasTimeline && props.variableView === 'state' ? (
           <p>{props.t('stateVariables.noTimeline')}</p>
         ) : props.variableView === 'authoring' ? (
           <StateAuthoringPanel card={props.card} t={props.t} onSaveCard={props.onSaveCard} />

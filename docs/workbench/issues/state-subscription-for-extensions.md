@@ -14,7 +14,9 @@
 
 Agent 工具入口补验：`native-tool-loop.test.ts` 使用确定性 Provider 夹具执行真实 Runtime、官方 State 工具与 SQLite，三项定向测试通过（其余13项未执行）。显式目标、从 Narrative 上下文推导目标的点路径写入、提交后后续 Provider 步骤失败，均只通知一次，目标、最终 revision 和标准化路径一致；读取不增加通知。未修改执行器，也未调用外部模型。
 
-剩余边界：未执行外部 Provider 端到端测试。The World 当前源码未找到 state.subscribe/state.changed 消费，动态天色仍未验收，独立扩展接入不纳入主应用 CI。当前事件为进程内提交后提示，不保证进程崩溃/重启后的补发；初始化及选择分支不是本事件的 State Mutation。revisionId 是不透明标识，消费者不能按其字典序判断先后，异步重读需防止晚结果覆盖。
+Client 接入补充：Client SDK/Host 现提供 `state.subscribe(target, handler, onError?)`，初始读取和既有 SSE 失效通知重读快照，按 revision 去重并拒绝旧请求结果。Timeline 实例绑定当前有效采用与 Branch，暂停、切换或释放订阅后不再投递。The World 已消费此接口，替代手填目标与手动刷新；实现和定向验证见 [故事级采用计划](../plans/extension-story-participation-plan.md) 的 Client 账目。
+
+剩余边界：未执行外部 Provider 端到端测试或 The World 浏览器动态天色验收，独立扩展测试仍使用显式 extension 测试入口。Server 事件为进程内提交后提示，不保证进程崩溃/重启后的补发；初始化及选择分支不是本事件的 State Mutation。Client 重连会重读权威快照，但不是历史事件补发。revisionId 是不透明标识，消费者不能按其字典序判断先后，异步重读需防止晚结果覆盖。
 
 历史发布链定位：普通 UI/Agent/扩展写入共同进入 `applyApplicationStateMutation`，幂等命中在事务前返回旧 revision/changeset；旧 Server 扩展适配器无条件 emit，导致 UI/Agent 漏报和扩展重放重复通知。本轮已覆盖这条路径、`revertApplicationStateChangeset` 补偿 revision，以及 `upsertStateDefinition` 中的默认值事务出口。未改 Data Engine 提交结构，未从“最新 Head”反推历史事件，也未增加持久事件队列。
 

@@ -38,6 +38,32 @@ export const useAppearanceStore = create<AppearanceState>()(persist((set) => ({
 }), {
   name: 'loom-studio-appearance',
   storage: createJSONStorage(() => safeLocalStorage),
+  merge: (persisted, current) => {
+    if (!persisted || typeof persisted !== 'object' || Array.isArray(persisted)) return current
+    const saved = persisted as Record<string, unknown>
+    const material = saved.material && typeof saved.material === 'object'
+      ? saved.material as Record<string, unknown> : {}
+    const background = saved.background && typeof saved.background === 'object'
+      ? saved.background as Record<string, unknown> : undefined
+    return {
+      ...current,
+      background: saved.background === null ? null
+        : background && typeof background.id === 'string' && typeof background.image === 'string'
+          ? { id: background.id, image: background.image } : current.background,
+      canvasWidth: typeof saved.canvasWidth === 'number' && Number.isFinite(saved.canvasWidth)
+        && saved.canvasWidth >= 540 && saved.canvasWidth <= 1120 ? saved.canvasWidth : current.canvasWidth,
+      narrativeOverscan: typeof saved.narrativeOverscan === 'number' && Number.isInteger(saved.narrativeOverscan)
+        && saved.narrativeOverscan >= 0 && saved.narrativeOverscan <= 50 ? saved.narrativeOverscan : current.narrativeOverscan,
+      followAI: typeof saved.followAI === 'boolean' ? saved.followAI : current.followAI,
+      material: {
+        mode: material.mode === 'solid' || material.mode === 'translucent' || material.mode === 'glass' ? material.mode : current.material.mode,
+        blur: typeof material.blur === 'number' && Number.isFinite(material.blur)
+          && material.blur >= 0 && material.blur <= 32 ? material.blur : current.material.blur,
+        opacity: typeof material.opacity === 'number' && Number.isFinite(material.opacity)
+          && material.opacity >= 0 && material.opacity <= 100 ? material.opacity : current.material.opacity,
+      },
+    }
+  },
   partialize: state => ({
     background: state.background,
     canvasWidth: state.canvasWidth,

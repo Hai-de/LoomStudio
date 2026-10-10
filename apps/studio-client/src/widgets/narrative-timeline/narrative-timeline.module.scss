@@ -57,32 +57,58 @@
   color: var(--loom-color-text-muted);
 }
 
-.renderingMessages {
+.renderingMessages,
+.messagePending {
   width: 100%;
-  min-height: 96px;
-  padding: 20px 0;
+  min-height: 48px;
+  background: transparent;
+}
+
+.displayPending,
+.timelineColdLoading {
+  min-height: 24px;
+  background: transparent;
+}
+
+.timelineCenterLoading {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 240px;
+  padding-top: max(80px, 22vh);
+  user-select: none;
 }
 
 .message {
+  --timeline-material-blur: var(--loom-preview-blur, 16px);
+  --timeline-material-opacity: var(--loom-preview-opacity, 78%);
+
   position: relative;
   width: 100%;
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
   transition: border-color var(--loom-motion-duration-fast) ease;
+
+  &[data-loom-latest='true'] {
+    will-change: transform, opacity;
+    animation:
+      message-fade-in-up 360ms var(--loom-motion-ease-out, cubic-bezier(0.215, 0.61, 0.355, 1)) both,
+      new-message-glow 2.8s var(--loom-motion-ease-out, ease-out) both;
+  }
 }
 
 .assistant {
   width: 100%;
   border-radius: var(--loom-radius-message, 14px);
   padding: 16px 20px 10px;
-  background: color-mix(in srgb, var(--loom-color-background) 82%, transparent);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid color-mix(in srgb, var(--loom-color-border-subtle, var(--loom-color-divider)) 55%, transparent);
+  background: color-mix(in srgb, var(--loom-color-background) var(--timeline-material-opacity), transparent);
+  backdrop-filter: blur(var(--timeline-material-blur));
+  -webkit-backdrop-filter: blur(var(--timeline-material-blur));
+  border: 1px solid color-mix(in srgb, var(--loom-color-divider) 55%, transparent);
 
   &:hover {
-    border-color: color-mix(in srgb, var(--loom-color-border-subtle, var(--loom-color-divider)) 85%, transparent);
+    border-color: color-mix(in srgb, var(--loom-color-divider) 85%, transparent);
   }
 }
 
@@ -94,10 +120,32 @@
   margin-left: auto;
   border-radius: var(--loom-radius-message, 14px);
   padding: 12px 16px 8px;
-  background: var(--loom-color-surface);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: color-mix(in srgb, var(--loom-color-surface) var(--timeline-material-opacity), transparent);
+  backdrop-filter: blur(calc(var(--timeline-material-blur) * 0.75));
+  -webkit-backdrop-filter: blur(calc(var(--timeline-material-blur) * 0.75));
   border: 1px solid color-mix(in srgb, var(--loom-color-divider) 55%, transparent);
+}
+
+:global(html[data-loom-material-preview='solid']) {
+  .assistant {
+    background: var(--loom-color-background);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .user {
+    background: var(--loom-color-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+:global(html[data-loom-material-preview='translucent']) {
+  .assistant,
+  .user {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }
 
 .messageSurface {
@@ -240,14 +288,64 @@
   }
 
   .message[data-loom-motion='to-edit'] .messageSurface > :global([data-loom-component='long-text-editor']),
-  .message[data-loom-motion='to-read'] .messageBody {
+  .message[data-loom-motion='to-read'] .messageBody,
+  .message[data-loom-latest='true'],
+  .virtualList,
+  .openingDraft {
     animation: none;
+    opacity: 1;
+    transform: none;
+    box-shadow: none;
   }
 }
+
+@keyframes message-fade-in-up {
+  0% {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes new-message-glow {
+  0% {
+    box-shadow:
+      inset 0 0 16px 1px color-mix(in srgb, var(--loom-color-accent) 26%, transparent),
+      0 0 18px 1px color-mix(in srgb, var(--loom-color-accent) 18%, transparent);
+  }
+  38% {
+    box-shadow:
+      inset 0 0 28px 2px color-mix(in srgb, var(--loom-color-accent) 34%, transparent),
+      0 0 24px 2px color-mix(in srgb, var(--loom-color-accent) 22%, transparent);
+  }
+  100% {
+    box-shadow: none;
+  }
+}
+
+@keyframes timeline-content-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .virtualList {
   position: relative;
   width: 100%;
   min-width: 0;
+  animation: timeline-content-enter 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.openingDraft {
+  animation: timeline-content-enter 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .virtualRow {

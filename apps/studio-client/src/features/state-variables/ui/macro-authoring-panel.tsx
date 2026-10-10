@@ -218,9 +218,9 @@ export function MacroAuthoringExplorer(props: { controller: MacroAuthoringContro
         meta: source.kind,
         children: matchingRows.map(row => ({
           id: `${source.id}:${row.id}`,
-          label: row.name || t('macroAuthoring.name') || '宏',
+          label: row.name || t('macroAuthoring.name'),
           kind: 'entry' as const,
-          meta: row.options.length > 0 ? `${row.options.length} 选项` : undefined,
+          meta: row.options.length > 0 ? t('macroAuthoring.optionCount', { count: row.options.length }) : undefined,
         }))
       }]
     })
@@ -289,9 +289,9 @@ export function MacroAuthoringExplorer(props: { controller: MacroAuthoringContro
             }
             return null
           }}
-          getDisclosureLabel={(node, expanded) => `${expanded ? '折叠' : '展开'} ${node.label}`}
-          getDragLabel={node => `移动 ${node.label}`}
-          moreActionsLabel="更多操作"
+          getDisclosureLabel={(node, expanded) => t(expanded ? 'macroAuthoring.collapseNamed' : 'macroAuthoring.expandNamed', { name: node.label })}
+          getDragLabel={node => t('macroAuthoring.moveNamed', { name: node.label })}
+          moreActionsLabel={t('macroAuthoring.moreActions')}
           variant="flat"
           />
         )}

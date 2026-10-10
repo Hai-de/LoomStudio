@@ -43,4 +43,13 @@ describe('preset anchor declarations', () => {
     })
     expect(reads).toBe(500)
   })
+
+  it('prioritizes targetAnchorId when anchor has custom label that starts with @', () => {
+    const mount = { id: 'mount', settingResourceId: resource.id, source: { kind: 'manual' }, orderIndex: 0 } as SettingMount
+    const result = presetAnchorDeclarations({
+      anchor: { id: 'anchor', kind: 'virtual', label: '@custom.name', capabilities: { targetAnchorId: '@setting.stable' } },
+      presetId: 'preset', resources: [resource], settingMounts: [mount],
+    })
+    expect([...result.targets.keys()]).toEqual(['setting-a:entry'])
+  })
 })

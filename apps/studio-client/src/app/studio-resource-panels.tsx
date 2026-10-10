@@ -2,6 +2,7 @@ import type { useStudioState } from './use-studio-state.js'
 import type { useStudioUiState } from './use-studio-ui-state.js'
 import type { useStudioNavigation } from '../shared/studio-shell/use-studio-navigation.js'
 import { LazyContextWorkbench, LazyPresetWorkbench } from './studio-panel-modules.js'
+import { formatEntityReference } from '@loom-studio/shared'
 
 type StudioState = ReturnType<typeof useStudioState>
 type StudioUiState = ReturnType<typeof useStudioUiState>
@@ -33,7 +34,11 @@ export function StudioResourcePanels(props: {
     onMoveNode: (...args: Parameters<StudioState['moveContextAsset']>) => {
       void state.moveContextAsset(...args).catch(() => undefined)
     },
-    onRenameNode: (id: string, label: string) => state.updateContextAsset(id, { label }),
+    onRenameNode: (id: string, label: string) => {
+      const targetResource = state.promptResourceDrafts.find(item => item.id === id)
+      const targetId = targetResource ? targetResource.rootNode.id : id
+      return state.updateContextAsset(targetId, { label })
+    },
     onAddNode: state.addContextAsset,
     onAddFolderNode: state.addContextAssetFolder,
     onAddAnchorNode: state.addContextAssetAnchor,
@@ -71,9 +76,11 @@ export function StudioResourcePanels(props: {
         onSaveModel={state.updatePresetModel}
         selectedResourceId={uiState.selectedPresetId}
         onSelectResource={id => {
+          if (!navigation.isCurrent()) return
           uiState.setSelectedPresetId(id)
           const resource = state.promptResourceDrafts.find(item => item.id === id)
           if (resource) navigation.openResource('preset', id, resource.rootNode.id)
+          else void navigation.openUri(formatEntityReference({ kind: 'entity', type: 'resource', id }))
         }}
         onOpenSetting={(resourceId, nodeId) => navigation.openResource('resource', resourceId, nodeId)}
         previewApi={state.api.narratives}
@@ -99,8 +106,10 @@ export function StudioResourcePanels(props: {
         {...contextAssetEditorProps}
         routeResourceId={navigation.route.panel === 'resource' ? navigation.route.resourceId : undefined}
         onSelectResource={(id, replace) => {
+          if (!navigation.isCurrent()) return
           const resource = state.promptResourceDrafts.find(item => item.id === id)
           if (resource) navigation.openResource('resource', id, resource.rootNode.id, replace)
+          else void navigation.openUri(formatEntityReference({ kind: 'entity', type: 'resource', id }), replace)
         }}
         card={state.selectedCardDetails}
         settingMounts={state.settingMounts}

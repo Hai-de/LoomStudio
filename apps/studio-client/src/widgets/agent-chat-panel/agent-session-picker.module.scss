@@ -67,7 +67,7 @@
   border-radius: 4px;
 
   &:hover {
-    background: var(--loom-color-surface-hover);
+    background: var(--loom-color-surface-raised);
   }
 
   &[data-selected='true'] {
@@ -140,7 +140,7 @@
   min-height: 58px;
 
   &:hover:not(:disabled) {
-    background: var(--loom-color-surface-hover);
+    background: var(--loom-color-surface-raised);
   }
 
   &[aria-pressed='true'] {

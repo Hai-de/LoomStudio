@@ -249,6 +249,9 @@ describe('safe operational metadata', () => {
     const error = Object.assign(new Error('secret response'), { statusCode: 429, code: 'secret-code', responseBody: 'secret-body' })
     expect(readLogFailure(error)).toEqual({ failureType: 'HttpError', failureReason: 'Rate limit exceeded (HTTP 429)', statusCode: 429 })
     expect(readLogFailure(Object.assign(new Error('secret'), { name: 'secret-name' }))).toEqual({ failureType: 'Error', failureReason: 'Operation failed' })
+    expect(readLogFailure(new TypeError('Failed to fetch'))).toEqual({ failureType: 'NetworkError', failureReason: 'Network request failed' })
+    expect(readLogFailure(new TypeError('Load failed'))).toEqual({ failureType: 'NetworkError', failureReason: 'Network request failed' })
+    expect(readLogFailure(new TypeError('Cannot read properties of undefined'))).toEqual({ failureType: 'TypeError', failureReason: 'Invalid operation or value type' })
   })
 
   it('never hides warnings or errors as technical details', () => {

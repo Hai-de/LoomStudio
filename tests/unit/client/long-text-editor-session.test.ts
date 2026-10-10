@@ -29,7 +29,7 @@ type Element = ReactElement<Record<string, unknown>>
 const props = {
   mode: 'preview', value: 'Original',
   clearLabel: '', clearedLabel: '', copiedLabel: '', copyFailedLabel: '', copyLabel: '',
-  label: '', restoreInitialLabel: '', undoEditLabel: '', undoLabel: '',
+  label: '', restoreInitialLabel: 'Restore initial', undoEditLabel: 'Undo edit', undoLabel: '',
   disableCodeWrapLabel: '', enableCodeWrapLabel: '', previewEmptyLabel: '',
   previewModeLabel: '', sourceModeLabel: '',
   onChange: vi.fn(), onCommit: vi.fn(), onModeChange: vi.fn(),
@@ -54,6 +54,18 @@ function render(mode: 'source' | 'preview', value = 'Original') {
 beforeEach(() => { hooks.cursor = 0; hooks.values = []; hooks.effects = [] })
 
 describe('LongTextEditor document session', () => {
+  it('keeps Undo enabled when history exists even after text returns to its initial content', () => {
+    const collect = (value: unknown): Element[] => {
+      if (Array.isArray(value)) return value.flatMap(collect)
+      if (!isValidElement<Record<string, unknown>>(value)) return []
+      return [value, ...Object.values(value.props).flatMap(collect)]
+    }
+    const source = render('source')
+    ;(source.editor!.props.onUndoAvailabilityChange as (available: boolean) => void)(true)
+    const controls = collect(render('source', 'Original').tree)
+    expect(controls.find(item => item.props['aria-label'] === 'Undo edit')?.props.disabled).toBe(false)
+    expect(controls.find(item => item.props['aria-label'] === 'Restore initial')?.props.disabled).toBe(true)
+  })
   it('prevents default mouse-down behavior on toolbar actions without committing', () => {
     const collect = (value: unknown): Element[] => {
       if (Array.isArray(value)) return value.flatMap(collect)

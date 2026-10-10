@@ -21,10 +21,28 @@ describe('Narrative primary Session lifecycle', () => {
     f.input.api.agentSessions.list = vi.fn(async () => ({ sessions: [inspected, primary] }))
     f.getTranscript.mockResolvedValue({ session: inspected, entries: [] })
 
-    await f.render().activateAgentSession(inspected)
+    const activated = await f.render().activateAgentSession(inspected)
+    expect(activated).toEqual({ session: inspected, branchId: mode === 'standalone' ? undefined : branch.id })
     expect(f.render().agentSession?.id).toBe('inspected')
     expect(f.render().timeline?.id).toBe(targetTimelineId)
     expect(f.render().primarySession?.id).toBe(mode === 'saved' ? primary.id : undefined)
+    expect(f.reportFailure).not.toHaveBeenCalled()
+  })
+
+  it('does not publish a Session when navigation changes while its transcript loads', async () => {
+    const f = fixture()
+    await f.render().createAgentSession('profile', true)
+    const before = f.render().agentSession
+    f.input.api.agentSessions.list = vi.fn(async () => ({ sessions: [f.result.agentSession] }))
+    const read = Promise.withResolvers<Awaited<ReturnType<StudioApi['agentSessions']['getTranscript']>>>()
+    f.getTranscript.mockReturnValueOnce(read.promise)
+    let current = true
+    const pending = f.render().activateAgentSession('late', () => current)
+    current = false
+    read.resolve({ session: { ...f.result.agentSession, id: 'late' }, entries: [] })
+    expect(await pending).toBeUndefined()
+    expect(f.render().agentSession).toEqual(before)
+    expect(f.render().agentSessionReady).toBe(true)
     expect(f.reportFailure).not.toHaveBeenCalled()
   })
 

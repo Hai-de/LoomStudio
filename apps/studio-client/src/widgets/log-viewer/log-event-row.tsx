@@ -4,7 +4,7 @@ import { IconButton } from '@loom-studio/ui'
 import { ArrowDownLeft, ArrowUpRight, Check, ChevronRight, CircleAlert, Copy, Filter, Link } from 'lucide-react'
 import { readLogReferences } from '../../features/log-viewer/model/log-references.js'
 import { logSource } from '../../features/log-viewer/model/log-presentation.js'
-import type { Translator } from '../../shared/i18n/index.js'
+import { formatNumber, formatTime, type Translator } from '../../shared/i18n/index.js'
 import styles from './log-event-row.module.scss'
 
 export function LogEventRow({ record, t, onFilterRun, onInspect }: {
@@ -37,14 +37,14 @@ export function LogEventRow({ record, t, onFilterRun, onInspect }: {
 
   return <details className={styles.record} data-level={record.level} onToggle={event => setExpanded(event.currentTarget.open)}>
     <summary className={styles.row} onClick={onInspect}>
-      <span className={styles.time}><ChevronRight className={styles.chevron} size={12} /><time dateTime={record.timestamp}>{new Date(record.timestamp).toLocaleTimeString([], { hour12: false })}</time></span>
+      <span className={styles.time}><ChevronRight className={styles.chevron} size={12} /><time dateTime={record.timestamp}>{formatTime(record.timestamp, undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</time></span>
       <span className={styles.source} data-source={source} title={record.namespace}>{source}</span>
       <span className={styles.event}>
         <span className={styles.message}>{(record.level === 'error' || record.level === 'warn') && <CircleAlert size={14} />}{record.message}</span>
         {view.duration && <span className={styles.duration} aria-label={`${t('logs.duration')} ${view.duration}`}>{view.duration}</span>}
         {(view.inputTokens !== undefined || view.outputTokens !== undefined) && <span className={styles.tokens}>
-          {view.inputTokens !== undefined && <><ArrowUpRight size={12} aria-label={t('logs.inputTokens')} />{view.inputTokens.toLocaleString()}</>}
-          {view.outputTokens !== undefined && <><ArrowDownLeft size={12} aria-label={t('logs.outputTokens')} />{view.outputTokens.toLocaleString()}</>}
+          {view.inputTokens !== undefined && <><ArrowUpRight size={12} aria-label={t('logs.inputTokens')} />{formatNumber(view.inputTokens)}</>}
+          {view.outputTokens !== undefined && <><ArrowDownLeft size={12} aria-label={t('logs.outputTokens')} />{formatNumber(view.outputTokens)}</>}
         </span>}
       </span>
     </summary>

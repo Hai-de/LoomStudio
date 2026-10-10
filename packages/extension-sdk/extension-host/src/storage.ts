@@ -62,15 +62,15 @@ export function createExtensionStorageContext(
     configs: {
       list: async input => {
         assertScopeActive(instance)
+        if (record.packageManifest.participation === 'timeline' && !input?.scope) throw new Error('Timeline extension storage listing requires an explicit scope')
         if (input?.scope) await validateStorageScope(options, input.scope, record.target)
         // ponytail: 首版按 package/type 分页读取后在内存中过滤 Scope；出现真实规模压力时再增加 Document 索引。
-        const documents = await listOwnedExtensionDocuments<ExtensionConfigContent>(options.documents, record, extensionConfigDocumentType)
+        const documents = (await listOwnedExtensionDocuments<ExtensionConfigContent>(options.documents, record, extensionConfigDocumentType))
+          .filter(document => !input?.scope || sameStorageScope(document.content.scope, input.scope))
         if (record.target.kind === 'card') {
           for (const document of documents) await validateStorageScope(options, document.content.scope, record.target)
         }
-        return documents
-          .map(document => toExtensionConfigEntry(packageId, document))
-          .filter(entry => !input?.scope || sameStorageScope(entry.scope, input.scope))
+        return documents.map(document => toExtensionConfigEntry(packageId, document))
       },
       get: async input => {
         assertScopeActive(instance)
@@ -130,18 +130,19 @@ export function createExtensionStorageContext(
     records: {
       list: async input => {
         assertScopeActive(instance)
+        if (record.packageManifest.participation === 'timeline' && !input?.scope) throw new Error('Timeline extension storage listing requires an explicit scope')
         if (input?.scope) await validateStorageScope(options, input.scope, record.target)
         if (input?.recordType) assertStorageToken(input.recordType, 'Extension Record type')
         if (input?.binding) assertEntityRef(input.binding)
         // ponytail: 首版按 package/type 分页读取后在内存中过滤 Scope、Record Type 与 Binding；真实查询量出现后再补窄索引。
-        const documents = await listOwnedExtensionDocuments<ExtensionRecordContent>(options.documents, record, extensionRecordDocumentType)
+        const documents = (await listOwnedExtensionDocuments<ExtensionRecordContent>(options.documents, record, extensionRecordDocumentType))
+          .filter(document => !input?.scope || sameStorageScope(document.content.scope, input.scope))
         if (record.target.kind === 'card') {
           for (const document of documents) await validateStorageScope(options, document.content.scope, record.target)
         }
         return documents
           .map(document => toExtensionRecordEntry(packageId, document))
-          .filter(entry => (!input?.scope || sameStorageScope(entry.scope, input.scope))
-            && (!input?.recordType || entry.recordType === input.recordType)
+          .filter(entry => (!input?.recordType || entry.recordType === input.recordType)
             && (!input?.binding || entry.bindings.some(binding => sameEntityRef(binding, input.binding!))))
       },
       get: async recordId => {

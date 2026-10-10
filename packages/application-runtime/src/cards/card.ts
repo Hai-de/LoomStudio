@@ -11,6 +11,7 @@ import type {
   CardPresetInput,
   CardMediaRefs,
   CardSourceContent,
+  CardExtensionAdoption,
   OpeningChatContent,
   OpeningChatEntryContent,
   OpeningChatInput,
@@ -30,6 +31,8 @@ export function toCardSummary(card: DocumentRecord<CardSourceContent>): CardSumm
   const content = normalizeCardContent(card.content)
   return {
     id: card.id,
+    artifactId: content.artifactId,
+    ...(content.derivedFrom ? { derivedFrom: structuredClone(content.derivedFrom) } : {}),
     version: card.version,
     name: content.name,
     userName: content.userName,
@@ -49,6 +52,8 @@ export function normalizeCardContent(content: CardSourceContent): CardSourceCont
   }
 
   return {
+    artifactId: content.artifactId,
+    ...(content.derivedFrom ? { derivedFrom: structuredClone(content.derivedFrom) } : {}),
     name: typeof legacyContent.name === 'string' && legacyContent.name.trim().length > 0 ? legacyContent.name : 'Untitled Card',
     userName: normalizeOptionalString(legacyContent.userName),
     description: typeof legacyContent.description === 'string' ? legacyContent.description : undefined,
@@ -73,6 +78,9 @@ export function normalizeCardContent(content: CardSourceContent): CardSourceCont
       timelineComponentMounts: structuredClone(legacyContent.timelineComponentMounts),
     } : {}),
     stateContributionIds: normalizeOptionalIdList(legacyContent.stateContributionIds),
+    ...(legacyContent.extensionAdoptions !== undefined ? {
+      extensionAdoptions: parseCardExtensionAdoptions(legacyContent.extensionAdoptions),
+    } : {}),
     timelineStateBindings: structuredClone(legacyContent.timelineStateBindings ?? []),
     media: normalizeCardMedia(legacyContent.media),
     preset: normalizePreset(legacyContent.preset),
@@ -83,6 +91,22 @@ export function normalizeCardContent(content: CardSourceContent): CardSourceCont
     createdAt: typeof legacyContent.createdAt === 'string' ? legacyContent.createdAt : nowIso(),
     updatedAt: typeof legacyContent.updatedAt === 'string' ? legacyContent.updatedAt : nowIso(),
   }
+}
+
+export function parseCardExtensionAdoptions(input: unknown): CardExtensionAdoption[] {
+  if (!Array.isArray(input)) throw new Error('Card extensionAdoptions must be an array')
+  const references = new Set<string>()
+  return input.map(reference => {
+    if (!isObject(reference) || typeof reference.packageId !== 'string'
+      || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(reference.packageId)
+      || (reference.target !== 'global' && reference.target !== 'card')) {
+      throw new Error('Card extension adoption requires a packageId and global or card target')
+    }
+    const key = JSON.stringify([reference.target, reference.packageId])
+    if (references.has(key)) throw new Error('Duplicate Card extension adoption')
+    references.add(key)
+    return { packageId: reference.packageId, target: reference.target }
+  })
 }
 
 export function normalizeCardMedia(input: unknown): CardMediaRefs | undefined {

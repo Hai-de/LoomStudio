@@ -4,7 +4,6 @@
     "composite": false,
     "noEmit": true,
     "allowJs": true,
-    "lib": ["ES2024", "DOM"],
     "types": ["node"],
     "paths": {
       "@loom-studio/tokenizer": ["../packages/tokenizer/src/index.ts"],

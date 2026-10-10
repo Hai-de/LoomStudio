@@ -17,6 +17,10 @@
   pointer-events: auto;
 }
 
+:global(html[data-loom-motion='reduce']) .layer {
+  transition: none;
+}
+
 @media (hover: hover) and (pointer: fine) {
   .layer {
     transform: translateY(calc(100% + 12px));
@@ -50,4 +54,12 @@
     opacity: 1;
     pointer-events: auto;
   }
+
+  :global(html[data-keyboard-open='true']) .layer {
+    margin: 0 auto 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global(html:not([data-loom-motion='full'])) .layer { transition: none; }
 }

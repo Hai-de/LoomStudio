@@ -11,6 +11,8 @@ import { createDocumentBackedAiGateway } from '../providers/gateway.js'
 import { createAgentToolRegistry, type AgentToolRegistry } from '../agents/tool-registry.js'
 import type { AiGateway, ApplicationRuntimeOptions, BlobStorage, MediaAssetLookup, SourceArtifactStorage } from '../types.js'
 import { createMacroProviderRegistry, type MacroProviderRegistry } from '../prompt/macro-provider-registry.js'
+import { createPromptProcessorRegistry, type PromptProcessorRegistry } from '../prompt/prompt-processor-registry.js'
+import { createStateContentRegistry, type StateContentRegistry } from '../state/state-content-registry.js'
 import { createStateContributionRegistry, type StateContributionRegistry } from '../state/state-contribution-registry.js'
 import { createTimelineArchiveParticipantRegistry, type TimelineArchiveParticipantRegistry } from '../archive/timeline-archive.js'
 import { createNarrativeContextRegistry, type NarrativeContextRegistry } from '../narrative/context-provider.js'
@@ -37,6 +39,8 @@ export type ApplicationRuntimeContext = {
   aiCapabilities: ApplicationRuntimeOptions['aiCapabilities']
   agentTools: AgentToolRegistry
   macroProviders: MacroProviderRegistry
+  promptProcessors: PromptProcessorRegistry
+  stateContent: StateContentRegistry
   stateContributions: StateContributionRegistry
   timelineArchiveParticipants: TimelineArchiveParticipantRegistry
   now(): string
@@ -77,6 +81,8 @@ export function createApplicationRuntimeContext(options: ApplicationRuntimeOptio
     aiCapabilities: options.aiCapabilities,
     agentTools,
     macroProviders: options.macroProviders ?? createMacroProviderRegistry(),
+    promptProcessors: options.promptProcessors ?? createPromptProcessorRegistry(),
+    stateContent: options.stateContent ?? createStateContentRegistry(),
     stateContributions: options.stateContributions ?? createStateContributionRegistry(),
     timelineArchiveParticipants: createTimelineArchiveParticipantRegistry(options.timelineArchiveParticipants),
     gateway: options.gateway ?? createDocumentBackedAiGateway({

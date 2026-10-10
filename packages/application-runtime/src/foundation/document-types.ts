@@ -15,6 +15,7 @@ export const applicationDocumentTypes = {
   extensionInstallation: 'airp.extensionInstallation',
   importBundle: 'airp.importBundle',
   timelineRuntimeContext: 'airp.timelineRuntimeContext',
+  timelineExtensionParticipation: 'airp.timelineExtensionParticipation',
   timelinePresetConfig: 'airp.timelinePresetConfig',
   timelineArchivePending: 'airp.timelineArchivePending',
 } as const

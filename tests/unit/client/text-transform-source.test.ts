@@ -3,7 +3,7 @@ import { isValidElement, type ReactElement } from 'react'
 import { SearchField } from '@loom-studio/ui'
 import { useTextTransformController, type TextTransformProps } from '../../../apps/studio-client/src/features/text-transforms/ui/text-transform-panel.js'
 import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/index.js'
-import type { HistorySource, TextPipelineInspection, TextPipelineOverride, TextTransformRule } from '../../../apps/studio-client/src/entities/index.js'
+import type { HistorySource, TextPipelineInspection, TextPipelineOverride, TextTransformRule, TextExtractor } from '../../../apps/studio-client/src/entities/index.js'
 import { MacroAuthoringExplorer, useMacroAuthoring, type MacroAuthoringSource } from '../../../apps/studio-client/src/features/state-variables/ui/macro-authoring-panel.js'
 import { MacroInspectorPanel } from '../../../apps/studio-client/src/features/state-variables/ui/macro-inspector-panel.js'
 import { PresetAnchorPicker } from '../../../apps/studio-client/src/features/context-assets/ui/context-asset-detail/preset-anchor-picker.js'
@@ -259,6 +259,43 @@ describe('Text Transform rule saving', () => {
     await f.render().saveRule()
     expect(f.render()).toMatchObject({ ruleText: draft, ruleSaved: false, ruleSaving: false, error: 'Version conflict' })
     expect(f.props.onRuntimeChanged).not.toHaveBeenCalled()
+  })
+
+  it('keeps the draft version when the catalog refreshes externally', async () => {
+    const f = await editing()
+    const draft = f.render().ruleText
+    f.listRules.mockResolvedValue({ rules: [{ ...rule, version: 2, name: 'External edit' }] })
+    await f.render().refresh()
+    const upsert = vi.fn<TextTransformProps['api']['upsertRule']>(async () => {
+      throw new Error('Version conflict')
+    })
+    f.props.api.upsertRule = upsert
+    await f.render().saveRule()
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ expectedVersion: 1 }))
+    expect(f.render()).toMatchObject({ ruleText: draft, error: 'Version conflict' })
+  })
+
+  it('also retains extractor draft versions across external refreshes', async () => {
+    const f = await editing()
+    const extractor: TextExtractor = {
+      id: 'extractor', version: 1, name: 'Extract', owner: rule.owner, enabled: true, orderIndex: 0,
+      targets: ['narrative'], matcher: rule.matcher, strategy: 'latest-valid', parser: 'text',
+      createdAt: '', updatedAt: '',
+    }
+    f.props.api.listExtractors = async () => ({ extractors: [extractor] })
+    await f.render().refresh()
+    f.render().selectExtractor(extractor.id)
+    f.render().setExtractorText(JSON.stringify({ ...extractor, name: 'Draft' }))
+    f.props.api.listExtractors = async () => ({ extractors: [{ ...extractor, version: 2 }] })
+    await f.render().refresh()
+    const upsert = vi.fn<TextTransformProps['api']['upsertExtractor']>(async () => {
+      throw new Error('Version conflict')
+    })
+    f.props.api.upsertExtractor = upsert
+    await f.render().saveExtractor()
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ expectedVersion: 1 }))
+    expect(JSON.parse(f.render().extractorText).name).toBe('Draft')
+    expect(f.render().error).toBe('Version conflict')
   })
 
   it('lists more than ten rules and replaces a new draft with its saved catalog entry', async () => {

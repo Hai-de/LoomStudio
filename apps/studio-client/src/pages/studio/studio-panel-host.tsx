@@ -1,6 +1,6 @@
 import { memo, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { STUDIO_PANEL_IDS, type StudioPanelId } from '../../shared/studio-shell/studio-layout-store.js'
-import { SkeletonText } from '@loom-studio/ui'
+import { LoadingText } from '@loom-studio/ui'
 import styles from './studio-page.module.scss'
 
 type StudioPanelHostProps = {
@@ -49,7 +49,7 @@ const StudioPanelStage = memo(function StudioPanelStage(props: {
       data-history-direction={props.active ? props.historyDirection : undefined}
     >
       {visited || props.active ? (
-        <Suspense fallback={<div aria-busy="true" className={styles.panelLoading}><SkeletonText lines={6} /></div>}>
+        <Suspense fallback={<div aria-busy="true" className={styles.panelLoading}><LoadingText /></div>}>
           {props.render(props.active)}
         </Suspense>
       ) : null}

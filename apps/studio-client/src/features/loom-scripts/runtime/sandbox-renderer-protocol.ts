@@ -169,6 +169,7 @@ function onHostMessage(event){
 function context(value){
   const theme=value.host?.themeSnapshot;
   if(theme?.version===1){document.documentElement.style.colorScheme=theme.colorScheme;for(const [name,value] of Object.entries(theme.tokens))document.documentElement.style.setProperty(name,value);}
+  if(value.host?.locale){document.documentElement.lang=value.host.locale;}
   return {...value,close:()=>port.postMessage({type:'loom.renderer.close',instanceId}),
     notifications:{show:async input=>{await client.request('notifications.show',input);}},
     capabilities:{request:request=>request?.capability==='state.read'?client.request('state.read',request.input):request?.capability==='ui.notify'?client.request('notifications.show',request.input):Promise.reject(new Error('Unknown capability'))}};

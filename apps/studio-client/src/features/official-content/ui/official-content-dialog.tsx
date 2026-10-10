@@ -1,5 +1,5 @@
-import { Dialog } from '@loom-studio/ui'
-import { Download, PackagePlus, RefreshCw } from 'lucide-react'
+import { Dialog, IconButton } from '@loom-studio/ui'
+import { Download, PackagePlus, RefreshCw, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import type { OfficialContentPackage } from '../../../entities/official-content.js'
@@ -73,7 +73,8 @@ export function OfficialContentDialog(props: {
   }
 
   return (
-    <Dialog open title={props.t('official.builtin')} onClose={props.onClose}>
+    <Dialog open title={props.t('official.builtin')} onClose={props.onClose}
+      headerActions={<IconButton aria-label={props.t('character.cancel')} title={props.t('character.cancel')} onClick={props.onClose}><X aria-hidden="true" /></IconButton>}>
       <div className={styles.content} aria-busy={busy}>
         <div className={styles.toolbar}>
           <button aria-label={props.t('official.refresh')} title={props.t('official.refresh')} disabled={busy} type="button" onClick={() => void run(reload)}>

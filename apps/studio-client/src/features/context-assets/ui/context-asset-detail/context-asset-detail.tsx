@@ -1,9 +1,10 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useId, useRef, useState, type ReactNode } from 'react'
 import { Anchor, Bot, Braces, ChevronDown, Equal, Info, KeyRound, ListFilter, ListOrdered, RefreshCw, Settings2, Zap } from 'lucide-react'
 import type { ContextAssetNode, PromptResource } from '../../../../entities/index.js'
 import type { Translator } from '../../../../shared/i18n/index.js'
 import { LongTextEditor, type LongTextEditorHandle } from '../../../../shared/ui/long-text-editor/long-text-editor.js'
 import type { LongTextEditorMode } from '../../../../shared/ui/long-text-editor/long-text-editor-model.js'
+import { DEFAULT_PRESET_ANCHOR_IDS } from '../../model/preset-anchor-options.js'
 import {
   buildActivationUpdate,
   normalizeKeywords,
@@ -40,6 +41,7 @@ export function ContextAssetDetail(props: ContextAssetDetailProps) {
   const body = props.node.body ?? ''
   const readOnly = isReadOnlyDetailNode(props.node)
   const activationDraft = readActivationDraft(props.node)
+  const anchorDatalistId = useId()
   const [keywordsText, setKeywordsText] = useState(activationDraft.keywords)
   const [anchorPickerOpen, setAnchorPickerOpen] = useState(false)
   const lastNodeIdRef = useRef(props.node.id)
@@ -103,6 +105,32 @@ export function ContextAssetDetail(props: ContextAssetDetailProps) {
                 <option value="assistant">Assistant</option>
                 <option value="developer">Developer</option>
               </select>
+            </dd>
+          </div>
+        ) : null}
+        {props.node.kind === 'virtual' ? (
+          <div>
+            <dt><Anchor aria-hidden="true" />{props.t('context.metadata.anchorId')}</dt>
+            <dd>
+              <input
+                className={styles.inlineInput}
+                disabled={readOnly}
+                list={anchorDatalistId}
+                value={props.node.capabilities?.targetAnchorId !== undefined ? props.node.capabilities.targetAnchorId : (props.node.label.startsWith('@') ? props.node.label : '')}
+                placeholder={props.t('context.metadata.anchorIdPlaceholder')}
+                onChange={event => updateCapabilities({ targetAnchorId: event.target.value })}
+                onBlur={event => updateCapabilities({ targetAnchorId: event.target.value.trim() }, true)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') {
+                    event.currentTarget.blur()
+                  }
+                }}
+              />
+              <datalist id={anchorDatalistId}>
+                {DEFAULT_PRESET_ANCHOR_IDS.map(id => (
+                  <option key={id} value={id} />
+                ))}
+              </datalist>
             </dd>
           </div>
         ) : null}

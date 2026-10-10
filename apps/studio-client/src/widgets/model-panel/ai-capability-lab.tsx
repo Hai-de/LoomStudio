@@ -315,7 +315,7 @@ function CreateAccountForm(props: {
   }
 
   return (
-    <details className={styles.createAccount}>
+    <details>
       <summary>{props.t(props.account ? 'provider.aiLabConfigureAccount' : 'provider.aiLabCreateAccount')}</summary>
       <form className={styles.aiLabForm} inert={creating} onSubmit={submit}>
         <label>
@@ -401,7 +401,7 @@ function CreateProfileForm(props: {
   }
 
   return (
-    <details className={styles.createAccount}>
+    <details>
       <summary>{props.t(props.profile ? 'provider.aiLabConfigureProfile' : 'provider.aiLabCreateProfile')}</summary>
       <form className={styles.aiLabForm} inert={creating} onSubmit={submit}>
         <label>

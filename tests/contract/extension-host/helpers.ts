@@ -25,12 +25,18 @@ export function createExtensionHostHarness(options: {
   aiGateway?: ProfiledAiGateway
   invokeModel?: ExtensionHostOptions['invokeModel']
   buildPrompt?: ExtensionHostOptions['buildPrompt']
+  registerPromptProcessor?: ExtensionHostOptions['registerPromptProcessor']
   registerMacroProvider?: ExtensionHostOptions['registerMacroProvider']
   registerNarrativeContextProvider?: ExtensionHostOptions['registerNarrativeContextProvider']
   registerStateContribution?: ExtensionHostOptions['registerStateContribution']
+  registerStateContentHandler?: ExtensionHostOptions['registerStateContentHandler']
   registerAgentToolHandler?: ExtensionHostOptions['registerAgentToolHandler']
   readState?: ExtensionHostOptions['readState']
   writeState?: ExtensionHostOptions['writeState']
+  runTimelineWork?: ExtensionHostOptions['runTimelineWork']
+  beginTimelineWork?: ExtensionHostOptions['beginTimelineWork']
+  canRunTimelineWork?: ExtensionHostOptions['canRunTimelineWork']
+  assertTimelineWork?: ExtensionHostOptions['assertTimelineWork']
 } = {}) {
   const diagnostics = createInMemoryDiagnosticsRegistry()
   const documents = createInMemoryDocumentStore()
@@ -53,12 +59,18 @@ export function createExtensionHostHarness(options: {
     aiGateway: options.aiGateway,
     invokeModel: options.invokeModel,
     buildPrompt: options.buildPrompt,
+    registerPromptProcessor: options.registerPromptProcessor,
     registerMacroProvider: options.registerMacroProvider,
     registerNarrativeContextProvider: options.registerNarrativeContextProvider,
     registerStateContribution: options.registerStateContribution,
+    registerStateContentHandler: options.registerStateContentHandler,
     registerAgentToolHandler: options.registerAgentToolHandler,
     readState: options.readState,
     writeState: options.writeState,
+    runTimelineWork: options.runTimelineWork,
+    beginTimelineWork: options.beginTimelineWork,
+    canRunTimelineWork: options.canRunTimelineWork,
+    assertTimelineWork: options.assertTimelineWork,
     callRpc: (method, params, context) => kernel.callRpc(method, params, context),
     registerRpc: (name, ownerPackageId, ownerModuleId, handler, ownerInstanceId, target) => {
       const handle = kernel.registerExtensionRpc(name, ownerPackageId, ownerModuleId, handler, ownerInstanceId, target)

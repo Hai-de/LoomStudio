@@ -1,4 +1,6 @@
 import type { DocumentRecord, DocumentTransaction, SqliteDocumentStore } from '@loom-studio/document-store'
+import { isDeepStrictEqual } from 'node:util'
+import { parseExtensionInstallationSource } from '../extensions/installation-source.js'
 import type { SqliteDataTransaction } from '@loom-studio/data-engine'
 import type { JsonValue } from '@loom-studio/shared'
 import { extensionConfigDocumentId, extensionStorageTokenPattern } from '@loom-studio/extension-sdk'
@@ -643,6 +645,10 @@ async function importExtensionPackageResourcesInternal(
     }
   }
   const installationId = extensionInstallationId(input.packageId, target)
+  const source = input.source === undefined ? undefined : parseExtensionInstallationSource(input.source, target)
+  if (input.participation !== undefined && input.participation !== 'timeline') {
+    throw new Error('Extension participation must be timeline when declared')
+  }
   const installation = await ctx.documents.get(installationId, { includeTombstone: true })
   if (input.update && (!installation || installation.meta.tombstone || installation.version !== input.update.expectedInstallationVersion)) {
     throw new Error(`Extension installation changed before update: ${installationId}`)
@@ -668,6 +674,12 @@ async function importExtensionPackageResourcesInternal(
   }
   if (installation && !installation.meta.tombstone) {
     assertPackageVersion((installation.content as ExtensionInstallationContent).packageVersion, installationId, 'installation')
+    if (!input.update && (installation.content as ExtensionInstallationContent).participation !== input.participation) {
+      throw new Error('Extension participation declaration changed; use an explicit package update')
+    }
+    if (!input.update && !isDeepStrictEqual((installation.content as ExtensionInstallationContent).source, source)) {
+      throw new Error('Extension installation source changed; use an explicit package update')
+    }
   }
   const previousArchiveBlobId = installation && !installation.meta.tombstone
     ? (installation.content as ExtensionInstallationContent).archiveBlobId : undefined
@@ -945,6 +957,8 @@ async function importExtensionPackageResourcesInternal(
           type: applicationDocumentTypes.extensionInstallation,
           content: {
             packageId: input.packageId, packageVersion: input.packageVersion, target,
+            ...(input.participation ? { participation: input.participation } : {}),
+            ...(source ? { source } : {}),
             ...((archiveBlobId ?? previousArchiveBlobId) ? { archiveBlobId: archiveBlobId ?? previousArchiveBlobId } : {}),
             createdAt: installation ? (installation.content as ExtensionInstallationContent).createdAt : timestamp,
             updatedAt: timestamp,
@@ -1186,6 +1200,17 @@ async function removeExtensionPackageResourcesInternal(
     const installation = await readDocument<ExtensionInstallationContent>(ctx.documents, installationId, applicationDocumentTypes.extensionInstallation)
     if (installation.version !== input.expectedInstallationVersion) throw new Error('Extension installation changed before resource removal')
   }
+  if (input.uninstall) {
+    const result = await executeDocumentMutation(ctx.documents, requestContext, 'application.uninstallExtension', async documents => {
+      await documents.delete({ id: installationId, expectedVersion: input.expectedInstallationVersion! })
+    })
+    return {
+      packageId: input.packageId,
+      promptResourceIds: [], agentToolIds: [], textTransformRuleIds: [], textExtractorIds: [],
+      detachedReferences: { cards: 0, timelines: 0, presetToolMounts: 0 },
+      mutation: result.mutation,
+    }
+  }
   const owns = (candidate: ExtensionResourceOriginCandidate | undefined) =>
     matchesExtensionInstallation(candidate, input.packageId, installationId)
   const promptResources = (await listMappedResources(ctx.promptResources))
@@ -1209,7 +1234,7 @@ async function removeExtensionPackageResourcesInternal(
     loomScriptIds: scripts.map(script => script.id), loomScriptMountIds: scriptMounts.map(mount => mount.id),
   } : {}
 
-  if (!input.uninstall && scripts.length === 0 && scriptMounts.length === 0 && promptResources.length === 0 && agentTools.length === 0 && transformRules.length === 0 && textExtractors.length === 0) {
+  if (scripts.length === 0 && scriptMounts.length === 0 && promptResources.length === 0 && agentTools.length === 0 && transformRules.length === 0 && textExtractors.length === 0) {
     return {
       packageId: input.packageId,
       promptResourceIds: [],
@@ -1229,7 +1254,6 @@ async function removeExtensionPackageResourcesInternal(
       if (input.expectedInstallationVersion !== undefined) {
         const installation = await readDocument<ExtensionInstallationContent>(documents, installationId, applicationDocumentTypes.extensionInstallation)
         if (installation.version !== input.expectedInstallationVersion) throw new Error('Extension installation changed before resource removal')
-        if (input.uninstall) await documents.delete({ id: installationId, expectedVersion: installation.version })
       }
       for (const tool of agentTools) await documents.delete({ id: tool.id, expectedVersion: tool.version })
       for (const rule of transformRules) await documents.delete({ id: rule.id, expectedVersion: rule.version })

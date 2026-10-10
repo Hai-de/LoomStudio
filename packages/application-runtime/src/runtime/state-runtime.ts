@@ -1,6 +1,7 @@
 import type { JsonObject, JsonValue } from '@loom-studio/shared'
 import { listStateDefinitionDocuments } from '@loom-studio/application-data'
 import { assertExtensionTimelineAccess } from './extension-resource-access.js'
+import { inspectStateSources } from '../state/state-source-inspection.js'
 import type { ApplicationRuntimeContext } from '../foundation/application-context.js'
 import { applicationDocumentTypes } from '../foundation/document-types.js'
 import { readDocument, writeDocument } from '../foundation/document-store.js'
@@ -26,6 +27,7 @@ import type {
   GetStateDefinitionResult,
   GetStateSnapshotInput,
   GetStateSnapshotResult,
+  InspectStateSourcesInput,
   ListStateDefinitionsInput,
   ListStateDefinitionsResult,
   RuntimeRequestContext,
@@ -39,10 +41,12 @@ import {
   requireDocumentParticipant,
 } from './context.js'
 
-type StateRuntimeContext = ApplicationStateContext & Pick<ApplicationRuntimeContext, 'now'>
+type StateRuntimeContext = ApplicationStateContext & Pick<ApplicationRuntimeContext, 'now' | 'stateContributions'>
 
 export function createStateRuntimeMethods(ctx: StateRuntimeContext) {
   return {
+    inspectStateSources: (input: InspectStateSourcesInput) => inspectStateSources(ctx, input),
+
     getStateSnapshot: async (input: GetStateSnapshotInput): Promise<GetStateSnapshotResult> => {
       input = structuredClone(input)
       await assertExtensionTimelineAccess(ctx.narratives, input.extensionTarget, input.target.scope === 'timeline' ? input.target.timelineId : undefined)

@@ -66,6 +66,7 @@ export const LongTextEditor = forwardRef<LongTextEditorHandle, LongTextEditorPro
   const codeEditorRef = useRef<CodeMirrorEditorHandle>(null)
   const initialValueRef = useRef(props.value)
   const [hasOpenedSource, setHasOpenedSource] = useState(props.mode === 'source')
+  const [canUndo, setCanUndo] = useState(false)
   const [state, dispatch] = useReducer(reduceLongTextEditorState, INITIAL_LONG_TEXT_EDITOR_STATE)
   const hasChanges = props.value !== initialValueRef.current
   const { feedback, copy } = useCopyFeedback()
@@ -155,7 +156,7 @@ export const LongTextEditor = forwardRef<LongTextEditorHandle, LongTextEditorPro
           <IconButton
             aria-label={props.undoEditLabel}
             className={styles.action}
-            disabled={props.disabled || props.mode === 'preview' || !hasChanges}
+            disabled={props.disabled || props.mode === 'preview' || !canUndo}
             onClick={() => codeEditorRef.current?.undo()}
             onMouseDown={event => event.preventDefault()}
           >
@@ -221,6 +222,7 @@ export const LongTextEditor = forwardRef<LongTextEditorHandle, LongTextEditorPro
             spellCheck={props.spellCheck}
             value={props.value}
             onCancel={props.onCancel}
+            onUndoAvailabilityChange={setCanUndo}
             onCommit={props.onCommit}
             onChange={value => {
               dispatch({ type: 'edit' })

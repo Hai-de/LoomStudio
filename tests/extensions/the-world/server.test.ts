@@ -1,17 +1,34 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { applyJsonPatch, applyMutation, validateWorldRoot } from '../../../extensions/the-world/src/server/index.js'
-import { createWorldRoot, projectCurrentWorld, upgradeWorldV1 } from '../../../extensions/the-world/src/world-state.js'
+import { createWorldRoot, projectCurrentWorld, upgradeLegacyWorld } from '../../../extensions/the-world/src/world-state.js'
+import { createLegacyWorldImport } from '../../../extensions/the-world/src/importer.js'
 
 const branch = { timelineId: 'timeline-1', branchId: 'branch-1' }
-const example = () => JSON.parse(readFileSync(new URL('../../../extensions/the-world/resources/examples/world-v2.json', import.meta.url), 'utf8'))
+const example = () => JSON.parse(readFileSync(new URL('../../../extensions/the-world/resources/examples/world-ec.json', import.meta.url), 'utf8'))
 
-describe('The World v2 contract', () => {
+describe('The World native EC contract', () => {
+  it('keeps importer diagnostics outside persisted entity components', () => {
+    const imported = createLegacyWorldImport({
+      branch, revisionId: 'rev-1', idempotencyKey: 'import-1',
+      mapUpdateText: '<MapUpdate>[{"op":"add_or_update","id":"harbor","name":"Harbor","type":"region","illustration":"candidate"}]</MapUpdate>',
+    })
+    expect(imported.operations).toEqual([{
+      op: 'upsert-entity', entityId: 'harbor', entity: { components: { place: { name: 'Harbor' } } },
+    }])
+    const next = applyMutation(createWorldRoot(), {
+      schemaVersion: 3, target: branch, expectedRevisionId: 'rev-1', idempotencyKey: 'import-1', operations: imported.operations,
+    }, 'rev-1', branch)
+    expect(next.entities.harbor).toEqual({ components: { place: { name: 'Harbor' } } })
+    expect(imported.diagnostics.some(diagnostic => diagnostic.code === 'unresolved-resource-reference')).toBe(true)
+  })
+
   it('initializes an unknown world without invented dates or weather', () => {
     const root = createWorldRoot()
     expect(validateWorldRoot(root)).toBe(root)
     expect(projectCurrentWorld(root)).toMatchObject({ time: undefined, weather: undefined, scene: undefined })
     expect(root).not.toHaveProperty('branch')
+    expect(root).toEqual({ entities: { world: { components: { world: {} } } } })
   })
   it('uses explicit scene and place references, preserving midnight', () => {
     const current = projectCurrentWorld(example())
@@ -24,21 +41,22 @@ describe('The World v2 contract', () => {
     }])).toThrow('cyclic')
   })
   it('validates the whole batch, allowing a scene and pointer to be added together', () => {
-    const entity = { schemaVersion: 2, id: 'scene', kind: 'scene', createdBy: 'author', components: { scene: { version: 1, name: 'Atrium' } } } as const
+    const entity = { components: { scene: { name: 'Atrium' } } } as const
     const next = applyMutation(createWorldRoot(), {
-      schemaVersion: 2, target: branch, expectedRevisionId: 'rev-1', idempotencyKey: 'mutation-1',
+      schemaVersion: 3, target: branch, expectedRevisionId: 'rev-1', idempotencyKey: 'mutation-1',
       operations: [
-        { op: 'upsert-entity', entity },
-        { op: 'set-component', entityId: 'world', component: 'world', value: { version: 1, currentSceneId: 'scene' } },
+        { op: 'upsert-entity', entityId: 'scene', entity },
+        { op: 'set-component', entityId: 'world', component: 'world', value: { currentSceneId: 'scene' } },
       ],
     }, 'rev-1', branch)
-    expect(projectCurrentWorld(next).scene).toEqual(entity)
+    expect(projectCurrentWorld(next).scene).toEqual({ id: 'scene', ...entity })
+    expect(next.entities.scene).toEqual(entity)
     expect(() => applyMutation(next, {
-      schemaVersion: 2, target: { ...branch, branchId: 'other' }, expectedRevisionId: 'rev-1', idempotencyKey: 'other',
+      schemaVersion: 3, target: { ...branch, branchId: 'other' }, expectedRevisionId: 'rev-1', idempotencyKey: 'other',
       operations: [{ op: 'remove-entity', entityId: 'scene' }],
     }, 'rev-1', branch)).toThrow('branch does not match')
     expect(() => Reflect.apply(applyMutation, undefined, [next, {
-      schemaVersion: 2, target: branch, expectedRevisionId: 'rev-1',
+      schemaVersion: 3, target: branch, expectedRevisionId: 'rev-1',
       operations: [{ op: 'typo', entityId: 'scene' }],
     }, 'rev-1', branch])).toThrow('operation is invalid')
   })
@@ -71,12 +89,22 @@ describe('The World v2 contract', () => {
     const old = { schemaVersion: 1, branch, entities: {
       legacy: { schemaVersion: 1, id: 'legacy', kind: 'world', branch, createdBy: 'migration', components: {} },
     } }
-    expect(() => validateWorldRoot(old)).toThrow('explicitly upgrade')
-    expect(() => upgradeWorldV1(old)).toThrow('worldEntityId explicitly')
-    const next = upgradeWorldV1(old, { worldEntityId: 'legacy' })
-    expect(next.entities.world.id).toBe('world')
+    expect(() => validateWorldRoot(old)).toThrow('explicit upgrade')
+    expect(() => upgradeLegacyWorld(old)).toThrow('worldEntityId explicitly')
+    const next = upgradeLegacyWorld(old, { worldEntityId: 'legacy' })
+    expect(next).toEqual(createWorldRoot())
     expect(next.entities.world).not.toHaveProperty('branch')
     expect(old.entities.legacy.branch).toEqual(branch)
     expect(old.schemaVersion).toBe(1)
+  })
+  it('rejects entity metadata and explicitly upgrades v2 without losing the scene pointer', () => {
+    const root = example()
+    expect(() => validateWorldRoot({ entities: { world: { ...root.entities.world, createdBy: 'author' } } })).toThrow('only components')
+    const legacy = { schemaVersion: 2, entities: Object.fromEntries(Object.entries(root.entities).map(([id, value]) => [
+      id, { schemaVersion: 2, id, kind: id === 'world' ? 'world' : 'place', createdBy: 'author',
+        components: Object.fromEntries(Object.entries((value as any).components).map(([key, data]) => [key, { version: 1, ...data as object }])) },
+    ])) }
+    expect(upgradeLegacyWorld(legacy)).toEqual(root)
+    expect(legacy.entities.world).toHaveProperty('createdBy', 'author')
   })
 })

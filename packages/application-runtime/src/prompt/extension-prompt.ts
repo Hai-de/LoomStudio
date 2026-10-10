@@ -8,6 +8,8 @@ import { isPromptActivation } from './prompt-activation.js'
 import type { PromptContribution, SourceNode } from './prompt-builder.js'
 import { compilePromptDataModel } from './prompt-build-pipeline.js'
 import { createVariableRenderContext, type VariableRenderContext } from './variables.js'
+import { processPrompt } from './process-prompt.js'
+import type { PromptProcessorRegistry } from './prompt-processor-registry.js'
 
 export async function readExtensionPromptInputs(input: {
   addition: ExtensionPromptAddition
@@ -72,6 +74,8 @@ export async function buildExtensionPrompt(input: {
   promptResources: PromptResourceStore
   installations: ReadonlyMap<string, string>
   owner?: { installationId: string; packageId: string }
+  processors?: PromptProcessorRegistry
+  cardId?: string
 }) {
   if (input.build.presetResourceId !== undefined
     && (typeof input.build.presetResourceId !== 'string' || !input.build.presetResourceId))
@@ -102,13 +106,23 @@ export async function buildExtensionPrompt(input: {
         added.sourceNodes.push({ id, sourceId: 'extension.prompt', parentId: null, displayName: id, orderIndex: index, kind: 'virtual' })
     }
   }
-  return compilePromptDataModel({
+  const model = {
     sourceNodes: [...base.sourceNodes, ...added.sourceNodes],
     contributions: [...base.contributions, ...added.contributions],
     ...(preset ? { skeletonRootId: fromStoredResource(preset).rootNode.id } : {}),
     currentInput: input.build.currentInput,
     activationFacts: input.build.activationFacts,
-  })
+  }
+  if (!input.processors) return compilePromptDataModel(model)
+  return (await processPrompt(model, {
+    registry: input.processors,
+    context: {
+      mode: 'preview',
+      signal: input.build.signal ?? new AbortController().signal,
+      ...(input.cardId ? { cardId: input.cardId } : {}),
+    },
+    renderText: content => renderVariableMacros(content, variables),
+  })).projection
 }
 
 function isOwnedResource(origin: unknown, installationId: string, packageId: string): boolean {

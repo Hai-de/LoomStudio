@@ -12,6 +12,35 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 describe('application runtime card bundle integration', () => {
+  it('preserves public work identity across local copies and assigns a new identity only for an explicit derived work', async () => {
+    const { runtime } = createTestRuntime()
+    const original = (await runtime.createCard({ name: 'Original work' })).card
+    expect(original.artifactId).toBeTruthy()
+    expect(original.artifactId).not.toBe(original.id)
+    const edited = (await runtime.updateCard({ cardId: original.id, expectedVersion: original.version, name: 'Revised work' })).card
+    expect(edited.artifactId).toBe(original.artifactId)
+    const exported = (await runtime.exportCardBundle({ cardId: original.id })).artifact
+    const copy = (await runtime.importCardBundle({ artifact: exported })).card
+    expect(copy.id).not.toBe(original.id)
+    expect(copy.artifactId).toBe(original.artifactId)
+    expect((await runtime.exportCardBundle({ cardId: copy.id })).artifact.artifactId).toBe(original.artifactId)
+    expect((await runtime.listCards()).cards.filter(card => card.artifactId === original.artifactId).map(card => card.id).sort())
+      .toEqual([original.id, copy.id].sort())
+    await expect(runtime.forkCard({ cardId: original.id, expectedVersion: original.version })).rejects.toThrow('changed')
+    const fork = (await runtime.forkCard({ cardId: original.id, expectedVersion: edited.version })).card
+    expect(fork.artifactId).not.toBe(original.artifactId)
+    expect(fork.id).not.toBe(original.id)
+    expect(fork.derivedFrom).toEqual({ artifactId: original.artifactId })
+    const forkArtifact = (await runtime.exportCardBundle({ cardId: fork.id })).artifact
+    expect(forkArtifact).toMatchObject({ artifactId: fork.artifactId, derivedFrom: { artifactId: original.artifactId } })
+    const reimported = (await runtime.importCardBundle({ artifact: forkArtifact })).card
+    expect(reimported).toMatchObject({ artifactId: fork.artifactId, derivedFrom: { artifactId: original.artifactId } })
+    expect((await runtime.getCard({ cardId: original.id })).card).toEqual(edited)
+    await expect(runtime.importCardBundle({
+      artifact: { ...forkArtifact, derivedFrom: { artifactId: forkArtifact.artifactId } },
+    })).rejects.toThrow('different artifactId')
+  })
+
   it('initializes the official assistant Prompt resources and keeps the built-ins read-only', async () => {
     const { runtime } = createTestRuntime()
 

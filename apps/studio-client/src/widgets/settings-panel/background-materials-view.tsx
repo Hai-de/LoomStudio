@@ -1,6 +1,7 @@
 import { useId, useState, type CSSProperties, type ReactNode } from 'react'
 import { Check, Eye, ImageOff, X } from 'lucide-react'
 import { Button, Dialog, IconButton, SearchField } from '@loom-studio/ui'
+import type { Translator } from '../../shared/i18n/index.js'
 import styles from './background-materials-view.module.scss'
 
 export type BackgroundOption = {
@@ -21,6 +22,7 @@ export type MaterialValue = {
 type AppearancePage = 'background' | 'material' | 'general'
 
 export function BackgroundMaterialsView(props: {
+  t: Translator
   backgrounds: readonly BackgroundOption[]
   selectedId: string | null
   followState: boolean
@@ -39,15 +41,15 @@ export function BackgroundMaterialsView(props: {
   const preview = props.backgrounds.find(item => item.id === previewId)
   const visible = props.backgrounds.filter(item => `${item.name} ${item.description} ${item.source}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
   const pages: { id: AppearancePage; label: string }[] = [
-    { id: 'background', label: '背景' },
-    { id: 'material', label: '材质' },
-    ...(props.general ? [{ id: 'general' as const, label: '缩放与 CSS' }] : []),
+    { id: 'background', label: props.t('appearance.background') },
+    { id: 'material', label: props.t('appearance.material') },
+    ...(props.general ? [{ id: 'general' as const, label: props.t('appearance.general') }] : []),
   ]
-  const modes = { solid: '实色', translucent: '半透明', glass: '毛玻璃' } as const
+  const modes = { solid: props.t('appearance.solid'), translucent: props.t('appearance.translucent'), glass: props.t('appearance.glass') }
 
   return (
     <section className={styles.view} data-loom-component="background-materials-view">
-      <div className={styles.tabs} role="tablist" aria-label="外观">
+      <div className={styles.tabs} role="tablist" aria-label={props.t('settings.appearance')}>
         {pages.map((item, index) => (
           <button
             aria-controls={`${tabId}-panel`}
@@ -80,21 +82,21 @@ export function BackgroundMaterialsView(props: {
               {page === 'background' ? (
                 <>
                   <label className={styles.switchRow}>
-                    <span>跟随 AI 场景切换</span>
+                    <span>{props.t('appearance.followScene')}</span>
                     <input type="checkbox" role="switch" checked={props.followState} onChange={event => props.onFollowStateChange(event.target.checked)} />
                   </label>
-                  <SearchField containerClassName={styles.search} aria-label="搜索背景" placeholder="搜索名称、描述或来源"
-                    clearLabel="清空搜索" value={query} onChange={event => setQuery(event.target.value)} onClear={() => setQuery('')} />
+                  <SearchField containerClassName={styles.search} aria-label={props.t('appearance.search')} placeholder={props.t('appearance.searchPlaceholder')}
+                    clearLabel={props.t('agent.clearSearch')} value={query} onChange={event => setQuery(event.target.value)} onClear={() => setQuery('')} />
                   <div className={styles.resourceHeader}>
-                    <span>{visible.length} 个背景</span>
+                    <span>{props.t('appearance.count', { count: visible.length })}</span>
                     <Button aria-pressed={props.selectedId === null} onClick={() => props.onSelect(null)}>
-                      <ImageOff aria-hidden="true" size={15} />不使用人工背景
+                      <ImageOff aria-hidden="true" size={15} />{props.t('appearance.noManualBackground')}
                     </Button>
                   </div>
                   <div className={styles.grid}>
                     {visible.map(item => (
                       <article className={styles.card} key={item.id} data-selected={props.selectedId === item.id}>
-                        <button className={styles.selectCard} aria-label={`选择背景：${item.name}`}
+                        <button className={styles.selectCard} aria-label={props.t('appearance.selectNamed', { name: item.name })}
                           aria-pressed={props.selectedId === item.id} type="button" onClick={() => props.onSelect(item.id)}>
                           <span className={styles.thumbnail}>
                             <img alt="" src={item.image} loading="lazy" />
@@ -107,19 +109,19 @@ export function BackgroundMaterialsView(props: {
                         </button>
                         <div className={styles.cardFooter}>
                           <small title={item.source}>{item.source}</small>
-                          <IconButton aria-label={`预览背景：${item.name}`} onClick={() => { setPreviewId(item.id); setPreviewMode('image') }}>
+                          <IconButton aria-label={props.t('appearance.previewNamed', { name: item.name })} onClick={() => { setPreviewId(item.id); setPreviewMode('image') }}>
                             <Eye aria-hidden="true" size={16} />
                           </IconButton>
                         </div>
                       </article>
                     ))}
                   </div>
-                  {visible.length === 0 ? <p className={styles.empty}>{query ? '没有匹配的背景' : '暂无可用背景'}</p> : null}
+                  {visible.length === 0 ? <p className={styles.empty}>{props.t(query ? 'appearance.noMatches' : 'appearance.empty')}</p> : null}
                 </>
               ) : (
                 <>
                   <fieldset className={styles.modeChoices}>
-                    <legend>表面模式</legend>
+                    <legend>{props.t('appearance.surfaceMode')}</legend>
                     {(['solid', 'translucent', 'glass'] as const).map(mode => (
                       <label key={mode}>
                         <input name={`${tabId}-mode`} type="radio" checked={props.material.mode === mode} onChange={() => props.onMaterialChange({ ...props.material, mode })} />
@@ -128,17 +130,17 @@ export function BackgroundMaterialsView(props: {
                     ))}
                   </fieldset>
                   <label className={styles.range}>
-                    <span>模糊强度 <output>{props.material.blur}px</output></span>
-                    <input aria-label="模糊强度" disabled={props.material.mode !== 'glass'} max={32} min={0} type="range" value={props.material.blur} onChange={event => props.onMaterialChange({ ...props.material, blur: Number(event.target.value) })} />
+                    <span>{props.t('appearance.blur')} <output>{props.material.blur}px</output></span>
+                    <input aria-label={props.t('appearance.blur')} disabled={props.material.mode !== 'glass'} max={32} min={0} type="range" value={props.material.blur} onChange={event => props.onMaterialChange({ ...props.material, blur: Number(event.target.value) })} />
                   </label>
                   <label className={styles.range}>
-                    <span>表面不透明度 <output>{props.material.opacity}%</output></span>
-                    <input aria-label="表面不透明度" disabled={props.material.mode === 'solid'} max={100} min={0} type="range" value={props.material.opacity} onChange={event => props.onMaterialChange({ ...props.material, opacity: Number(event.target.value) })} />
+                    <span>{props.t('appearance.opacity')} <output>{props.material.opacity}%</output></span>
+                    <input aria-label={props.t('appearance.opacity')} disabled={props.material.mode === 'solid'} max={100} min={0} type="range" value={props.material.opacity} onChange={event => props.onMaterialChange({ ...props.material, opacity: Number(event.target.value) })} />
                   </label>
                   <Button disabled={!current} onClick={() => { setPreviewId(current!.id); setPreviewMode('material') }}>
-                    <Eye aria-hidden="true" size={16} />预览材质
+                    <Eye aria-hidden="true" size={16} />{props.t('appearance.previewMaterial')}
                   </Button>
-                  {!current ? <p className={styles.note}>当前未选择背景</p> : null}
+                  {!current ? <p className={styles.note}>{props.t('appearance.unselected')}</p> : null}
                 </>
               )}
             </div>
@@ -146,20 +148,20 @@ export function BackgroundMaterialsView(props: {
         )}
       </div>
       <Dialog open={!!preview} onClose={() => setPreviewId(null)} closeOnBackdrop
-        className={styles.previewDialog} title={preview?.name ?? '背景预览'}
-        headerActions={<IconButton aria-label="关闭预览" onClick={() => setPreviewId(null)}><X aria-hidden="true" size={18} /></IconButton>}
+        className={styles.previewDialog} title={preview?.name ?? props.t('appearance.preview')}
+        headerActions={<IconButton aria-label={props.t('appearance.closePreview')} onClick={() => setPreviewId(null)}><X aria-hidden="true" size={18} /></IconButton>}
         actions={preview ? <Button disabled={props.selectedId === preview.id} onClick={() => { props.onSelect(preview.id); setPreviewId(null) }}>
-          <Check aria-hidden="true" size={16} />{props.selectedId === preview.id ? '已使用' : '使用此背景'}
+          <Check aria-hidden="true" size={16} />{props.t(props.selectedId === preview.id ? 'appearance.selected' : 'appearance.useBackground')}
         </Button> : undefined}>
         {preview ? (
           <>
-            <div className={styles.previewModes} role="group" aria-label="预览模式">
-              <Button aria-pressed={previewMode === 'image'} onClick={() => setPreviewMode('image')}>原图</Button>
-              <Button aria-pressed={previewMode === 'material'} onClick={() => setPreviewMode('material')}>材质效果</Button>
+            <div className={styles.previewModes} role="group" aria-label={props.t('appearance.previewMode')}>
+              <Button aria-pressed={previewMode === 'image'} onClick={() => setPreviewMode('image')}>{props.t('appearance.original')}</Button>
+              <Button aria-pressed={previewMode === 'material'} onClick={() => setPreviewMode('material')}>{props.t('appearance.materialEffect')}</Button>
             </div>
             {previewMode === 'image'
               ? <img className={styles.fullImage} src={preview.image} alt={preview.name} />
-              : <MaterialScene background={preview} material={props.material} />}
+              : <MaterialScene background={preview} material={props.material} t={props.t} />}
             <div className={styles.previewMeta}>
               <span>{preview.source}</span>
               {preview.description !== preview.name ? <p>{preview.description}</p> : null}
@@ -171,7 +173,7 @@ export function BackgroundMaterialsView(props: {
   )
 }
 
-function MaterialScene(props: { background?: BackgroundOption; material: MaterialValue }) {
+function MaterialScene(props: { background?: BackgroundOption; material: MaterialValue; t: Translator }) {
   const glass = props.material.mode === 'glass'
   const variables = {
     '--loom-material-blur': `${glass ? props.material.blur : 0}px`,
@@ -185,16 +187,16 @@ function MaterialScene(props: { background?: BackgroundOption; material: Materia
       <div className={styles.sceneContent}>
         <header className={styles.material}>Loom Studio</header>
         <div className={styles.reading}>
-          <p>沿着河岸向前走，远处的灯光在水面轻轻摇晃。</p>
+          <p>{props.t('appearance.sampleIntro')}</p>
           <article className={styles.material}>
-            <strong>旅途手记</strong>
+            <strong>{props.t('appearance.sampleTitle')}</strong>
             <div className={styles.scrollText}>
-              <p>远方的钟声穿过街巷，人群渐渐散去。</p>
-              <p>你停下脚步，将今天的见闻记在了手册里。</p>
+              <p>{props.t('appearance.sampleBody')}</p>
+              <p>{props.t('appearance.sampleEnd')}</p>
             </div>
           </article>
         </div>
-        <footer className={styles.material}>继续你的故事…</footer>
+        <footer className={styles.material}>{props.t('appearance.sampleContinue')}</footer>
       </div>
     </div>
   )

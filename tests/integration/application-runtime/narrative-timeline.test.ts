@@ -20,6 +20,44 @@ function createTestRuntime(options?: { stateContributions?: StateContributionReg
 }
 
 describe('application narrative timeline lifecycle', () => {
+  it('initializes adopted contributions from the selected opening without changing registrations or existing timelines', async () => {
+    const registry = createStateContributionRegistry()
+    const { engine, runtime } = createTestRuntime({ stateContributions: registry })
+    const calls: string[][] = []
+    let foreignTemplate = false
+    registry.register({
+      packageId: 'example.dynamic', moduleId: 'server', instanceId: 'dynamic', packageVersion: '1',
+      contribution: {
+        id: 'example.dynamic.data', entityTypes: [], entities: [], componentMounts: [],
+        templates: [{ id: 'example.dynamic.data', templateVersion: 1, schema: { type: 'object' }, initial: { hp: 0 } }],
+        bindings: [{ path: 'dynamic', templateId: 'example.dynamic.data', templateVersion: 1 }],
+      },
+      initialize(context) {
+        calls.push([...context.opening])
+        return { [foreignTemplate ? 'foreign.template' : 'example.dynamic.data']: { hp: calls.length } }
+      },
+    })
+    try {
+      const { card } = await runtime.createCard({ name: 'Alice' })
+      await runtime.updateCard({ cardId: card.id, stateContributionIds: ['example.dynamic.data'] })
+      const first = await runtime.createNarrativeTimeline({
+        cardId: card.id, openingNodes: [{ content: 'Hello {{char}}' }],
+      })
+      expect(calls).toEqual([['Hello Alice']])
+      const second = await runtime.createNarrativeTimeline({ cardId: card.id, openingNodes: [] })
+      for (const [story, hp] of [[first, 1], [second, 2]] as const) {
+        expect((await runtime.getStateSnapshot({
+          target: { scope: 'timeline', timelineId: story.timeline.id, branchId: story.branch.id },
+        })).snapshot.value).toMatchObject({ dynamic: { hp } })
+      }
+      expect(registry.get('example.dynamic.data')!.contribution.templates[0]!.initial).toEqual({ hp: 0 })
+      foreignTemplate = true
+      const before = await runtime.listNarrativeTimelines()
+      await expect(runtime.createNarrativeTimeline({ cardId: card.id })).rejects.toThrow('another contribution')
+      expect(await runtime.listNarrativeTimelines()).toEqual(before)
+    } finally { await engine.close() }
+  })
+
   it('creates a Timeline without opening messages and keeps existing openings unchanged after Card edits', async () => {
     const { engine, runtime } = createTestRuntime()
     try {

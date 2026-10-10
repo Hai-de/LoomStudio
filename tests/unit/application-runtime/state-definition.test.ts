@@ -64,6 +64,22 @@ describe('state definitions', () => {
     expect(({} as Record<string, unknown>).component).toBeUndefined()
   })
 
+  it('rejects a wildcard binding that expands onto an already mounted component', () => {
+    expect(() => materializeStateContribution({
+      id: 'composed',
+      entityTypes: [{ id: 'person', collectionPath: 'people' }],
+      entities: [{ typeId: 'person', entityId: 'alice' }],
+      templates: ['card.stats', 'extension.stats'].map(id => ({
+        id, templateVersion: 1, schema: { type: 'object' }, initial: { owner: id },
+      })),
+      componentMounts: [{
+        templateId: 'card.stats', templateVersion: 1, componentKey: 'stats',
+        target: { kind: 'entity', entity: { typeId: 'person', entityId: 'alice' } },
+      }],
+      bindings: [{ path: 'people.*.components.stats', templateId: 'extension.stats', templateVersion: 1 }],
+    })).toThrowError(expect.objectContaining({ code: 'state.binding_path_conflict' }))
+  })
+
   it('supports multi-component assembly on the same entity and wildcard injection', () => {
     const templates = new Map<string, TimelineStateTemplateDraft>([
       ['core_stats', {

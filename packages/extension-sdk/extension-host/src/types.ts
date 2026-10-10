@@ -144,15 +144,28 @@ export type ExtensionHostOptions = {
   aiGateway?: ProfiledAiGateway
   invokeModel?: (input: Parameters<import('@loom-studio/extension-sdk').ExtensionActivationContext['ai']['invokeModel']>[0]) =>
     ReturnType<import('@loom-studio/extension-sdk').ExtensionActivationContext['ai']['invokeModel']>
-  buildPrompt?: (input: import('@loom-studio/extension-sdk').ExtensionPromptBuildInput, target: ExtensionInstallationTarget, packageId: string) =>
+  buildPrompt?: (input: import('@loom-studio/extension-sdk').ExtensionPromptBuildInput, target: ExtensionInstallationTarget, packageId: string, lease?: import('@loom-studio/extension-sdk').ExtensionTimelineLease) =>
     Promise<import('@loom-studio/extension-sdk').ExtensionPromptBuildResult>
+  registerPromptProcessor?(processor: import('@loom-studio/extension-sdk').ExtensionPromptProcessor, owner: {
+    packageId: string
+    moduleId: string
+    instanceId: string
+    target: ExtensionInstallationTarget
+  }): Disposable
+  registerStateContentHandler?(handler: import('@loom-studio/extension-sdk').ExtensionStateContentHandler, owner: {
+    packageId: string
+    target: ExtensionInstallationTarget
+    isAvailable?(target: import('@loom-studio/extension-sdk').ExtensionTimelineTarget | undefined): Promise<boolean>
+  }): Disposable
   registerMacroProvider?(provider: ExtensionMacroProvider, owner: {
+    isAvailable?(context: Parameters<ExtensionMacroProvider['resolve']>[0]): Promise<boolean>
     packageId: string
     moduleId: string
     instanceId: string
     target: ExtensionInstallationTarget
   }): Disposable
   registerNarrativeContextProvider?(provider: NarrativeContextProvider, owner: {
+    isAvailable?(context: Parameters<NarrativeContextProvider['resolve']>[0]): Promise<boolean>
     packageId: string
     moduleId: string
     instanceId: string
@@ -164,9 +177,20 @@ export type ExtensionHostOptions = {
     instanceId: string
     packageVersion: string
     target: ExtensionInstallationTarget
-  }): Disposable
-  readState?(target: ExtensionStateTarget, owner: { packageId: string; moduleId: string; instanceId: string }): Promise<ExtensionStateSnapshot>
-  writeState?(input: ExtensionStateMutationInput, owner: { packageId: string; moduleId: string; instanceId: string }): Promise<ExtensionStateMutationResult>
+  }, initialize?: import('@loom-studio/extension-sdk').ExtensionStateInitializer): Disposable
+  runTimelineWork?<T>(
+    input: { timelineId: string; installationId: string; packageVersion: string; signal?: AbortSignal },
+    work: (execution: { lease: import('@loom-studio/extension-sdk').ExtensionTimelineLease; signal: AbortSignal }) => Promise<T>,
+  ): Promise<T>
+  beginTimelineWork?(
+    input: { timelineId: string; installationId: string; packageVersion: string; signal?: AbortSignal },
+  ): Promise<{ lease: import('@loom-studio/extension-sdk').ExtensionTimelineLease; signal: AbortSignal; dispose(): void; run<T>(work: () => T): T }>
+  assertTimelineWork?(lease: import('@loom-studio/extension-sdk').ExtensionTimelineLease): Promise<void>
+  canRunTimelineWork?(input: { timelineId: string; installationId: string }): Promise<boolean>
+  listTimelineTargets?(input: { installationId: string }): Promise<import('@loom-studio/extension-sdk').ExtensionTimelineTarget[]>
+  subscribeTimelineTargets?(input: { installationId: string }, listener: () => void): { dispose(): void }
+  readState?(target: ExtensionStateTarget, owner: { packageId: string; moduleId: string; instanceId: string; lease?: import('@loom-studio/extension-sdk').ExtensionTimelineLease }): Promise<ExtensionStateSnapshot>
+  writeState?(input: ExtensionStateMutationInput, owner: { packageId: string; moduleId: string; instanceId: string; lease?: import('@loom-studio/extension-sdk').ExtensionTimelineLease }): Promise<ExtensionStateMutationResult>
   canAccessState?(target: ExtensionStateTarget, installation: ExtensionInstallationTarget): Promise<boolean>
   registerAgentToolHandler?(
     toolId: string,
@@ -175,8 +199,8 @@ export type ExtensionHostOptions = {
     ownerInstanceId: string,
     handler: ExtensionAgentToolHandler,
   ): Disposable
-  validateStorageScope?(scope: ExtensionStorageScope, target: ExtensionInstallationTarget): Promise<void>
-  validateEntityRef?(ref: ExtensionEntityRef, target: ExtensionInstallationTarget): Promise<void>
+  validateStorageScope?(scope: ExtensionStorageScope, target: ExtensionInstallationTarget, execution?: import('@loom-studio/extension-sdk').ExtensionTimelineTarget): Promise<void>
+  validateEntityRef?(ref: ExtensionEntityRef, target: ExtensionInstallationTarget, execution?: import('@loom-studio/extension-sdk').ExtensionTimelineTarget): Promise<void>
   assetScratchRoot?: string
   resolveFileDataDirectory?(packageId: string, target: ExtensionInstallationTarget): Promise<string>
   serverModuleSnapshotRoot?: string

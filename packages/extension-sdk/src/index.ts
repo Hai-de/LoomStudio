@@ -361,6 +361,7 @@ export type LoomSandboxRendererWireContext = {
     prefersReducedMotion: boolean
     theme: 'inherit'
     themeSnapshot: ClientThemeSnapshot
+    locale?: string
   }
 }
 
@@ -469,6 +470,7 @@ export type ClientRendererContext = {
     prefersReducedMotion: boolean
     theme: 'inherit'
     themeSnapshot: ClientThemeSnapshot
+    locale?: string
   }
   signal: AbortSignal
   close(): void
@@ -534,6 +536,8 @@ export type RegisteredClientBackground = ClientBackgroundDefinition & {
 }
 
 export type ClientExtensionActivationContext = {
+  /** Fixed for a Timeline-participating instance; changing Branch cancels the old instance. */
+  timeline: { readonly target?: Readonly<import('./timeline.js').ExtensionTimelineTarget> }
   notifications: { show(input: import('./iframe-context.js').ClientNotification): Promise<void> }
   extension: {
     packageId: string
@@ -575,6 +579,11 @@ export type ClientExtensionActivationContext = {
   }
   state: {
     get(target: ClientStateTarget): Promise<ClientStateSnapshot>
+    subscribe(
+      target: ClientStateTarget,
+      handler: (snapshot: ClientStateSnapshot) => void | Promise<void>,
+      onError?: (error: Error) => void,
+    ): ExtensionRegistrationHandle
   }
   history: {
     project(input: { source: ClientHistorySource; phase: 'classify' | 'prompt' | 'display' }): Promise<JsonValue>
@@ -656,6 +665,16 @@ export type ExtensionAgentToolContribution = {
   source: string
 }
 
+export type {
+  ExtensionPromptEntry,
+  ExtensionPromptEntryPatch,
+  ExtensionPromptProcessingContext,
+  ExtensionPromptProcessingSession,
+  ExtensionPromptProcessor,
+} from './prompt-processing.js'
+export type { ExtensionStateInitializationContext, ExtensionStateInitializer } from './state-initialization.js'
+export type { ExtensionStateContentHandler } from './state-content.js'
+
 export type ExtensionPromptAddition = {
   settingResourceIds?: string[]
   content?: Array<{
@@ -671,6 +690,7 @@ export type ExtensionPromptBuildInput = ExtensionPromptAddition & {
   presetResourceId?: string
   currentInput?: string
   activationFacts?: JsonObject
+  signal?: AbortSignal
 }
 
 export type ExtensionPromptBuildResult = { messages: ChatMessage[] }
@@ -704,10 +724,12 @@ export type ExtensionModuleManifest = {
     'assets.read'?: boolean
     'ai.invoke'?: boolean
     'macros.provide'?: boolean
+    'prompt.process'?: boolean
     'narrative.context.provide'?: boolean
     'state.contribute'?: boolean
     'state.read'?: boolean
     'state.write'?: boolean
+    'state.processContent'?: boolean
     'ui.notify'?: boolean
     [key: string]: JsonValue | undefined
   }
@@ -724,10 +746,13 @@ export type ExtensionDependency = {
   source?: ExtensionDownloadSource
 }
 
+export type { ExtensionTimelineLease, ExtensionTimelineTarget, ExtensionTimelineExecution } from './timeline.js'
+
 export type ExtensionManifest = {
   manifestVersion: 2
   id: string
   version: string
+  participation?: 'timeline'
   displayName: string
   description?: string
   icon?: string
@@ -866,6 +891,7 @@ export type ExtensionRecordEntry = {
 }
 
 export type ExtensionMacroContext = {
+  readonly timelineTarget?: Readonly<{ timelineId: string; branchId: string }>
   readonly global: JsonObject
   readonly timeline?: JsonObject
   readonly cardId?: string
@@ -946,6 +972,11 @@ export type ExtensionStateSubscription = {
 }
 
 export type ExtensionActivationContext = {
+  timeline: {
+    list(): Promise<import('./timeline.js').ExtensionTimelineTarget[]>
+    subscribe(listener: () => void | Promise<void>): { dispose(): void }
+    run<T>(target: import('./timeline.js').ExtensionTimelineTarget, work: (execution: import('./timeline.js').ExtensionTimelineExecution) => Promise<T>): Promise<T>
+  }
   extension: {
     packageId: string
     moduleId: string
@@ -987,6 +1018,7 @@ export type ExtensionActivationContext = {
     }): Promise<import('@loom-studio/ai-gateway').AiGatewayResult>
   }
   prompt: {
+    registerProcessor(processor: import('./prompt-processing.js').ExtensionPromptProcessor): ExtensionRegistrationHandle
     build(input: ExtensionPromptBuildInput): Promise<ExtensionPromptBuildResult>
   }
   macros: {
@@ -996,7 +1028,10 @@ export type ExtensionActivationContext = {
     register(provider: NarrativeContextProvider): ExtensionRegistrationHandle
   }
   state: {
-    contribute(contribution: StateContribution): ExtensionRegistrationHandle
+    contribute(contribution: StateContribution, options?: {
+      initialize?: import('./state-initialization.js').ExtensionStateInitializer
+    }): ExtensionRegistrationHandle
+    registerContentHandler(handler: import('./state-content.js').ExtensionStateContentHandler): ExtensionRegistrationHandle
     read(target: ExtensionStateTarget): Promise<ExtensionStateSnapshot>
     write(input: ExtensionStateMutationInput): Promise<ExtensionStateMutationResult>
     subscribe(input: ExtensionStateSubscription, handler: (event: ExtensionStateChangeEvent) => void | Promise<void>): ExtensionRegistrationHandle

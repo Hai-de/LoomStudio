@@ -34,3 +34,5 @@ export function createTranslator(locale: Locale): Translator {
     return result
   }
 }
+
+export * from './format.js'

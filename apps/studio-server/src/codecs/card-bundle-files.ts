@@ -17,7 +17,7 @@ type CardFile = {
 }
 
 export type CardFilesIndex = {
-  metadata: Pick<CardBundleArtifact, 'schemaVersion' | 'artifactId' | 'displayName' | 'description' | 'metadata'>
+  metadata: Pick<CardBundleArtifact, 'schemaVersion' | 'artifactId' | 'derivedFrom' | 'displayName' | 'description' | 'metadata'>
   card: string
   contextAssets: string[]
   externalContextAssetIds?: string[]
@@ -99,6 +99,7 @@ export function projectCardFiles(artifact: CardBundleArtifact, files: Record<str
     metadata: {
       schemaVersion: artifact.schemaVersion,
       artifactId: artifact.artifactId,
+      ...(artifact.derivedFrom !== undefined ? { derivedFrom: artifact.derivedFrom } : {}),
       displayName: artifact.displayName,
       ...(artifact.description !== undefined ? { description: artifact.description } : {}),
       ...(artifact.metadata !== undefined ? { metadata: artifact.metadata } : {}),

@@ -1,7 +1,7 @@
-import { ArrowDownUp, ArrowLeft, BookOpen, Check, Circle, ChevronRight, CloudDownload, Combine, Download, FileArchive, Folder, Grid2X2, ImageDown, List, Pencil, Play, Plus, RefreshCw, Trash2, Upload, X } from 'lucide-react'
+import { ArrowDownUp, ArrowLeft, BookOpen, Check, Circle, ChevronRight, CloudDownload, Combine, Download, FileArchive, Folder, GitFork, Grid2X2, ImageDown, List, Pencil, Play, Plus, RefreshCw, Trash2, Upload, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type DragEvent, type FormEvent } from 'react'
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Dialog, TextInput, Textarea, Toggle, type MenuAction } from '@loom-studio/ui'
-import type { Translator } from '../../shared/i18n/index.js'
+import { formatDateTime, type Translator } from '../../shared/i18n/index.js'
 import { useCharacterGalleryStore, type CharacterGroupFilter } from './character-gallery-store.js'
 import { useCharacterProfileNavigation } from './use-character-profile-navigation.js'
 import { MasterDetailWorkbench } from '../../shared/ui/master-detail-workbench/master-detail-workbench.js'
@@ -21,6 +21,8 @@ import { openingChoiceText, type OpeningChoice } from '../../features/cards/mode
 
 type CharacterCardSummary = {
   id: string
+  artifactId?: string
+  derivedFrom?: { artifactId: string }
   version: number
   name: string
   userName?: string
@@ -40,6 +42,7 @@ type CharacterPanelProps = {
   busy: boolean
   cards: CharacterCardSummary[]
   onCreateCard(): Promise<void>
+  onForkCard(cardId: string, expectedVersion: number): Promise<void>
   onCreateTimelineFromCard(cardId: string, choice?: OpeningChoice, cardVersion?: number): Promise<boolean | void>
   onExportCard(card: CharacterCardSummary, format: 'png' | 'polyglot' | 'loomcard' | 'directory'): Promise<void>
   directoryApi?: CardDirectoryApi
@@ -148,7 +151,7 @@ function CharacterProfileEditor(props: {
       </header>
       <header className={styles.openingHeader}>
         <span>{props.t('character.opening')}</span>
-        <button type="button" disabled={props.busy || saving} title="添加开场消息" aria-label="添加开场消息"
+        <button type="button" disabled={props.busy || saving} title={props.t('character.addOpeningMessage')} aria-label={props.t('character.addOpeningMessage')}
           onClick={() => updateOpeningEntries([...activeOpening.entries, { role: 'assistant', content: '' }])}>
           <Plus size={16} aria-hidden="true" />
         </button>
@@ -156,17 +159,17 @@ function CharacterProfileEditor(props: {
       {activeOpening.entries.map((entry, index) => (
         <div key={index}>
           <div className={styles.openingHeader}>
-            <select aria-label={`开场消息 ${index + 1} 的角色`} value={entry.role} disabled={props.busy || saving}
+            <select aria-label={props.t('character.openingMessageRole', { index: index + 1 })} value={entry.role} disabled={props.busy || saving}
               onChange={event => updateOpeningEntries(activeOpening.entries.map((item, i) =>
                 i === index ? { ...item, role: event.target.value as 'user' | 'assistant' } : item))}>
-              <option value="assistant">角色</option><option value="user">用户</option>
+              <option value="assistant">{props.t('character.assistantRole')}</option><option value="user">{props.t('character.userRole')}</option>
             </select>
-            <button type="button" disabled={props.busy || saving} title="删除开场消息" aria-label={`删除开场消息 ${index + 1}`}
+            <button type="button" disabled={props.busy || saving} title={props.t('character.deleteOpeningMessage')} aria-label={props.t('character.deleteOpeningMessageNamed', { index: index + 1 })}
               onClick={() => updateOpeningEntries(activeOpening.entries.filter((_, i) => i !== index))}>
               <Trash2 size={16} aria-hidden="true" />
             </button>
           </div>
-          <Textarea aria-label={`开场消息 ${index + 1}`} disabled={props.busy || saving} value={entry.content}
+          <Textarea aria-label={props.t('character.openingMessageNamed', { index: index + 1 })} disabled={props.busy || saving} value={entry.content}
             onChange={event => updateOpeningEntries(activeOpening.entries.map((item, i) =>
               i === index ? { ...item, content: event.target.value } : item))} />
         </div>
@@ -194,7 +197,6 @@ export function CharacterPanel(props: CharacterPanelProps) {
   const [groupDraft, setGroupDraft] = useState('')
   const [editingGroupId, setEditingGroupId] = useState<string>()
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>()
-  const [deleteTimelineCount, setDeleteTimelineCount] = useState(0)
   const [includePlayData, setIncludePlayData] = useState(true)
   const [includePromptResources, setIncludePromptResources] = useState(true)
   const [exportCard, setExportCard] = useState<CharacterCardSummary>()
@@ -298,22 +300,21 @@ export function CharacterPanel(props: CharacterPanelProps) {
   }, [props.active])
 
   useEffect(() => {
-    let active = true
     setIncludePlayData(true)
     setIncludePromptResources(true)
-    if (!pendingDeleteIds?.length) {
-      setDeleteTimelineCount(0)
-      return () => { active = false }
-    }
-    void Promise.all(pendingDeleteIds.map(cardId => props.onPreviewCardDeletion(cardId)))
-      .then(previews => {
-        if (active) setDeleteTimelineCount(previews.reduce((total, preview) => total + preview.timelines.length, 0))
-      })
-      .catch(() => {
-        if (active) setDeleteTimelineCount(0)
-      })
-    return () => { active = false }
-  }, [pendingDeleteIds, props.onPreviewCardDeletion])
+  }, [pendingDeleteIds])
+  const deletionPreview = useQuery({
+    queryKey: ['card-delete-preview', props.endpoint, pendingDeleteIds],
+    enabled: Boolean(pendingDeleteIds?.length),
+    queryFn: async () => {
+      const previews = await Promise.all(pendingDeleteIds!.map(cardId => props.onPreviewCardDeletion(cardId)))
+      return previews.reduce((total, preview) => total + preview.timelines.length, 0)
+    },
+    retry: false,
+    staleTime: 0,
+    refetchOnReconnect: false,
+    gcTime: 0,
+  })
   useEffect(() => {
     const knownCardIds = new Set(galleryCards.map(card => card.id))
     setSelectedCardIds(current => new Set([...current].filter(cardId => knownCardIds.has(cardId))))
@@ -419,6 +420,7 @@ export function CharacterPanel(props: CharacterPanelProps) {
   }
 
   async function confirmDelete() {
+    if (!deletionPreview.isSuccess || deletionPreview.isFetching || props.busy) return
     const cardIds = pendingDeleteIds ?? []
     if (cardIds.length === 0) {
       setPendingDeleteIds(undefined)
@@ -496,10 +498,11 @@ export function CharacterPanel(props: CharacterPanelProps) {
       </Dialog>
       <Dialog open={Boolean(startingCard)} title={props.t('character.chooseOpening')}
         className={styles.exportDialog} onClose={() => setStartingCard(undefined)}
-        actions={<button type="button" disabled={props.busy} onClick={() => {
+        actions={<><button type="button" onClick={() => setStartingCard(undefined)}>{props.t('character.cancel')}</button>
+        <button type="button" disabled={props.busy} onClick={() => {
           if (startingCard) void props.onCreateTimelineFromCard(startingCard.id, startChoice, startingCard.version)
             .then(created => { if (created !== false) setStartingCard(undefined) })
-        }}>{props.t('character.startSession')}</button>}>
+        }}>{props.t('character.startSession')}</button></>}>
         {startingCard ? <>
           <OpeningPicker opening={startingCard.opening ?? { entries: [] }} choice={startChoice}
             onChange={setStartChoice} disabled={props.busy} t={props.t} />
@@ -537,7 +540,10 @@ export function CharacterPanel(props: CharacterPanelProps) {
         includePlayData={includePlayData}
         includePromptResources={includePromptResources}
         open={Boolean(pendingDeleteIds)}
-        timelineCount={deleteTimelineCount}
+        timelineCount={deletionPreview.data ?? 0}
+        previewReady={deletionPreview.isSuccess && !deletionPreview.isFetching}
+        previewError={deletionPreview.error?.message}
+        onRetryPreview={() => { void deletionPreview.refetch() }}
         t={props.t}
         onCancel={() => setPendingDeleteIds(undefined)}
         onConfirm={() => void confirmDelete().catch(() => undefined)}
@@ -557,7 +563,7 @@ export function CharacterPanel(props: CharacterPanelProps) {
         onMobilePaneChange={setMobilePane}
         onBack={handleBack}
         backLabel={props.t('character.back')}
-        resizeLabel="调整角色列表宽度"
+        resizeLabel={props.t('character.resizeList')}
         master={(
           <div ref={characterPanelRef} className={styles.galleryPane}>
             <input
@@ -690,6 +696,7 @@ export function CharacterPanel(props: CharacterPanelProps) {
                 {selectionMode && !selectedCardIds.has(selected.id) ? <button aria-label={props.t('character.select')} className={styles.toolbarButton} title={props.t('character.select')} type="button" onClick={() => enterSelectionMode(selected.id)}><Circle aria-hidden="true" /></button> : null}
                 <button aria-label={props.t('character.edit')} aria-pressed={profileEditing} className={profileEditing ? styles.toolbarButtonActive : styles.toolbarButton} title={props.t('character.edit')} type="button" onClick={() => { setProfileTab('profile'); setProfileEditing(value => !value) }}><Pencil aria-hidden="true" /></button>
                 <button aria-label={props.t('character.export')} className={styles.toolbarButton} disabled={props.busy} title={props.t('character.export')} type="button" onClick={() => setExportCard(selected)}><Download aria-hidden="true" /></button>
+                <button aria-label={props.t('character.forkWork')} className={styles.toolbarButton} disabled={props.busy} title={props.t('character.forkWork')} type="button" onClick={() => void props.onForkCard(selected.id, selected.version).catch(() => undefined)}><GitFork aria-hidden="true" /></button>
                 <button aria-label={props.t('character.delete')} className={`${styles.toolbarButton} ${styles.deleteButton}`} disabled={props.busy} title={props.t('character.delete')} type="button" onClick={() => setPendingDeleteIds([selected.id])}><Trash2 aria-hidden="true" /></button>
               </div>
             </header>
@@ -718,6 +725,9 @@ export function CharacterPanel(props: CharacterPanelProps) {
               />
             </div>
             {profileTab === 'attachments' ? <div role="tabpanel" id="card-attachments-panel" aria-labelledby="card-attachments-tab"><CardResourceDirectory key={selected.id} api={props.resourceApi} endpoint={props.endpoint} directoryApi={props.directoryApi} cardId={selected.id} resources={props.resources ?? []} onChangeNode={props.onChangeResourceNode} onCommitNode={props.onCommitResourceNode} onRefreshCards={props.onRefreshCards} onOpenSetting={props.onOpenSetting} selectedTreeId={props.resourceDirectorySelectedId} expandedTreeIds={props.resourceDirectoryExpandedIds} onTreeStateChange={props.onResourceDirectoryStateChange} t={props.t} /></div> : <div role="tabpanel" id="card-profile-panel" aria-labelledby="card-profile-tab">
+              {selected.artifactId ? <p className={styles.workIdentity}>{props.t('character.artifactId')}: <code>{selected.artifactId}</code>
+                {selected.derivedFrom ? <><br />{props.t('character.derivedFrom')}: <code>{selected.derivedFrom.artifactId}</code></> : null}
+              </p> : null}
             {profileEditing ? (
               <CharacterProfileEditor key={selected.id} card={selected} onSave={props.onUpdateCardProfile} busy={props.busy}
                 t={props.t} onSaved={async () => {
@@ -743,7 +753,7 @@ export function CharacterPanel(props: CharacterPanelProps) {
                   <header className={styles.openingHeader}>
                     <h3>{props.t('character.opening')}</h3>
                     <button className={styles.openingToggle} type="button" disabled={props.busy}
-                      title="编辑开场白" aria-label="编辑开场白" onClick={() => setProfileEditing(true)}>
+                      title={props.t('character.editOpening')} aria-label={props.t('character.editOpening')} onClick={() => setProfileEditing(true)}>
                       <Pencil size={16} aria-hidden="true" />
                     </button>
                     {selected.opening?.entries?.[0]?.content ? (
@@ -991,6 +1001,9 @@ function DeleteConfirmation(props: {
   onIncludePromptResourcesChange(value: boolean): void
   open: boolean
   timelineCount: number
+  previewReady: boolean
+  previewError?: string
+  onRetryPreview(): void
   t: Translator
 }) {
   return (
@@ -998,7 +1011,7 @@ function DeleteConfirmation(props: {
       actions={(
         <>
           <button disabled={props.busy} type="button" onClick={props.onCancel}>{props.t('character.cancel')}</button>
-          <button className={styles.deleteButton} disabled={props.busy || props.count === 0} type="button" onClick={props.onConfirm}>{props.t('character.confirmDelete')}</button>
+          <button className={styles.deleteButton} disabled={props.busy || props.count === 0 || !props.previewReady} type="button" onClick={props.onConfirm}>{props.t('character.confirmDelete')}</button>
         </>
       )}
       closeOnBackdrop
@@ -1009,7 +1022,13 @@ function DeleteConfirmation(props: {
       title={props.t('character.deleteConfirmTitle')}
       onClose={props.onCancel}
     >
-      {props.timelineCount > 0 ? (
+      {!props.previewReady ? props.previewError ? (
+        <div role="alert">
+          <p>{props.t('character.deletePreviewFailed')}: {props.previewError}</p>
+          <button disabled={props.busy} type="button" onClick={props.onRetryPreview}>{props.t('character.deletePreviewRetry')}</button>
+        </div>
+      ) : <p role="status">{props.t('character.deletePreviewLoading')}</p> : null}
+      {props.previewReady && props.timelineCount > 0 ? (
         <label className={styles.deletePlayDataOption}>
           <input checked={props.includePlayData} disabled={props.busy} type="checkbox" onChange={event => props.onIncludePlayDataChange(event.target.checked)} />
           <span>{props.t('character.deletePlayData', { count: props.timelineCount })}</span>
@@ -1074,8 +1093,7 @@ function TimelineCard(props: { timeline: NarrativeTimelineView; busy: boolean; c
 }
 
 function formatTimelineDate(value: string): string {
-  const date = new Date(value)
-  return Number.isNaN(date.valueOf()) ? value : date.toLocaleString()
+  return formatDateTime(value)
 }
 
 function shortId(id: string): string {

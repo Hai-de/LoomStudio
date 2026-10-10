@@ -19,6 +19,8 @@ import type {
   ExtensionRegistrationHandle,
   ExtensionStorageScope,
   ExtensionInstallationTarget,
+  ExtensionTimelineTarget,
+  ExtensionTimelineLease,
   JsonValue,
   RendererContributionDefinition,
   RegisteredClientBackground,
@@ -57,7 +59,8 @@ type ClientExtensionModuleSummary = {
 }
 
 export type ClientExtensionHost = {
-  reconcile(packages: readonly ManagedClientExtensionPackage[], options?: { reload?: readonly string[] }): Promise<void>
+  reconcile(packages: readonly ManagedClientExtensionPackage[], options?: { reload?: readonly string[]; timeline?: ClientTimelineParticipation }): Promise<void>
+  isPackageAvailable(extensionPackage: Pick<ManagedClientExtensionPackage, 'packageId' | 'target' | 'participation'>): boolean
   executeCommand(input: {
     target?: ExtensionInstallationTarget
     packageId: string
@@ -73,6 +76,12 @@ export type ClientExtensionHost = {
   subscribe(listener: () => void): () => void
   revision(): number
   notifyConfigsChanged(): Promise<void>
+  notifyStateChanged(): Promise<void>
+}
+
+export type ClientTimelineParticipation = {
+  target: ExtensionTimelineTarget
+  leases: ExtensionTimelineLease[]
 }
 
 type ClientCommandExecutionResult =
@@ -119,6 +128,7 @@ type ActiveClientModule = {
   packageVersion: string
   reloadId?: string
   permissions: string
+  timeline?: { target: ExtensionTimelineTarget; lease: ExtensionTimelineLease }
   abortController: AbortController
   handles: ExtensionRegistrationHandle[]
   registeredCommandIds: Set<string>
@@ -162,6 +172,7 @@ export function createClientExtensionHost(options: {
   const diagnostics: ClientExtensionDiagnostic[] = []
   const backgrounds = new Map<string, RegisteredClientBackground>()
   const configSubscriptions = new Map<number, ClientConfigSubscription>()
+  const stateSubscriptions = new Set<() => Promise<void>>()
   const listeners = new Set<() => void>()
   const loadModule = options.loadModule ?? importClientModule
   const logger = options.logger ?? consoleClientExtensionLogger
@@ -170,6 +181,29 @@ export function createClientExtensionHost(options: {
   let currentRevision = 0
   let nextConfigSubscriptionId = 1
   let queue = Promise.resolve()
+  let participation: ClientTimelineParticipation | undefined
+
+  function timelineFor(extensionPackage: Pick<ManagedClientExtensionPackage, 'packageId' | 'target' | 'participation'>) {
+    if (extensionPackage.participation !== 'timeline') return undefined
+    const scope = options.rendererHost.scopeSnapshot()
+    if (!participation || scope.timelineId !== participation.target.timelineId || scope.branchId !== participation.target.branchId) return undefined
+    const id = extensionInstallationId(extensionPackage.packageId, extensionPackage.target ?? { kind: 'global' })
+    const lease = participation.leases.find(item => item.installationId === id && item.timelineId === participation!.target.timelineId)
+    return lease ? { target: participation.target, lease } : undefined
+  }
+  function isPackageAvailable(extensionPackage: Pick<ManagedClientExtensionPackage, 'packageId' | 'target' | 'participation'>) {
+    return (extensionPackage.target?.kind !== 'card' || extensionPackage.target.cardId === options.rendererHost.scopeSnapshot().cardId)
+      && (extensionPackage.participation !== 'timeline' || Boolean(timelineFor(extensionPackage)))
+  }
+  let unsubscribeScope: (() => void) | undefined
+  function cancelChangedTarget() {
+    const scope = options.rendererHost.scopeSnapshot()
+    for (const record of active.values()) {
+      if (record.timeline && (record.timeline.target.timelineId !== scope.timelineId || record.timeline.target.branchId !== scope.branchId)) {
+        record.abortController.abort()
+      }
+    }
+  }
 
   function emit(): void {
     currentRevision += 1
@@ -278,6 +312,7 @@ export function createClientExtensionHost(options: {
       packageVersion: extensionPackage.version,
       reloadId: module.reloadId,
       permissions: permissionFingerprint(module),
+      ...(extensionPackage.participation === 'timeline' ? { timeline: structuredClone(timelineFor(extensionPackage)) } : {}),
       abortController: new AbortController(),
       handles: [],
       registeredCommandIds: new Set(),
@@ -289,10 +324,10 @@ export function createClientExtensionHost(options: {
     emit()
 
     try {
-      if (extensionPackage.target?.kind === 'card' && extensionPackage.target.cardId !== options.rendererHost.scopeSnapshot().cardId) throw new Error('Client module Card is not active')
+      if (!isPackageAvailable(extensionPackage)) throw new Error('Client module is not active in this context')
       const loaded = await loadModule(module.entryUrl, instanceId)
       record.abortController.signal.throwIfAborted()
-      if (extensionPackage.target?.kind === 'card' && extensionPackage.target.cardId !== options.rendererHost.scopeSnapshot().cardId) throw new Error('Client module Card changed while loading')
+      if (!isPackageAvailable(extensionPackage)) throw new Error('Client module context changed while loading')
       const extensionModule = loaded.activate ? loaded as ClientExtensionModule : loaded.default
       if (!extensionModule?.activate) throw new Error('Client extension must export activate(ctx)')
       const context = createActivationContext({
@@ -307,6 +342,7 @@ export function createClientExtensionHost(options: {
         registerCommand,
         registerConfigSubscription,
         disposeConfigSubscription,
+        stateSubscriptions,
         backgrounds,
         appearance,
         notify: options.notify,
@@ -405,7 +441,10 @@ export function createClientExtensionHost(options: {
 
   let lifecycleRevision = 0
   return {
+    isPackageAvailable,
     reconcile: (packages, reconcileOptions) => {
+      unsubscribeScope ??= options.rendererHost.subscribe(cancelChangedTarget)
+      participation = reconcileOptions?.timeline ? structuredClone(reconcileOptions.timeline) : undefined
       const revision = ++lifecycleRevision
       const reload = new Set(reconcileOptions?.reload ?? [])
       const candidates = new Map<string, { extensionPackage: ManagedClientExtensionPackage; module: ManagedClientExtensionModule }>()
@@ -421,7 +460,9 @@ export function createClientExtensionHost(options: {
         const next = candidates.get(key)
         if (!next?.module.desired.enabled || reload.has(key) || next.module.entryUrl !== record.entryUrl
           || next.extensionPackage.version !== record.packageVersion || next.module.reloadId !== record.reloadId
-          || permissionFingerprint(next.module) !== record.permissions) record.abortController.abort()
+          || permissionFingerprint(next.module) !== record.permissions
+          || !isPackageAvailable(next.extensionPackage)
+          || JSON.stringify(record.timeline) !== JSON.stringify(timelineFor(next.extensionPackage))) record.abortController.abort()
       }
       return serialize(async () => {
         if (revision !== lifecycleRevision) return
@@ -431,7 +472,7 @@ export function createClientExtensionHost(options: {
           const key = moduleKey(extensionPackage.packageId, module.moduleId, extensionPackage.target)
           catalog.set(key, { extensionPackage, module })
           if (!summaries.has(key)) summaries.set(key, { packageId: extensionPackage.packageId, moduleId: module.moduleId, target: extensionPackage.target, state: 'inactive' })
-          if (!module.desired.enabled) continue
+          if (!module.desired.enabled || !isPackageAvailable(extensionPackage)) continue
           if ((module.contributions.renderers?.length ?? 0) > 0 || (module.contributions.commands?.length ?? 0) === 0 || active.has(key)) {
             desired.set(key, { extensionPackage, module })
           }
@@ -483,7 +524,7 @@ export function createClientExtensionHost(options: {
         if (!placement) {
           return commandFailure('command.placement_not_found', `Client Command has no active Action Placement on ${input.sourceSurface}: ${input.commandId}`)
         }
-        if (!catalogEntry.module.desired.enabled) {
+        if (!catalogEntry.module.desired.enabled || !isPackageAvailable(catalogEntry.extensionPackage)) {
           return commandFailure('command.disabled', `Client Command module is disabled: ${key}`)
         }
         if (!active.has(key)) await activate(catalogEntry.extensionPackage, catalogEntry.module)
@@ -504,6 +545,7 @@ export function createClientExtensionHost(options: {
       }
       try {
         await resolved.registration.handler(structuredClone(context))
+        resolved.signal.throwIfAborted()
         return { status: 'completed' }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
@@ -526,6 +568,8 @@ export function createClientExtensionHost(options: {
       }
     },
     dispose: () => {
+      unsubscribeScope?.()
+      unsubscribeScope = undefined
       lifecycleRevision += 1
       for (const record of active.values()) record.abortController.abort()
       return serialize(async () => {
@@ -547,6 +591,7 @@ export function createClientExtensionHost(options: {
     },
     revision: () => currentRevision,
     notifyConfigsChanged: refreshConfigSubscriptions,
+    notifyStateChanged: async () => { await Promise.all([...stateSubscriptions].map(refresh => refresh())) },
   }
 }
 
@@ -589,8 +634,31 @@ function createActivationContext(input: {
     target?: ExtensionInstallationTarget,
   ): number
   disposeConfigSubscription(id: number): void
+  stateSubscriptions: Set<() => Promise<void>>
 }): ClientExtensionActivationContext {
   const installationTarget = structuredClone(input.extensionPackage.target ?? { kind: 'global' as const })
+  const signal = input.record.abortController.signal
+  const timelineTarget = input.record.timeline?.target
+  function assertActive() {
+    signal.throwIfAborted()
+    const current = input.rendererHost.scopeSnapshot()
+    if (timelineTarget && (current.timelineId !== timelineTarget.timelineId || current.branchId !== timelineTarget.branchId)) {
+      throw new Error('Client extension Timeline context changed')
+    }
+  }
+  function assertTarget(target: ClientStateTarget) {
+    assertActive()
+    if (timelineTarget && (target.scope !== 'timeline' || target.timelineId !== timelineTarget.timelineId || target.branchId !== timelineTarget.branchId)) {
+      throw new Error('Client extension State target does not match its Timeline context')
+    }
+  }
+  async function readState(target: ClientStateTarget) {
+    target = structuredClone(target)
+    assertTarget(target)
+    const snapshot = await input.data.state.get(target, installationTarget)
+    assertTarget(target)
+    return snapshot
+  }
   const notifications = {
     async show(value: ClientNotification): Promise<void> {
       input.record.abortController.signal.throwIfAborted()
@@ -603,6 +671,7 @@ function createActivationContext(input: {
     },
   }
   return {
+    timeline: { ...(timelineTarget ? { target: Object.freeze(structuredClone(timelineTarget)) } : {}) },
     notifications,
     extension: {
       packageId: input.extensionPackage.packageId,
@@ -623,7 +692,7 @@ function createActivationContext(input: {
       },
     },
     commands: {
-      register: (commandId, handler) => input.registerCommand(input.extensionPackage, input.module, input.record, commandId, handler),
+      register: (commandId, handler) => { assertActive(); return input.registerCommand(input.extensionPackage, input.module, input.record, commandId, handler) },
     },
     renderers: {
       register: (definition: RendererContributionDefinition, renderer: ClientRenderer) => {
@@ -636,7 +705,11 @@ function createActivationContext(input: {
         if ((definition.surface === 'narrative.entry.inline' || definition.surface === 'agent.message.inline') && !renderer.projectNode) {
           throw new Error(`Inline Renderer ${definition.id} must provide projectNode(context)`)
         }
-        const handle = input.rendererHost.register({
+        const registration = input.rendererHost.register({
+          isAvailable: () => {
+            const current = input.rendererHost.scopeSnapshot()
+            return !signal.aborted && (!timelineTarget || (current.timelineId === timelineTarget.timelineId && current.branchId === timelineTarget.branchId))
+          },
           owner: {
             kind: 'extension',
             packageId: input.extensionPackage.packageId,
@@ -644,14 +717,24 @@ function createActivationContext(input: {
             ...(installationTarget.kind === 'card' ? { target: installationTarget } : {}),
           },
           definition,
-          mount: renderer.mount,
-          ...(renderer.update ? { update: renderer.update } : {}),
-          ...(renderer.projectNode ? { projectNode: renderer.projectNode } : {}),
+          mount: (root, context) => { assertActive(); return renderer.mount(root, context) },
+          ...(renderer.update ? { update: (context: Parameters<NonNullable<ClientRenderer['update']>>[0]) => {
+            assertActive(); return renderer.update!(context)
+          } } : {}),
+          ...(renderer.projectNode ? { projectNode: (context: Parameters<NonNullable<ClientRenderer['projectNode']>>[0]) => {
+            assertActive(); return renderer.projectNode!(context)
+          } } : {}),
           ...(renderer.frame ? { frame: renderer.frame } : {}),
           frameNotifications: { ...notifications, signal: input.record.abortController.signal },
         })
+        const invalidate = () => input.rendererHost.invalidate()
+        const handle = { dispose: () => {
+          signal.removeEventListener('abort', invalidate)
+          return registration.dispose()
+        } }
         input.record.registeredRendererIds.add(definition.id)
         input.record.handles.push(handle)
+        signal.addEventListener('abort', invalidate, { once: true })
         return handle
       },
       open: (contributionId, options) => {
@@ -692,13 +775,45 @@ function createActivationContext(input: {
       subscribe: (query, handler) => {
         if (input.record.abortController.signal.aborted) throw new Error('Cannot subscribe to Config changes from an unloaded extension')
         const id = input.registerConfigSubscription(input.extensionPackage.packageId, query, handler, installationTarget)
-        const handle = { dispose: () => input.disposeConfigSubscription(id) }
+        const handle = { dispose: () => {
+          input.disposeConfigSubscription(id)
+          signal.removeEventListener('abort', handle.dispose)
+        } }
         input.record.handles.push(handle)
+        signal.addEventListener('abort', handle.dispose, { once: true })
         return handle
       },
     },
     state: {
-      get: target => input.data.state.get(target, installationTarget),
+      get: readState,
+      subscribe: (target, handler, onError) => {
+        target = structuredClone(target)
+        assertTarget(target)
+        let disposed = false
+        let request = 0
+        let revision: string | undefined
+        const refresh = async () => {
+          const sequence = ++request
+          try {
+            const snapshot = await readState(target)
+            if (disposed || sequence !== request || revision === snapshot.revisionId) return
+            await handler(structuredClone(snapshot))
+            if (!disposed && sequence === request) revision = snapshot.revisionId
+          } catch (error) {
+            if (disposed || signal.aborted || sequence !== request) return
+            revision = undefined
+            const failure = error instanceof Error ? error : new Error(String(error))
+            if (onError) onError(failure)
+            else input.logger.error('Client State subscription failed', { error: failure.message })
+          }
+        }
+        const handle = { dispose() { disposed = true; input.stateSubscriptions.delete(refresh); signal.removeEventListener('abort', handle.dispose) } }
+        input.stateSubscriptions.add(refresh)
+        input.record.handles.push(handle)
+        signal.addEventListener('abort', handle.dispose, { once: true })
+        void refresh()
+        return handle
+      },
     },
     history: {
       project: query => input.data.history.project(query, installationTarget),
@@ -706,10 +821,13 @@ function createActivationContext(input: {
     },
     rpc: {
       call: async (method, params) => {
+        assertActive()
         if (!method.startsWith(`${input.extensionPackage.packageId}.`)) {
           throw new Error(`Client extension RPC must use package namespace ${input.extensionPackage.packageId}.*`)
         }
-        return await input.data.rpc.call(method, params, { packageId: input.extensionPackage.packageId, target: installationTarget }) as never
+        const result = await input.data.rpc.call(method, params, { packageId: input.extensionPackage.packageId, target: installationTarget })
+        assertActive()
+        return result as never
       },
     },
     assets: {

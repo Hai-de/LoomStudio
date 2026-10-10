@@ -291,6 +291,7 @@ export function createCardsRuntimeMethods(ctx: CardsRuntimeContext) {
           id: ctx.createId('card'),
           type: applicationDocumentTypes.cardSource,
           content: {
+            artifactId: ctx.createId('card-artifact'),
             name: input.name,
             userName: normalizeOptionalString(input.userName),
             description: input.description,
@@ -321,6 +322,19 @@ export function createCardsRuntimeMethods(ctx: CardsRuntimeContext) {
       return {
         card: toCardSource(card),
       }
+    },
+
+    forkCard: async (input: { cardId: string; expectedVersion: number }, requestContext?: RuntimeRequestContext): Promise<ImportCardBundleResult> => {
+      const original = await readDocument<CardSourceContent>(ctx.documents, input.cardId, applicationDocumentTypes.cardSource)
+      if (original.version !== input.expectedVersion) throw new Error('Card changed before creating the derived work')
+      const artifact = await exportCardArtifact({ cardId: input.cardId, documents: ctx.documents, promptResources: ctx.promptResources, blobs: ctx.blobs })
+      if ((await ctx.documents.get(input.cardId))?.version !== original.version) throw new Error('Card changed while creating the derived work')
+      await assertCardMedia(ctx, artifact.card.media)
+      return await importWorkspaceCardBundle({
+        artifact: { ...artifact, artifactId: ctx.createId('card-artifact'), derivedFrom: { artifactId: artifact.artifactId } },
+        context: requestContext, documents: ctx.documents, promptResources: ctx.promptResources,
+        dataEngine: ctx.dataEngine, blobs: ctx.blobs, now: ctx.now(),
+      })
     },
 
     attachCardExtensionPackage: async (input: AttachCardExtensionPackageInput, requestContext?: RuntimeRequestContext): Promise<UpdateCardResult> => {
@@ -495,6 +509,7 @@ export function createCardsRuntimeMethods(ctx: CardsRuntimeContext) {
             ...(input.timelineStateEntities !== undefined ? { timelineStateEntities: structuredClone(input.timelineStateEntities) } : {}),
             ...(input.timelineComponentMounts !== undefined ? { timelineComponentMounts: structuredClone(input.timelineComponentMounts) } : {}),
             ...(input.stateContributionIds !== undefined ? { stateContributionIds: [...input.stateContributionIds] } : {}),
+            ...(input.extensionAdoptions !== undefined ? { extensionAdoptions: input.extensionAdoptions } : {}),
             ...(input.timelineStateBindings !== undefined ? { timelineStateBindings: structuredClone(input.timelineStateBindings) } : {}),
             ...(input.macros !== undefined ? { macros: normalizeMacros(input.macros, 'Card') } : {}),
             ...(input.macroOptions !== undefined ? { macroOptions: normalizeMacroOptions(input.macroOptions) } : {}),

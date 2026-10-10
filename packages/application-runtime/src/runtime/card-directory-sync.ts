@@ -103,7 +103,7 @@ export function createCardDirectoryRuntimeMethods(ctx: CardDirectoryRuntimeConte
         if (!equal(input.snapshot, current.snapshot)) throw new Error('Card directory version conflict; save or recapture before Apply')
         const artifact = normalizeCardBundleArtifact(input.artifact)
         const old = current.artifact
-        for (const key of ['artifactId', 'displayName', 'description', 'textTransformRules', 'textExtractors', 'extensionPackages', 'metadata'] as const) {
+        for (const key of ['artifactId', 'derivedFrom', 'displayName', 'description', 'textTransformRules', 'textExtractors', 'extensionPackages', 'metadata'] as const) {
           if (!equal(baseline(artifact)[key], baseline(old)[key])) throw new Error(`Card directory does not support changing ${key}`)
         }
         const prompts = keyed(current.prompts, item => item.rootNodeId)

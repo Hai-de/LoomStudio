@@ -1,6 +1,8 @@
 # The World 世界状态与 AI 接入计划
 
-> 状态：实施中 / State v2、可信工具上下文与 dist 分发准备已实现；Client 自动跟随与刷新未完成。
+> 2026-10-07 接续：故事级采用、资源随扩展停止参与、后台任务隔离及数据保留，统一由[扩展的故事级采用与运行隔离](./extension-story-participation-plan.md)收束。本 Plan 保留 The World 的 EC、初始化与表现集成；不自行实现私有启用表。平台基础、管理入口和 The World 受管 RPC 已接入，完整执行隔离仍在实施。
+
+> 状态：实施中 / 原生 EC、可信工具上下文、Client 当前目标订阅、State 来源诊断与 dist 分发准备已实现；端到端验收未完成。
 > 日期：2026-10-02
 > 更新：2026-10-05，用户已批准 State v2 / 显式升级、工具可信上下文及扩展 dist 移出 ignore；未授权推送发布。
 > 目标：让作者初始化、AI 读写、运行面板与天气表现消费同一份分支世界状态。
@@ -12,7 +14,7 @@
 
 Loom 已有 State、Setting、Agent Tool、Preset 和 Renderer，不需要再造一个世界引擎。首个交付切片是“初始化世界 → AI 读取 → 局部提交 → 面板刷新”；完整地图操作、自动 Atlas / Locator 注入、音频和导入 UI 不作为前置。
 
-本 Plan 保留初始调研与提案作为决策记录。State v2、分支身份整理和服务端工具上下文已获批准并实施，最新结果以第 10 节第二批账目为准；Client 目标与刷新合同尚未扩张。
+本 Plan 保留初始调研与提案作为决策记录。最新实现以第 4 节“原生 EC 实施”和末尾“Client 目标与订阅实施”账目为准；早期 State v2、手填目标与全局预览记录不代表当前合同。
 
 ## 2. 已确认事实与证据
 
@@ -59,13 +61,32 @@ flowchart TD
 
 ## 4. State 最小设计提案
 
+### 2026-10-07 EC 接入决策
+
+当前 Server 声明了实体类型，但 `entities` 与 `componentMounts` 均为空，只把完整 v2 根绑定到 `theWorld`。因此业务 JSON 中的 `entities.world` 不等于平台已登记的实体及组件。这不是仅靠重新导入静态资源就能修复的问题。
+
+源码边界：`packages/shared/src/state-contribution.ts` 的实体声明只有 `typeId` / `entityId`；`state-contribution.ts` 物化实体为 `{ components: {} }`。The World v2 校验却要求根 `schemaVersion` 和实体顶层的 `schemaVersion`、`id`、`kind`、`createdBy`。模板初始值只接受对象，不能直接用原始路径绑定补入这些标量。原始根绑定在组件挂载之后执行，保留它再补挂载会覆盖挂载结果，不采用这种表面接通方式。
+
+用户确认：Entity 不需要这些 metadata。The World 使用平台原生 EC，实体身份、实体类型和模板版本由平台声明负责；删除重复的业务实体 `id`、`kind`、`schemaVersion`、`createdBy` 等管理字段，不把它们搬入组件，不新增 metadata 组件。扩展安装来源、采用关系和启停配置继续留在平台配置中。State 仅保存当前场景、地点、时间、天气等世界运行数据；不为实验格式增加通用实体初始值协议。
+
+这一决策替代前文“把元数据放入组件”的建议。已同步调整 The World 声明、校验、投影、导入及升级入口，保留 `/theWorld/entities/.../components/...` 业务路径；客户端产物已重建，不自动改写现有 Timeline 数据或修改扩展包版本。具体证据与限制见下方“原生 EC 实施”记录。
+
 ### 4.1 当前世界与实体
+
+#### 原生 EC 实施
+
+- `src/server/index.js` 已正式登记 `official-the-world-entity`、固定 `world` 实体、七种组件模板和 `world` 组件挂载；移除不透明的根绑定。默认 State 为 `{theWorld:{entities:{world:{components:{world:{}}}}}}`，没有虚构时间/天气。原带点号的实体类型 ID 不符合平台实体引用校验，已改为合法 ID。
+- `contracts.ts`、共享校验与投影删除根/实体管理 metadata 及组件内重复版本。不新增 metadata 组件；资源 ID、历法 ID、天气 kind 等业务字段保留。ID 从集合键读取，界面投影中的 ID 不回写 State。
+- mutation 协议版本调整为 3，upsert-entity 的 entityId 放在操作上而非实体内；AI JSON Patch 的组件路径保持不变。ST 导入只产生组件数据，不将解析诊断的 source/sourceAttributes 写入实体。
+- 显式旧数据转换支持 v1/v2，保留已有当前场景指针，删除旧管理字段，不修改输入对象；未知组件版本拒绝，不默默丢弃。此 RPC 不更新平台采用时保存的声明，旧安装到新 EC 的跨声明恢复/迁移仍未实现，不宣称旧故事可直接恢复。
+- 提示资源、示例 `resources/examples/world-ec.json`、客户端投影与合同文档同步更新；`dist/client.js` 已重新生成。未操作实际安装状态或用户数据库，未发布。
+- 验证：`server.test.ts`、`state-runtime.test.ts`、`resources.test.ts` 共 21/21 通过。包含真实 Runtime/SQLite 的平台实体与组件登记、中途采用、旧 checkpoint 显式补齐、暂停隔离、分支隔离、幂等写回及升级；Host 装配仍为测试适配器，不代表真实 Provider 端到端验收。
+- `pnpm --dir extensions/the-world run typecheck` 与 `run build` 通过。没有浏览器或人工视觉验收；State 作者面板的来源/采用诊断、Client 当前目标订阅和全局预览隔离仍属于平台 Plan 的未完事项。
 
 继续使用 `theWorld.entities`，固定 `world` 实体表达当前世界，不新建地图数据库。建议增加 `world` 组件：
 
 ```ts
 type WorldComponent = {
-  version: 1
   currentSceneId?: string
 }
 ```
@@ -183,9 +204,17 @@ Workspace Renderer 的活动 Timeline / Branch 获取与变化通知需要核对
 - [x] 定稿 P1 合同并完成真实 State Service 写入、重放与 Fork 验证。
 - [x] 完成 P2 维护 Settings 分发与显式采用、工具启用及执行器缺失的本地编译验证。
 - [x] 完成 P2 Settings / 工具 / 初始化示例。
-- [x] 定稿并实现 P3 工具可信上下文；完整 Provider → Server 桥接链仍待验收。
-- [ ] 完成 P4 运行投影与面板收口。
-- [ ] 完成 P5 验收记录；人工或外部模型未验收项不得标为通过。
+- [x] 定稿并实现 P3 工具可信上下文；本机确定性 Provider → 真实 Server/Host → State 工具链已通过。
+- [x] 完成 P4 当前目标、State 订阅、缺失数据与表现清理；平台来源诊断已接入，人工视觉验收仍待完成。
+- [x] 完成 P5 自动化与未验收账目；人工界面、真实外部模型、公网发行未验收，不标为通过。
+
+### P5 首版验收收口
+
+- 新增 `tests/extensions/the-world/agent-server.test.ts`：在临时目录安装真实扩展，启动真实 Studio Server/Extension Host，使用本机确定性 OpenAI-compatible HTTP Provider，经过三轮模型响应完成读取 revision、更新天气和最终回复。没有绕过 Server 工具适配器，也不消耗外部模型额度。
+- 证据覆盖维护 Settings 进入首轮 Prompt、宿主提供实际 Narrative 目标与 Invocation 身份、目标 Timeline 写入成功、另一 Timeline 不变，以及暂停后工具/Settings 退出消费但已写 State 保留。
+- 该集成反例实际检出平台暂停工具仍阻断生成的问题；已修复为过滤当前故事不可用来源、保留挂载并记录诊断，其他 Card 私有资源越界仍拒绝。
+- 真实 Server 工具链与原生 State Runtime 两文件 7/7 通过；平台来源、Prompt 恢复、间接引用与通用提交守卫的最终验证见关联平台 Plan。未更改 The World 业务 Entity，不增加 metadata，不重新构建没有变化的客户端产物。
+- 未验收：桌面/移动人工表现与交互、真实外部模型、公网 Git 添加、Card 私有安装 PNG 路由及全量发行流程。这些不是本次自动化结果，也不是尚待编写的兼容层；没有迁移用户数据、强制纳入忽略目录、提交或推送。
 
 ### 2026-10-05 首批实施
 
@@ -249,12 +278,12 @@ Workspace Renderer 的活动 Timeline / Branch 获取与变化通知需要核对
 
 未完成和下一阶段边界：
 
-1. P4：Client Renderer 尚无可信当前 Branch 与 State 更新订阅合同。需定稿最小宿主补充，之后再做自动跟随、刷新、异步结果隔离、预览局部化及无效控件清理；当前不以 DOM 猜目标或轮询补缺口。
+1. P4（第二批时的历史待办）：当时 Client Renderer 尚无可信当前 Branch 与 State 更新订阅合同；此项后续实现见末尾“Client 目标与订阅实施”。没有使用 DOM 猜目标或轮询。
 2. P3 验收缺口：已分别验证 Host 字段传递和真实 Runtime State 行为，尚未用确定性 Provider 覆盖完整 Agent Turn → Studio Server 适配器链；不宣称端到端模型读写完成。
 3. 升级入口目前是显式 RPC，尚无专用可视化预览 / 确认页。缺历法的 v1 数据会明确拒绝，需要作者修正源数据。
 4. 独立扩展目录没有自己的 `.git`；移出 ignore 不等于已提交。没有 git init、commit、push 或 release。正式发布前应在独立仓库同步源码与 dist，确定新的包版本和宿主最低兼容版本，再验证 Git URL 安装。旧 update-manifest 与 tar.gz 工作流不代表新版已发布，也不替代当前宿主支持的 Git / ZIP 安装入口。
 
-Plan 保持活跃，不把 P4 和剩余验收归档为完成。本轮没有运行 dev server 或视觉浏览器，现有客户端预览表现仍需后续集成及人工验收。
+Plan 保持活跃，剩余验收不归档为完成。第二批未运行 dev server 或视觉浏览器；后续 Client 实施和未验收边界见末尾账目。
 
 ### 2026-10-05 安装时自动导入静态资源
 
@@ -271,3 +300,20 @@ Plan 保持活跃，不把 P4 和剩余验收归档为完成。本轮没有运�
 当前用户环境：本轮操作期间用户已导入 The World；只读数据库确认存在 1 份维护 Setting、2 个 Agent Tool 和 1 个资源安装记录。没有再次导入，也没有替用户挂载 Preset 或执行工具。
 
 验证：远程安装生命周期 7 项、Server 安装集成 3 项、The World 安装资源 2 项通过，共 12 项；覆盖预览无导入副作用、确认后导入、已有 installation 不覆盖、失败保留包并显式重试、真实目录 / ZIP 安装后 Setting 入库。Studio Server 与 Studio Client 定向 `tsc --noEmit` 均通过。初次新测试使用错误的 DTO label 层级、ZIP 样本节点未带包命名空间，修正样本后通过，没有改变生产校验。未执行公网下载或人工视觉验收；浏览器仅用于检查现有导入状态。
+
+### Client 目标与订阅实施
+
+P4 的基础合同与消费者已实现，不再以手填 Timeline/Branch 的实验面板代表当前行为。
+
+- Host 为已采用的 Client 实例提供固定 `timeline.target`，复用数据 SSE 提供 `state.subscribe`。目标/代次变化、暂停、断线或卸载先取消旧实例；新上下文重新读取 State，采用仍归 Timeline 而非 Branch。共享扩展保持原生命周期。
+- The World 订阅平台 State，按 `world.currentSceneId` 投影当前场景、地点、世界时间和天气。没有时间或可识别天气不绘制默认天色；无数据明确显示当前分支未初始化，非法/旧数据报告读取失败，不自动改写 State。
+- 面板保持现有 Focus Surface 和布局，删除手动目标、天气时间预览、无实现的音频/地图模式/移动控件及默认背景命令。地图只检查现有地点，显示偏好不会伪装成剧情修改。Config 保存天气效果偏好；主题和毛玻璃是实例内显示选项。
+- 云层使用 Package File URL；CSS/主题请求传递取消信号，旧响应不恢复已释放表现。取消时清理 DOM、订阅、云动画、天气间隔与短时回调；背景只恢复自己仍持有的值，不覆盖后来改变的用户背景。面板拖动/缩放监听在卸载时解除。
+- 定向验证结果：平台 Client 4 文件 53 项；扩展 Client / weather renderer / cloud assets 3 文件 6 项通过。覆盖未采用不加载、暂停/恢复/分支切换、过期采用响应、修订去重、失败重读、晚回调清理、真实安装后的 Catalog/PNG/入口。相关包类型检查、扩展类型检查和构建通过；`dist/client.js` 已更新。
+- 未做浏览器操作或人工视觉验收。天气仍沿用宿主 DOM 实验接口，不声称完整 Background 资源集成已完成。State 来源/采用诊断面板、旧安装声明迁移、完整 Agent Turn/Server 适配器验收与公网发行仍待处理；本轮未操作用户数据库，也未提交或发布。
+
+### State 来源诊断接入
+
+- 平台已提供 State“来源”页签，可分别查看 The World 当前注册的 EC、Timeline 接受的声明、安装范围、Card 默认与当前故事采用资格；当前 Branch 的实体/组件路径单独标明存在或缺失。暂停或卸载不隐藏接受来源，查询不补建世界数据。
+- 同时修复新 Timeline 未给 Binding 保存扩展来源的问题。归属元数据只进入平台 Runtime Context，不进入 The World Entity。
+- 具体验证与边界见[平台计划的 State 来源账目](./extension-story-participation-plan.md#state-来源与初始化归属)。没有更改实际用户安装或迁移旧开发数据；完整 Agent Turn/Server 链、浏览器与发行验收仍未完成。

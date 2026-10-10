@@ -4,6 +4,7 @@ import { formatEntityReference, formatResourceReference } from '@loom-studio/sha
 import { Dialog } from '@loom-studio/ui'
 import { ResourceReferenceDialog } from '../../../apps/studio-client/src/features/resource-references/resource-reference-dialog.js'
 import type { StudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
+import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/index.js'
 
 const hooks = vi.hoisted(() => ({ cursor: 0, values: [] as unknown[], effects: [] as (() => void)[] }))
 vi.mock('react', async original => ({
@@ -46,6 +47,7 @@ function fixture(uri?: string) {
   } })
   const getCard = vi.fn().mockResolvedValue({ card: { id: 'card/1', name: 'User card', version: 1 } })
   const props: ComponentProps<typeof ResourceReferenceDialog> = {
+    t: createTranslator('zh-CN'),
     api: { promptResources: { get: getResource }, cards: { get: getCard } } as unknown as StudioApi,
     uri, onClose: vi.fn(), onOpenEditor: vi.fn(), onNavigate: vi.fn(),
   }

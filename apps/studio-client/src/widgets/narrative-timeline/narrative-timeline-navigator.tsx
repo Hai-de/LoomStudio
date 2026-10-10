@@ -28,7 +28,7 @@ export function NarrativeTimelineNavigator(props: NarrativeTimelineNavigatorProp
   const [hoveredIndex, setHoveredIndex] = useState<number>()
   const [browsingIndex, setBrowsingIndex] = useState<number>()
   const [visibleCapacity, setVisibleCapacity] = useState(60)
-  const [tickStep, setTickStep] = useState(11)
+  const [tickStep, setTickStep] = useState(9)
   const navigatorRef = useRef<HTMLElement>(null)
   const wheelDeltaRef = useRef(0)
   const activeIndex = Math.max(0, props.items.findIndex(item => item.id === props.activeId))
@@ -49,7 +49,7 @@ export function NarrativeTimelineNavigator(props: NarrativeTimelineNavigatorProp
       const currentElement = navigatorRef.current
       if (!currentElement) return
       const styles = getComputedStyle(currentElement)
-      const nextTickStep = Number.parseFloat(styles.getPropertyValue('--narrative-timeline-tick-step')) || 11
+      const nextTickStep = Number.parseFloat(styles.getPropertyValue('--narrative-timeline-tick-step')) || 9
       const nextCapacity = Math.min(100, Math.max(12, Math.floor(currentElement.clientHeight * 0.78 / nextTickStep)))
       setTickStep(nextTickStep)
       setVisibleCapacity(nextCapacity)
@@ -59,7 +59,7 @@ export function NarrativeTimelineNavigator(props: NarrativeTimelineNavigatorProp
     const observer = new ResizeObserver(updateCapacity)
     observer.observe(navigatorElement)
     return () => observer.disconnect()
-  }, [])
+  }, [props.items.length > 0])
 
   function updateHoveredIndex(event: PointerEvent<HTMLElement>) {
     const bounds = event.currentTarget.getBoundingClientRect()

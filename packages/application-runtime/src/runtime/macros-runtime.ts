@@ -76,7 +76,7 @@ export async function inspectApplicationMacros(
   if (preset && preset.resourceKind !== 'preset') throw new Error(`Prompt resource is not a Preset: ${input.presetId}`)
 
   let base: VariableRenderContext
-  let context: { cardId?: string; presetId?: string; global: JsonObject; timeline?: JsonObject }
+  let context: { cardId?: string; presetId?: string; global: JsonObject; timeline?: JsonObject; timelineTarget?: { timelineId: string; branchId: string } }
   const staticSources: MacroStaticSource[] = []
 
   if (input.timelineTarget) {
@@ -98,6 +98,7 @@ export async function inspectApplicationMacros(
     })
     base = await readAgentTurnVariables(ctx, card ? card.userName : runtimeContext?.fallbackUserName, state.value, card?.name ?? runtimeContext?.cardName)
     context = {
+      timelineTarget: { timelineId: page.timeline.id, branchId: page.branch.id },
       global: base.snapshot.global,
       timeline: state.value,
       cardId,
@@ -131,6 +132,7 @@ export async function inspectApplicationMacros(
 }
 
 export async function inspectPreparedMacros(input: {
+  timelineTarget?: { timelineId: string; branchId: string }
   ctx: Pick<ApplicationRuntimeContext, 'macroProviders' | 'now'>
   variables: VariableRenderContext
   cardId?: string
@@ -150,6 +152,7 @@ export async function inspectPreparedMacros(input: {
   return await input.ctx.macroProviders.inspect({
     snapshot: input.variables.snapshot,
     context: {
+      ...(input.timelineTarget ? { timelineTarget: input.timelineTarget } : {}),
       global: input.variables.snapshot.global,
       ...(input.timeline ? { timeline: input.timeline } : {}),
       ...(input.cardId ? { cardId: input.cardId } : {}),

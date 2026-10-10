@@ -65,3 +65,33 @@
   max-width: 100%;
   overflow-x: auto;
 }
+
+.content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--loom-radius-message, 8px);
+  will-change: transform, opacity, filter;
+  animation: img-blur-up 0.55s var(--loom-motion-ease-out, cubic-bezier(0.215, 0.61, 0.355, 1)) both;
+}
+
+@keyframes img-blur-up {
+  0% {
+    transform: scale(0.98);
+    opacity: 0;
+    filter: blur(10px);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content img {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}

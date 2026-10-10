@@ -88,6 +88,10 @@
     width: 100%;
   }
 
+  :global(html[data-keyboard-open='true']) .canvasStack {
+    --loom-composer-bottom-offset: 4px;
+  }
+
   .canvasStack[data-agent-expanded='true'] {
     --loom-agent-expansion-height: min(42vh, 320px);
   }

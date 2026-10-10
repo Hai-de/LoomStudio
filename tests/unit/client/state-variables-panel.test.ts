@@ -10,6 +10,7 @@ import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/in
 const t = createTranslator('zh-CN')
 
 const api = {
+  inspectSources: async () => { throw new Error('not called during SSR') },
   get: async () => { throw new Error('not called during SSR') },
   apply: async () => { throw new Error('not called during SSR') },
   listDefinitions: async () => ({ definitions: [] }),

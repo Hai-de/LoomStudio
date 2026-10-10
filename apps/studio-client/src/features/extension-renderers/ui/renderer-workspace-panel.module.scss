@@ -6,6 +6,30 @@
   overflow: hidden;
 }
 
+.management {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.panel[data-runtime-error='true'] {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.management[data-runtime-error='true'] {
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+}
+
+.runtimeAlert {
+  max-height: min(240px, 35vh);
+  padding: 12px var(--loom-page-header-padding);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  color: var(--loom-color-text-subtle);
+}
+
+.managementTabs {
+  padding-inline: var(--loom-page-header-padding);
+}
+
 .intro,
 .header {
   position: relative;

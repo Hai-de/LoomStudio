@@ -20,6 +20,8 @@ import {
   type AgentRunProgress,
 } from '../agents/tool-loop.js'
 import { composeAgentTurnPrompt } from '../agents/agent-turn.js'
+import { collectPromptExtensionDependencies } from '../extensions/prompt-dependencies.js'
+import { assertTimelineExtensionLease } from '../extensions/timeline-participation.js'
 import { readSessionHistory } from '../agents/session-history.js'
 import { readAgentRunRecovery, registerAgentExecutor } from '../agents/run-recovery.js'
 import { assertNonEmpty, assertProviderModelExists } from '../agents/agent.js'
@@ -100,6 +102,8 @@ type AgentsRuntimeContext = Pick<ApplicationRuntimeContext,
   | 'logger'
   | 'runtimeLogger'
   | 'macroProviders'
+  | 'promptProcessors'
+  | 'stateContent'
   | 'narratives'
   | 'narrativeContext'
   | 'now'
@@ -301,7 +305,7 @@ export function createAgentsRuntimeMethods(ctx: AgentsRuntimeContext) {
     },
 
     previewAgentTurn: async (input: PreviewAgentTurnInput, requestContext?: RuntimeRequestContext): Promise<PreviewAgentTurnResult> => {
-      const prepared = await prepareAgentTurn(ctx, input, 'preview', requestContext)
+      const prepared = await collectPromptExtensionDependencies(ctx, () => prepareAgentTurn(ctx, input, 'preview', requestContext))
       return {
         runId: prepared.runId,
         tokenEstimate: estimateRequestTokens({
@@ -350,7 +354,10 @@ export function createAgentsRuntimeMethods(ctx: AgentsRuntimeContext) {
         data: { ...references, outcome: 'running', detail: 'Agent Session transcript' },
       })
       try {
-        const prepared = await prepareAgentTurn(ctx, input, 'runtime', requestContext, runId)
+        for (const lease of requestContext?.agentRun?.continuation?.recovery?.promptExtensionLeases ?? []) {
+          await assertTimelineExtensionLease(ctx, ctx.documents, lease)
+        }
+        const prepared = await collectPromptExtensionDependencies(ctx, () => prepareAgentTurn(ctx, input, 'runtime', requestContext, runId))
         const {
           model,
           narrativePage,
@@ -360,11 +367,6 @@ export function createAgentsRuntimeMethods(ctx: AgentsRuntimeContext) {
           session,
           preset,
         } = prepared
-        const classificationRules = (await resolveEffectiveTextPipeline(
-          ctx,
-          { kind: 'agent-session', sessionId: session.id },
-          'classify',
-        )).rules
         const loop = await runNativeToolLoop({
           ctx,
           agents,
@@ -383,9 +385,11 @@ export function createAgentsRuntimeMethods(ctx: AgentsRuntimeContext) {
           userInput: prepared.userInput,
           compiledToolSet,
           toolExecutionScope: prompt.toolExecutionScope,
+          processedPrompt: prompt.processingSnapshot,
+          promptExtensionLeases: requestContext?.agentRun?.continuation?.recovery?.promptExtensionLeases ?? prepared.promptExtensionLeases,
           branchId: narrativePage?.branch.id ?? 'agent-only',
           purpose: input.narrativeTarget?.inputNodeId ? 'narrative' : 'agent',
-          classificationRules,
+          classificationRules: prepared.classificationRules,
           ...(requestContext ? { requestContext } : {}),
           delivery: preset.delivery ?? 'stream',
           ...(requestContext?.agentRun?.continuation?.userEntry
@@ -677,7 +681,9 @@ async function prepareAgentTurn(
     : narrativeSample?.nodes ?? []
   const agentPage = await readSessionHistory(ctx.agents, session.id)
   const preset = await readPresetResource(ctx.promptResources, session.agentPresetId)
-  const availableInstallations = await readAvailableExtensionInstallations(ctx.documents, narrativePage?.timeline.createdFrom?.cardId)
+  const availableInstallations = await readAvailableExtensionInstallations(
+    ctx.documents, narrativePage?.timeline.createdFrom?.cardId, narrativePage?.timeline.id ?? null,
+  )
   if (!isExtensionResourceAvailable(preset.origin, availableInstallations)) {
     throw new Error(`Agent Preset is not available in this context: ${preset.id}`)
   }
@@ -703,7 +709,7 @@ async function prepareAgentTurn(
     ...(requestContext?.callId ? { callId: requestContext.callId } : {}),
     ...(requestContext?.parentCallId ? { parentCallId: requestContext.parentCallId } : {}),
   }
-  let prompt
+  let prompt: Awaited<ReturnType<typeof composeAgentTurnPrompt>>
   let compiledToolSet
   const timelineState = narrativePage
     ? await getApplicationStateSnapshot(ctx, {
@@ -729,6 +735,7 @@ async function prepareAgentTurn(
     ? normalizeMacroSelections(input.macroSelections)
     : narrativePage ? (await readTimelinePresetConfig(ctx.documents, narrativePage.timeline.id, preset.id)).macroSelections : undefined
   const macroInspection = await inspectPreparedMacros({
+    ...(narrativePage ? { timelineTarget: { timelineId: narrativePage.timeline.id, branchId: narrativePage.branch.id } } : {}),
     ctx,
     variables,
     cardId,
@@ -768,6 +775,7 @@ async function prepareAgentTurn(
         )
       : undefined
     compiledToolSet = await compileAgentToolSet({
+      cardId,
       availableExtensionInstallations: availableInstallations,
       ctx,
       model,
@@ -802,6 +810,22 @@ async function prepareAgentTurn(
       },
       externalRuntime: createContentToolPromptRuntimeInputs(compiledToolSet),
       promptAddition: input.promptAddition,
+      processing: {
+        registry: ctx.promptProcessors,
+        context: {
+          mode,
+          signal: requestContext?.abortSignal ?? new AbortController().signal,
+          ...(cardId ? { cardId } : {}),
+          ...(timelineState && narrativePage ? { timeline: {
+            timelineId: narrativePage.timeline.id,
+            branchId: narrativePage.branch.id,
+            revisionId: timelineState.revisionId,
+            value: timelineState.value,
+          } } : {}),
+        },
+      },
+      resumeMessages: requestContext?.agentRun?.continuation?.messages,
+      resumeProcessingSnapshot: requestContext?.agentRun?.continuation?.recovery?.processedPrompt,
     })
     prompt.promptBuildTrace.diagnostics.push(...(compiledToolSet.trace.diagnostics ?? []))
     for (const diagnostic of [...sessionTextPipeline.diagnostics, ...(narrativeTextPipeline?.diagnostics ?? [])]) {
@@ -826,7 +850,7 @@ async function prepareAgentTurn(
         message: 'CodeAct is enabled, but its tutorial anchor is absent or disabled. Mount the instructions in the selected preset.',
       })
     }
-    prompt.toolExecutionScope.vfsAttachments = () => listPresetScriptAttachments(ctx, preset.id)
+    prompt.toolExecutionScope.vfsAttachments = () => listPresetScriptAttachments(ctx, preset.id, prompt.toolExecutionScope.availableExtensionInstallations)
     if (requestContext?.agentRun?.onMutationApproval)
       prompt.toolExecutionScope.approveMutation = requestContext.agentRun.onMutationApproval
     if (requestContext?.agentRun?.onHistoryReadApproval)
@@ -871,7 +895,7 @@ async function prepareAgentTurn(
     prompt.toolExecutionScope.mutatePromptResource = async resourceInput => {
       const resource = await ctx.promptResources.getResource(resourceInput.resourceId)
       if (!resource) throw new Error(`Prompt Resource not found: ${resourceInput.resourceId}`)
-      if (!isExtensionResourceAvailable(resource.metadata.origin, availableInstallations)) {
+      if (!isExtensionResourceAvailable(resource.metadata.origin, prompt.toolExecutionScope.availableExtensionInstallations)) {
         throw new Error(`Prompt Resource is not available in this context: ${resourceInput.resourceId}`)
       }
       const result = await ctx.promptResources.mutateResource({
@@ -1128,6 +1152,8 @@ async function prepareAgentTurn(
     throw error
   }
   return {
+    classificationRules: (await resolveEffectiveTextPipeline(ctx,
+      { kind: 'agent-session', sessionId: session.id }, 'classify')).rules,
     userInput,
     preset,
     model,

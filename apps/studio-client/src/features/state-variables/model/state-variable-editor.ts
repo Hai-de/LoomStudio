@@ -3,6 +3,7 @@ import type { ClientJsonValue } from '@loom-studio/client-bridge'
 import { isJsonObject } from '@loom-studio/shared'
 import type { Card, StateSnapshot, StateTarget } from '../../../entities/index.js'
 import type { FileTreeNode } from '../../../shared/ui/file-tree/file-tree-model.js'
+import type { Translator } from '../../../shared/i18n/index.js'
 
 type StatePropertyType = 'number' | 'string' | 'boolean' | 'null' | 'other'
 
@@ -226,6 +227,7 @@ export type StateTreeNodeCapabilities = {
 
 export function stateSnapshotToTreeNodes(
   snapshotValue: unknown,
+  t: Translator,
   prefix = '',
   macroPrefix = '',
 ): FileTreeNode[] {
@@ -242,13 +244,13 @@ export function stateSnapshotToTreeNodes(
     const nextMacroToken = `{{${nextMacroPath}}}`
 
     if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
-      const children = stateSnapshotToTreeNodes(val, nextPath, nextMacroPath)
+      const children = stateSnapshotToTreeNodes(val, t, nextPath, nextMacroPath)
       nodes.push({
         id: nextPath,
         label: key,
         kind: 'object',
         container: true,
-        meta: `${children.length} 项`,
+        meta: t('state.itemCount', { count: children.length }),
         capabilities: {
           path: nextPath,
           macroPath: nextMacroPath,
@@ -265,7 +267,7 @@ export function stateSnapshotToTreeNodes(
         id: nextPath,
         label: key,
         kind: type,
-        meta: isLongText ? `${(val as string).length} 字符` : undefined,
+        meta: isLongText ? t('state.characterCount', { count: (val as string).length }) : undefined,
         capabilities: {
           path: nextPath,
           macroPath: nextMacroPath,

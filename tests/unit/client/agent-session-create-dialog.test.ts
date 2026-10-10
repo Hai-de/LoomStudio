@@ -2,6 +2,7 @@ import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentSessionCreateDialog } from '../../../apps/studio-client/src/widgets/agent-chat-panel/agent-session-create-dialog.js'
 import type { AgentPreset } from '../../../apps/studio-client/src/entities/index.js'
+import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/index.js'
 
 const hooks = vi.hoisted(() => ({ cursor: 0, values: [] as unknown[] }))
 vi.mock('react', async importOriginal => ({
@@ -25,6 +26,7 @@ function fixture() {
   const onCreate = vi.fn(async () => ({ id: 'session' })) as unknown as
     Parameters<typeof AgentSessionCreateDialog>[0]['onCreate'] & ReturnType<typeof vi.fn>
   const props = {
+    t: createTranslator('zh-CN'),
     presets: [
       { id: 'preset-a', rootNode: { label: 'Writing' } },
       { id: 'preset-b', rootNode: { label: 'Summary' }, origin: { kind: 'extension-package', packageId: 'memory' } },

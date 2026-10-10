@@ -3,33 +3,37 @@ import type { ExtensionInstallationTarget, NarrativeContextProjection, Narrative
 import { createNarrativeSampler } from './sampling.js'
 
 export type ResolvedNarrativeContext = NarrativeContextProjection & { sourceId: string }
+type Availability = (context: Parameters<NarrativeContextProvider['resolve']>[0]) => Promise<boolean>
 export type NarrativeContextRegistry = {
-  register(provider: NarrativeContextProvider, target?: ExtensionInstallationTarget): { dispose(): void }
+  register(provider: NarrativeContextProvider, target?: ExtensionInstallationTarget, isAvailable?: Availability): { dispose(): void }
   resolve(context: { timelineId: string; branchId: string; cardId?: string }): Promise<ResolvedNarrativeContext | undefined>
   notifySessionHandoff(context: Parameters<NonNullable<NarrativeContextProvider['onSessionHandoff']>>[0] & { cardId?: string }): Promise<'notified' | 'not-configured'>
 }
 
 export function createNarrativeContextRegistry(): NarrativeContextRegistry {
-  const providers = new Map<string, NarrativeContextProvider & { target: ExtensionInstallationTarget }>()
+  const providers = new Map<string, NarrativeContextProvider & { target: ExtensionInstallationTarget; isAvailable?: Availability }>()
   const registry: NarrativeContextRegistry = {
-    register(provider, target = { kind: 'global' }) {
+    register(provider, target = { kind: 'global' }, isAvailable) {
       if (!provider.id.trim() || typeof provider.resolve !== 'function') throw new Error('Invalid Narrative context provider')
       if (providers.has(provider.id)) throw new Error(`Narrative context provider already registered: ${provider.id}`)
-      const registered = { ...provider, target: structuredClone(target) }
+      const registered = { ...provider, target: structuredClone(target), isAvailable }
       providers.set(provider.id, registered)
       return { dispose() { if (providers.get(provider.id) === registered) providers.delete(provider.id) } }
     },
     async resolve(context) {
       let result: ResolvedNarrativeContext | undefined
-      const available = [...providers.values()].filter(provider => provider.target.kind === 'global' || provider.target.cardId === context.cardId)
-      for (const provider of available) {
+      let available = 0
+      for (const provider of [...providers.values()]) {
+        if (provider.target.kind === 'card' && provider.target.cardId !== context.cardId) continue
+        if (provider.isAvailable && !await provider.isAvailable(context)) continue
+        available++
         const projection = await provider.resolve(Object.freeze({ ...context }))
         if (projection === undefined) continue
         validateProjection(projection)
         if (result) throw new Error(`Conflicting Narrative context providers: ${result.sourceId}, ${provider.id}`)
         result = { ...structuredClone(projection), sourceId: provider.id }
       }
-      if (!result && available.length > 0) {
+      if (!result && available > 0) {
         throw new Error(`No Narrative context source selected for branch: ${context.branchId}`)
       }
       return result

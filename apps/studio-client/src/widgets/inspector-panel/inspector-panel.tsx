@@ -1,5 +1,5 @@
 import type { ClientJsonValue } from '@loom-studio/client-bridge'
-import type { Translator } from '../../shared/i18n/index.js'
+import { formatNumber, type Translator } from '../../shared/i18n/index.js'
 import type {
   AiCapabilityProfile,
   AiGatewayInvokeInput,
@@ -95,10 +95,12 @@ export function InspectorPanel(props: InspectorPanelProps) {
       <section className={styles.section}>
         <h2>{props.t('inspector.prompt')}</h2>
         {props.tokenEstimate ? <details>
-          <summary>{props.t('tokens.requestEstimate')} · {props.tokenEstimate.estimatedTokens.toLocaleString()} tokens</summary>
+          <summary>{props.t('tokens.requestEstimate')} · {formatNumber(props.tokenEstimate.estimatedTokens)} tokens</summary>
           <p>{props.tokenEstimate.basis.encoding} × {props.tokenEstimate.basis.multiplier} · {props.tokenEstimate.scope}</p>
-          <p>消息: {props.tokenEstimate.messages.join(' / ')} · 工具: {props.tokenEstimate.tools.join(' / ') || '0'}</p>
-          <p>未计入: {props.tokenEstimate.uncounted.join(', ')}</p>
+          <p>{props.t('tokens.messageAndToolEstimate', {
+            messages: props.tokenEstimate.messages.join(' / '), tools: props.tokenEstimate.tools.join(' / ') || '0',
+          })}</p>
+          <p>{props.t('tokens.uncounted', { items: props.tokenEstimate.uncounted.join(', ') })}</p>
         </details> : null}
         <JsonBlock value={props.promptMessages} />
       </section>

@@ -1,4 +1,5 @@
 import { realpathSync } from 'node:fs'
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { createTextTokenCounter } from '@loom-studio/tokenizer/async'
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve } from 'node:path'
@@ -13,6 +14,9 @@ import type {
   EventPublishIdentity,
   EventSubscriberIdentity,
   ExtensionActivationContext,
+  ExtensionTimelineExecution,
+  ExtensionTimelineLease,
+  ExtensionTimelineTarget,
   ExtensionDocumentWriteInput,
   ExtensionMediaAsset,
   ExtensionRpcHandler,
@@ -106,16 +110,84 @@ export function createContext(
     }
   }
   const canAccessState = async (target: import('@loom-studio/extension-sdk').ExtensionStateTarget): Promise<boolean> => {
+    if (packageManifest.participation === 'timeline') {
+      const execution = timelineWork.getStore()
+      if (!execution || target.scope !== 'timeline' || target.timelineId !== execution.target.timelineId
+        || target.branchId !== execution.target.branchId) return false
+      execution.signal.throwIfAborted()
+      if (!options.assertTimelineWork) throw new Error('Timeline execution checks are unavailable')
+      await options.assertTimelineWork(execution.lease)
+    }
     if (record.target.kind === 'global') return true
     if (target.scope === 'global') return false
     if (!options.canAccessState) throw new Error('Card State access validation is not available in this host')
     return options.canAccessState(target, structuredClone(record.target))
   }
+  const timelineWork = new AsyncLocalStorage<ExtensionTimelineExecution & { lease: ExtensionTimelineLease }>()
+  const initializationWork = new AsyncLocalStorage<AbortSignal>()
+  const executionSignal = async (): Promise<AbortSignal> => {
+    if (packageManifest.participation !== 'timeline') return instance.scope.signal
+    const execution = timelineWork.getStore()
+    if (execution) {
+      execution.signal.throwIfAborted()
+      if (!options.assertTimelineWork) throw new Error('Timeline execution checks are unavailable')
+      await options.assertTimelineWork(execution.lease)
+      return execution.signal
+    }
+    const initialization = initializationWork.getStore()
+    if (initialization) {
+      initialization.throwIfAborted()
+      return initialization
+    }
+    throw new Error('Timeline extension work must run inside ctx.timeline.run')
+  }
+  const runTimeline = async <T>(target: ExtensionTimelineTarget, work: (execution: ExtensionTimelineExecution) => Promise<T>, signal?: AbortSignal): Promise<T> => {
+    assertScopeActive(instance)
+    if (packageManifest.participation !== 'timeline') throw new Error('Extension must declare Timeline participation')
+    if (target.scope !== 'timeline' || typeof target.timelineId !== 'string' || !target.timelineId.trim()
+      || typeof target.branchId !== 'string' || !target.branchId.trim()) throw new Error('Timeline work requires an explicit Timeline and Branch target')
+    const current = timelineWork.getStore()
+    if (current) {
+      if (target.timelineId !== current.target.timelineId || target.branchId !== current.target.branchId) {
+        throw new Error('Nested Timeline work cannot change its target')
+      }
+      current.signal.throwIfAborted()
+      if (!options.assertTimelineWork) throw new Error('Timeline execution checks are unavailable')
+      await options.assertTimelineWork(current.lease)
+      return work({ target: current.target, signal: current.signal })
+    }
+    if (!options.runTimelineWork) throw new Error('Timeline execution is unavailable')
+    const frozenTarget = Object.freeze(structuredClone(target))
+    return instance.scope.run(() => options.runTimelineWork!({
+      timelineId: frozenTarget.timelineId,
+      installationId: extensionInstallationId(packageManifest.id, record.target),
+      packageVersion: packageManifest.version,
+      signal: signal ? AbortSignal.any([signal, instance.scope.signal]) : instance.scope.signal,
+    }, execution => timelineWork.run({ ...execution, target: frozenTarget }, () =>
+      work({ target: frozenTarget, signal: execution.signal }))))
+  }
+  const isTimelineAvailable = async (timelineId?: string): Promise<boolean> => {
+    if (!timelineId) return false
+    if (!options.canRunTimelineWork) throw new Error('Timeline eligibility checks are unavailable')
+    return options.canRunTimelineWork({ timelineId, installationId: extensionInstallationId(packageManifest.id, record.target) })
+  }
   const subscribeEvents = (patterns: string[], handler: (event: import('@loom-studio/transport').StudioEvent) => void | Promise<void>) => {
     if (!options.subscribeEvents) throw new Error('Extension event subscriptions are not available in this host')
     let active = true
-    const registration = options.subscribeEvents(patterns, event => {
+    const registration = options.subscribeEvents(patterns, async event => {
       if (!active || !instance.scope.active) return
+      if (packageManifest.participation === 'timeline' && event.name !== 'system.ready' && event.name !== 'system.stopping') {
+        if (event.name !== 'state.changed') return
+        const payload = event.payload as Partial<import('@loom-studio/extension-sdk').ExtensionStateChangeEvent>
+        if (payload?.target?.scope !== 'timeline') return
+        if (!options.canRunTimelineWork) throw new Error('Timeline event eligibility checks are unavailable')
+        if (!await options.canRunTimelineWork({
+          timelineId: payload.target.timelineId,
+          installationId: extensionInstallationId(packageManifest.id, record.target),
+        })) return
+        if (!active || !instance.scope.active) return
+        return runTimeline(payload.target, async () => { await handler(event) })
+      }
       if (record.target.kind === 'card' && event.name === 'state.changed') {
         const payload = event.payload as Partial<import('@loom-studio/extension-sdk').ExtensionStateChangeEvent>
         if (!payload?.target) return
@@ -129,6 +201,33 @@ export function createContext(
   }
 
   return {
+    timeline: {
+      run: runTimeline,
+      subscribe: listener => {
+        assertScopeActive(instance)
+        if (packageManifest.participation !== 'timeline') throw new Error('Extension must declare Timeline participation')
+        if (!options.subscribeTimelineTargets) throw new Error('Timeline target subscriptions are unavailable')
+        let active = true
+        const registration = options.subscribeTimelineTargets({
+          installationId: extensionInstallationId(packageManifest.id, record.target),
+        }, () => {
+          if (!active || !instance.scope.active) return
+          void instance.scope.run(listener).catch(error => reportDiagnostic(options.diagnostics, record, instance.instanceId, {
+            severity: 'error', code: 'extension.timeline_listener_failed', source: 'extension-host',
+            message: error instanceof Error ? error.message : String(error),
+          }))
+        })
+        const handle = { dispose() { active = false; registration.dispose() } }
+        instance.scope.track('timeline-targets', handle)
+        return handle
+      },
+      list: async () => {
+        assertScopeActive(instance)
+        if (packageManifest.participation !== 'timeline') throw new Error('Extension must declare Timeline participation')
+        if (!options.listTimelineTargets) throw new Error('Timeline execution targets are unavailable')
+        return options.listTimelineTargets({ installationId: extensionInstallationId(packageManifest.id, record.target) })
+      },
+    },
     extension: {
       packageId: packageManifest.id,
       moduleId: moduleManifest.id,
@@ -246,12 +345,19 @@ export function createContext(
         const handle = options.registerMacroProvider({
           id: installedExtensionContributionId(packageManifest.id, record.target, provider.id),
           name: provider.name,
-          resolve: context => instance.scope.run(() => provider.resolve(context)),
+          resolve: context => {
+            if (packageManifest.participation !== 'timeline') return instance.scope.run(() => provider.resolve(context))
+            if (!context.timelineTarget) throw new Error('Timeline macro requires an explicit Timeline and Branch target')
+            return runTimeline({ scope: 'timeline', ...context.timelineTarget }, async () => provider.resolve(context))
+          },
         }, {
           packageId: packageManifest.id,
           moduleId: moduleManifest.id,
           instanceId: instance.instanceId,
           target: structuredClone(record.target),
+          ...(packageManifest.participation === 'timeline' ? {
+            isAvailable: (context: import('@loom-studio/extension-sdk').ExtensionMacroContext) => isTimelineAvailable(context.timelineTarget?.timelineId),
+          } : {}),
         })
         instance.scope.track(`macro-provider:${provider.id}`, handle)
         return handle
@@ -269,20 +375,54 @@ export function createContext(
         if (!options.registerNarrativeContextProvider) throw new Error('Narrative context providers are not available in this host')
         const handle = options.registerNarrativeContextProvider({
           id: installedExtensionContributionId(packageManifest.id, record.target, provider.id),
-          resolve: context => instance.scope.run(() => provider.resolve(context)),
+          resolve: context => packageManifest.participation === 'timeline'
+            ? runTimeline({ scope: 'timeline', timelineId: context.timelineId, branchId: context.branchId }, () => provider.resolve(context))
+            : instance.scope.run(() => provider.resolve(context)),
           ...(provider.onSessionHandoff ? {
-            onSessionHandoff: context => instance.scope.run(() => provider.onSessionHandoff!(context)),
+            onSessionHandoff: context => packageManifest.participation === 'timeline'
+              ? runTimeline({ scope: 'timeline', timelineId: context.timelineId, branchId: context.branchId }, () => provider.onSessionHandoff!(context))
+              : instance.scope.run(() => provider.onSessionHandoff!(context)),
           } : {}),
         }, {
           packageId: packageManifest.id, moduleId: moduleManifest.id, instanceId: instance.instanceId,
           target: structuredClone(record.target),
+          ...(packageManifest.participation === 'timeline' ? {
+            isAvailable: (context: { timelineId: string }) => isTimelineAvailable(context.timelineId),
+          } : {}),
         })
         instance.scope.track(`narrative-context:${provider.id}`, handle)
         return handle
       },
     },
     state: {
-      contribute: contribution => {
+      registerContentHandler: handler => {
+        assertScopeActive(instance)
+        for (const capability of ['state.processContent', 'state.read', 'state.write'] as const) {
+          if (moduleManifest.capabilities?.[capability] !== true)
+            throw new Error(`State content handler requires ${capability}`)
+        }
+        if (!handler.id.startsWith(`${packageManifest.id}/`) || !handler.contributionId.startsWith(`${packageManifest.id}.`))
+          throw new Error('State content handler must use its package namespace')
+        if (!options.registerStateContentHandler) throw new Error('State content handlers are unavailable')
+        const handle = options.registerStateContentHandler({
+          ...handler,
+          process: input => {
+            if (packageManifest.participation !== 'timeline') return instance.scope.run(() => handler.process({
+              ...input, signal: AbortSignal.any([input.signal, instance.scope.signal]),
+            }))
+            if (!input.target) throw new Error('State content requires an explicit Timeline and Branch target')
+            return runTimeline(input.target, ({ signal }) => handler.process({ ...input, signal }), input.signal)
+          },
+        }, {
+          packageId: packageManifest.id, target: structuredClone(record.target),
+          ...(packageManifest.participation === 'timeline' ? {
+            isAvailable: (target: ExtensionTimelineTarget | undefined) => isTimelineAvailable(target?.timelineId),
+          } : {}),
+        })
+        instance.scope.track(`state-content:${handler.id}`, handle)
+        return handle
+      },
+      contribute: (contribution, initialization) => {
         assertScopeActive(instance)
         if (moduleManifest.capabilities?.['state.contribute'] !== true) {
           throw new Error(`Extension module is not allowed to contribute State: ${moduleKey(packageManifest.id, moduleManifest.id)}`)
@@ -297,7 +437,10 @@ export function createContext(
           instanceId: instance.instanceId,
           packageVersion: packageManifest.version,
           target: structuredClone(record.target),
-        })
+        }, initialization?.initialize ? context => instance.scope.run(() => {
+          const signal = AbortSignal.any([context.signal, instance.scope.signal])
+          return initializationWork.run(signal, () => initialization.initialize!({ ...context, signal }))
+        }) : undefined)
         instance.scope.track(`state-contribution:${contribution.id}`, handle)
         return handle
       },
@@ -314,6 +457,7 @@ export function createContext(
             packageId: packageManifest.id,
             moduleId: moduleManifest.id,
             instanceId: instance.instanceId,
+            ...(timelineWork.getStore() ? { lease: timelineWork.getStore()!.lease } : {}),
           })
         })
       },
@@ -330,6 +474,7 @@ export function createContext(
             packageId: packageManifest.id,
             moduleId: moduleManifest.id,
             instanceId: instance.instanceId,
+            ...(timelineWork.getStore() ? { lease: timelineWork.getStore()!.lease } : {}),
           })
         })
       },
@@ -406,38 +551,116 @@ export function createContext(
         assertScopeActive(instance)
         return options.aiCapabilities?.list() ?? []
       },
-      invoke: input => {
+      invoke: async input => {
         assertScopeActive(instance)
         if (moduleManifest.capabilities?.['ai.invoke'] !== true) {
           throw new Error(`Extension module is not allowed to invoke AI capabilities: ${moduleKey(packageManifest.id, moduleManifest.id)}`)
         }
         if (!options.aiGateway) throw new Error('AI Gateway invocation is not available in this host')
-        return options.aiGateway.invoke({
+        const workSignal = await executionSignal()
+        const signal = input.signal ? AbortSignal.any([input.signal, workSignal]) : workSignal
+        signal.throwIfAborted()
+        const result = await options.aiGateway.invoke({
           ...input,
-          signal: input.signal
-            ? AbortSignal.any([input.signal, instance.scope.signal])
-            : instance.scope.signal,
+          signal,
           caller: { kind: 'extension', id: packageManifest.id },
         })
+        signal.throwIfAborted()
+        await executionSignal()
+        return result
       },
-      invokeModel: input => {
+      invokeModel: async input => {
         assertScopeActive(instance)
         if (moduleManifest.capabilities?.['ai.invoke'] !== true)
           throw new Error(`Extension module is not allowed to invoke AI capabilities: ${moduleKey(packageManifest.id, moduleManifest.id)}`)
         if (!options.invokeModel) throw new Error('AI model invocation is not available in this host')
-        return instance.scope.run(() => options.invokeModel!({
-          ...input,
-          signal: input.signal
-            ? AbortSignal.any([input.signal, instance.scope.signal])
-            : instance.scope.signal,
-        }))
+        const workSignal = await executionSignal()
+        const signal = input.signal ? AbortSignal.any([input.signal, workSignal]) : workSignal
+        signal.throwIfAborted()
+        return instance.scope.run(async () => {
+          const result = await options.invokeModel!({ ...input, signal })
+          signal.throwIfAborted()
+          await executionSignal()
+          return result
+        })
       },
     },
     prompt: {
-      build: input => {
+      registerProcessor: processor => {
+        assertScopeActive(instance)
+        if (moduleManifest.capabilities?.['prompt.process'] !== true)
+          throw new Error(`Extension module is not allowed to process prompts: ${moduleKey(packageManifest.id, moduleManifest.id)}`)
+        if (!processor.id.startsWith(`${packageManifest.id}/`))
+          throw new Error(`Prompt processor must use package namespace: ${processor.id}`)
+        if (!options.registerPromptProcessor) throw new Error('Prompt processors are not available in this host')
+        const handle = options.registerPromptProcessor({
+          id: processor.id,
+          create: context => instance.scope.run(async () => {
+            const { timeline, ...baseContext } = context
+            const requestedSignal = AbortSignal.any([context.signal, instance.scope.signal])
+            const target = timeline ? Object.freeze({
+              scope: 'timeline' as const, timelineId: timeline.timelineId, branchId: timeline.branchId,
+            }) : undefined
+            if (packageManifest.participation === 'timeline' && (!target || !options.beginTimelineWork || !options.assertTimelineWork)) {
+              throw new Error('Timeline Prompt processor requires a target and managed execution')
+            }
+            const work = packageManifest.participation === 'timeline' ? await options.beginTimelineWork!({
+              timelineId: target!.timelineId,
+              installationId: extensionInstallationId(packageManifest.id, record.target),
+              packageVersion: packageManifest.version, signal: requestedSignal,
+            }) : undefined
+            const signal = work?.signal ?? requestedSignal
+            const execution = work ? { target: target!, lease: work.lease, signal } : undefined
+            const run = async <T>(callback: () => T | Promise<T>): Promise<T> => instance.scope.run(async () => {
+              signal.throwIfAborted()
+              if (work) await options.assertTimelineWork!(work.lease)
+              const value = await (execution ? work!.run(() => timelineWork.run(execution, callback)) : callback())
+              signal.throwIfAborted()
+              if (work) await options.assertTimelineWork!(work.lease)
+              return value
+            })
+            let session: import('@loom-studio/extension-sdk').ExtensionPromptProcessingSession | undefined
+            let disposing: Promise<void> | undefined
+            const dispose = () => disposing ??= (async () => {
+              work?.dispose()
+              await session?.dispose?.()
+            })()
+            try {
+              await run(async () => {
+                session = await processor.create({
+                  ...baseContext, signal,
+                  ...(moduleManifest.capabilities?.['state.read'] === true && timeline ? { timeline } : {}),
+                })
+              })
+              return {
+                ...(session!.prepare ? { prepare: (entries: readonly import('@loom-studio/extension-sdk').ExtensionPromptEntry[]) => run(() => session!.prepare!(entries)) } : {}),
+                render: (entry: import('@loom-studio/extension-sdk').ExtensionPromptEntry) => run(() => session!.render(entry)),
+                dispose,
+              }
+            } catch (error) {
+              try { await dispose() } catch (cleanupError) {
+                throw new AggregateError([error, cleanupError], 'Prompt processor creation and cleanup failed')
+              }
+              throw error
+            }
+          }),
+        }, {
+          packageId: packageManifest.id,
+          moduleId: moduleManifest.id,
+          instanceId: instance.instanceId,
+          target: structuredClone(record.target),
+        })
+        instance.scope.track(`prompt-processor:${processor.id}`, handle)
+        return handle
+      },
+      build: async input => {
         assertScopeActive(instance)
         if (!options.buildPrompt) throw new Error('Prompt build is not available in this host')
-        return instance.scope.run(() => options.buildPrompt!(input, record.target, packageManifest.id))
+        const workSignal = await executionSignal()
+        return instance.scope.run(() => options.buildPrompt!({
+          ...input,
+          signal: input.signal ? AbortSignal.any([input.signal, workSignal]) : workSignal,
+        }, record.target, packageManifest.id, timelineWork.getStore()?.lease))
       },
     },
     agentTools: {
@@ -459,10 +682,18 @@ export function createContext(
           packageManifest.id,
           moduleManifest.id,
           instance.instanceId,
-          (input, context) => instance.scope.run(() => handler(input, {
-            ...context,
-            signal: AbortSignal.any([context.signal, instance.scope.signal]),
-          })),
+          (input, context) => {
+            if (packageManifest.participation === 'timeline') {
+              if (!context.narrativeTarget) throw new Error('Timeline extension tool requires a Narrative target')
+              return runTimeline(context.narrativeTarget, execution => Promise.resolve(handler(input, {
+                ...context, signal: AbortSignal.any([context.signal, execution.signal]),
+              })), context.signal)
+            }
+            return instance.scope.run(() => handler(input, {
+              ...context,
+              signal: AbortSignal.any([context.signal, instance.scope.signal]),
+            }))
+          },
         )
         instance.scope.track(`agent-tool:${toolId}`, registration)
         instance.registeredAgentToolIds.add(toolId)
@@ -590,7 +821,37 @@ export function createContext(
         })
       },
     },
-    storage: createExtensionStorageContext(record, instance, options, extensionActor),
+    storage: createExtensionStorageContext(record, instance, {
+      ...options,
+      validateStorageScope: async (scope, target) => {
+        const storyScope = scope.kind === 'timeline' || scope.kind === 'agent-session'
+        if (packageManifest.participation === 'timeline' && storyScope) {
+          await executionSignal()
+          const execution = timelineWork.getStore()
+          if (!execution) throw new Error('Story storage requires ctx.timeline.run')
+          if (scope.kind === 'timeline' && scope.timelineId !== execution.target.timelineId) {
+            throw new Error('Storage scope is outside the current Timeline')
+          }
+          if (!options.validateStorageScope) throw new Error('Extension Storage Scope validation is not available in this host')
+          return options.validateStorageScope(scope, target, execution.target)
+        }
+        if (scope.kind !== 'global' && !options.validateStorageScope) throw new Error('Extension Storage Scope validation is not available in this host')
+        await options.validateStorageScope?.(scope, target)
+      },
+      validateEntityRef: async (ref, target) => {
+        if (!options.validateEntityRef) throw new Error('Extension Entity Ref validation is not available in this host')
+        if (packageManifest.participation === 'timeline' && ref.kind !== 'asset') {
+          await executionSignal()
+          const execution = timelineWork.getStore()
+          if (!execution) throw new Error('Story references require ctx.timeline.run')
+          if (ref.kind !== 'agent-message' && ref.timelineId !== execution.target.timelineId) {
+            throw new Error('Entity reference is outside the current Timeline')
+          }
+          return options.validateEntityRef(ref, target, execution.target)
+        }
+        await options.validateEntityRef(ref, target)
+      },
+    }, extensionActor),
     assets: {
       publish: async input => {
         assertScopeActive(instance)

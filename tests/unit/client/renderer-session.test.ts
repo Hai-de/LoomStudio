@@ -5,7 +5,7 @@ import { createClientRendererHost } from '../../../apps/studio-client/src/shared
 describe('Renderer Session Host', () => {
   it('revokes private windows on scope changes and global windows when their renderer is removed', () => {
     const closed: string[] = []
-    vi.stubGlobal('window', { open: (url: string) => ({ opener: null, close: () => closed.push(url) }) })
+    vi.stubGlobal('window', { location: { href: 'https://studio.test/' }, open: (url: string) => ({ opener: null, close: () => closed.push(url) }) })
     const renderers = createClientRendererHost()
     const sessions = createRendererSessionHost(renderers)
     try {
@@ -38,6 +38,29 @@ describe('Renderer Session Host', () => {
       expect(closed).toHaveLength(3)
     } finally {
       sessions.dispose()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it.each(['/page.html', '/page.html#settings', '/page.html?theme=dark#settings',
+    'https://studio.test/page.html?loomRendererSession=old#settings'])('preserves query and hash for %s', src => {
+    const open = vi.fn((_url: string, _target: string) => ({ opener: null, close: vi.fn() }))
+    vi.stubGlobal('window', { location: { href: 'https://studio.test/studio/' }, open })
+    const host = createRendererSessionHost()
+    try {
+      const handle = host.open({
+        owner: { kind: 'extension', packageId: 'example.page', moduleId: 'client' },
+        contributionId: 'page',
+        definition: { id: 'page', name: 'Page', surface: 'standalone.page', instanceScope: 'workspace' },
+        frame: { src }, mount: vi.fn(),
+      }, { kind: 'workspace', key: 'workspace' })
+      const actual = new URL(String(open.mock.calls[0]?.[0]))
+      const original = new URL(src, 'https://studio.test/studio/')
+      expect(actual.hash).toBe(original.hash)
+      expect(actual.searchParams.get('theme')).toBe(original.searchParams.get('theme'))
+      expect(actual.searchParams.getAll('loomRendererSession')).toEqual([handle.sessionId])
+    } finally {
+      host.dispose()
       vi.unstubAllGlobals()
     }
   })

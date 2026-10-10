@@ -261,6 +261,8 @@ export async function importCardBundle(input: {
         id: cardId,
         type: applicationDocumentTypes.cardSource,
         content: {
+          artifactId: artifact.artifactId,
+          ...(artifact.derivedFrom ? { derivedFrom: structuredClone(artifact.derivedFrom) } : {}),
           name: artifact.card.name,
           userName: normalizeOptionalString(artifact.card.userName),
           description: artifact.card.description,
@@ -288,6 +290,7 @@ export async function importCardBundle(input: {
           ...(artifact.card.macros !== undefined ? { macros: normalizeMacros(artifact.card.macros, 'Card') } : {}),
           ...(artifact.card.macroOptions !== undefined ? { macroOptions: normalizeMacroOptions(artifact.card.macroOptions) } : {}),
           ...(artifact.card.stateContributionIds !== undefined ? { stateContributionIds: [...artifact.card.stateContributionIds] } : {}),
+          ...(artifact.card.extensionAdoptions !== undefined ? { extensionAdoptions: structuredClone(artifact.card.extensionAdoptions) } : {}),
           createdAt: timestamp,
           updatedAt: timestamp,
         },
@@ -433,6 +436,7 @@ function buildExportArtifact(input: {
   importBundle?: DocumentRecord<ImportBundleContent>
 }): CardBundleArtifact {
   const cardContent = input.card.content
+  if (typeof cardContent.artifactId !== 'string' || !cardContent.artifactId.trim()) throw new Error('Card source artifactId is missing')
   const importBundleContent = input.importBundle?.content
   const sourceArtifact = importBundleContent?.sourceArtifact
   const sourceArtifactRef = importBundleContent?.sourceArtifactRef
@@ -442,7 +446,8 @@ function buildExportArtifact(input: {
   return {
     ...sourceArtifact,
     schemaVersion: 4,
-    artifactId: sourceArtifact?.artifactId ?? input.card.id,
+    artifactId: cardContent.artifactId,
+    ...(cardContent.derivedFrom ? { derivedFrom: structuredClone(cardContent.derivedFrom) } : {}),
     displayName: sourceArtifact?.displayName ?? cardContent.name,
     description: sourceArtifact?.description ?? cardContent.description,
     card: {
@@ -457,6 +462,7 @@ function buildExportArtifact(input: {
       macros: cardContent.macros,
       macroOptions: cardContent.macroOptions,
       stateContributionIds: cardContent.stateContributionIds,
+      ...(cardContent.extensionAdoptions !== undefined ? { extensionAdoptions: structuredClone(cardContent.extensionAdoptions) } : {}),
     },
     contextAssets: input.contextAssets,
     // Current Card bindings, not the import snapshot, own resource provenance.

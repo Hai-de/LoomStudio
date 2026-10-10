@@ -6,6 +6,8 @@ import {
   createDocumentBackedProfiledAiGateway,
   createOfficialAgentToolRegistry,
   createMacroProviderRegistry,
+  createPromptProcessorRegistry,
+  createStateContentRegistry,
   createNarrativeContextRegistry,
   createStateContributionRegistry,
   type CardBundleArtifact,
@@ -147,6 +149,8 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
   const loomRunner = createLoomRunner({ traceAudit })
   const aiCapabilities = createAiGatewayCapabilityRegistry()
   const macroProviders = createMacroProviderRegistry()
+  const promptProcessors = createPromptProcessorRegistry()
+  const stateContent = createStateContentRegistry()
   const narrativeContext = createNarrativeContextRegistry()
   const stateContributions = createStateContributionRegistry()
   registerOfficialFakeAiProvider(aiCapabilities)
@@ -230,6 +234,8 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
     providerAdapters,
     aiCapabilities,
     macroProviders,
+    promptProcessors,
+    stateContent,
     narrativeContext,
     stateContributions,
     gateway: options.providerLogger ? withAiGatewayLogging(gateway, options.providerLogger) : gateway,
@@ -364,26 +370,41 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
         ...(result.raw ? { raw: result.raw } : {}),
       }
     },
-    buildPrompt: async (input, target, packageId) => await applicationRuntime.buildExtensionPrompt(
-      input, target, packageId,
+    buildPrompt: async (input, target, packageId, lease) => await applicationRuntime.buildExtensionPrompt(
+      input, target, packageId, lease,
     ),
     registerMacroProvider: (provider, owner) => macroProviders.register({
       ...provider,
       sourceLabel: `${owner.packageId}/${owner.moduleId}`,
-    }, owner.target),
-    registerNarrativeContextProvider: (provider, owner) => narrativeContext.register(provider, owner.target),
-    registerStateContribution: (contribution, owner) => stateContributions.register({
+    }, owner.target, owner.isAvailable),
+    registerPromptProcessor: (processor, owner) => promptProcessors.register(processor, owner.target),
+    registerStateContentHandler: (handler, owner) => stateContent.register(handler, owner),
+    registerNarrativeContextProvider: (provider, owner) => narrativeContext.register(provider, owner.target, owner.isAvailable),
+    registerStateContribution: (contribution, owner, initialize) => stateContributions.register({
       contribution,
+      initialize,
       packageId: owner.packageId,
       moduleId: owner.moduleId,
       instanceId: owner.instanceId,
       packageVersion: owner.packageVersion,
       target: owner.target,
     }),
-    readState: async target => (await applicationRuntime.getStateSnapshot({ target })).snapshot,
+    runTimelineWork: (input, work) => applicationRuntime.runTimelineExtensionWork(input, work),
+    beginTimelineWork: input => applicationRuntime.beginTimelineExtensionWork(input),
+    assertTimelineWork: lease => applicationRuntime.assertTimelineExtensionWork(lease),
+    canRunTimelineWork: input => applicationRuntime.isTimelineExtensionActive(input),
+    listTimelineTargets: input => applicationRuntime.listTimelineExtensionTargets(input),
+    subscribeTimelineTargets: (input, listener) => applicationRuntime.subscribeTimelineExtensionTargets(input, listener),
+    readState: async (target, owner) => {
+      if (owner.lease) await applicationRuntime.assertTimelineExtensionWork(owner.lease)
+      return (await applicationRuntime.getStateSnapshot({ target })).snapshot
+    },
     canAccessState: (target, installation) => canAccessExtensionState(narratives, installation, target),
     writeState: async (input, owner) => {
-      const result = await applicationRuntime.applyStateMutation(input, { actor: { kind: 'extension', id: owner.packageId } })
+      const result = await applicationRuntime.applyStateMutation(input, {
+        actor: { kind: 'extension', id: owner.packageId },
+        ...(owner.lease ? { extensionLeases: [owner.lease] } : {}),
+      })
       return { snapshot: result.snapshot, changesetId: result.mutation.changesetId }
     },
     registerAgentToolHandler: (toolId, _ownerPackageId, _ownerModuleId, _ownerInstanceId, handler) => agentTools.registerRuntime({
@@ -408,7 +429,7 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
         }
       },
     }),
-    validateStorageScope: async (scope, target) => {
+    validateStorageScope: async (scope, target, execution) => {
       if (scope.kind === 'global') return
       if (scope.kind === 'card') {
         const card = await documents.get(scope.cardId)
@@ -425,6 +446,7 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
       }
       const session = await agents?.getSession(scope.agentSessionId)
       if (!session || session.deletedAt) throw new Error(`Agent Session not found: ${scope.agentSessionId}`)
+      if (execution && session.timelineId !== execution.timelineId) throw new Error('Agent Session is outside the current Timeline')
       if (target.kind === 'card') {
         const timeline = session.timelineId ? await narratives?.getTimeline(session.timelineId) : undefined
         if (!timeline || timeline.deletedAt || timeline.createdFrom?.cardId !== target.cardId) {
@@ -432,7 +454,11 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
         }
       }
     },
-    validateEntityRef: async (ref, target) => {
+    validateEntityRef: async (ref, target, execution) => {
+      if (execution && ref.kind === 'agent-message'
+        && (await agents?.getSession(ref.agentSessionId))?.timelineId !== execution.timelineId) {
+        throw new Error('Agent Message is outside the current Timeline')
+      }
       if (target.kind === 'card' && ref.kind !== 'asset') {
         const timelineId = ref.kind === 'agent-message'
           ? (await agents?.getSession(ref.agentSessionId))?.timelineId

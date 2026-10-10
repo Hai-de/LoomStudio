@@ -31,6 +31,22 @@ Client Module 必须导出 `activate(ctx)`。Manifest 中声明的 Renderer 必�
 
 Client Module 当前是受信任的同源 JavaScript。即使某个 Renderer 使用 sandbox iframe，模块本身仍已在 Studio 主页面执行；iframe 只隔离该 Renderer 的 frame 内容，不能把整个 Client Module 描述成不可信代码沙箱。
 
+### Timeline 参与
+
+Manifest 声明 `participation: "timeline"` 的 Client Module 还须通过当前 Timeline 的采用校验。
+Catalog 保留该声明；Client Host 将采用记录与实际安装身份、安装版本、包版本及 Card 范围核对，
+未采用、暂停、安装缺失或需要显式恢复时不加载模块，也不展示故事 Action / Renderer。
+全局模块开关仍是前置条件，故事采用不改写它。
+
+每个活动模块实例获得固定的 `ctx.timeline.target`（Timeline + Branch）。切换目标或采用 generation、
+安装版本变化时先 abort 旧实例，再清理并重建；Branch 仍不拥有采用配置。
+共享扩展的 `ctx.timeline.target` 为空，不因故事切换重复激活。Focus Surface 仍是 Workspace 容器，
+故事模块的注册随实例撤销，不借此增加第二个 Focus Surface 或占用跨故事的实例。
+
+采用与 State 更新复用 `/extensions/events`。数据事件先重新核对当前采用资格，再刷新订阅；
+不重新读取全部扩展目录。断线立即撤销故事实例，重连后重新读取权威 Catalog 和采用关系。
+页面导航尚未得到同一 Timeline 的有效 Branch 时，不提供故事目标。
+
 ## 2. Renderer Contribution 合同
 
 Manifest 与运行时共享 `RendererContributionDefinition`：
@@ -113,7 +129,8 @@ ctx.renderers.register/open/close/openStandalone
 ctx.commands.register
 ctx.records.list/get
 ctx.configs.list/get/upsert/subscribe
-ctx.state.get
+ctx.timeline.target
+ctx.state.get/subscribe
 ctx.history.project/extract
 ctx.rpc.call
 ctx.assets.url
@@ -127,6 +144,8 @@ ctx.logger / ctx.signal / ctx.extension
 - Record 读取始终绑定当前 `packageId`；
 - Client RPC 只能调用当前 Package namespace；
 - State 与 History 通过 Application RPC 读取，不暴露 Store；
+- `state.subscribe(target, handler, onError?)` 立即读取一次，后续数据事件和重连触发复核；同一 revision 不重复通知，不承诺逐个历史 revision 投递。失败交给 `onError` 或日志，再次成功可重新投递相同 revision；
+- Timeline 实例只能读取/订阅自己的固定目标；目标切换、暂停或释放订阅后忽略迟到结果。State 订阅和 Config 订阅在模块 abort 时解除。宿主不能撤销已开始执行的任意 JS 回调，扩展的异步处理仍须遵守 `ctx.signal`；
 - Asset 和 Package File 只获得受控 URL，不获得物理路径；
 - Data commit 会产生 `extensions.data.changed` SSE，Client Host 收到后使 Renderer Projection 失效重建；
 - Client Config 始终绑定当前 `packageId`，更新使用 Document Version 乐观并发；订阅只在服务端提交成功并产生数据事件后读取新的权威快照；

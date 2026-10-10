@@ -5,7 +5,7 @@ import type { ClientJsonValue } from '@loom-studio/client-bridge'
 import type { ManagedClientExtensionModule, ManagedClientExtensionPackage, ManagedExtensionPackage } from '../../../entities/index.js'
 import type { StudioApi } from '../../../shared/api/studio-api.js'
 import { invalidateCardMedia } from '../../../shared/lib/card-media.js'
-import { createClientExtensionHost, type ClientExtensionDataApi } from './client-extension-host.js'
+import { createClientExtensionHost, type ClientExtensionDataApi, type ClientTimelineParticipation } from './client-extension-host.js'
 import type { ClientRendererHost } from '../../../shared/extension-renderer-runtime/client-renderer-host.js'
 import { createRendererSessionHost } from './renderer-session.js'
 import { extensionInstallationId, type ClientNotification, type ExtensionInstallationTarget } from '@loom-studio/extension-sdk'
@@ -40,7 +40,7 @@ export function createClientExtensionDataApi(api: Pick<StudioApi, 'extensionRunt
 }
 
 export function useClientExtensionRuntime(input: {
-  api: Pick<StudioApi, 'extensions' | 'extensionRuntime' | 'states' | 'textTransforms'>
+  api: Pick<StudioApi, 'extensions' | 'extensionRuntime' | 'states' | 'textTransforms' | 'timelineExtensions' | 'extensionInstallations'>
   rendererHost: ClientRendererHost
   logger: Logger
   clientLogs: MemoryLogSink
@@ -70,14 +70,61 @@ export function useClientExtensionRuntime(input: {
   useEffect(() => host.subscribe(() => setBackgroundRevision(revision => revision + 1)), [host])
   const lifecycle = useRef<{ host: typeof host; signal: AbortSignal } | null>(null)
   const globalPackages = useRef<ManagedExtensionPackage[]>([])
+  const currentPackages = useRef<ManagedExtensionPackage[]>([])
   const requestSequence = useRef(0)
+  const participationSequence = useRef(0)
+
+  const refreshParticipation = useCallback(async (catalog = currentPackages.current, reload: readonly string[] = []) => {
+    const signal = lifecycle.current?.host === host ? lifecycle.current.signal : undefined
+    if (!signal || signal.aborted) return false
+    const sequence = ++participationSequence.current
+    const scope = input.rendererHost.scopeSnapshot()
+    const stale = () => signal.aborted || sequence !== participationSequence.current
+      || contextKey(input.rendererHost) !== JSON.stringify([scope.cardId, scope.timelineId, scope.branchId])
+    try {
+      let timeline: ClientTimelineParticipation | undefined
+      if (scope.timelineId && scope.branchId && catalog.some(item => item.participation === 'timeline')) {
+        const [config, result] = await Promise.all([
+          input.api.timelineExtensions.get({ timelineId: scope.timelineId }),
+          input.api.extensionInstallations.list(),
+        ])
+        if (stale()) return false
+        timeline = {
+          target: { scope: 'timeline', timelineId: scope.timelineId, branchId: scope.branchId },
+          leases: config.entries.flatMap(entry => {
+            const installation = result.installations.find(item => item.id === entry.installationId)
+            const pkg = catalog.find(item => extensionInstallationId(item.packageId, item.target ?? { kind: 'global' }) === entry.installationId)
+            if (!entry.enabled || !installation || !pkg || pkg.participation !== 'timeline'
+              || config.timelineId !== scope.timelineId || installation.participation !== 'timeline'
+              || installation.version !== entry.installationVersion || installation.packageId !== entry.packageId
+              || installation.packageVersion !== entry.packageVersion || pkg.version !== entry.packageVersion
+              || extensionInstallationId(installation.packageId, installation.target) !== entry.installationId
+              || (installation.target.kind === 'card' && installation.target.cardId !== scope.cardId)) return []
+            return [{
+              timelineId: scope.timelineId!, installationId: entry.installationId,
+              installationVersion: entry.installationVersion, generation: entry.generation,
+            }]
+          }),
+        }
+      }
+      if (stale()) return false
+      await host.reconcile(toClientPackages(catalog), { reload, timeline })
+      return !stale()
+    } catch (reason) {
+      if (stale()) return false
+      await host.reconcile(toClientPackages(catalog))
+      if (!stale()) setError(reason instanceof Error ? reason : new Error(String(reason)))
+      return false
+    }
+  }, [host, input.api.extensionInstallations, input.api.timelineExtensions, input.rendererHost])
 
   const refresh = useCallback(async (reload: readonly string[] = []) => {
     const signal = lifecycle.current?.host === host ? lifecycle.current.signal : undefined
     if (!signal || signal.aborted) return []
     const sequence = ++requestSequence.current
     const cardId = input.rendererHost.scopeSnapshot().cardId
-    const stale = () => signal.aborted || requestSequence.current !== sequence || input.rendererHost.scopeSnapshot().cardId !== cardId
+    const target = contextKey(input.rendererHost)
+    const stale = () => signal.aborted || requestSequence.current !== sequence || contextKey(input.rendererHost) !== target
     try {
       const [result, privateResult, diagnostics] = await Promise.all([
         input.api.extensions.list(),
@@ -93,31 +140,37 @@ export function useClientExtensionRuntime(input: {
       const packagesWithImportState = mapPackageImportState(result.items, rules.rules, extractors.extractors)
       const privatePackages = mapPackageImportState(privateResult.items, rules.rules, extractors.extractors)
       globalPackages.current = packagesWithImportState
+      currentPackages.current = [...packagesWithImportState, ...privatePackages]
       setPackages(packagesWithImportState)
       setCardPackages(privatePackages)
       setServerDiagnostics(diagnostics.diagnostics)
-      await host.reconcile(toClientPackages([...packagesWithImportState, ...privatePackages]), { reload })
-      if (stale()) return []
+      if (!await refreshParticipation(currentPackages.current, reload) || stale()) return []
       setError(undefined)
       setRefreshSequence(sequence => sequence + 1)
       return packagesWithImportState
     } catch (reason) {
       if (stale()) return []
+      participationSequence.current += 1
+      await host.reconcile(toClientPackages(currentPackages.current))
+      if (stale()) return []
       setError(reason instanceof Error ? reason : new Error(String(reason)))
       return []
     }
-  }, [host, input.api.extensions, input.api.textTransforms, input.rendererHost])
+  }, [host, input.api.extensions, input.api.textTransforms, input.rendererHost, refreshParticipation])
 
   useEffect(() => {
     const controller = new AbortController()
     lifecycle.current = { host, signal: controller.signal }
     globalPackages.current = []
-    let cardId = input.rendererHost.scopeSnapshot().cardId
+    currentPackages.current = []
+    let target = contextKey(input.rendererHost)
     const unsubscribeScope = input.rendererHost.subscribe(() => {
-      const nextCardId = input.rendererHost.scopeSnapshot().cardId
-      if (nextCardId === cardId) return
-      cardId = nextCardId
+      const nextTarget = contextKey(input.rendererHost)
+      if (nextTarget === target) return
+      target = nextTarget
+      participationSequence.current += 1
       setCardPackages([])
+      currentPackages.current = globalPackages.current
       void host.reconcile(toClientPackages(globalPackages.current))
       void refresh()
     })
@@ -128,7 +181,7 @@ export function useClientExtensionRuntime(input: {
         if (controller.signal.aborted) return
         input.rendererHost.invalidate()
         setConfigRevision(revision => revision + 1)
-        await host.notifyConfigsChanged()
+        await Promise.all([host.notifyConfigsChanged(), host.notifyStateChanged()])
       })
     }
     void refresh().then(() => {
@@ -138,11 +191,19 @@ export function useClientExtensionRuntime(input: {
       events.addEventListener('directories.media.changed', invalidateCardMedia)
       events.addEventListener('extensions.changed', () => { void refresh() })
       events.addEventListener('extensions.data.changed', () => {
-        input.rendererHost.invalidate()
-        setConfigRevision(revision => revision + 1)
-        void host.notifyConfigsChanged()
+        void refreshParticipation().then(async current => {
+          if (!current || controller.signal.aborted) return
+          input.rendererHost.invalidate()
+          setConfigRevision(revision => revision + 1)
+          await Promise.all([host.notifyConfigsChanged(), host.notifyStateChanged()])
+        })
       })
-      events.onerror = () => setError(new Error('Extension event stream disconnected'))
+      events.onerror = () => {
+        requestSequence.current += 1
+        participationSequence.current += 1
+        void host.reconcile(toClientPackages(currentPackages.current))
+        setError(new Error('Extension event stream disconnected'))
+      }
     })
     return () => {
       controller.abort()
@@ -153,7 +214,7 @@ export function useClientExtensionRuntime(input: {
       void host.dispose()
       sessionHost.dispose()
     }
-  }, [host, input.rendererHost, refresh, sessionHost])
+  }, [host, input.rendererHost, refresh, refreshParticipation, sessionHost])
 
   return {
     host,
@@ -182,6 +243,11 @@ export function useClientExtensionRuntime(input: {
       return await refresh()
     },
   }
+}
+
+function contextKey(host: ClientRendererHost): string {
+  const scope = host.scopeSnapshot()
+  return JSON.stringify([scope.cardId, scope.timelineId, scope.branchId])
 }
 
 export function mapPackageImportState(

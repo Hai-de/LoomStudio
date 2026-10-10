@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createTranslator } from '../../shared/i18n/index.js'
 import { BackgroundMaterialsView, type MaterialValue } from '../../widgets/settings-panel/background-materials-view.js'
 
 const backgrounds = [
@@ -13,7 +14,7 @@ export function BackgroundsPreview() {
   const [followState, setFollowState] = useState(true)
   return (
     <main style={{ padding: 20, minHeight: '100dvh', boxSizing: 'border-box', background: 'var(--loom-color-surface)' }}>
-      <BackgroundMaterialsView backgrounds={backgrounds} selectedId={selectedId} material={material}
+      <BackgroundMaterialsView t={createTranslator('zh-CN')} backgrounds={backgrounds} selectedId={selectedId} material={material}
         followState={followState} onSelect={setSelectedId} onMaterialChange={setMaterial} onFollowStateChange={setFollowState} />
     </main>
   )
