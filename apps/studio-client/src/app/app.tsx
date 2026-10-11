@@ -332,6 +332,11 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
       modelConfigured={state.providerAccountsLoaded ? hasCompleteProviderAccount(state.providerAccounts) : undefined}
       busy={mutationBusy}
       canRedo={state.canRedoEdit}
+      agentActiveRun={state.agentActiveRun}
+      agentMessages={state.agentChatMessages}
+      agentSession={state.agentChatSession}
+      agentSessionsCount={state.agentChatSessions?.length}
+      isPrimarySession={Boolean(state.agentChatSession && state.narrativeAgentSession?.id === state.agentChatSession.id)}
       agentPanel={<AgentChatPanel
       busy={agentChatBusy}
       activeRun={state.agentActiveRun}

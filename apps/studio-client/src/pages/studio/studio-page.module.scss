@@ -123,21 +123,20 @@
   --loom-composer-reserve: calc(var(--loom-input-height) + 4rem);
 
   position: absolute;
-  z-index: 40;
-  top: 0;
-  left: 0;
-  bottom: 0;
+  z-index: 30;
+  top: 44px;
+  left: 6px;
+  bottom: 6px;
   width: var(--loom-shell-rail-preferred-width, var(--loom-rail-expanded-width, 240px));
-  height: 100%;
-  max-height: 100%;
-  max-width: 100%;
+  height: calc(100% - 50px);
+  max-height: calc(100% - 50px);
+  max-width: calc(100% - 12px);
   display: grid;
   overflow: hidden;
-  border-radius: 0;
-  border: none;
-  border-right: 1px solid color-mix(in srgb, var(--loom-color-border) 60%, transparent);
+  border-radius: var(--loom-radius-window, 18px);
+  border: 1px solid color-mix(in srgb, var(--loom-color-border) 60%, transparent);
   background: var(--loom-color-surface);
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.32), 0 2px 10px rgba(0, 0, 0, 0.16);
   transition:
     width var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing),
     transform var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing),
@@ -149,7 +148,7 @@
     background: color-mix(in srgb, var(--loom-color-surface) var(--loom-preview-opacity, 58%), transparent);
     -webkit-backdrop-filter: blur(var(--loom-preview-blur, 18px)) saturate(135%);
     backdrop-filter: blur(var(--loom-preview-blur, 18px)) saturate(135%);
-    border-right-color: color-mix(in srgb, var(--loom-color-border) 55%, transparent);
+    border-color: color-mix(in srgb, var(--loom-color-border) 55%, transparent);
   }
 
   .workspaceRail {
@@ -193,8 +192,8 @@
   height: 100%;
   min-width: var(--loom-rail-collapsed-width);
   min-height: 0;
-  display: grid;
-  grid-template-rows: 46px minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   container-name: studio-rail;
   container-type: inline-size;
 }
@@ -203,15 +202,50 @@
   position: relative;
   width: 100%;
   height: 40px;
-  margin-top: 6px;
-  min-width: 0;
-  min-height: 0;
+  min-height: 40px;
+  flex: 0 0 40px;
   display: flex;
   align-items: center;
   gap: 0;
   overflow: hidden;
-  padding: 0 8px 0 5px;
+  padding: 0 8px;
   box-sizing: border-box;
+}
+
+.dockCollapseButton {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  padding: 0;
+  color: var(--loom-color-text-subtle);
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+  flex-shrink: 0;
+  transition:
+    color var(--loom-motion-duration-fast) ease,
+    background-color var(--loom-motion-duration-fast) ease;
+
+  &:hover {
+    color: var(--loom-color-accent-strong);
+    background: color-mix(in srgb, var(--loom-color-text) 8%, transparent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--loom-color-accent);
+    outline-offset: -1px;
+  }
+}
+
+.dockCollapseButtonIcon {
+  width: 16px;
+  height: 16px;
+  stroke-width: var(--loom-page-header-icon-stroke, 1.85);
 }
 
 .dockBrandIconButton {
@@ -245,6 +279,7 @@
 .dockBrandTextButton {
   display: inline-flex;
   align-items: center;
+  height: 26px;
   border: 0;
   padding: 0;
   background: transparent;
@@ -253,18 +288,19 @@
   color: var(--loom-color-text-muted);
   outline: none;
   white-space: nowrap;
+  pointer-events: auto;
   transition:
     color var(--loom-motion-duration-fast) ease,
-    opacity var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing),
-    clip-path var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing);
+    background-color var(--loom-motion-duration-fast) ease;
 
   &:hover {
     color: var(--loom-color-accent-strong);
+    background: color-mix(in srgb, var(--loom-color-text) 8%, transparent);
   }
 
   &:focus-visible {
-    outline: 1px solid var(--loom-color-accent);
-    outline-offset: 2px;
+    outline: 2px solid var(--loom-color-accent);
+    outline-offset: 1px;
   }
 }
 
@@ -347,31 +383,32 @@
   transform: none !important;
   opacity: 1 !important;
   pointer-events: auto !important;
-  top: 0;
-  bottom: 0;
+  top: 44px;
+  bottom: 6px;
+  left: 6px;
   width: clamp(42rem, 52vw, 72rem);
-  height: 100%;
-  max-height: 100%;
+  height: calc(100% - 50px);
+  max-height: calc(100% - 50px);
   display: block;
   transition-duration: var(--loom-shell-motion-duration-enter);
 }
 
 .floatingDockBesideNarrative {
   width: calc(var(--loom-narrative-left-anchor, 42rem) - 16px);
-  height: 100%;
-  max-height: 100%;
+  height: calc(100% - 50px);
+  max-height: calc(100% - 50px);
 }
 
 .floatingDockCoverNarrative {
   width: var(--loom-narrative-right-anchor, 72rem);
-  height: 100%;
-  max-height: 100%;
+  height: calc(100% - 50px);
+  max-height: calc(100% - 50px);
 }
 
 .floatingDockImmersive {
-  width: 100%;
-  height: 100%;
-  max-height: 100%;
+  width: calc(100% - 12px);
+  height: calc(100% - 50px);
+  max-height: calc(100% - 50px);
 }
 
 .floatingDockResizing {
@@ -518,9 +555,7 @@
   opacity: 1;
   transition:
     opacity var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing),
-    clip-path var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing),
-    height var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing),
-    padding var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing);
+    clip-path var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing);
 }
 
 .railGroup:first-child .railGroupLabel {
@@ -634,11 +669,6 @@
     opacity: 0;
     clip-path: inset(0 100% 0 0);
     pointer-events: none;
-    height: 0;
-    min-height: 0;
-    padding-top: 0;
-    padding-bottom: 0;
-    overflow: hidden;
     transition-duration: var(--loom-shell-motion-duration-enter);
   }
 }
@@ -680,12 +710,32 @@
   overflow: hidden;
   background: var(--loom-color-surface);
   clip-path: inset(0 0 0 0);
-  transition: clip-path var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing);
+  transition:
+    clip-path var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing),
+    transform var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing),
+    opacity var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing);
 }
 
 .workspaceShellLayout[data-rail-compact='true'] .workspaceRail {
   clip-path: inset(0 calc(100% - var(--loom-rail-collapsed-width)) 0 0);
   transition-duration: var(--loom-shell-motion-duration-enter);
+}
+
+.workspaceShellLayout[data-rail-hidden='true'] {
+  .workspaceRail {
+    transform: translateX(-100%);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .workspacePanel {
+    inset: 0 0 0 0 !important;
+  }
+
+  .workspaceBody {
+    border-left: none;
+    border-top-left-radius: 0;
+  }
 }
 
 .workspacePanel {
@@ -697,7 +747,9 @@
   overflow: hidden;
   opacity: 1;
   outline: none;
-  transition: opacity var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing);
+  transition:
+    inset var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing),
+    opacity var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing);
 }
 
 .workspaceRail .dockSidebar,
@@ -723,7 +775,6 @@
   position: relative;
   height: 40px !important;
   min-height: 40px !important;
-  margin-top: 6px;
   flex: 0 0 40px;
   display: flex;
   align-items: center;
@@ -774,7 +825,7 @@
 }
 
 .headerNavigation {
-  display: inline-flex;
+  display: none !important;
   align-items: center;
   flex: 0 0 auto;
   gap: 0;
@@ -894,6 +945,8 @@
   border-top: 1px solid color-mix(in srgb, var(--loom-color-border) 60%, transparent);
   border-left: 1px solid color-mix(in srgb, var(--loom-color-border) 60%, transparent);
   border-top-left-radius: var(--loom-radius-window, 18px);
+  transition:
+    border-top-left-radius var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing);
 }
 
 .dockPanelHost::-webkit-scrollbar,
@@ -989,39 +1042,69 @@
 .stageFloatingHeader {
   position: absolute;
   top: 6px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(var(--loom-canvas-width), calc(100vw - 32px));
-  height: 40px;
+  left: 6px;
+  right: 6px;
+  height: 32px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  z-index: 25;
+  z-index: 50;
   background: transparent;
   pointer-events: none;
-  gap: 12px;
-  padding: 0 12px;
+  padding: 0;
   box-sizing: border-box;
 }
 
 .stageHeaderLeft {
-  display: flex;
-  justify-content: flex-start;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
+  height: 32px;
+  padding: 2px 4px;
+  gap: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--loom-color-surface) 72%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(135%);
+  backdrop-filter: blur(16px) saturate(135%);
+  border: 1px solid color-mix(in srgb, var(--loom-color-border) 55%, transparent);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.14),
+    0 1px 3px rgba(0, 0, 0, 0.08);
+  pointer-events: auto;
+  z-index: 2;
+  transition:
+    background-color var(--loom-motion-duration-fast) ease,
+    border-color var(--loom-motion-duration-fast) ease,
+    box-shadow var(--loom-motion-duration-fast) ease;
+
+  &:hover {
+    background: color-mix(in srgb, var(--loom-color-surface) 84%, transparent);
+    border-color: color-mix(in srgb, var(--loom-color-border) 70%, transparent);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  }
+}
+
+.stageHeaderCenter {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: calc(100% - 240px);
   pointer-events: none;
-  transition: opacity var(--loom-motion-duration-fast) ease;
+  z-index: 1;
 }
 
 .stageHeaderRight {
-  display: flex;
-  justify-content: flex-end;
+  display: inline-flex;
   align-items: center;
+  height: 32px;
+  padding: 0;
   gap: 6px;
-  min-width: 0;
-  pointer-events: none;
   margin-left: auto;
+  pointer-events: auto;
+  z-index: 2;
 }
 
 :global(.loom-stage-extension-action) {
@@ -1093,41 +1176,55 @@
 }
 
 .stageHeaderButton {
-  width: var(--loom-page-header-control-size);
-  height: var(--loom-page-header-control-size);
-  min-width: var(--loom-page-header-control-size);
-  min-height: var(--loom-page-header-control-size);
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  min-height: 26px;
   display: grid;
   place-items: center;
   border: none;
   border-radius: 50%;
-  background: var(--loom-color-background);
+  background: transparent;
   box-shadow: none;
-  color: var(--loom-color-text);
+  color: var(--loom-color-text-subtle);
   cursor: pointer;
   padding: 0;
   outline: none;
   pointer-events: auto;
   transition:
-    color var(--loom-motion-duration-fast) ease;
+    color var(--loom-motion-duration-fast) ease,
+    background-color var(--loom-motion-duration-fast) ease;
 
   &:hover:not(:disabled) {
     color: var(--loom-color-accent-strong);
-    background: var(--loom-color-background);
+    background: color-mix(in srgb, var(--loom-color-text) 10%, transparent);
   }
 
   &:active:not(:disabled) {
     color: var(--loom-color-accent-strong);
-    background: var(--loom-color-background);
+    background: color-mix(in srgb, var(--loom-color-text) 15%, transparent);
   }
 
   &:focus-visible {
     outline: 2px solid var(--loom-color-accent);
-    outline-offset: -2px;
+    outline-offset: -1px;
   }
 }
 
-:global(html[data-loom-material-preview='glass']) .stageHeaderButton,
+.stageHeaderRight :global(.loom-stage-extension-action) {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  min-height: 26px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+
+  &:hover {
+    background: color-mix(in srgb, var(--loom-color-text) 10%, transparent);
+  }
+}
+
 :global(html[data-loom-material-preview='glass']) .stageCharacterCapsule {
   background: color-mix(in srgb, var(--loom-color-surface) var(--loom-preview-opacity, 42%), transparent);
   -webkit-backdrop-filter: blur(calc(var(--loom-preview-blur, 18px) * 0.7)) saturate(130%);
@@ -1135,8 +1232,6 @@
   border: 1px solid color-mix(in srgb, var(--loom-color-border) 45%, transparent);
 }
 
-:global(html[data-loom-material-preview='glass']) .stageHeaderButton:hover:not(:disabled),
-:global(html[data-loom-material-preview='glass']) .stageHeaderButton:active:not(:disabled),
 :global(html[data-loom-material-preview='glass']) .stageCharacterCapsule:hover:not(:disabled) {
   background: color-mix(in srgb, var(--loom-color-surface) 54%, transparent);
 }
@@ -1159,25 +1254,34 @@
 .stageCharacterCapsule {
   display: inline-flex;
   align-items: center;
-  height: var(--loom-page-header-control-size);
-  padding: 3px 12px 3px 4px;
-  gap: 8px;
-  max-width: calc(var(--loom-rail-expanded-width, 220px) - 52px);
-  border: none;
+  height: 32px;
+  padding: 2px 10px 2px 4px;
+  gap: 7px;
+  max-width: 320px;
+  border: 1px solid color-mix(in srgb, var(--loom-color-border) 55%, transparent);
   border-radius: 999px;
-  background: var(--loom-color-background);
+  background: color-mix(in srgb, var(--loom-color-surface) 72%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(135%);
+  backdrop-filter: blur(16px) saturate(135%);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.14),
+    0 1px 3px rgba(0, 0, 0, 0.08);
   color: var(--loom-color-text);
   cursor: pointer;
   outline: none;
   pointer-events: auto;
   user-select: none;
-  box-shadow: none;
   transition:
-    color var(--loom-motion-duration-fast) ease;
+    color var(--loom-motion-duration-fast) ease,
+    background-color var(--loom-motion-duration-fast) ease,
+    border-color var(--loom-motion-duration-fast) ease,
+    box-shadow var(--loom-motion-duration-fast) ease;
 
   &:hover:not(:disabled) {
     color: var(--loom-color-accent-strong);
-    background: var(--loom-color-background);
+    background: color-mix(in srgb, var(--loom-color-surface) 84%, transparent);
+    border-color: color-mix(in srgb, var(--loom-color-border) 70%, transparent);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
 
     .stageCharacterCapsuleArrow {
       color: var(--loom-color-text);
@@ -1196,6 +1300,8 @@
 
 .stageCharacterCapsuleActive {
   color: var(--loom-color-accent-strong);
+  border-color: color-mix(in srgb, var(--loom-color-accent) 60%, transparent);
+  background: color-mix(in srgb, var(--loom-color-accent) 15%, transparent);
 
   .stageCharacterCapsuleArrow {
     transform: rotate(180deg);
@@ -1204,10 +1310,10 @@
 }
 
 .stageCharacterCapsuleAvatar {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  min-height: 28px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -1224,19 +1330,19 @@
 }
 
 .stageCharacterCapsuleName {
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
   color: inherit;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 160px;
+  max-width: 180px;
   line-height: 1;
 }
 
 .stageCharacterCapsuleArrow {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   stroke-width: var(--loom-page-header-icon-stroke);
   color: var(--loom-color-text-subtle);
   flex-shrink: 0;
@@ -1246,19 +1352,294 @@
   pointer-events: none;
 }
 
+.stageAgentCapsule {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 2px 8px 2px 10px;
+  gap: 6px;
+  max-width: 320px;
+  border: 1px solid color-mix(in srgb, var(--loom-color-border) 55%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--loom-color-surface) 72%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(135%);
+  backdrop-filter: blur(16px) saturate(135%);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.14),
+    0 1px 3px rgba(0, 0, 0, 0.08);
+  color: var(--loom-color-text);
+  cursor: pointer;
+  outline: none;
+  pointer-events: auto;
+  user-select: none;
+  transition:
+    color var(--loom-motion-duration-fast) ease,
+    background-color var(--loom-motion-duration-fast) ease,
+    border-color var(--loom-motion-duration-fast) ease,
+    box-shadow var(--loom-motion-duration-fast) ease;
+
+  &:hover:not(:disabled) {
+    color: var(--loom-color-accent-strong);
+    background: color-mix(in srgb, var(--loom-color-surface) 84%, transparent);
+    border-color: color-mix(in srgb, var(--loom-color-border) 70%, transparent);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+
+    .stageAgentToggleIcon {
+      color: var(--loom-color-text);
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--loom-color-accent);
+    outline-offset: 2px;
+  }
+}
+
+.stageAgentCapsuleOpen {
+  color: var(--loom-color-accent-strong);
+  border-color: color-mix(in srgb, var(--loom-color-accent) 60%, transparent);
+  background: color-mix(in srgb, var(--loom-color-accent) 15%, transparent);
+
+  .stageAgentToggleIcon {
+    color: var(--loom-color-accent-strong);
+  }
+}
+
+.stageAgentCapsuleRunning {
+  border-color: color-mix(in srgb, var(--loom-color-accent) 50%, transparent);
+}
+
+.stageAgentCapsuleApproval {
+  border-color: color-mix(in srgb, #f59e0b 60%, transparent);
+  background: color-mix(in srgb, #f59e0b 12%, transparent);
+  color: #f59e0b;
+}
+
+.stageAgentCapsuleLeading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stageAgentSpinner {
+  width: 14px;
+  height: 14px;
+  color: var(--loom-color-accent);
+  animation: stageAgentSpin 1s linear infinite;
+}
+
+@keyframes stageAgentSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.stageAgentApprovalIcon {
+  width: 14px;
+  height: 14px;
+  color: #f59e0b;
+}
+
+.stageAgentPrimaryStar {
+  width: 14px;
+  height: 14px;
+  color: var(--loom-color-accent);
+  fill: currentColor;
+}
+
+.stageAgentIcon {
+  width: 14px;
+  height: 14px;
+  color: var(--loom-color-text-subtle);
+  stroke-width: var(--loom-page-header-icon-stroke);
+}
+
+.stageAgentCapsuleBody {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.stageAgentTitle,
+.stageAgentStatusText {
+  font-size: 13px;
+  font-weight: 500;
+  color: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+  line-height: 1;
+}
+
+.stageAgentStatusText {
+  color: var(--loom-color-accent-strong);
+  font-weight: 600;
+}
+
+.stageAgentBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--loom-color-text) 10%, transparent);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--loom-color-text-muted);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.stageAgentCapsuleTrailing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stageAgentToggleIcon {
+  width: 14px;
+  height: 14px;
+  stroke-width: var(--loom-page-header-icon-stroke);
+  color: var(--loom-color-text-subtle);
+  flex-shrink: 0;
+  transition: color var(--loom-motion-duration-fast) ease;
+}
+
 @media (max-width: 768px) {
   .stageFloatingHeader {
     position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    padding: max(4px, env(safe-area-inset-top, 0px)) 8px 0 5px !important;
-    z-index: 25 !important;
+    top: max(6px, env(safe-area-inset-top, 0px)) !important;
+    left: 6px !important;
+    right: 6px !important;
+    height: 32px !important;
+    padding: 0 !important;
+    z-index: 50 !important;
     gap: 6px;
   }
 
-  .stageCharacterCapsuleName {
-    max-width: 96px;
+  .stageHeaderLeft {
+    height: 32px;
+    padding: 2px 4px;
+    gap: 2px;
+  }
+
+  .stageCharacterCapsule {
+    width: 32px !important;
+    min-width: 32px !important;
+    height: 32px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    display: grid !important;
+    place-items: center !important;
+    justify-content: center !important;
+  }
+
+  .stageCharacterCapsuleAvatar {
+    width: 26px !important;
+    height: 26px !important;
+    min-width: 26px !important;
+    min-height: 26px !important;
+  }
+
+  .stageCharacterCapsuleName,
+  .stageCharacterCapsuleArrow {
+    display: none !important;
+  }
+
+  .stageHeaderRight {
+    height: 32px;
+    padding: 0;
+    gap: 4px;
+  }
+
+  .stageAgentCapsule {
+    height: 32px;
+    padding: 2px 6px;
+    gap: 4px;
+    max-width: 52px;
+  }
+
+  .stageAgentCapsuleBody {
+    display: none !important;
+  }
+
+  .dockTriggerZone {
+    display: none;
+  }
+
+  .viewModeControl {
+    display: none !important;
+  }
+
+  .windowModeButton {
+    display: none !important;
+  }
+
+  .mobileBackdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 38;
+    display: block;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+  }
+
+  .floatingDock:not(.floatingDockActive):not(.floatingDockMobileOpen) {
+    position: fixed !important;
+    inset: 0 !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    transform: translateX(-100%) !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+
+  .floatingDockMobileOpen,
+  .floatingDockActive {
+    position: fixed !important;
+    inset: 0 !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    transform: translateX(0) !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    z-index: 40 !important;
+  }
+
+  .workspaceShellLayout {
+    top: calc(max(6px, env(safe-area-inset-top, 0px)) + 38px) !important;
+    height: calc(100% - max(6px, env(safe-area-inset-top, 0px)) - 38px) !important;
+  }
+
+  .windowResizeRight {
+    display: none !important;
   }
 }
 
@@ -1286,78 +1667,21 @@
     transition: none;
   }
 
+  .workspaceBody {
+    transition: none;
+  }
+
+  .stageAgentCapsule {
+    transition: none;
+  }
+
+  .stageAgentSpinner {
+    animation: none !important;
+  }
+
   .panelStage {
     animation: none !important;
     transition: none;
-  }
-}
-
-@media (max-width: 768px) {
-  .dockTriggerZone {
-    display: none;
-  }
-
-  .viewModeControl {
-    display: none !important;
-  }
-
-  .windowModeButton {
-    display: none !important;
-  }
-
-  .mobileBackdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 38;
-    display: block;
-    background: rgba(0, 0, 0, 0.45);
-    backdrop-filter: blur(4px);
-  }
-
-  .floatingDock:not(.floatingDockActive):not(.floatingDockMobileOpen) {
-    top: 0;
-    left: 0;
-    bottom: 0;
-    transform: translateX(-100%) !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
-    border-radius: 0;
-  }
-
-  .floatingDockMobileOpen {
-    transform: translateX(0) !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    position: fixed;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    width: min(280px, 78vw) !important;
-    height: var(--loom-viewport-height, 100%) !important;
-    max-height: var(--loom-viewport-height, 100%) !important;
-    border: none;
-    border-radius: 0;
-    z-index: 40;
-    box-shadow: none;
-  }
-
-  .floatingDockActive {
-    position: fixed;
-    inset: 0;
-    top: 0;
-    left: 0;
-    width: 100% !important;
-    height: var(--loom-viewport-height, 100%) !important;
-    max-width: 100% !important;
-    max-height: var(--loom-viewport-height, 100%) !important;
-    border-radius: 0;
-    border: none;
-    box-shadow: none;
-    z-index: 50;
-  }
-
-  .windowResizeRight {
-    display: none !important;
   }
 }
 

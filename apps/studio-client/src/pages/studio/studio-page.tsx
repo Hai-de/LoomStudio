@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { AlignLeft, ChevronDown, ImageOff, PanelRight, PanelRightClose } from 'lucide-react'
+import { AlignLeft, ArrowLeft, ArrowRight, ChevronDown, ImageOff, PanelLeft, PanelLeftClose, PanelRight, PanelRightClose } from 'lucide-react'
 import type { Translator } from '../../shared/i18n/index.js'
 import { StudioPanelRight } from './studio-panel-right.js'
-import { useStudioLayoutStore, type StudioPanelId } from '../../shared/studio-shell/studio-layout-store.js'
+import { DEFAULT_ASSET_VIEW_STATE, useStudioLayoutStore, type AssetLayoutId, type StudioPanelId } from '../../shared/studio-shell/studio-layout-store.js'
 import type { useStudioNavigation } from '../../shared/studio-shell/use-studio-navigation.js'
 import { StudioPanelHost } from './studio-panel-host.js'
-import { StudioWindowHeader } from './studio-window-header.js'
+import { readAssetLayoutId, StudioWindowHeader } from './studio-window-header.js'
 import { StudioWindowHeaderProvider } from '../../shared/studio-shell/studio-window-header-context.js'
 import { StudioRail } from './studio-rail.js'
 import { useStudioShortcuts } from './use-studio-shortcuts.js'
@@ -14,12 +14,19 @@ import { useStudioWindowResize } from './use-studio-window-resize.js'
 import { useEffectiveMotion } from '../../shared/hooks/use-motion-preference.js'
 import { resolveRailPresentation } from './studio-shell-layout.js'
 import type { WindowResizeAxis } from '../../shared/studio-shell/window-resize.js'
+import type { ActiveAgentRun } from '../../features/narrative-runtime/model/use-narrative-runtime.js'
+import type { AgentSession, AgentTranscriptEntry } from '../../entities/index.js'
+import { StageAgentCapsule } from './stage-agent-capsule.js'
 import styles from './studio-page.module.scss'
 
 type StudioPageProps = {
   navigation: ReturnType<typeof useStudioNavigation>
+  agentActiveRun?: ActiveAgentRun
+  agentMessages?: AgentTranscriptEntry[]
   agentPanel: ReactNode
   agentPanelOpen?: boolean
+  agentSession?: AgentSession
+  agentSessionsCount?: number
   assetWorkspaceId: string
   background?: ReactNode
   busy: boolean
@@ -29,6 +36,7 @@ type StudioPageProps = {
   characterAvatarUrl?: string
   characterName?: string
   customCss: string
+  isPrimarySession?: boolean
   modelConfigured?: boolean
   panelHeaderActions?: Partial<Record<StudioPanelId, ReactNode>>
   panelHeaderMain?: Partial<Record<StudioPanelId, ReactNode>>
@@ -154,7 +162,14 @@ export function StudioPage(props: StudioPageProps) {
 
   const [dockHovered, setDockHovered] = useState(false)
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
+  const [railHidden, setRailHidden] = useState(false)
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (activePanel === null && railHidden) {
+      setRailHidden(false)
+    }
+  }, [activePanel, railHidden])
 
   useEffect(() => {
     if (panelCloseTimerRef.current) clearTimeout(panelCloseTimerRef.current)
@@ -212,6 +227,73 @@ export function StudioPage(props: StudioPageProps) {
   const isDockVisible = isMobile
     ? (activePanel !== null || mobileDrawerOpen)
     : (activePanel !== null || dockPinned || dockHovered)
+
+  const isWorkspaceOpen = isMobile
+    ? (activePanel !== null || mobileDrawerOpen)
+    : (activePanel !== null || dockPinned)
+
+  const handleToggleWorkspace = () => {
+    if (isMobile) {
+      if (activePanel !== null) {
+        closePanel()
+      } else {
+        setMobileDrawerOpen(prev => !prev)
+      }
+    } else {
+      if (activePanel !== null) {
+        closePanel()
+      } else {
+        if (dockPinned) {
+          toggleDockPinned()
+          setDockHovered(false)
+        } else {
+          toggleDockPinned()
+        }
+      }
+    }
+  }
+
+  const activeAssetLayoutId = displayedPanel ? readAssetLayoutId(displayedPanel) : null
+  const activeAssetViewMode = useStudioLayoutStore(state => activeAssetLayoutId === null
+    ? null
+    : (state.assetLayouts[activeAssetLayoutId].views[props.assetWorkspaceId] ?? DEFAULT_ASSET_VIEW_STATE).viewMode)
+  const activeAssetPane = useStudioLayoutStore(state => activeAssetLayoutId === null
+    ? null
+    : (state.assetPanes[activeAssetLayoutId][props.assetWorkspaceId] ?? 'explorer'))
+  const activeAssetSelectedId = useStudioLayoutStore(state => activeAssetLayoutId === null
+    ? undefined
+    : (state.assetLayouts[activeAssetLayoutId].views[props.assetWorkspaceId] ?? DEFAULT_ASSET_VIEW_STATE).selectedId)
+  const setAssetPane = useStudioLayoutStore(state => state.setAssetPane)
+  const canGoBackAsset = activeAssetLayoutId !== null && activeAssetViewMode === 'drilldown' && activeAssetPane === 'detail'
+  const assetForwardRef = useRef<{ layoutId: AssetLayoutId; workspaceId: string; selectedId?: string } | undefined>(undefined)
+
+  const handleHistoryNavigation = (direction: 'back' | 'forward') => {
+    if (direction === 'back') {
+      if (canGoBackAsset && activeAssetLayoutId) {
+        assetForwardRef.current = {
+          layoutId: activeAssetLayoutId,
+          workspaceId: props.assetWorkspaceId,
+          selectedId: activeAssetSelectedId,
+        }
+        setAssetPane(activeAssetLayoutId, props.assetWorkspaceId, 'explorer')
+        return
+      }
+      assetForwardRef.current = undefined
+      requestedHistoryDirection.current = 'back'
+      void props.navigation.goBack()
+    } else {
+      const forward = assetForwardRef.current
+      if (activeAssetLayoutId && activeAssetViewMode === 'drilldown' && activeAssetPane === 'explorer'
+        && forward?.layoutId === activeAssetLayoutId && forward.workspaceId === props.assetWorkspaceId
+        && forward.selectedId === activeAssetSelectedId) {
+        assetForwardRef.current = undefined
+        setAssetPane(activeAssetLayoutId, props.assetWorkspaceId, 'detail')
+        return
+      }
+      requestedHistoryDirection.current = 'forward'
+      void props.navigation.goForward()
+    }
+  }
 
 
 
@@ -317,42 +399,34 @@ export function StudioPage(props: StudioPageProps) {
   const dockSidebar = (
     <div className={styles.dockSidebar}>
       <header className={styles.dockHeader} data-loom-component="page-header">
-        <button
-          aria-label={props.t('rail.closePanel')}
-          className={styles.dockBrandIconButton}
-          title={props.t('rail.closePanel')}
-          type="button"
-          onClick={() => {
-            if (activePanel !== null) {
-              closePanel()
-            } else if (mobileDrawerOpen) {
-              setMobileDrawerOpen(false)
-            } else if (dockPinned) {
-              toggleDockPinned()
-            }
-          }}
-        >
-          <AlignLeft aria-hidden="true" className={styles.stageHeaderButtonIcon} />
-        </button>
-        <button
-          aria-label={dockPinned ? props.t('rail.unpinDock') : props.t('rail.pinDock')}
-          aria-hidden={railPresentation.compact}
-          aria-pressed={dockPinned}
-          className={[
-            styles.dockBrandTextButton,
-            dockPinned ? styles.dockBrandTextButtonPinned : '',
-          ].filter(Boolean).join(' ')}
-          title={dockPinned ? props.t('rail.unpinDock') : props.t('rail.pinDock')}
-          tabIndex={railPresentation.compact ? -1 : 0}
-          type="button"
-          onClick={() => toggleDockPinned()}
-        >
-          <span className={styles.dockBrandText}>LoomStudio</span>
-        </button>
+        {displayedPanel !== null ? (
+          <button
+            aria-label="收起导航栏"
+            className={styles.dockCollapseButton}
+            title="收起导航栏"
+            type="button"
+            onClick={() => setRailHidden(true)}
+          >
+            <PanelLeftClose aria-hidden="true" className={styles.dockCollapseButtonIcon} />
+          </button>
+        ) : (
+          <button
+            aria-label={dockPinned ? props.t('rail.unpinDock') : props.t('rail.pinDock')}
+            aria-hidden={railPresentation.compact}
+            aria-pressed={dockPinned}
+            className={[
+              styles.dockBrandTextButton,
+              dockPinned ? styles.dockBrandTextButtonPinned : '',
+            ].filter(Boolean).join(' ')}
+            title={dockPinned ? props.t('rail.unpinDock') : props.t('rail.pinDock')}
+            tabIndex={railPresentation.compact ? -1 : 0}
+            type="button"
+            onClick={() => toggleDockPinned()}
+          >
+            <span className={styles.dockBrandText}>LoomStudio</span>
+          </button>
+        )}
       </header>
-      <div className={styles.dockHeaderDivider} aria-hidden="true">
-        <span className="loom-divider" />
-      </div>
       <StudioRail
         activePanel={activePanel}
         modelConfigured={props.modelConfigured}
@@ -373,6 +447,17 @@ export function StudioPage(props: StudioPageProps) {
         actionsTargetRef={setHeaderActionsTarget}
         activePanel={displayedPanel}
         assetWorkspaceId={props.assetWorkspaceId}
+        leading={railHidden ? (
+          <button
+            aria-label="展开导航栏"
+            className={styles.dockCollapseButton}
+            title="展开导航栏"
+            type="button"
+            onClick={() => setRailHidden(false)}
+          >
+            <PanelLeft aria-hidden="true" className={styles.dockCollapseButtonIcon} />
+          </button>
+        ) : null}
         main={props.panelHeaderMain?.[displayedPanel]}
         t={props.t}
         onPanelHistory={direction => {
@@ -419,25 +504,42 @@ export function StudioPage(props: StudioPageProps) {
         </div>
 
         <header className={styles.stageFloatingHeader} data-loom-component="stage-floating-header">
-          <div className={styles.stageHeaderLeft} data-dock-open={isDockVisible ? 'true' : undefined}>
+          <div className={styles.stageHeaderLeft}>
             <button
-              aria-label={props.t('rail.label')}
-              className={styles.stageHeaderButton}
-              title={props.t('rail.label')}
+              aria-label={isWorkspaceOpen ? props.t('rail.closePanel') : props.t('rail.label')}
+              className={[
+                styles.stageHeaderButton,
+                isWorkspaceOpen ? styles.stageHeaderButtonActive : '',
+              ].filter(Boolean).join(' ')}
+              title={isWorkspaceOpen ? props.t('rail.closePanel') : props.t('rail.label')}
               type="button"
-              onClick={() => {
-                if (isMobile) {
-                  setMobileDrawerOpen(true)
-                } else {
-                  toggleDockPinned()
-                }
-              }}
+              onClick={handleToggleWorkspace}
               onMouseEnter={handleMouseEnter}
               onMouseLeave={handleMouseLeave}
             >
               <AlignLeft aria-hidden="true" className={styles.stageHeaderButtonIcon} />
             </button>
+            <button
+              aria-label={props.t('navigation.back')}
+              className={styles.stageHeaderButton}
+              title={props.t('navigation.back')}
+              type="button"
+              onClick={() => handleHistoryNavigation('back')}
+            >
+              <ArrowLeft aria-hidden="true" className={styles.stageHeaderButtonIcon} />
+            </button>
+            <button
+              aria-label={props.t('navigation.forward')}
+              className={styles.stageHeaderButton}
+              title={props.t('navigation.forward')}
+              type="button"
+              onClick={() => handleHistoryNavigation('forward')}
+            >
+              <ArrowRight aria-hidden="true" className={styles.stageHeaderButtonIcon} />
+            </button>
+          </div>
 
+          <div className={styles.stageHeaderCenter}>
             {props.characterName ? (
               <button
                 aria-label={`${props.characterName} - ${props.t('rail.character')}`}
@@ -463,23 +565,17 @@ export function StudioPage(props: StudioPageProps) {
 
           <div className={styles.stageHeaderRight}>
             {props.headerActions}
-            <button
+            <StageAgentCapsule
               ref={agentPanelToggleRef}
-              aria-label={isAgentPanelOpen ? '关闭侧边面板' : '打开侧边面板'}
-              className={[
-                styles.stageHeaderButton,
-                isAgentPanelOpen ? styles.stageHeaderButtonActive : '',
-              ].filter(Boolean).join(' ')}
-              title={isAgentPanelOpen ? '关闭侧边面板' : '打开侧边面板'}
-              type="button"
-              onClick={toggleAgentPanel}
-            >
-              {isAgentPanelOpen ? (
-                <PanelRightClose aria-hidden="true" className={styles.stageHeaderButtonIcon} />
-              ) : (
-                <PanelRight aria-hidden="true" className={styles.stageHeaderButtonIcon} />
-              )}
-            </button>
+              activeRun={props.agentActiveRun}
+              isPrimary={props.isPrimarySession}
+              messages={props.agentMessages}
+              open={isAgentPanelOpen}
+              session={props.agentSession}
+              sessionsCount={props.agentSessionsCount}
+              t={props.t}
+              onToggle={toggleAgentPanel}
+            />
           </div>
         </header>
 
@@ -528,7 +624,11 @@ export function StudioPage(props: StudioPageProps) {
           onMouseLeave={handleMouseLeave}
         >
           <div className={styles.workspaceMotionClip}>
-            <div className={styles.workspaceShellLayout} data-rail-compact={railPresentation.compact}>
+            <div
+              className={styles.workspaceShellLayout}
+              data-rail-compact={railPresentation.compact}
+              data-rail-hidden={railHidden && displayedPanel !== null ? 'true' : undefined}
+            >
               <div className={styles.workspaceRail}>{dockSidebar}</div>
               <div className={styles.workspacePanel} hidden={displayedPanel === null}
                 style={displayedPanel === null ? { display: 'none' } : undefined}>{panelHost}</div>

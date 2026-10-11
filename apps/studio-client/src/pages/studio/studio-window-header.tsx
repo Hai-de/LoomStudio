@@ -10,6 +10,7 @@ export function StudioWindowHeader(props: {
   actions?: ReactNode
   actionsTargetRef: RefCallback<HTMLDivElement>
   assetWorkspaceId: string
+  leading?: ReactNode
   main?: ReactNode
   onPanelHistory(direction: 'back' | 'forward'): void
   t: Translator
@@ -41,6 +42,7 @@ export function StudioWindowHeader(props: {
       data-asset-view-mode={activeAssetViewMode ?? undefined}
       data-loom-component="window-header"
     >
+      {props.leading}
       <div className={styles.headerNavigation} data-loom-component="navigation-history">
         <button
           aria-label={props.t('navigation.back')}
@@ -130,7 +132,7 @@ export function StudioWindowHeader(props: {
   )
 }
 
-function readAssetLayoutId(panel: StudioPanelId): AssetLayoutId | null {
+export function readAssetLayoutId(panel: StudioPanelId): AssetLayoutId | null {
   if (panel === 'preset' || panel === 'agent') return 'preset'
   if (panel === 'resource') return 'resources'
   return null
