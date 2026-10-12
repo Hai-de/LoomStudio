@@ -11,7 +11,7 @@ import { buildProjectionOrder } from '../../../apps/studio-client/src/features/c
 import { readPromptResourceWorkbenchRoot } from '../../../apps/studio-client/src/features/context-assets/model/prompt-resource-view.js'
 import { resolvePresetBuildContextResources } from '../../../apps/studio-client/src/features/context-assets/model/preset-build-context.js'
 import { resolveVirtualDisplayName, resolveVirtualExtension } from '../../../apps/studio-client/src/features/context-assets/model/context-asset-tree.js'
-import type { ContextAssetNode, PromptResource, SettingMount } from '../../../apps/studio-client/src/entities/index.js'
+import type { ContextAssetNode, PromptResource, LoreMount } from '../../../apps/studio-client/src/entities/index.js'
 import { describe, expect, it } from 'vitest'
 
 describe('studio client context asset helpers', () => {
@@ -33,14 +33,14 @@ describe('studio client context asset helpers', () => {
     expect(result.selectedId).toBe('new-entry')
     expect(folder?.children?.map(node => node.id)).toEqual(['new-entry', 'setting-entry'])
     expect(added?.projection).toMatchObject({
-      zoneId: 'setting.stable',
-      slotKey: 'setting-layer:city-layers-main@setting.stable',
+      zoneId: 'lore.stable',
+      slotKey: 'lore:city-layers-main@lore.stable',
       entryOrder: 20,
       sourceKind: 'actual',
     })
     expect(added?.capabilities?.projection).toMatchObject({
-      zoneId: 'setting.stable',
-      slotKey: 'setting-layer:city-layers-main@setting.stable',
+      zoneId: 'lore.stable',
+      slotKey: 'lore:city-layers-main@lore.stable',
       entryOrderHint: 20,
       sourceKind: 'actual',
     })
@@ -158,15 +158,15 @@ describe('studio client context asset helpers', () => {
 
   it('resolves global and timeline settings in runtime order with stable deduplication', () => {
     const preset = promptResource('preset-1', 'preset')
-    const setting1 = promptResource('setting-1', 'setting')
-    const setting2 = promptResource('setting-2', 'setting')
-    const timelineSetting = promptResource('setting-3', 'setting')
+    const setting1 = promptResource('setting-1', 'lore')
+    const setting2 = promptResource('setting-2', 'lore')
+    const timelineLore = promptResource('setting-3', 'lore')
     const logic = promptResource('logic-1', 'logic')
 
     expect(resolvePresetBuildContextResources({
       preset,
-      resources: [preset, setting1, setting2, timelineSetting, logic],
-      settingMounts: [
+      resources: [preset, setting1, setting2, timelineLore, logic],
+      loreMounts: [
         ...mounts({ kind: 'manual', id: 'global' }, ['setting-1', 'setting-2']),
         ...mounts({ kind: 'preset', id: 'preset-1' }, ['setting-2', 'setting-3', 'missing']),
       ],
@@ -176,12 +176,12 @@ describe('studio client context asset helpers', () => {
 
   it('ignores legacy preset-linked settings without an active timeline', () => {
     const preset = promptResource('preset-1', 'preset')
-    const setting = promptResource('setting-1', 'setting')
+    const setting = promptResource('setting-1', 'lore')
 
     expect(resolvePresetBuildContextResources({
       preset,
       resources: [preset, setting],
-      settingMounts: mounts({ kind: 'preset', id: 'preset-1' }, ['setting-1']),
+      loreMounts: mounts({ kind: 'preset', id: 'preset-1' }, ['setting-1']),
     })).toEqual({ resources: [], unavailableResourceIds: [] })
   })
 })
@@ -200,10 +200,10 @@ function promptResource(
   }
 }
 
-function mounts(source: SettingMount['source'], settingResourceIds: string[]): SettingMount[] {
-  return settingResourceIds.map((settingResourceId, orderIndex) => ({
+function mounts(source: LoreMount['source'], loreResourceIds: string[]): LoreMount[] {
+  return loreResourceIds.map((loreResourceId, orderIndex) => ({
     id: `mount-${orderIndex}`,
-    settingResourceId,
+    loreResourceId,
     source,
     orderIndex,
     origin: {},
@@ -245,7 +245,7 @@ function baseNodes(): ContextAssetNode[] {
     {
       id: 'setting-module',
       label: 'Setting',
-      category: 'setting',
+      category: 'lore',
       kind: 'module',
       children: [
         {
@@ -261,9 +261,9 @@ function baseNodes(): ContextAssetNode[] {
               projection: {
                 lifecycle: 'always',
                 order: 'entry: 10',
-                slotKey: 'setting-layer:city-layers-main@setting.stable',
+                slotKey: 'lore:city-layers-main@lore.stable',
                 sourceKind: 'actual',
-                zoneId: 'setting.stable',
+                zoneId: 'lore.stable',
                 entryOrder: 10,
               },
             },

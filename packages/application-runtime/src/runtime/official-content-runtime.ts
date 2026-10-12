@@ -53,14 +53,14 @@ export function createOfficialContentRuntimeMethods(ctx: OfficialContentRuntimeC
       }
 
       const mounts = new Set<string>()
-      for (const mount of input.settingMounts) {
-        const key = `${mount.presetResourceId}\0${mount.settingResourceId}`
-        if (mounts.has(key)) throw new Error(`Official content Setting mount is duplicated: ${mount.presetResourceId} -> ${mount.settingResourceId}`)
+      for (const mount of input.loreMounts) {
+        const key = `${mount.presetResourceId}\0${mount.loreResourceId}`
+        if (mounts.has(key)) throw new Error(`Official content Lore mount is duplicated: ${mount.presetResourceId} -> ${mount.loreResourceId}`)
         mounts.add(key)
         const preset = artifacts.get(mount.presetResourceId)
-        const setting = artifacts.get(mount.settingResourceId)
+        const lore = artifacts.get(mount.loreResourceId)
         if (!preset || preset.resourceKind !== 'preset') throw new Error(`Official content Preset reference is invalid: ${mount.presetResourceId}`)
-        if (!setting || setting.resourceKind !== 'setting') throw new Error(`Official content Setting reference is invalid: ${mount.settingResourceId}`)
+        if (!lore || lore.resourceKind !== 'lore') throw new Error(`Official content Lore reference is invalid: ${mount.loreResourceId}`)
       }
 
       const resources = input.resources.map(item => ({
@@ -132,12 +132,12 @@ export function createOfficialContentRuntimeMethods(ctx: OfficialContentRuntimeC
             })
           }
         }
-        for (const mount of input.settingMounts) {
+        for (const mount of input.loreMounts) {
           if (!resources.find(item => item.id === mount.presetResourceId)?.created
             && !existing.get(mount.presetResourceId)?.tombstoned) continue
-          resourceTx.addSettingMount({
+          resourceTx.addLoreMount({
             source: { kind: 'preset', id: mount.presetResourceId },
-            settingResourceId: mount.settingResourceId,
+            loreResourceId: mount.loreResourceId,
             orderIndex: 0,
             origin: { kind: 'builtin', key: builtinOriginKeys[mount.presetResourceId] ?? `${input.packageId}:${mount.presetResourceId}` },
           })

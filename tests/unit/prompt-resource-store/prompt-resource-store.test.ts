@@ -49,7 +49,7 @@ describe('PromptResourceStore', () => {
     const { engine, store } = createStore()
     try {
       const original = await store.createResource({
-        actor, id: 'installed-setting', resourceKind: 'setting', rootNode: createSmallTree(),
+        actor, id: 'installed-setting', resourceKind: 'lore', rootNode: createSmallTree(),
         metadata: { model: { providerId: 'local' } },
       })
       const rootNode: PromptResourceTreeNode = {
@@ -90,13 +90,13 @@ describe('PromptResourceStore', () => {
         const rootNode = createSmallTree()
         if (field !== 'metadata') rootNode.children![0]![field] = value
         await expect(store.createResource({
-          actor, resourceKind: 'setting', rootNode,
+          actor, resourceKind: 'lore', rootNode,
           ...(field === 'metadata' ? { metadata: value } : {}),
         })).rejects.toMatchObject({ code: 'prompt_resource.json_invalid' })
         expect((await store.listResources()).resources).toEqual([])
       }
 
-      const created = await store.createResource({ actor, resourceKind: 'setting', rootNode: createSmallTree() })
+      const created = await store.createResource({ actor, resourceKind: 'lore', rootNode: createSmallTree() })
       for (const invalid of [NaN, Infinity, -Infinity, undefined]) {
         const value = { nested: [invalid as never] }
         await expect(store.mutateResource({
@@ -119,7 +119,7 @@ describe('PromptResourceStore', () => {
       const custom = { 'example.extension': { first: shared, second: shared } }
       const rootNode = { ...createSmallTree(), extra: custom, capabilities }
       const created = await store.createResource({
-        actor, resourceKind: 'setting', metadata: custom, rootNode,
+        actor, resourceKind: 'lore', metadata: custom, rootNode,
       })
       expect(created.resource.metadata).toEqual(custom)
       expect(created.resource.rootNode).toEqual(rootNode)
@@ -131,17 +131,17 @@ describe('PromptResourceStore', () => {
 
   it('characterizes V1 nested trees through flatten/read round-trip and node revisions', async () => {
     const { engine, store } = createStore()
-    const settingFixture = createV1NestedFixture('setting-root', 'setting', 500)
+    const settingFixture = createV1NestedFixture('lore-root', 'lore', 500)
     const presetFixture = createV1NestedFixture('preset-root', 'preset', 100)
 
-    const setting = await store.createResource({ actor, id: 'setting-500', resourceKind: 'setting', rootNode: settingFixture })
+    const setting = await store.createResource({ actor, id: 'setting-500', resourceKind: 'lore', rootNode: settingFixture })
     const preset = await store.createResource({ actor, id: 'preset-100', resourceKind: 'preset', rootNode: presetFixture })
 
-    expect(engine.database.prepare('SELECT version FROM schema_migrations WHERE namespace = ?').get('application.prompt-resource')).toEqual({ version: 5 })
-    expect(engine.database.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND (name LIKE 'prompt_resource%' OR name IN ('global_setting_mounts', 'preset_tool_mounts'))`).all()).toEqual(expect.arrayContaining([
+    expect(engine.database.prepare('SELECT version FROM schema_migrations WHERE namespace = ?').get('application.prompt-resource')).toEqual({ version: 6 })
+    expect(engine.database.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND (name LIKE 'prompt_resource%' OR name IN ('global_lore_mounts', 'preset_tool_mounts'))`).all()).toEqual(expect.arrayContaining([
       { name: 'prompt_resources' },
       { name: 'prompt_resource_nodes' },
-      { name: 'global_setting_mounts' },
+      { name: 'global_lore_mounts' },
       { name: 'prompt_resource_node_revisions' },
       { name: 'prompt_resource_header_revisions' },
       { name: 'preset_tool_mounts' },
@@ -156,14 +156,14 @@ describe('PromptResourceStore', () => {
       actor,
       resourceId: setting.resource.id,
       expectedVersion: 1,
-      mutations: [{ kind: 'node.update', nodeId: 'setting-entry-250', patch: { body: 'Updated V1 entry.' } }],
+      mutations: [{ kind: 'node.update', nodeId: 'lore-entry-250', patch: { body: 'Updated V1 entry.' } }],
     })
     expect(updated.resource.rootNode.children?.[249]?.body).toBe('Updated V1 entry.')
     expect(engine.database.prepare('SELECT COUNT(*) AS count FROM prompt_resource_node_revisions WHERE resource_id = ? AND resource_version = 2').get(setting.resource.id)).toEqual({ count: 1 })
 
-    await store.addSettingMount({ actor, settingResourceId: setting.resource.id, source: { kind: 'manual' }, orderIndex: 0 })
-    await store.addSettingMount({ actor, settingResourceId: setting.resource.id, source: { kind: 'preset', id: preset.resource.id }, orderIndex: 1 })
-    expect((await store.listSettingMounts({ settingResourceId: setting.resource.id })).map(mount => mount.source)).toEqual([
+    await store.addLoreMount({ actor, loreResourceId: setting.resource.id, source: { kind: 'manual' }, orderIndex: 0 })
+    await store.addLoreMount({ actor, loreResourceId: setting.resource.id, source: { kind: 'preset', id: preset.resource.id }, orderIndex: 1 })
+    expect((await store.listLoreMounts({ loreResourceId: setting.resource.id })).map(mount => mount.source)).toEqual([
       { kind: 'manual', id: 'global' },
       { kind: 'preset', id: preset.resource.id },
     ])
@@ -190,8 +190,8 @@ describe('PromptResourceStore', () => {
 
   it('enforces resource ownership, parent ownership, and root identity in SQLite', async () => {
     const { engine, store } = createStore()
-    const resource = await store.createResource({ actor, resourceKind: 'setting', rootNode: createSmallTree() })
-    const other = await store.createResource({ actor, id: 'other-resource', resourceKind: 'setting', rootNode: createSmallTree('other-root', 'other') })
+    const resource = await store.createResource({ actor, resourceKind: 'lore', rootNode: createSmallTree() })
+    const other = await store.createResource({ actor, id: 'other-resource', resourceKind: 'lore', rootNode: createSmallTree('other-root', 'other') })
     const insertNode = engine.database.prepare(`
       INSERT INTO prompt_resource_nodes (
         id, resource_id, parent_id, order_index, kind, label, extra_json, created_at, updated_at
@@ -231,7 +231,7 @@ describe('PromptResourceStore', () => {
 
   it('validates ownership, root rules, cycles, and failed batches before writing', async () => {
     const { engine, store } = createStore()
-    const resource = await store.createResource({ actor, resourceKind: 'setting', rootNode: createSmallTree() })
+    const resource = await store.createResource({ actor, resourceKind: 'lore', rootNode: createSmallTree() })
     const commits: unknown[] = []
     engine.subscribeCommits(commit => commits.push(commit))
 
@@ -284,8 +284,8 @@ describe('PromptResourceStore', () => {
 
   it('rejects expected-version conflicts, semantic no-ops, invalid runtime values, and foreign parents', async () => {
     const { engine, store } = createStore()
-    const resource = await store.createResource({ actor, resourceKind: 'setting', rootNode: createSmallTree(), metadata: { mode: 'one' } })
-    const other = await store.createResource({ actor, id: 'other-resource', resourceKind: 'setting', rootNode: createSmallTree('other-root', 'other') })
+    const resource = await store.createResource({ actor, resourceKind: 'lore', rootNode: createSmallTree(), metadata: { mode: 'one' } })
+    const other = await store.createResource({ actor, id: 'other-resource', resourceKind: 'lore', rootNode: createSmallTree('other-root', 'other') })
 
     await expect(store.mutateResource({ actor, resourceId: resource.resource.id, expectedVersion: 2, mutations: [{ kind: 'node.update', nodeId: 'entry-a', patch: { body: 'A2' } }] })).rejects.toMatchObject({ code: 'prompt_resource.conflict' })
     await expect(store.mutateResource({ actor, resourceId: resource.resource.id, expectedVersion: 1, mutations: [{ kind: 'node.update', nodeId: 'entry-a', patch: { body: 'A' } }] })).rejects.toMatchObject({ code: 'prompt_resource.noop' })
@@ -299,7 +299,7 @@ describe('PromptResourceStore', () => {
     cyclic.self = cyclic
     await expect(store.mutateResource({ actor, resourceId: resource.resource.id, expectedVersion: 1, mutations: [{ kind: 'node.update', nodeId: 'entry-a', patch: { capabilities: cyclic as never } }] })).rejects.toMatchObject({ code: 'prompt_resource.json_invalid' })
     await expect(store.mutateResource({ actor, resourceId: resource.resource.id, expectedVersion: 1, mutations: [{ kind: 'node.update', nodeId: 'entry-a', patch: { extra: [] as never } }] })).rejects.toMatchObject({ code: 'prompt_resource.json_invalid' })
-    await expect(store.replaceSettingMounts({ actor, source: { kind: 'manual' }, mounts: [{ settingResourceId: resource.resource.id, orderIndex: 0, origin: cyclic as never }] })).rejects.toMatchObject({ code: 'prompt_resource.json_invalid' })
+    await expect(store.replaceLoreMounts({ actor, source: { kind: 'manual' }, mounts: [{ loreResourceId: resource.resource.id, orderIndex: 0, origin: cyclic as never }] })).rejects.toMatchObject({ code: 'prompt_resource.json_invalid' })
     await expect(store.mutateResource({ actor, resourceId: resource.resource.id, expectedVersion: 1, mutations: [{ kind: 'resource.update', patch: { metadata: null as never } }] })).rejects.toMatchObject({ code: 'prompt_resource.json_invalid' })
     await expect(store.getResource(resource.resource.id)).resolves.toMatchObject({ version: 1 })
     engine.close()
@@ -307,7 +307,7 @@ describe('PromptResourceStore', () => {
 
   it('uses JSON null to clear optional node fields and rejects clearing an already absent value', async () => {
     const { engine, store } = createStore()
-    const resource = await store.createResource({ actor, resourceKind: 'setting', rootNode: createSmallTree() })
+    const resource = await store.createResource({ actor, resourceKind: 'lore', rootNode: createSmallTree() })
     const configured = await store.mutateResource({
       actor,
       resourceId: resource.resource.id,
@@ -316,16 +316,16 @@ describe('PromptResourceStore', () => {
         kind: 'node.update',
         nodeId: 'entry-a',
         patch: {
-          category: 'setting',
+          category: 'lore',
           meta: 'metadata',
           enabled: true,
           body: 'configured',
-          capabilities: { projection: { zoneId: 'setting.stable' } },
+          capabilities: { projection: { zoneId: 'lore.stable' } },
           extra: { source: 'test' },
         },
       }],
     })
-    expect(findNode(configured.resource.rootNode, 'entry-a')).toMatchObject({ category: 'setting', meta: 'metadata', enabled: true, body: 'configured', capabilities: { projection: { zoneId: 'setting.stable' } }, extra: { source: 'test' } })
+    expect(findNode(configured.resource.rootNode, 'entry-a')).toMatchObject({ category: 'lore', meta: 'metadata', enabled: true, body: 'configured', capabilities: { projection: { zoneId: 'lore.stable' } }, extra: { source: 'test' } })
 
     const cleared = await store.mutateResource({
       actor,
@@ -344,7 +344,7 @@ describe('PromptResourceStore', () => {
 
   it('increments once for a batch and reverts create, update, move, and delete domains', async () => {
     const { engine, store } = createStore()
-    const resource = await store.createResource({ actor, resourceKind: 'setting', rootNode: createSmallTree() })
+    const resource = await store.createResource({ actor, resourceKind: 'lore', rootNode: createSmallTree() })
     const updated = await store.mutateResource({
       actor,
       resourceId: resource.resource.id,
@@ -387,7 +387,7 @@ describe('PromptResourceStore', () => {
 
   it('reverts and redoes header-only and header-plus-node changes completely', async () => {
     const { engine, store } = createStore()
-    const resource = await store.createResource({ actor, resourceKind: 'setting', rootNode: createSmallTree(), metadata: { mode: 'one' } })
+    const resource = await store.createResource({ actor, resourceKind: 'lore', rootNode: createSmallTree(), metadata: { mode: 'one' } })
 
     const headerOnly = await store.mutateResource({ actor, resourceId: resource.resource.id, expectedVersion: 1, mutations: [{ kind: 'resource.update', patch: { label: 'Header One', metadata: { mode: 'two' } } }] })
     const undoneHeader = await store.revertChangeset({ actor, changesetId: headerOnly.commit.changesetId })
@@ -415,36 +415,36 @@ describe('PromptResourceStore', () => {
 
   it('rejects mount-only and mixed-resource changesets instead of partially reverting them', async () => {
     const { engine, store } = createStore()
-    const setting = await store.createResource({ actor, id: 'mixed-setting', resourceKind: 'setting', rootNode: createSmallTree('mixed-setting-root', 'mixed-setting') })
+    const setting = await store.createResource({ actor, id: 'mixed-setting', resourceKind: 'lore', rootNode: createSmallTree('mixed-lore-root', 'mixed-setting') })
     const preset = await store.createResource({ actor, id: 'mixed-preset', resourceKind: 'preset', rootNode: createSmallTree('mixed-preset-root', 'mixed-preset') })
-    const mount = await store.addSettingMount({ actor, settingResourceId: setting.resource.id, source: { kind: 'manual' }, orderIndex: 0 })
+    const mount = await store.addLoreMount({ actor, loreResourceId: setting.resource.id, source: { kind: 'manual' }, orderIndex: 0 })
     await expect(store.revertChangeset({ actor, changesetId: mount.commit.changesetId })).rejects.toMatchObject({ code: 'prompt_resource.mixed_changeset' })
 
     const mixed = await engine.transact({ actor }, async tx => {
       const transaction = store.transaction(tx)
       const resource = transaction.mutateResource({ resourceId: preset.resource.id, expectedVersion: 1, mutations: [{ kind: 'node.update', nodeId: 'mixed-preset-entry-a', patch: { body: 'changed' } }] })
-      transaction.addSettingMount({ settingResourceId: setting.resource.id, source: { kind: 'preset', id: preset.resource.id }, orderIndex: 1 })
+      transaction.addLoreMount({ loreResourceId: setting.resource.id, source: { kind: 'preset', id: preset.resource.id }, orderIndex: 1 })
       return resource
     })
     await expect(store.revertChangeset({ actor, changesetId: mixed.commit.changesetId })).rejects.toMatchObject({ code: 'prompt_resource.mixed_changeset' })
     await expect(store.getResource(preset.resource.id)).resolves.toMatchObject({ version: 2 })
-    expect((await store.listSettingMounts({ source: { kind: 'preset', id: preset.resource.id } })).map(item => item.settingResourceId)).toEqual([setting.resource.id])
+    expect((await store.listLoreMounts({ source: { kind: 'preset', id: preset.resource.id } })).map(item => item.loreResourceId)).toEqual([setting.resource.id])
     engine.close()
   })
 
   it('supports tombstones and mount replacement in isolated transactions', async () => {
     const { engine, store } = createStore()
-    const first = await store.createResource({ actor, id: 'setting-1', resourceKind: 'setting', rootNode: createSmallTree() })
-    const second = await store.createResource({ actor, id: 'setting-2', resourceKind: 'setting', rootNode: createSmallTree('root-2', 'second') })
-    const firstReplace = await store.replaceSettingMounts({ actor, source: { kind: 'manual' }, mounts: [{ settingResourceId: first.resource.id, orderIndex: 0 }, { settingResourceId: second.resource.id, orderIndex: 1 }] })
-    const secondReplace = await store.replaceSettingMounts({ actor, source: { kind: 'manual' }, mounts: [{ settingResourceId: second.resource.id, orderIndex: 3 }] })
+    const first = await store.createResource({ actor, id: 'setting-1', resourceKind: 'lore', rootNode: createSmallTree() })
+    const second = await store.createResource({ actor, id: 'setting-2', resourceKind: 'lore', rootNode: createSmallTree('root-2', 'second') })
+    const firstReplace = await store.replaceLoreMounts({ actor, source: { kind: 'manual' }, mounts: [{ loreResourceId: first.resource.id, orderIndex: 0 }, { loreResourceId: second.resource.id, orderIndex: 1 }] })
+    const secondReplace = await store.replaceLoreMounts({ actor, source: { kind: 'manual' }, mounts: [{ loreResourceId: second.resource.id, orderIndex: 3 }] })
     expect(secondReplace.commit.operations).toEqual([
       ...firstReplace.mounts.map(mount => ({ store: 'prompt-resources', kind: 'delete' as const, entityId: mount.id, entityType: 'prompt-resource.mount' })).sort((left, right) => left.entityId.localeCompare(right.entityId)),
       { store: 'prompt-resources', kind: 'create', entityId: secondReplace.mounts[0]!.id, entityType: 'prompt-resource.mount' },
     ])
-    expect((await store.listSettingMounts({ source: { kind: 'manual' } })).map(mount => mount.settingResourceId)).toEqual(['setting-2'])
+    expect((await store.listLoreMounts({ source: { kind: 'manual' } })).map(mount => mount.loreResourceId)).toEqual(['setting-2'])
 
-    const firstMount = await store.addSettingMount({ actor, settingResourceId: first.resource.id, source: { kind: 'manual' }, orderIndex: 4 })
+    const firstMount = await store.addLoreMount({ actor, loreResourceId: first.resource.id, source: { kind: 'manual' }, orderIndex: 4 })
     await expect(store.revertChangeset({ actor, changesetId: firstMount.commit.changesetId })).rejects.toMatchObject({ code: 'prompt_resource.mixed_changeset' })
 
     const deleted = await store.deleteResource({ actor, resourceId: first.resource.id, expectedVersion: 1, reason: 'Contract test' })
@@ -454,7 +454,7 @@ describe('PromptResourceStore', () => {
     expect(deleted.commit.operations).toEqual([
       { store: 'prompt-resources', kind: 'delete', entityId: first.resource.id, entityType: 'prompt-resource', fromVersion: 1, toVersion: 2 },
     ])
-    expect(await store.listSettingMounts({ settingResourceId: first.resource.id })).toEqual(firstMount.mounts)
+    expect(await store.listLoreMounts({ loreResourceId: first.resource.id })).toEqual(firstMount.mounts)
     const restored = await store.restoreResource({ actor, resourceId: first.resource.id, expectedVersion: 2 })
     expect(restored.resource).toMatchObject({ id: first.resource.id, version: 3 })
     expect(restored.resource).not.toHaveProperty('deletedAt')
@@ -464,7 +464,7 @@ describe('PromptResourceStore', () => {
     expect(restored.commit.operations).toEqual([
       { store: 'prompt-resources', kind: 'restore', entityId: first.resource.id, entityType: 'prompt-resource', fromVersion: 2, toVersion: 3 },
     ])
-    expect(await store.listSettingMounts({ settingResourceId: first.resource.id })).toEqual(firstMount.mounts)
+    expect(await store.listLoreMounts({ loreResourceId: first.resource.id })).toEqual(firstMount.mounts)
     engine.close()
   })
 
@@ -523,10 +523,10 @@ function createStore() {
   return { engine, store: createPromptResourceStore({ engine }) }
 }
 
-function createV1NestedFixture(rootId: string, category: 'setting' | 'preset', count: number): PromptResourceTreeNode {
+function createV1NestedFixture(rootId: string, category: 'lore' | 'preset', count: number): PromptResourceTreeNode {
   return {
     id: rootId,
-    label: category === 'setting' ? 'Setting Layer' : 'Preset',
+    label: category === 'lore' ? 'Setting Layer' : 'Preset',
     kind: 'module',
     category,
     children: Array.from({ length: count }, (_, index) => ({

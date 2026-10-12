@@ -73,13 +73,13 @@ describe('official Loom Assistant resources', () => {
       const input = officialPackage()
       const installed = await runtime.importExtensionPackageResources(input)
       const presetId = installed.promptResources.find(item => item.contributionId === 'official.loom-assistant.preset')!.resourceId
-      const settingId = installed.promptResources.find(item => item.contributionId === 'official.loom-assistant.knowledge')!.resourceId
+      const loreId = installed.promptResources.find(item => item.contributionId === 'official.loom-assistant.knowledge')!.resourceId
       const ruleId = installed.transformRules.find(item => item.contributionId === 'assistant-note')!.ruleId
       const preset = (await runtime.getAgentPreset({ agentPresetId: presetId })).agentPreset
-      const mounts = await runtime.listSettingMounts({ source: { kind: 'preset', id: presetId } })
+      const mounts = await runtime.listLoreMounts({ source: { kind: 'preset', id: presetId } })
 
       expect(mounts.mounts).toEqual(expect.arrayContaining([
-        expect.objectContaining({ settingResourceId: settingId, resolvedSettingResourceId: settingId }),
+        expect.objectContaining({ loreResourceId: loreId, resolvedLoreResourceId: loreId }),
       ]))
       expect(preset.textUses).toEqual(expect.arrayContaining([
         expect.objectContaining({ kind: 'rule', id: ruleId, enabled: true }),

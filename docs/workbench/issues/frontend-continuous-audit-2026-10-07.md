@@ -243,7 +243,7 @@
 - 分类：UI / 国际化；状态：已接入当前列明的 Host 入口，字典/类型及组件检查通过；不是全项目零硬编码或全量语言验收。以下为修复前证据。
 - 位置：`widgets/agent-chat-panel/agent-session-create-dialog.tsx:43-91`、`agent-session-picker.tsx:123-174`、`widgets/settings-panel/background-materials-view.tsx:44-184`；`widgets/model-panel/provider-account-list.tsx:302-312`。
 - 因果：标题、按钮、搜索提示、错误与 aria-label 硬编码中文；CreateDialog/BackgroundMaterialsView 的 props 甚至不接收 Translator。它们均有正式生产调用，不只是开发预览。
-- 本轮覆盖补充：排除 dev 与字典文件，对全部生产 TS/TSX 的 JSX 文本及 aria-label/title/placeholder/label/alt 做 AST 候选扫描，并核对 Settings 分类、Inspector Token 说明、资源引用弹层、Agent 审批、角色开场编辑器、State 树 meta 等实际消费。缺口不限于原列出的四个组件，继续归本条，不按字符串数量制造新问题。两份字典均为 1,245 个 key，集合一致；这仅证明字典键齐全，不能证明调用者使用了翻译。日期/数字仍有 `Intl(...undefined)` 和无 locale 的格式化，属于尚未统一的语言边界。
+- 本轮覆盖补充：排除 dev 与字典文件，对全部生产 TS/TSX 的 JSX 文本及 aria-label/title/placeholder/label/alt 做 AST 候选扫描，并核对 Lore 分类、Inspector Token 说明、资源引用弹层、Agent 审批、角色开场编辑器、State 树 meta 等实际消费。缺口不限于原列出的四个组件，继续归本条，不按字符串数量制造新问题。两份字典均为 1,245 个 key，集合一致；这仅证明字典键齐全，不能证明调用者使用了翻译。日期/数字仍有 `Intl(...undefined)` 和无 locale 的格式化，属于尚未统一的语言边界。
 - 反证：用户正文、资源 ID、插件声明 label 可不翻译；本项只针对 Host 自有操作文案。当前项目支持 en-US，有明确翻译合同，不是要求新语言功能。
 - 最小建议：沿当前 TypeScript 字典与 Translator 补齐这些入口，不引入新国际化库，不顺手扩展日期/复数框架。
 - 关闭条件：切 en-US 后相关 Host 文案与 accessible name 一致；用户原文不变。纯文案默认只核对 Diff 与类型键，不跑全仓测试。
@@ -704,7 +704,7 @@
 
 - `context-asset-detail.tsx:314-341` 按 node.id key 重建 LongTextEditor；Narrative 编辑器位于 entry.id 的行内，且 `narrative-timeline.tsx:82-92` 将 editingId 传为 pinnedId，`use-conversation-viewport.ts:24,36-40` 的 rangeExtractor 显式补入该索引。因此普通虚拟滚动不会仅因离屏卸载当前编辑器，不能据虚拟化本身推断初始内容或撤销历史丢失。资源删除、主动切换/取消仍是另一类生命周期，不在此反证内。
 - `AiCapabilityLab` 的 InvocationForm 按 profileId key 挂载，submitting ref 阻止重复提交，running 时表单 inert；账户/能力创建和更新组件也按身份 key 区分。没有真实跨身份串结果证据。动态 number/select 控件与默认值值得后续实测，但当前仓库的正式内建能力只声明 messages JSON 输入，尚未定位使用这些字段的实际扩展；没有借假想 Provider 宣称现有生产调用已失败，也未向真实 Provider 发请求。
-- `features/prompt-resources/model/use-prompt-resource-state.ts:38-54` 统一失效 bindings 查询；`use-prompt-resource-commands.ts:132-149` 的 replaceSettingMounts 调用它，`app/use-studio-state.ts:318-320` 的角色资源绑定完成后也调用。因此不能把 FE-020 的规则目录缓存缺口扩展到这两条已有失效通路。刷新错误的反馈与弹窗目标切换仍需分别核对。
+- `features/prompt-resources/model/use-prompt-resource-state.ts:38-54` 统一失效 bindings 查询；`use-prompt-resource-commands.ts:132-149` 的 replaceLoreMounts 调用它，`app/use-studio-state.ts:318-320` 的角色资源绑定完成后也调用。因此不能把 FE-020 的规则目录缓存缺口扩展到这两条已有失效通路。刷新错误的反馈与弹窗目标切换仍需分别核对。
 - NarrativeRangePreview 在 timelineId/branchId 改变时推进 requestId 并清除结果，load 只发布当前请求；其文案国际化缺口与 FE-011 同类，不重复编号。Inspector 的长 JSON 展示仅做源码阅读，尚无真实数据规模和浏览器性能证据，不升级为卡顿结论。
 
 第二十一轮检查布局偏好、窗口 Resize 和 Appearance hydration，新增 FE-034。StudioLayout 的存储清洗会限制 UI scale/rail width，并过滤尺寸和资源视图的非法结构；WindowColumnLayout 通过 resolveColumnSizes 计算当前有效宽度，没有在单纯容器变窄时直接写回偏好。共享列分割器提供方向键及 Home/End，不能因窗口外框 Resize 只处理方向键就称所有列分割器都缺键盘操作。Appearance 的结构缺口在真实持久化中间件与实际根 Effect 上复现，严格限定损坏偏好场景，未写真实 localStorage。窗口小尺寸、指针取消和 CSS 几何仍不能只凭模型读取宣称已做浏览器验收。

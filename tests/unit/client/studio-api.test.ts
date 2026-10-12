@@ -365,8 +365,8 @@ describe('studio client typed api', () => {
       'application.updatePromptResourceAssets': { resource: { id: 'resource-1' } },
       'application.movePromptResourceAsset': { resource: { id: 'resource-1' } },
       'application.deletePromptResourceAsset': { resource: { id: 'resource-1' } },
-      'application.listSettingMounts': { mounts: [] },
-      'application.replaceSettingMounts': { mounts: [{ id: 'mount-1' }], mutation: { changesetId: 'changeset-1' } },
+      'application.listLoreMounts': { mounts: [] },
+      'application.replaceLoreMounts': { mounts: [{ id: 'mount-1' }], mutation: { changesetId: 'changeset-1' } },
       'application.listPresetToolMounts': { mounts: [] },
       'application.replacePresetToolMounts': { mounts: [{ id: 'tool-mount-1' }], mutation: { changesetId: 'changeset-2' } },
     }))
@@ -388,8 +388,8 @@ describe('studio client typed api', () => {
     await api.promptResources.createAsset({ resourceId: 'resource-1', targetAssetId: 'root', position: 'inside', asset: { id: 'asset-1' } as any })
     await api.promptResources.updateAsset({ resourceId: 'resource-1', assetId: 'asset-1', body: 'updated' })
     await api.promptResources.updateAssets({ resourceId: 'resource-1', updates: [{ assetId: 'asset-1', label: 'Renamed' }] })
-    await api.promptResources.listSettingMounts({ kind: 'preset', id: 'resource-1' })
-    await api.promptResources.replaceSettingMounts({ source: { kind: 'preset', id: 'resource-1' }, settingResourceIds: ['setting-1'] })
+    await api.promptResources.listLoreMounts({ kind: 'preset', id: 'resource-1' })
+    await api.promptResources.replaceLoreMounts({ source: { kind: 'preset', id: 'resource-1' }, loreResourceIds: ['setting-1'] })
     await api.promptResources.listPresetToolMounts({ presetId: 'resource-1' })
     await api.promptResources.replacePresetToolMounts({
       presetId: 'resource-1',
@@ -411,8 +411,8 @@ describe('studio client typed api', () => {
       { method: 'application.createPromptResourceAsset', params: { resourceId: 'resource-1', targetAssetId: 'root', position: 'inside', asset: { id: 'asset-1' } } },
       { method: 'application.updatePromptResourceAsset', params: { resourceId: 'resource-1', assetId: 'asset-1', body: 'updated' } },
       { method: 'application.updatePromptResourceAssets', params: { resourceId: 'resource-1', updates: [{ assetId: 'asset-1', label: 'Renamed' }] } },
-      { method: 'application.listSettingMounts', params: { source: { kind: 'preset', id: 'resource-1' } } },
-      { method: 'application.replaceSettingMounts', params: { source: { kind: 'preset', id: 'resource-1' }, settingResourceIds: ['setting-1'] } },
+      { method: 'application.listLoreMounts', params: { source: { kind: 'preset', id: 'resource-1' } } },
+      { method: 'application.replaceLoreMounts', params: { source: { kind: 'preset', id: 'resource-1' }, loreResourceIds: ['setting-1'] } },
       { method: 'application.listPresetToolMounts', params: { presetId: 'resource-1' } },
       { method: 'application.replacePresetToolMounts', params: { presetId: 'resource-1', mounts: [{ toolId: 'official/test_structured', orderIndex: 0, defaultEnabled: true, provider: { order: 10 } }] } },
       { method: 'application.movePromptResourceAsset', params: { resourceId: 'resource-1', assetId: 'asset-1', targetAssetId: 'root', position: 'after' } },

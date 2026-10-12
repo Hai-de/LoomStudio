@@ -11,7 +11,7 @@ function fixture() {
   })
   const resource = vi.fn().mockResolvedValue({
     resource: {
-      id: 'resource', resourceKind: 'setting',
+      id: 'resource', resourceKind: 'lore',
       rootNode: { id: 'root', label: 'Root', children: [
         { id: 'group', label: 'Group', children: [{ id: 'nested', label: 'Node' }] },
       ] },
@@ -67,7 +67,7 @@ describe('Studio target URI entry', () => {
       .rejects.toThrow('Timeline branch not found: missing')
   })
 
-  it.each(['preset', 'setting'])('resolves %s resources to their root or exact nested node', async resourceKind => {
+  it.each(['preset', 'lore'])('resolves %s resources to their root or exact nested node', async resourceKind => {
     const f = fixture()
     const result = await f.resource()
     result.resource.resourceKind = resourceKind

@@ -149,7 +149,7 @@ export function addContextAssetInZoneNode(
 
   const id = makeId()
   const isPreset = rootNode.category === 'preset'
-  const slotKey = `${isPreset ? 'preset' : 'setting-layer'}:${rootNode.id}@${zoneId}`
+  const slotKey = `${isPreset ? 'preset' : 'lore'}:${rootNode.id}@${zoneId}`
   const node: ContextAssetNode = {
     id,
     label: 'New Entry',

@@ -22,7 +22,7 @@
         }
       ]
     },
-    "settingLayer": {
+    "lore": {
       "entries": [
         {
           "id": "rainline-station",
@@ -76,7 +76,7 @@
             },
             {
               "zoneId": "setting.stable",
-              "slotKey": "setting-layer:city-layers-main@setting.stable",
+              "slotKey": "lore:city-layers-main@lore.stable",
               "rankKey": "0001"
             },
             {
@@ -113,16 +113,16 @@
     {
       "id": "setting-city-layers",
       "label": "Loom City Layers",
-      "meta": "Setting Layer",
-      "category": "setting",
+      "meta": "Lore",
+      "category": "lore",
       "kind": "module",
-      "body": "Setting Layer 作为整体 slot 注入，单个条目只参与 slot 内部排序。",
+      "body": "Lore 作为整体 slot 注入，单个条目只参与 slot 内部排序。",
       "children": [
         {
           "id": "sl-rainline-station",
           "label": "雨线车站",
           "meta": "setting.stable",
-          "category": "setting",
+          "category": "lore",
           "kind": "entry",
           "body": "雨线车站只在整点暴雨中显现，候车厅的钟永远慢三分钟。",
           "enabled": true,
@@ -130,7 +130,7 @@
             "activation": { "kind": "always" },
             "projection": {
               "zoneId": "setting.stable",
-              "slotKey": "setting-layer:city-layers-main@setting.stable",
+              "slotKey": "lore:city-layers-main@lore.stable",
               "entryOrderHint": 10,
               "slotOrderHint": 200
             }
@@ -140,7 +140,7 @@
           "id": "sl-archive-keeper",
           "label": "档案管理员",
           "meta": "setting.stable",
-          "category": "setting",
+          "category": "lore",
           "kind": "entry",
           "body": "档案管理员记得每一张被撕毁的车票，也记得它们原本要去往哪里。",
           "enabled": true,
@@ -148,7 +148,7 @@
             "activation": { "kind": "keyword", "keywords": ["档案", "车票", "管理员"] },
             "projection": {
               "zoneId": "setting.stable",
-              "slotKey": "setting-layer:city-layers-main@setting.stable",
+              "slotKey": "lore:city-layers-main@lore.stable",
               "entryOrderHint": 20,
               "slotOrderHint": 200
             }

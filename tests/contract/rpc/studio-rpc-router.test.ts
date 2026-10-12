@@ -299,7 +299,7 @@ describe('studio rpc router', () => {
         received.push(requestContext)
         return { card: { id: 'card-1' }, mutation: { changesetId: 'chg-1' } }
       },
-      replaceSettingMounts: async (_input: unknown, requestContext?: unknown) => {
+      replaceLoreMounts: async (_input: unknown, requestContext?: unknown) => {
         received.push(requestContext)
         return { mounts: [], mutation: { changesetId: 'chg-2' } }
       },
@@ -326,9 +326,9 @@ describe('studio rpc router', () => {
       cardId: 'card-1',
       promptResourceIds: ['resource-1'],
     }, context)
-    await router.call('application.replaceSettingMounts', {
+    await router.call('application.replaceLoreMounts', {
       source: { kind: 'preset', id: 'preset-1' },
-      settingResourceIds: ['setting-1'],
+      loreResourceIds: ['setting-1'],
     }, context)
     await router.call('application.replacePresetToolMounts', {
       presetId: 'preset-1',
@@ -401,21 +401,21 @@ describe('studio rpc router', () => {
   it('rejects invalid Setting Mount sources before invoking the runtime', async () => {
     let invoked = false
     const applicationRuntime = {
-      replaceSettingMounts: async () => {
+      replaceLoreMounts: async () => {
         invoked = true
         return { mounts: [], mutation: { changesetId: 'chg-1' } }
       },
     } as unknown as ApplicationRuntime
     const router = createStudioRpcRouter({ applicationRuntime, kernel: createKernelCaller() })
 
-    await expect(router.call('application.replaceSettingMounts', {
+    await expect(router.call('application.replaceLoreMounts', {
       source: { kind: 'manual', id: 'workspace' },
-      settingResourceIds: [],
-    }, context)).rejects.toThrow('Expected Setting mount source param: source')
-    await expect(router.call('application.replaceSettingMounts', {
+      loreResourceIds: [],
+    }, context)).rejects.toThrow('Expected Lore mount source param: source')
+    await expect(router.call('application.replaceLoreMounts', {
       source: { kind: 'preset' },
-      settingResourceIds: [],
-    }, context)).rejects.toThrow('Expected Setting mount source param: source')
+      loreResourceIds: [],
+    }, context)).rejects.toThrow('Expected Lore mount source param: source')
     expect(invoked).toBe(false)
   })
 })

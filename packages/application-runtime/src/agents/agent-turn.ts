@@ -71,24 +71,24 @@ export async function composeAgentTurnPrompt(input: {
       message: `Skipped missing optional Prompt resource: ${resourceId}`,
     })
   }
-  const presetMounts = await input.promptResources.listSettingMounts({ source: { kind: 'preset', id: input.preset.id } })
+  const presetMounts = await input.promptResources.listLoreMounts({ source: { kind: 'preset', id: input.preset.id } })
   for (const mount of presetMounts) {
-    if (mount.resolvedSettingResourceId !== null) continue
+    if (mount.resolvedLoreResourceId !== null) continue
     diagnostics.push({
-      severity: 'warning', code: 'prompt.setting_reference_unresolved',
-      message: `Skipped unresolved Setting reference: ${mount.reference?.kind === 'external' ? mount.reference.resourceId : mount.reference?.contributionId}`,
+      severity: 'warning', code: 'prompt.lore_reference_unresolved',
+      message: `Skipped unresolved Lore reference: ${mount.reference?.kind === 'external' ? mount.reference.resourceId : mount.reference?.contributionId}`,
     })
   }
-  const contextSettingIds = (await Promise.all(input.contextResourceIds.map(async resourceId => {
+  const contextLoreIds = (await Promise.all(input.contextResourceIds.map(async resourceId => {
     const resource = await input.promptResources.getResource(resourceId)
     if (!resource) warnMissingResource(resourceId)
     return resource
-  }))).flatMap(resource => resource?.resourceKind === 'setting' ? [resource.id] : [])
+  }))).flatMap(resource => resource?.resourceKind === 'lore' ? [resource.id] : [])
   const resourceIds = [...new Set([
     input.preset.id,
-    ...presetMounts.flatMap(mount => mount.resolvedSettingResourceId === null
-      ? [] : [mount.resolvedSettingResourceId ?? mount.settingResourceId]),
-    ...contextSettingIds,
+    ...presetMounts.flatMap(mount => mount.resolvedLoreResourceId === null
+      ? [] : [mount.resolvedLoreResourceId ?? mount.loreResourceId]),
+    ...contextLoreIds,
   ])]
   const resourceInputs = resourceIds.length
     ? await readPromptResourceInputs({

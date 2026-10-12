@@ -9,6 +9,7 @@
 
 | 路线图 / 计划                                                                                | 当前状态     | 关注点                                                                  |
 | -------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------- |
+| [Settings → Lore 全量命名切换](./settings-to-lore-plan.md) | 源码已实施 / 文件数据迁移待停服 | 全量领域改名、官方扩展同步；数据库已升级，文件型测试卡副本已验证；State 不变 |
 | [审查归档后续](../issues/audit-follow-ups.md) | Deferred / Backlog | 远端 CI、旧计划接续及精简后的用户 UI 验收/独立测试维护；完整修复账目已移出活跃目录 |
 | [扩展模块补全](./extension-module-completion-plan.md) | 待调研 / 未实施 | 远程安装与独立官方扩展发行接续；来源、构建脚本与权限合同待决定 |
 | [扩展的故事级采用与运行隔离](./extension-story-participation-plan.md) | 首版实现完成 / 待人工验收 | Prompt/恢复凭据、通用事务守卫、间接资源过滤与来源诊断已接通；Package 总开关与跨声明迁移未纳入首版 |
@@ -33,6 +34,8 @@
 ---
 
 ## 历史已归档计划
+
+2026-10-12：[核心模块职责边界收束](../../archive/plans/responsibility-boundary-refactor-2026-10-12.md)首批六包已完成并归档：Sessions/Character 业务模型、Server/CLI 与应用适配、Agent 工具能力、Text Transform 检查状态、Narrative 目录与 Run 观察已分离。定向验证及主应用类型构建通过；原版同样失败的 Character SSR 用例、44 条测试类型诊断及既有 lint/文档问题保留，未做浏览器验收。
 
 2026-10-09：[测试套件真实度与编译基线对齐](../../archive/plans/test-suite-and-compiler-baseline-remediation-plan.md)已完成并归档。Linux 源码构建与 Preset 重命名问题已修复；tsconfig 基线与 lib 统一升级对齐至 ES2024；本地 check:types 与 check:all 类型检查门禁已建立；轻量 happy-dom 与零外部依赖 renderHook 基建已落地并通过真实单测验证；剩余历史测试的假 Mock 清理按规范列入日常渐进维护，未假称全仓旧测试全部重写。
 
@@ -60,7 +63,7 @@
 
 2026-09-15：[`testing-gate-and-pipeline-resilience-plan.md`](../../archive/plans/testing-gate-and-pipeline-resilience-plan.md) 已完成并归档；测试通道分级隔离（fast/server/real/stress）、卡片慢速 crc32 硬件加速修复（提速 360 倍）、AIRP 与卡片往返全链路业务实线、SQLite 50 并发事务与千节点提示词 DFS 编译硬性压测门线、fast-check 属性不变量覆盖已全部交付；全仓 172 个测试文件 25 秒稳定通过。
 
-2026-09-14：[`core-dependencies-performance-and-state-plan.md`](../../archive/plans/core-dependencies-performance-and-state-plan.md) 已完成并归档；Panel 分包、Prompt Resource Query 状态、资源树属性测试、Shared Setting Mount Schema、Knip 与体积基线已交付。Pretext 与 `proxy-memoize` 因缺少真实收益证据未引入；浏览器 Profiler 与切换手感仍保留为未验收项。
+2026-09-14：[`core-dependencies-performance-and-state-plan.md`](../../archive/plans/core-dependencies-performance-and-state-plan.md) 已完成并归档；Panel 分包、Prompt Resource Query 状态、资源树属性测试、Shared Lore Mount Schema、Knip 与体积基线已交付。Pretext 与 `proxy-memoize` 因缺少真实收益证据未引入；浏览器 Profiler 与切换手感仍保留为未验收项。
 
 2026-09-14：[`official-content-installation-and-release-plan.md`](../../archive/plans/official-content-installation-and-release-plan.md) 已完成并归档；本地官方内容、显式安装、ST 生命周期解耦、正式导出包与完整样例已交付。远程来源、在线更新与远程发布保留为延期路线。
 

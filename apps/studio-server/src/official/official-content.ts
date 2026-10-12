@@ -12,7 +12,7 @@ type ContentCatalog = {
   version: string
   name: string
   resources: Array<{ id: string; path: string }>
-  settingMounts: Array<{ presetResourceId: string; settingResourceId: string }>
+  loreMounts: Array<{ presetResourceId: string; loreResourceId: string }>
 }
 
 export async function readOfficialContent(directory: string) {
@@ -45,9 +45,9 @@ export async function readOfficialContent(directory: string) {
     resources.push({ id: entry.id, artifact })
   }
   const resourceKinds = new Map(resources.map(resource => [resource.id, resource.artifact.resourceKind]))
-  for (const mount of catalog.settingMounts) {
-    if (resourceKinds.get(mount.presetResourceId) !== 'preset' || resourceKinds.get(mount.settingResourceId) !== 'setting') {
-      throw new Error('Official content has an unresolved Setting mount')
+  for (const mount of catalog.loreMounts) {
+    if (resourceKinds.get(mount.presetResourceId) !== 'preset' || resourceKinds.get(mount.loreResourceId) !== 'lore') {
+      throw new Error('Official content has an unresolved Lore mount')
     }
   }
   const hash = createHash('sha256')
@@ -59,7 +59,7 @@ export async function readOfficialContent(directory: string) {
 }
 
 function parseCatalog(value: JsonValue): ContentCatalog {
-  if (!isRecord(value) || !Array.isArray(value.resources) || !Array.isArray(value.settingMounts)) {
+  if (!isRecord(value) || !Array.isArray(value.resources) || !Array.isArray(value.loreMounts)) {
     throw new Error('Invalid official content catalog')
   }
   const catalog = {
@@ -67,9 +67,9 @@ function parseCatalog(value: JsonValue): ContentCatalog {
     version: readString(value, 'version'),
     name: readString(value, 'name'),
     resources: value.resources.map(item => ({ id: readString(item, 'id'), path: readString(item, 'path') })),
-    settingMounts: value.settingMounts.map(item => ({
+    loreMounts: value.loreMounts.map(item => ({
       presetResourceId: readString(item, 'presetResourceId'),
-      settingResourceId: readString(item, 'settingResourceId'),
+      loreResourceId: readString(item, 'loreResourceId'),
     })),
   }
   if (!/^[a-zA-Z0-9._-]+$/.test(catalog.id) || !/^\d+\.\d+\.\d+$/.test(catalog.version)) throw new Error('Invalid official package identity or version')
@@ -115,7 +115,7 @@ export function createOfficialContentService(runtime: ApplicationRuntime, direct
         packageId: content.catalog.id,
         packageVersion: content.catalog.version,
         resources: content.resources,
-        settingMounts: content.catalog.settingMounts,
+        loreMounts: content.catalog.loreMounts,
       }, context) as unknown as JsonValue
     },
   }
@@ -127,6 +127,6 @@ export async function installBuiltinStarterContent(runtime: ApplicationRuntime, 
     packageId: content.catalog.id,
     packageVersion: content.catalog.version,
     resources: content.resources,
-    settingMounts: content.catalog.settingMounts,
+    loreMounts: content.catalog.loreMounts,
   })
 }

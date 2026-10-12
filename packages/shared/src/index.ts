@@ -1,19 +1,19 @@
 export type { AssistantChatMessage, ChatMessage, ChatToolCall } from './chat.js'
 export {
-  listSettingMountsInputSchema,
-  listSettingMountsResultSchema,
-  replaceSettingMountsInputSchema,
-  replaceSettingMountsResultSchema,
-  settingMountSchema,
-  settingMountSourceSchema,
+  listLoreMountsInputSchema,
+  listLoreMountsResultSchema,
+  replaceLoreMountsInputSchema,
+  replaceLoreMountsResultSchema,
+  loreMountSchema,
+  loreMountSourceSchema,
 } from './prompt-resource-contracts.js'
 export type {
-  ListSettingMountsInput,
-  ListSettingMountsResult,
-  ReplaceSettingMountsInput,
-  ReplaceSettingMountsResult,
-  SettingMount,
-  SettingMountSource,
+  ListLoreMountsInput,
+  ListLoreMountsResult,
+  ReplaceLoreMountsInput,
+  ReplaceLoreMountsResult,
+  LoreMount,
+  LoreMountSource,
 } from './prompt-resource-contracts.js'
 export type { CardDirectoryPreview, CardDirectorySaveResult, CardDirectoryEntry, CardDirectoryCatalog, OpenCardDirectoryResult, CardDirectoryAttachment } from './resource-directories.js'
 export type {

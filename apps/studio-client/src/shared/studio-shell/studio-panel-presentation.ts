@@ -1,7 +1,7 @@
 import { Blocks, BookOpen, Bot, Braces, Clock3, FolderGit2, Folders, ListOrdered, Plug, Regex, Settings, SlidersHorizontal, SquareTerminal, UserRound, Users, Wrench, type LucideIcon } from 'lucide-react'
 import type { StudioPanelId } from './studio-layout-store.js'
 
-export type StudioPanelLabelKey = 'rail.model' | 'rail.agent' | 'rail.user' | 'rail.play' | 'rail.recent' | 'rail.sessions' | 'rail.character' | 'rail.preset' | 'rail.resource' | 'rail.state' | 'rail.macro' | 'rail.textTransform' | 'rail.inspector' | 'rail.logs' | 'rail.extensions' | 'rail.settings'
+export type StudioPanelLabelKey = 'rail.model' | 'rail.agent' | 'rail.user' | 'rail.play' | 'rail.recent' | 'rail.sessions' | 'rail.character' | 'rail.preset' | 'rail.lore' | 'rail.state' | 'rail.macro' | 'rail.textTransform' | 'rail.inspector' | 'rail.logs' | 'rail.extensions' | 'rail.settings'
 
 export const STUDIO_PANEL_PRESENTATION = {
   model: { Icon: Plug, labelKey: 'rail.model' },
@@ -12,7 +12,7 @@ export const STUDIO_PANEL_PRESENTATION = {
   sessions: { Icon: FolderGit2, labelKey: 'rail.sessions' },
   character: { Icon: Users, labelKey: 'rail.character' },
   preset: { Icon: ListOrdered, labelKey: 'rail.preset' },
-  resource: { Icon: BookOpen, labelKey: 'rail.resource' },
+  resource: { Icon: BookOpen, labelKey: 'rail.lore' },
   state: { Icon: SlidersHorizontal, labelKey: 'rail.state' },
   macro: { Icon: Braces, labelKey: 'rail.macro' },
   'text-transform': { Icon: Regex, labelKey: 'rail.textTransform' },

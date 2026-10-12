@@ -16,20 +16,20 @@ import { findContextAssetPath, findContextAssetByVirtualPath } from '../../featu
 import { PromptResourceToolbar } from '../../features/context-assets/ui/prompt-resource-toolbar/prompt-resource-toolbar.js'
 import { useResourceTokenSnapshot } from '../../features/context-assets/model/use-resource-token-snapshot.js'
 import { Dialog, SearchField } from '@loom-studio/ui'
-import type { Card, ContextAssetNode, PromptResource, SettingMount, SettingMountSource } from '../../entities/index.js'
+import type { Card, ContextAssetNode, PromptResource, LoreMount, LoreMountSource } from '../../entities/index.js'
 import type { Translator } from '../../shared/i18n/index.js'
 import styles from './context-workbench.module.scss'
-import { readSettingTreeMeta, resolveSettingScope, resolveSettingTarget } from './setting-target.js'
+import { readLoreTreeMeta, resolveLoreScope, resolveLoreTarget } from './lore-target.js'
 
 type ContextWorkbenchProps = {
   resourceBindings?: import('../../features/context-assets/ui/prompt-resource-toolbar/resource-bindings.js').ResourceBindingsSource
   extensionInstallations?: import('../../entities/index.js').ListExtensionInstallationsResult['installations']
-  view?: 'settings' | 'macros' | 'text'
-  onViewChange?: (view: 'settings' | 'macros' | 'text') => void
+  view?: 'lore' | 'macros' | 'text'
+  onViewChange?: (view: 'lore' | 'macros' | 'text') => void
   card?: Card
   nodes: ContextAssetNode[]
   resources: PromptResource[]
-  settingMounts: SettingMount[]
+  loreMounts: LoreMount[]
   onChangeNode: (id: string, partial: Partial<ContextAssetNode>) => void
   draftResourceIds: string[]
   onDiscardDraft(resourceId: string): void
@@ -49,7 +49,7 @@ type ContextWorkbenchProps = {
   onExportResource: (resourceId: string) => Promise<void>
   onExportResourceZip?: (resourceId: string) => Promise<void>
   onImportResourceZip?: (file: File) => Promise<string | undefined>
-  onReplaceSettingMounts: (source: SettingMountSource, settingResourceIds: string[]) => Promise<void>
+  onReplaceLoreMounts: (source: LoreMountSource, loreResourceIds: string[]) => Promise<void>
   onReplaceCardResources: (cardId: string, resourceIds: string[]) => Promise<void>
   selectedResourceId?: string
   onSelectResource?: (resourceId: string, replace?: boolean) => void
@@ -81,30 +81,30 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
   const [temporaryExpandedIds, setTemporaryExpandedIds] = useState<string[]>([])
   const mobilePane = useStudioLayoutStore(state => state.assetPanes.resources[props.workspaceId] ?? 'explorer')
 
-  const settingResources = useMemo(
-    () => props.resources.filter(resource => resource.resourceKind === 'setting'),
+  const loreResources = useMemo(
+    () => props.resources.filter(resource => resource.resourceKind === 'lore'),
     [props.resources],
   )
   const cardResourceIds = useMemo(() => new Set(props.card?.promptResourceIds ?? []), [props.card?.promptResourceIds])
   const unavailableBoundIds = [...cardResourceIds].filter(id => !props.resources.some(resource => resource.id === id))
   const routeTargetResource = useMemo(() => {
-    if (props.routeResourceId) return settingResources.find(resource => resource.id === props.routeResourceId)
+    if (props.routeResourceId) return loreResources.find(resource => resource.id === props.routeResourceId)
     if (!props.routeAssetId) return undefined
-    return settingResources.find(r => r.id === props.routeAssetId || Boolean(findContextNode([r.rootNode], props.routeAssetId)))
-  }, [props.routeResourceId, props.routeAssetId, settingResources])
+    return loreResources.find(r => r.id === props.routeAssetId || Boolean(findContextNode([r.rootNode], props.routeAssetId)))
+  }, [props.routeResourceId, props.routeAssetId, loreResources])
 
   const [scopeFilter, setScopeFilter] = useState<'current' | 'global'>('current')
 
   const globalMountIds = useMemo(() => new Set(
-    props.settingMounts
+    props.loreMounts
       .filter(m => m.source.id === 'global')
-      .map(m => m.settingResourceId)
-  ), [props.settingMounts])
+      .map(m => m.loreResourceId)
+  ), [props.loreMounts])
 
-  const collection = useMemo(() => resolveSettingScope(
-    settingResources, globalMountIds, cardResourceIds, props.extensionInstallations ?? [], scopeFilter,
-  ), [settingResources, globalMountIds, cardResourceIds, props.extensionInstallations, scopeFilter])
-  const target = resolveSettingTarget(collection, settingResources, props.routeResourceId)
+  const collection = useMemo(() => resolveLoreScope(
+    loreResources, globalMountIds, cardResourceIds, props.extensionInstallations ?? [], scopeFilter,
+  ), [loreResources, globalMountIds, cardResourceIds, props.extensionInstallations, scopeFilter])
+  const target = resolveLoreTarget(collection, loreResources, props.routeResourceId)
   const targetResources = target.resources
   const temporaryOrigin = target.target?.origin?.kind === 'extension-package'
     ? `${props.t('directory.extensionContribution')} · ${target.target.origin.packageId}`
@@ -113,10 +113,10 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
   const selectedId = target.temporary
     ? (temporarySelection?.resourceId === props.routeResourceId ? temporarySelection?.nodeId : props.routeAssetId ?? target.target!.rootNode.id)
     : explorerView.selectedId
-  const selectedNodeResource = selectedId ? settingResources.find(r => r.id === selectedId || Boolean(findContextNode([r.rootNode], selectedId))) : undefined
+  const selectedNodeResource = selectedId ? loreResources.find(r => r.id === selectedId || Boolean(findContextNode([r.rootNode], selectedId))) : undefined
   const selectedResourceId = props.routeResourceId ?? props.selectedResourceId
     ?? routeTargetResource?.id ?? selectedNodeResource?.id ?? internalSelectedResourceId
-    ?? (settingResources.find(r => cardResourceIds.has(r.id))?.id ?? (unavailableBoundIds.length === 0 ? settingResources[0]?.id : undefined))
+    ?? (loreResources.find(r => cardResourceIds.has(r.id))?.id ?? (unavailableBoundIds.length === 0 ? loreResources[0]?.id : undefined))
   const tokenResource = targetResources.find(resource => resource.id === selectedResourceId)
   const tokenSnapshot = useResourceTokenSnapshot(tokenResource ? [tokenResource.rootNode] : [], `${props.workspaceId}:${selectedResourceId ?? ''}`)
 
@@ -148,7 +148,7 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
         id: resource.rootNode.id,
         label: resource.rootNode.label,
         kind: 'folder',
-        category: 'setting-root',
+        category: 'lore-root',
         meta,
         children,
       }
@@ -157,14 +157,14 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
 
   const workbenchNodes = displayNodes
   const selectedNode = findContextNode(workbenchNodes, selectedId)
-  const selectedSettingResource = targetResources.find(r => r.id === selectedId)
-  const hasDetailSelection = Boolean(selectedNode || selectedSettingResource)
+  const selectedLoreResource = targetResources.find(r => r.id === selectedId)
+  const hasDetailSelection = Boolean(selectedNode || selectedLoreResource)
 
   const bindingResources = props.resources
   const readonlyGlobalIds = useMemo(() => {
     if (scopeFilter === 'current') return new Set<string>()
     const ids = new Set<string>()
-    for (const res of settingResources) {
+    for (const res of loreResources) {
       const origin = res.origin
       const isExtension = origin?.kind === 'extension-package'
       const installation = origin?.kind === 'extension-package'
@@ -175,7 +175,7 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
       }
     }
     return ids
-  }, [scopeFilter, settingResources, props.extensionInstallations])
+  }, [scopeFilter, loreResources, props.extensionInstallations])
 
   const boundIds = useMemo(() => {
     if (scopeFilter === 'current') return props.card?.promptResourceIds ?? []
@@ -184,7 +184,7 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
 
   useEffect(() => {
     if (!props.routeAssetId || target.temporary) return
-    if (props.routeResourceId) props.onViewChange?.('settings')
+    if (props.routeResourceId) props.onViewChange?.('lore')
     openAssetDetail('resources', props.workspaceId, props.routeAssetId)
   }, [openAssetDetail, props.routeResourceId, props.routeAssetId, target.temporary, props.workspaceId, props.onViewChange])
 
@@ -247,7 +247,7 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
       props.onSelectResource(resourceId, target.temporary)
       return
     }
-    const resource = settingResources.find(r => r.id === resourceId)
+    const resource = loreResources.find(r => r.id === resourceId)
     if (resource) {
       handleSelectNode(resource.rootNode.id)
     }
@@ -288,8 +288,8 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
           extensionInstallations={props.extensionInstallations}
           hideSelect
           hideSingleResourceActions
-          resourceKind="setting"
-          resources={settingResources}
+          resourceKind="lore"
+          resources={loreResources}
           selectedResourceId={selectedResourceId}
           t={props.t}
           bindResourcesLabel={props.t(scopeFilter === 'global' ? 'context.globalBindings.action' : 'context.cardBindings.action')}
@@ -315,7 +315,7 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
           {unavailableBoundIds.map(id => <p key={id} role="status">{props.t('context.bindings.unavailable', { id })}</p>)}
           <ContextAssetExplorer
             tokenSnapshot={tokenSnapshot}
-            formatMeta={readSettingTreeMeta}
+            formatMeta={readLoreTreeMeta}
             key={target.temporary ? `temporary:${props.routeResourceId}` : 'collection'}
             displayNodes={displayNodes}
             expandedIds={target.temporary ? temporaryExpandedIds : explorerView.expandedIds}
@@ -353,7 +353,7 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
             t={props.t}
             title={props.t(scopeFilter === 'global' ? 'context.globalBindings.title' : 'context.cardBindings.title')}
             onChange={resourceIds => scopeFilter === 'global'
-              ? props.onReplaceSettingMounts({ kind: 'manual', id: 'global' }, resourceIds.filter(id => !readonlyGlobalIds.has(id)))
+              ? props.onReplaceLoreMounts({ kind: 'manual', id: 'global' }, resourceIds.filter(id => !readonlyGlobalIds.has(id)))
               : props.onReplaceCardResources(props.card!.id, resourceIds)}
             onClose={() => setBindingOpen(false)}
           />
@@ -362,15 +362,15 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
     >
       <div
         className={styles.viewContent}
-        id={`${viewId}-settings-content`}
+        id={`${viewId}-lore-content`}
         role="tabpanel"
-        aria-labelledby={`${viewId}-settings`}
+        aria-labelledby={`${viewId}-lore`}
       >
         {target.temporary ? <div className={styles.temporaryDetailHeader}>
           <span>{props.t('promptResource.temporaryOpen')} · {temporaryOrigin} · {target.target?.rootNode.label}</span>
         </div> : null}
         <ContextAssetEditor
-          activationEditable={selectedNode?.category === 'setting'}
+          activationEditable={selectedNode?.category === 'lore'}
           presets={props.resources.filter(resource => resource.resourceKind === 'preset')}
           editorMode={textEditorMode}
           metadataOpen={metadataOpen}
@@ -407,7 +407,7 @@ function ResourceBindingDialog(props: {
     const resource = props.resources.find(candidate => candidate.id === id)
     return { id, resource }
   })
-  const available = props.resources.filter(resource => resource.resourceKind === 'setting' && !props.boundIds.includes(resource.id)
+  const available = props.resources.filter(resource => resource.resourceKind === 'lore' && !props.boundIds.includes(resource.id)
     && normalizeSearchText(`${resource.rootNode.label} ${resource.resourceKind}`).includes(normalizeSearchText(query)))
 
   async function change(ids: string[]) {
@@ -427,7 +427,7 @@ function ResourceBindingDialog(props: {
     <Dialog closeOnBackdrop description={props.description} open={props.open} title={props.title} onClose={props.onClose}>
       <div className={styles.bindingEditor}>
         {error ? <p role="alert">{error}</p> : null}
-        <div className={styles.globalSettingOptions}>
+        <div className={styles.globalLoreOptions}>
           {bound.map(({ id, resource }) => {
             const isReadonly = Boolean(props.readonlyIds?.has(id))
             const origin = resource?.origin
@@ -444,7 +444,7 @@ function ResourceBindingDialog(props: {
 
             if (isReadonly) {
               return (
-                <span key={id} className={styles.globalSettingPillReadonly} title={originLabel}>
+                <span key={id} className={styles.globalLorePillReadonly} title={originLabel}>
                   <span>{resource?.rootNode.label ?? props.t('context.bindings.unavailable', { id })}</span>
                   {originLabel ? <small className={styles.pillBadge}>{originLabel}</small> : null}
                 </span>
@@ -454,7 +454,7 @@ function ResourceBindingDialog(props: {
             return (
               <button
                 aria-label={props.t('context.bindings.remove', { id })}
-                className={styles.globalSettingPill}
+                className={styles.globalLorePill}
                 disabled={pending}
                 key={id}
                 type="button"

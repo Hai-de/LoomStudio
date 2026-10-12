@@ -63,7 +63,7 @@ describe('The World through the real Studio Server tool bridge', () => {
         })
         const { resources } = await rpc<{ resources: Array<{ id: string; origin?: { packageId: string } }> }>('application.listPromptResources', {})
         const setting = resources.find(resource => resource.origin?.packageId === 'official.the-world')!
-        await rpc('application.replaceSettingMounts', { source: { kind: 'preset', id: agentPreset.id }, settingResourceIds: [setting.id] })
+        await rpc('application.replaceLoreMounts', { source: { kind: 'preset', id: agentPreset.id }, loreResourceIds: [setting.id] })
         await rpc('application.replacePresetToolMounts', {
           presetId: agentPreset.id,
           mounts: ['read-world-state', 'update-world-state'].map((id, orderIndex) => ({

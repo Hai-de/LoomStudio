@@ -223,7 +223,7 @@ const knownApplicationOperationReasons = new Set([
   'application.removeObsoleteBuiltinAgentTools',
   'application.replaceCardPortableExtensionPayloads',
   'application.replacePresetToolMounts',
-  'application.replaceSettingMounts',
+  'application.replaceLoreMounts',
   'application.revertChangeset',
   'application.revertPromptResourceChangeset',
   'application.revertStateChangeset',

@@ -12,7 +12,7 @@
 
 保留原 ST 的闭环：世界事实与地点关系为 AI 提供上下文，AI 提交明确变化，地图、场景和天气随事实更新。但不迁移 ST 的世界书双写、localStorage 世界数据库、正文标签自动副作用和任意宿主 CSS 注入。
 
-Loom 已有 State、Setting、Agent Tool、Preset 和 Renderer，不需要再造一个世界引擎。首个交付切片是“初始化世界 → AI 读取 → 局部提交 → 面板刷新”；完整地图操作、自动 Atlas / Locator 注入、音频和导入 UI 不作为前置。
+Loom 已有 State、Lore、Agent Tool、Preset 和 Renderer，不需要再造一个世界引擎。首个交付切片是“初始化世界 → AI 读取 → 局部提交 → 面板刷新”；完整地图操作、自动 Atlas / Locator 注入、音频和导入 UI 不作为前置。
 
 本 Plan 保留初始调研与提案作为决策记录。最新实现以第 4 节“原生 EC 实施”和末尾“Client 目标与订阅实施”账目为准；早期 State v2、手填目标与全局预览记录不代表当前合同。
 
@@ -21,9 +21,9 @@ Loom 已有 State、Setting、Agent Tool、Preset 和 Renderer，不需要再造
 | 事实 | 当前证据入口 |
 | --- | --- |
 | 云 PNG 源码路径相对 `src/client/` 正确，打包到 `dist/client.js` 后向上两级越出 Package 文件根；构建没有处理 PNG URL | `extensions/the-world/src/client/clouds-3d.js`、`scripts/build-client.mjs` |
-| 有实体合同、空根 State Contribution、读写 RPC、两个工具定义与执行器；没有配套 Prompt Settings / Preset 贡献 | `src/contracts.ts`、`src/server/index.js`、`manifest.json`、`resources/agent-tools/` |
+| 有实体合同、空根 State Contribution、读写 RPC、两个工具定义与执行器；没有配套 Prompt Lore / Preset 贡献 | `src/contracts.ts`、`src/server/index.js`、`manifest.json`、`resources/agent-tools/` |
 | Contribution 在 Card 显式选择后于创建 Timeline 时物化；启用扩展不会给所有现有 Timeline 自动补数据 | `docs/architecture/application/state-and-variables.md` |
-| Settings 与 Tool Definition 需显式导入；Preset 的 Setting Mount / Tool Mount 决定消费，不因模块启用自动进入全部 Agent | `docs/architecture/application/prompt-build/README.md`、`docs/architecture/extensions/README.md` |
+| Lore 与 Tool Definition 需显式导入；Preset 的 Lore Mount / Tool Mount 决定消费，不因模块启用自动进入全部 Agent | `docs/architecture/application/prompt-build/README.md`、`docs/architecture/extensions/README.md` |
 | 服务端已有 `state.subscribe`，The World 尚未消费；Client 没有同等的通用 State 事件订阅接口 | `packages/extension-sdk/src/index.ts`、`docs/workbench/issues/state-subscription-for-extensions.md`、`docs/architecture/extensions/client-renderer-host.md` |
 | 扩展 Tool Handler Context 目前只有 `signal`，不能直接取得可信 Turn 目标或 Invocation ID | `packages/extension-sdk/src/index.ts` 的 `ExtensionAgentToolHandlerContext` |
 | 面板靠手填目标读取；场景、时间、天气各自取第一个匹配实体，预览修改不提交 State | `src/client/panel-view.tsx`、`src/client/index.js` |
@@ -36,10 +36,10 @@ Loom 已有 State、Setting、Agent Tool、Preset 和 Renderer，不需要再造
 
 | 归属 | 内容 | 边界 |
 | --- | --- | --- |
-| Timeline State | 当前场景、地点关系、世界时间、历法、天气与媒体引用 | 唯一运行事实，按 Branch 修订；不复制进 Setting |
-| Prompt Settings | 世界规则、字段含义、更新时机、未知值处理、工具使用示例 | 作者可编辑；不是当前天气、时间和位置的第二份数据库 |
+| Timeline State | 当前场景、地点关系、世界时间、历法、天气与媒体引用 | 唯一运行事实，按 Branch 修订；不复制进 Lore |
+| Prompt Lore | 世界规则、字段含义、更新时机、未知值处理、工具使用示例 | 作者可编辑；不是当前天气、时间和位置的第二份数据库 |
 | Agent Tools | 读取世界、校验并提交局部变化 | 通过现有 State Service，保留冲突、幂等与 Changeset |
-| Preset 使用配置 | 显式采用 Settings、启用世界工具 | 不自动修改用户已有预设，不要求专属 The World Agent |
+| Preset 使用配置 | 显式采用 Lore、启用世界工具 | 不自动修改用户已有预设，不要求专属 The World Agent |
 | 扩展 Config | 特效启用、预览参数等用户偏好 | 不写剧情；表现关闭不停止世界事实更新 |
 | Renderer | 展示当前目标的权威快照及诊断 | 不按“第一个实体”猜当前场景，不维护第二套剧情状态 |
 
@@ -47,8 +47,8 @@ Loom 已有 State、Setting、Agent Tool、Preset 和 Renderer，不需要再造
 flowchart TD
     Author["作者：Card 初始化与世界规则"] --> Init["选用 The World State Contribution"]
     Init --> State["Timeline / Branch State"]
-    Author --> Settings["显式导入并采用 Settings"]
-    Settings --> Preset["现有 Agent Preset"]
+    Author --> Lore["显式导入并采用 Lore"]
+    Lore --> Preset["现有 Agent Preset"]
     Tools["导入工具定义并启用 Tool Mount"] --> Preset
     State --> Read["读取世界工具"]
     Read --> AI["AI：判断本轮明确变化"]
@@ -117,11 +117,11 @@ RPC 与工具共用同一套可执行校验和操作语义，避免 `world-model
 
 继续允许真实局部修改，保留未修改实体。首版不扩张 JSON Patch 操作集；必须明确数组是否支持，当前自制实现不能处理数组元素，不对 AI 宣称完整 RFC 6902。外部工具参数应列出支持操作、路径和值约束。
 
-## 5. Settings 与 AI 工具接入
+## 5. Lore 与 AI 工具接入
 
-扩展携带一份“世界状态维护规则” Setting，Manifest 通过 `contributes.promptResources` 分发。内容保持最小：字段关系与稳定 ID、先读后写、只记录明确变化、不编造未知事实、无依据不推进时间、冲突后重新判断，以及一组读取 / 局部修改示例。
+扩展携带一份“世界状态维护规则” Lore，Manifest 通过 `contributes.promptResources` 分发。内容保持最小：字段关系与稳定 ID、先读后写、只记录明确变化、不编造未知事实、无依据不推进时间、冲突后重新判断，以及一组读取 / 局部修改示例。
 
-角色长篇世界观继续使用作者自己的 Settings。首版不新增强制专属 Preset：用户在现有 Preset 显式采用维护规则、启用两个世界工具；示例 Card / 使用文档演示完整配置。安装、资源导入、模块权限和工具挂载是四个不同步骤，缺一项给出明确诊断。
+角色长篇世界观继续使用作者自己的 Lore。首版不新增强制专属 Preset：用户在现有 Preset 显式采用维护规则、启用两个世界工具；示例 Card / 使用文档演示完整配置。安装、资源导入、模块权限和工具挂载是四个不同步骤，缺一项给出明确诊断。
 
 保留 `official.the-world/read-world-state` 与 `official.the-world/update-world-state` 两个身份，先不复制 ST 的 AddNPC / SetProperty / AddPOI 工具集。读取返回 The World 子树、当前场景和 revision，不把无关全量 State 交给 AI；更新只提交受限实体 / 组件变化。
 
@@ -135,7 +135,7 @@ RPC 与工具共用同一套可执行校验和操作语义，避免 `world-model
 
 真实幂等验证必须经过 Handler 和 Host。现有执行器先读最新 revision 并报冲突，可能在宿主幂等重放之前阻止重试；修复应保留同键不同请求拒绝及 stale revision 冲突，不简单删除并发检查或自动生成新键。
 
-首版通过读取工具把实时事实交给 AI。已有 Atlas / Locator 纯投影可后续复用，但不把动态摘要写回 Setting，不新建通用 Prompt Source Registry，不承诺所有 Agent 自动获得地图信息。
+首版通过读取工具把实时事实交给 AI。已有 Atlas / Locator 纯投影可后续复用，但不把动态摘要写回 Lore，不新建通用 Prompt Source Registry，不承诺所有 Agent 自动获得地图信息。
 
 ## 6. 面板、预览与资源
 
@@ -159,7 +159,7 @@ Workspace Renderer 的活动 Timeline / Branch 获取与变化通知需要核对
 | --- | --- | --- |
 | P0 云资源修复 | `src/client/clouds-3d.js`、`src/client/index.js`；必要的定向验证 | URL 经 Package API 传入；客户端构建及打包入口 URL 解析，安装包路由读取 PNG 成功 |
 | P1 合同定稿与安全写入 | `src/contracts.ts`、`src/world-model.ts`、`src/server/index.js`、`docs/state-contract.md`、`tests/extensions/the-world/server.test.ts` | 明确版本 / 分支 / 数组语义；非法操作拒绝、引用一致、合法日期；真实 Handler + Host 冲突 / 重放证据 |
-| P2 初始化与提示资源 | `manifest.json`、`resources/`、`README.md`、必要的导入 / Card 定向验证 | 新 Timeline 显式初始化；旧 Timeline 不改写；Setting 与两工具导入、挂载后实际进入 Prompt / tools |
+| P2 初始化与提示资源 | `manifest.json`、`resources/`、`README.md`、必要的导入 / Card 定向验证 | 新 Timeline 显式初始化；旧 Timeline 不改写；Lore 与两工具导入、挂载后实际进入 Prompt / tools |
 | P3 可信工具上下文 | 先只读核对 `packages/extension-sdk/src/index.ts`、Host、`packages/application-runtime/src/agents/` 与官方 State 工具 | 定稿最小合同后才开放宿主写集；验证当前 Turn 目标不可越权、取消、幂等和无目标拒绝 |
 | P4 同源投影与运行面板 | `src/client/index.js`、`src/client/panel-view.tsx`、实际涉及的天气模块 | 当前 Scene / Place 一致；State 写入刷新、目标切换不串世界、午夜正确；缺目标明确诊断 |
 | P5 文档与验收收口 | 包内 README、相关合同 / 迁移文档、本 Plan | 设置与工具操作链路可复现；记录真实模型、资源路由、浏览器诊断与人工验收各自结果 |
@@ -171,7 +171,7 @@ Workspace Renderer 的活动 Timeline / Branch 获取与变化通知需要核对
 ## 8. 完成标准与验证预算
 
 1. 示例 Card 显式选用 Contribution，创建 Timeline 后获得可校验的世界；启用模块不隐式升级既有 Timeline。
-2. 导入维护规则和工具后，只有采用它们的 Preset 能向 AI 提供正确 Setting 与工具定义；停用执行器给出明确失败。
+2. 导入维护规则和工具后，只有采用它们的 Preset 能向 AI 提供正确 Lore 与工具定义；停用执行器给出明确失败。
 3. 确定性 Provider 执行真实 Runtime / Handler / State 链：读取、修改局部天气或时间、再次读取一致，其他实体保留。
 4. 非法操作、错误日期、跨目标调用、stale revision 和同键不同请求拒绝；同请求重放不增加 revision / 副作用。Fork / 历史分支读取保持一致，不被重复 branch 标记阻断。
 5. 面板和天气读取同一当前目标；明确区分未知、未初始化、读取失败与调试预览，切换和停用不遗留旧结果。
@@ -202,8 +202,8 @@ Workspace Renderer 的活动 Timeline / Branch 获取与变化通知需要核对
 - [x] 完成 P0 云 URL 修复与 Global 安装包路由验证；Card 私有安装路由验收仍未执行。
 - [x] 完成 P1 服务端未知操作、时分秒范围和数组遍历拒绝；不代表完整组件 / 日期合同完成。
 - [x] 定稿 P1 合同并完成真实 State Service 写入、重放与 Fork 验证。
-- [x] 完成 P2 维护 Settings 分发与显式采用、工具启用及执行器缺失的本地编译验证。
-- [x] 完成 P2 Settings / 工具 / 初始化示例。
+- [x] 完成 P2 维护 Lore 分发与显式采用、工具启用及执行器缺失的本地编译验证。
+- [x] 完成 P2 Lore / 工具 / 初始化示例。
 - [x] 定稿并实现 P3 工具可信上下文；本机确定性 Provider → 真实 Server/Host → State 工具链已通过。
 - [x] 完成 P4 当前目标、State 订阅、缺失数据与表现清理；平台来源诊断已接入，人工视觉验收仍待完成。
 - [x] 完成 P5 自动化与未验收账目；人工界面、真实外部模型、公网发行未验收，不标为通过。
@@ -211,7 +211,7 @@ Workspace Renderer 的活动 Timeline / Branch 获取与变化通知需要核对
 ### P5 首版验收收口
 
 - 新增 `tests/extensions/the-world/agent-server.test.ts`：在临时目录安装真实扩展，启动真实 Studio Server/Extension Host，使用本机确定性 OpenAI-compatible HTTP Provider，经过三轮模型响应完成读取 revision、更新天气和最终回复。没有绕过 Server 工具适配器，也不消耗外部模型额度。
-- 证据覆盖维护 Settings 进入首轮 Prompt、宿主提供实际 Narrative 目标与 Invocation 身份、目标 Timeline 写入成功、另一 Timeline 不变，以及暂停后工具/Settings 退出消费但已写 State 保留。
+- 证据覆盖维护 Lore 进入首轮 Prompt、宿主提供实际 Narrative 目标与 Invocation 身份、目标 Timeline 写入成功、另一 Timeline 不变，以及暂停后工具/Lore 退出消费但已写 State 保留。
 - 该集成反例实际检出平台暂停工具仍阻断生成的问题；已修复为过滤当前故事不可用来源、保留挂载并记录诊断，其他 Card 私有资源越界仍拒绝。
 - 真实 Server 工具链与原生 State Runtime 两文件 7/7 通过；平台来源、Prompt 恢复、间接引用与通用提交守卫的最终验证见关联平台 Plan。未更改 The World 业务 Entity，不增加 metadata，不重新构建没有变化的客户端产物。
 - 未验收：桌面/移动人工表现与交互、真实外部模型、公网 Git 添加、Card 私有安装 PNG 路由及全量发行流程。这些不是本次自动化结果，也不是尚待编写的兼容层；没有迁移用户数据、强制纳入忽略目录、提交或推送。
@@ -224,7 +224,7 @@ Workspace Renderer 的活动 Timeline / Branch 获取与变化通知需要核对
 - 服务端 mutation 明确拒绝未知操作；校验时、分、秒、毫秒及月 / 日的正值。未硬编码 Gregorian 日期上限，Calendar 引用及月长校验留给 P1 合同定稿。
 - JSON Patch 拒绝穿越数组或标量，避免 `add` 将既有数组静默替换成对象；数组整体替换仍可用。`world-model.ts` 的纯数据实现尚未统一，不能据此声称两条路径合同已收口。
 - 地图使用正式 `parentPlaceId`；午夜零点保留；多云选择、时间预览及切主题统一沿用当前天气映射。滑块 / 开关自身状态、当前 Scene 投影和全局表现生命周期仍未完成。
-- Manifest 新增 `world-state-maintenance` Setting 贡献，按当前 Prompt Resource v2 / Activation / Anchor 合同组织；README 说明安装、权限、显式导入和 Preset 采用链路，不自动创建专属预设。
+- Manifest 新增 `world-state-maintenance` Lore 贡献，按当前 Prompt Resource v2 / Activation / Anchor 合同组织；README 说明安装、权限、显式导入和 Preset 采用链路，不自动创建专属预设。
 
 验证：
 
@@ -236,7 +236,7 @@ Workspace Renderer 的活动 Timeline / Branch 获取与变化通知需要核对
 | `pnpm test:extensions:typecheck` | 通过；包含本次扩展测试的类型检查，不作为主应用 CI 结果 |
 | 浏览器 / 外部 Provider | 未执行；没有真实模型调用、Card 私有安装 PNG 路由或桌面 / 移动人工验收 |
 
-测试中的初始阻塞均已处理：开发目录的依赖软链接不能作为发行包，临时包排除 `node_modules` 后走正常安装；默认工具挂载记录存在但禁用；Fake Provider 不支持原生工具；真实维护 Setting 需要 Activation / Anchor，导入成功不等于注入成功。没有放宽安装安全或改动宿主行为。
+测试中的初始阻塞均已处理：开发目录的依赖软链接不能作为发行包，临时包排除 `node_modules` 后走正常安装；默认工具挂载记录存在但禁用；Fake Provider 不支持原生工具；真实维护 Lore 需要 Activation / Anchor，导入成功不等于注入成功。没有放宽安装安全或改动宿主行为。
 
 下一步决策证据：
 
@@ -245,7 +245,7 @@ Workspace Renderer 的活动 Timeline / Branch 获取与变化通知需要核对
 - 推荐将 `world` 组件、宿主 target 权威及显式 v1 → v2 升级一并定稿；不自动修改既有 Timeline。推荐仅绑定当前 Narrative 的世界工具，未绑定时明确失败，而不是开放任意分支。
 - 当前 `extensions/the-world` 没有自己的 Git 根，属于主仓库忽略的本地目录；没有将源码重新加入主仓库、提交、发布或推送。
 
-实际偏差：P1 / P3 的合同决策阻止完整 State 初始化与自动上下文接入，先完成独立 P0、P1 已知拒绝路径、P2 Settings 和 P4 明确字段错误。没有把这些部分完成标成整个运行闭环已交付。
+实际偏差：P1 / P3 的合同决策阻止完整 State 初始化与自动上下文接入，先完成独立 P0、P1 已知拒绝路径、P2 Lore 和 P4 明确字段错误。没有把这些部分完成标成整个运行闭环已交付。
 
 完成后按项目规则更新本 Plan 并归档；有独立未完成工作时拆出后续，不把未验收风险写成已经消失。
 
@@ -259,7 +259,7 @@ Workspace Renderer 的活动 Timeline / Branch 获取与变化通知需要核对
 - `src/server/index.js` 注册 v2 空世界 Contribution，read 只返回 The World 子树；局部 patch 转为确定性宿主 operations。使用宿主真实幂等与 revision 检查，重放不覆盖后来的 head。
 - 新增 previewWorldUpgrade / commitWorldUpgrade。预览不写；提交验证预览内容与 revision；没有自动升级、静默丢弃坏数据或升级 UI。
 - SDK、Extension Host、Studio Server 贯通 invocationId / narrativeTarget；模型不得自行传目标或幂等键，未绑定 Narrative 拒绝，取消信号保留。
-- 维护 Setting 和两工具输入同步 v2；完整自定义历法 / Scene / Place 示例位于 `resources/examples/world-v2.json`。旧导入资源不自动覆盖，需要重新显式导入与采用。
+- 维护 Lore 和两工具输入同步 v2；完整自定义历法 / Scene / Place 示例位于 `resources/examples/world-v2.json`。旧导入资源不自动覆盖，需要重新显式导入与采用。
 - 面板读取与调试模型按固定世界指针投影，不再取首个实体，也不再将未知日期显示成 2024 年。但仍为手动目标刷新，旧实验全局预览及无效控件尚待 P4 收口。
 - 扩展 `.gitignore` 移除 dist；重新生成 `dist/client.js`。Release 工作流检查客户端产物存在，并将 dist / assets 等运行必需文件纳入归档。
 
@@ -267,7 +267,7 @@ Workspace Renderer 的活动 Timeline / Branch 获取与变化通知需要核对
 
 | 检查 | 结果及边界 |
 | --- | --- |
-| 四个 The World 定向测试文件 | 19 项通过：纯合同、SQLite Runtime / State Service、Settings / 工具编译，以及实际 HTTP 安装包 PNG / bundle 请求 |
+| 四个 The World 定向测试文件 | 19 项通过：纯合同、SQLite Runtime / State Service、Lore / 工具编译，以及实际 HTTP 安装包 PNG / bundle 请求 |
 | `tests/contract/extension-host/installations.test.ts` | 3 项通过；真实 Host 保留调用 ID / Narrative target、独立安装执行器与销毁 |
 | 扩展 typecheck、test:extensions:typecheck、Studio Server 定向 tsc --noEmit | 均通过；首次 server 命令错误禁用 composite 的 incremental，修正参数后通过 |
 | 扩展 build / smoke | 通过；验证 bundle 与显式历法迁移解析，不代表视觉验收 |
@@ -297,9 +297,9 @@ Plan 保持活跃，剩余验收不归档为完成。第二批未运行 dev serv
 - [x] 普通安装与官方选择器安装完成后同时刷新扩展和资源消费者。
 - [x] 定向验证安装成功、失败重试、保留已有资源与真实资源入库。
 
-当前用户环境：本轮操作期间用户已导入 The World；只读数据库确认存在 1 份维护 Setting、2 个 Agent Tool 和 1 个资源安装记录。没有再次导入，也没有替用户挂载 Preset 或执行工具。
+当前用户环境：本轮操作期间用户已导入 The World；只读数据库确认存在 1 份维护 Lore、2 个 Agent Tool 和 1 个资源安装记录。没有再次导入，也没有替用户挂载 Preset 或执行工具。
 
-验证：远程安装生命周期 7 项、Server 安装集成 3 项、The World 安装资源 2 项通过，共 12 项；覆盖预览无导入副作用、确认后导入、已有 installation 不覆盖、失败保留包并显式重试、真实目录 / ZIP 安装后 Setting 入库。Studio Server 与 Studio Client 定向 `tsc --noEmit` 均通过。初次新测试使用错误的 DTO label 层级、ZIP 样本节点未带包命名空间，修正样本后通过，没有改变生产校验。未执行公网下载或人工视觉验收；浏览器仅用于检查现有导入状态。
+验证：远程安装生命周期 7 项、Server 安装集成 3 项、The World 安装资源 2 项通过，共 12 项；覆盖预览无导入副作用、确认后导入、已有 installation 不覆盖、失败保留包并显式重试、真实目录 / ZIP 安装后 Lore 入库。Studio Server 与 Studio Client 定向 `tsc --noEmit` 均通过。初次新测试使用错误的 DTO label 层级、ZIP 样本节点未带包命名空间，修正样本后通过，没有改变生产校验。未执行公网下载或人工视觉验收；浏览器仅用于检查现有导入状态。
 
 ### Client 目标与订阅实施
 

@@ -17,7 +17,7 @@ Application / UI:
 ## 位置、缓存与草稿
 
 - 面板、Timeline/Branch 和明确的资源目标由 Shell 的[导航合同](../../ui/navigation-and-routing.md)持有；关闭面板不等于销毁已访问宿主。导航只保存位置，不保存业务正文或未提交草稿。
-- Prompt Resource、Setting Mount 与 Preset Tool Mount 的正式远端状态由 TanStack Query 管理。资源工作台的输入通过 feature 草稿投影显示，不把未保存文本写进 Query Cache。
+- Prompt Resource、Lore Mount 与 Preset Tool Mount 的正式远端状态由 TanStack Query 管理。资源工作台的输入通过 feature 草稿投影显示，不把未保存文本写进 Query Cache。
 - Context Asset 草稿按 endpoint scope 和 resource ID 隔离，记录首次编辑时实际显示的资源版本与节点字段修改。同一页面内切换资源不静默丢弃失败草稿；浏览器刷新后的草稿恢复没有持久化合同。
 - 远端刷新仍能接收 Agent 的提交，但不覆盖已有草稿。普通失焦保存使用编辑基线版本；过期版本拒绝提交并保留输入，不自动改用最新版本覆盖远端。
 - 用户明确选择重新应用时，先读取最新资源，只合并本次提交的已编辑字段，再做版本检查。未编辑字段沿用最新值，读取/保存期间的新输入继续保留；远端节点已删除时失败，不复活节点。用户也可明确放弃本地修改。

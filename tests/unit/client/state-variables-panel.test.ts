@@ -52,7 +52,7 @@ describe('StateVariablesPanel', () => {
       t,
       card: {
         id: 'card-1', version: 1, name: 'Alice', stateDefinitionIds: ['shared-1'],
-        timelineStateBindings: [], opening: { entries: [] }, settingLayer: { entries: [] },
+        timelineStateBindings: [], opening: { entries: [] }, lore: { entries: [] },
         createdAt: 'now', updatedAt: 'now',
       },
       onSaveCard: async (input): Promise<Card> => ({
@@ -60,7 +60,7 @@ describe('StateVariablesPanel', () => {
         version: input.expectedVersion + 1,
         name: 'Alice',
         opening: { entries: [] },
-        settingLayer: { entries: [] },
+        lore: { entries: [] },
         createdAt: 'now',
         updatedAt: 'now',
       }),

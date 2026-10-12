@@ -550,7 +550,7 @@ export async function readStateInitializationResources(
   const resources: Array<ExtensionStateInitializationContext['resources'][number]> = []
   for (const id of new Set(resourceIds)) {
     const resource = await ctx.promptResources.getResource(id)
-    if (!resource || resource.resourceKind !== 'setting') continue
+    if (!resource || resource.resourceKind !== 'lore') continue
     if (!isExtensionResourceAvailable(resource.metadata.origin, installations))
       throw new Error(`State initialization resource is unavailable: ${id}`)
     const root = fromStoredResource(resource).rootNode

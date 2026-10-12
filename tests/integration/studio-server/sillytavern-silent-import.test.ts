@@ -25,7 +25,7 @@ describe('studio server converter lifecycle contract', () => {
       }))
       const entry = (label: string) => `export function activate(ctx) {
         ctx.rpc.register('sillytavern.importer.convertPromptResource', () => ({
-          artifact: ${JSON.stringify(nativeSetting(label))}
+          artifact: ${JSON.stringify(nativeLore(label))}
         }))
       }`
       await writeFile(join(sourceDirectory, 'index.js'), entry('First instance'))
@@ -52,9 +52,9 @@ describe('studio server converter lifecycle contract', () => {
   })
 })
 
-function nativeSetting(label: string) {
+function nativeLore(label: string) {
   return {
-    format: 'loom.promptResource', schemaVersion: 2, resourceKind: 'setting',
-    rootNode: { id: 'test.setting', label, meta: '', category: 'setting', kind: 'module', body: '', children: [] },
+    format: 'loom.promptResource', schemaVersion: 2, resourceKind: 'lore',
+    rootNode: { id: 'test.setting', label, meta: '', category: 'lore', kind: 'module', body: '', children: [] },
   }
 }

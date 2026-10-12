@@ -169,7 +169,7 @@ export function collectPromptInputs(input: {
 
 function readSourceKind(category: PromptResourceNode['category']): PromptContribution['sourceRef']['kind'] | undefined {
   if (category === 'preset') return 'preset'
-  if (category === 'setting') return 'settingLayer'
+  if (category === 'lore') return 'lore'
   if (category === 'runtime') return 'runtime'
   if (category === 'history') return 'narrativeChat'
   return undefined
@@ -186,7 +186,7 @@ export function findNodes(nodes: PromptResourceNode[], predicate: (node: PromptR
 
 export function applyDefaultPromptProjection(asset: PromptResourceNode, resource: PromptResourceContent): PromptResourceNode {
   if (asset.kind !== 'entry' || asset.capabilities?.targetAnchorId) return asset
-  if (resource.resourceKind !== 'setting') return asset
+  if (resource.resourceKind !== 'lore') return asset
 
   const targetAnchorId = '@chat.system'
   const entryOrders = findNodes([resource.rootNode], node => node.capabilities?.targetAnchorId === targetAnchorId)
@@ -214,13 +214,13 @@ function assertPromptResourceArtifact(value: unknown): asserts value is PromptRe
   if (value.schemaVersion !== 1 && value.schemaVersion !== 2) throw new Error(`Unsupported Prompt Resource artifact schemaVersion: ${String(value.schemaVersion)}`)
   if (!isPromptResourceKind(value.resourceKind)) throw new Error(`Invalid Prompt Resource kind: ${String(value.resourceKind)}`)
   if (value.macroOptions !== undefined) normalizeMacroOptions(value.macroOptions)
-  if (value.useCardSettings !== undefined && typeof value.useCardSettings !== 'boolean') throw new Error('Invalid Preset card Setting selection')
-  if (value.settingMounts !== undefined && (!Array.isArray(value.settingMounts) || value.resourceKind !== 'preset'
-    || value.settingMounts.some(reference => !isObject(reference)
+  if (value.useCardLore !== undefined && typeof value.useCardLore !== 'boolean') throw new Error('Invalid Preset card Lore selection')
+  if (value.loreMounts !== undefined && (!Array.isArray(value.loreMounts) || value.resourceKind !== 'preset'
+    || value.loreMounts.some(reference => !isObject(reference)
       || (reference.kind !== 'package' && reference.kind !== 'external')
       || (reference.kind === 'package' && (typeof reference.contributionId !== 'string' || !reference.contributionId.trim()))
       || (reference.kind === 'external' && (typeof reference.resourceId !== 'string' || !reference.resourceId.trim()))))) {
-    throw new Error('Invalid Preset Setting references')
+    throw new Error('Invalid Preset Lore references')
   }
   if (value.textUses !== undefined && (!Array.isArray(value.textUses) || value.textUses.some(use =>
     !isObject(use) || typeof use.id !== 'string' || !use.id.trim()
@@ -240,7 +240,7 @@ function assertPromptResourceArtifact(value: unknown): asserts value is PromptRe
 
 function isPromptResourceKind(value: unknown): value is PromptResourceKind {
   return value === 'preset'
-    || value === 'setting'
+    || value === 'lore'
     || value === 'logic'
     || value === 'runtime'
     || value === 'history'
@@ -533,26 +533,26 @@ function assertCardBundleCard(value: unknown): asserts value is CardBundleArtifa
     }
   }
 
-  if (value.settingLayer !== undefined) {
-    if (!isObject(value.settingLayer)) throw new Error('Card bundle card.settingLayer must be an object')
-    if (value.settingLayer.entries !== undefined && !Array.isArray(value.settingLayer.entries)) {
-      throw new Error('Card bundle card.settingLayer.entries must be an array')
+  if (value.lore !== undefined) {
+    if (!isObject(value.lore)) throw new Error('Card bundle card.lore must be an object')
+    if (value.lore.entries !== undefined && !Array.isArray(value.lore.entries)) {
+      throw new Error('Card bundle card.lore.entries must be an array')
     }
-    for (const [index, entry] of (value.settingLayer.entries ?? []).entries()) {
+    for (const [index, entry] of (value.lore.entries ?? []).entries()) {
       if (!isObject(entry) || typeof entry.content !== 'string') {
-        throw new Error(`Card bundle setting entry must contain string content: ${index}`)
+        throw new Error(`Card bundle lore entry must contain string content: ${index}`)
       }
-      assertOptionalString(entry.id, `Card bundle setting entry id: ${index}`)
-      assertOptionalString(entry.path, `Card bundle setting entry path: ${index}`)
-      assertOptionalString(entry.title, `Card bundle setting entry title: ${index}`)
+      assertOptionalString(entry.id, `Card bundle lore entry id: ${index}`)
+      assertOptionalString(entry.path, `Card bundle lore entry path: ${index}`)
+      assertOptionalString(entry.title, `Card bundle lore entry title: ${index}`)
       if (entry.enabled !== undefined && typeof entry.enabled !== 'boolean') {
-        throw new Error(`Card bundle setting entry enabled must be boolean: ${index}`)
+        throw new Error(`Card bundle lore entry enabled must be boolean: ${index}`)
       }
       if (entry.activation !== undefined && !isPromptActivation(entry.activation)) {
-        throw new Error(`Card bundle setting entry activation is invalid: ${index}`)
+        throw new Error(`Card bundle lore entry activation is invalid: ${index}`)
       }
       if (entry.tags !== undefined && (!Array.isArray(entry.tags) || !entry.tags.every(tag => typeof tag === 'string'))) {
-        throw new Error(`Card bundle setting entry tags must be strings: ${index}`)
+        throw new Error(`Card bundle lore entry tags must be strings: ${index}`)
       }
       
     }

@@ -42,7 +42,7 @@
 - 角色卡声明新故事默认采用；新 Timeline 明确采用并执行初始化。中途添加必须预览贡献、权限、初始化及冲突，并通过受控提交完成，不能通过切换布尔值覆盖已有世界。
 - 未加入、已采用、暂停、依赖缺失需要可区分；这些语义不要求创建多份相互覆盖的 enabled 状态。
 - 每轮 Prompt/任务启动使用一致的采用上下文；提交时检查当前资格，防止暂停、恢复之后旧任务重新取得写入资格。
-- 静态资源目录允许查看停用来源及诊断，但不得因为“仍可查看”就继续注入、执行。检查范围包括间接引用、工具返回的上下文和宿主自动行为，不仅顶层 Setting 挂载。
+- 静态资源目录允许查看停用来源及诊断，但不得因为“仍可查看”就继续注入、执行。检查范围包括间接引用、工具返回的上下文和宿主自动行为，不仅顶层 Lore 挂载。
 - 显式复制为独立用户资源后可脱离原扩展；普通编辑、导入或挂载不得隐式改变来源。
 
 ### 已落地的基础合同
@@ -147,7 +147,7 @@
 - [x] Client 实例采用校验、固定 Timeline/Branch、取消与 State 订阅；浏览器交互验收待做。
 - [x] 角色默认/Timeline 采用操作入口、安装来源与缺失状态展示；组件行为验证通过，浏览器验收待做。
 - [x] State 来源诊断、当前声明/已接受声明区分、Branch 数据存在性与对应正式文档；人工视觉验收待做。
-- [x] Settings、工具、文本规则与脚本的来源资格诊断，以及 SDK / 正式架构合同。
+- [x] Lore、工具、文本规则与脚本的来源资格诊断，以及 SDK / 正式架构合同。
 - [x] 角色卡公共 artifactId 持久化、显式派生身份与来源往返；浏览器验收待做。
 - [x] The World 原生 EC 声明与无实体 metadata 数据合同；真实 Runtime 定向验证通过。
 - [x] The World 客户端当前目标与 State 自动刷新、缺失数据和表现清理；人工视觉验收待做。
@@ -256,7 +256,7 @@
 - Host 限制故事 Storage Scope 和 Record binding：必须进入准确 Timeline 的受管范围；Agent Session 归属由 Server 查询；列表必须显式提供 Scope。全局配置仍可编辑。列表先按请求 Scope 过滤，避免同 Card 的其他故事记录误使当前列表失败。
 - Prompt 准备记录实际读取资源和受管回调的原始凭据；Provider、工具和成功输出提交保持资格，恢复前先复核旧凭据。工具每次刷新来源资格，CodeAct 脚本附件也按采用过滤；间接读取产生的新依赖加入后续 Step 和恢复检查点。取消不能撤回已发出的外部请求。
 - 新增 `ctx.timeline.subscribe` 目标集合失效通知；只通知需要重新 `list()` 对账，不投递业务数据，不为任意领域事件猜测目标。
-- 新增只读 `application.inspectTimelineExtensionResources` 和 Timeline 扩展行“携带资源”入口；列出 Settings、Preset、工具、文本规则/提取器和脚本的来源资格。暂停/卸载保留资源可诊断，来源可用与挂载/权限明确分开。
+- 新增只读 `application.inspectTimelineExtensionResources` 和 Timeline 扩展行“携带资源”入口；列出 Lore、Preset、工具、文本规则/提取器和脚本的来源资格。暂停/卸载保留资源可诊断，来源可用与挂载/权限明确分开。
 - 真实 Server 测试发现暂停扩展后，保留的工具挂载会令新一轮生成报错。现已过滤当前安装来源不可用的工具并在 Trace 记录原因；其他 Card 私有工具引用仍拒绝，没有扩大资源权限。
 - 最终 9 文件 / 91 用例通过，覆盖 Data Engine、Host Storage/Timeline/Prompt session、Runtime 采用/State content/恢复/资源导入、Client 资源诊断；另有 CodeAct/VFS 2 文件 / 37 用例和 The World 2 文件 / 7 用例通过。本轮共 13 个相关文件、135 个不同用例获得通过证据，不计重复运行，不是完整 CI。
 - Runtime / Extension Host / Studio Server / Studio Client 定向 `tsc -b` 通过；相关 Diff 空白检查通过。新增间接读取测试最初误用 Narrative 模式不开放的 Workspace 资源工具，改为真实支持的 CodeAct 脚本附件路径后通过，没有为了测试放宽权限。

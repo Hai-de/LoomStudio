@@ -20,20 +20,20 @@ export async function readExtensionPromptInputs(input: {
   ownerInstallationId?: string
   ownerPackageId?: string
 }): Promise<{ sourceNodes: SourceNode[]; contributions: PromptContribution[] }> {
-  if (input.addition.settingResourceIds !== undefined
-    && (!Array.isArray(input.addition.settingResourceIds)
-      || !input.addition.settingResourceIds.every(id => typeof id === 'string' && id.length > 0)))
-    throw new Error('Prompt Setting references must be non-empty resource IDs')
+  if (input.addition.loreResourceIds !== undefined
+    && (!Array.isArray(input.addition.loreResourceIds)
+      || !input.addition.loreResourceIds.every(id => typeof id === 'string' && id.length > 0)))
+    throw new Error('Prompt Lore references must be non-empty resource IDs')
   if (input.addition.content !== undefined && !Array.isArray(input.addition.content))
     throw new Error('Prompt content must be an array')
-  const resourceIds = [...new Set(input.addition.settingResourceIds ?? [])]
+  const resourceIds = [...new Set(input.addition.loreResourceIds ?? [])]
   for (const id of resourceIds) {
     const resource = await input.promptResources.getResource(id)
-    if (!resource || resource.resourceKind !== 'setting') throw new Error(`Setting resource not found: ${id}`)
+    if (!resource || resource.resourceKind !== 'lore') throw new Error(`Lore resource not found: ${id}`)
     if (!isExtensionResourceAvailable(resource.metadata.origin, input.installations))
-      throw new Error(`Setting resource is not available in this context: ${id}`)
+      throw new Error(`Lore resource is not available in this context: ${id}`)
     if (input.ownerInstallationId && !isOwnedResource(resource.metadata.origin, input.ownerInstallationId, input.ownerPackageId!))
-      throw new Error(`Setting resource is not owned by this extension installation: ${id}`)
+      throw new Error(`Lore resource is not owned by this extension installation: ${id}`)
   }
   const resources = await readPromptResourceInputs({
     promptResources: input.promptResources,

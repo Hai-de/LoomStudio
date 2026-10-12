@@ -104,14 +104,14 @@ describe('SillyTavern Importer Extension', () => {
 
     // Context assets check: Arcane Codex setting module + post-session module
     expect(artifact.contextAssets.length).toBe(2)
-    const lorebookModule = artifact.contextAssets.find(a => a.category === 'setting' && a.label === 'Arcane Codex')
+    const lorebookModule = artifact.contextAssets.find(a => a.category === 'lore' && a.label === 'Arcane Codex')
     expect(lorebookModule).toBeDefined()
     expect(lorebookModule?.kind).toBe('module')
     expect(lorebookModule?.children?.length).toBe(2)
 
     const fireballAsset = lorebookModule?.children?.find(a => a.label === 'Fireball Spell')
     expect(fireballAsset).toBeDefined()
-    expect(fireballAsset?.capabilities?.targetAnchorId).toBe('@setting.lower')
+    expect(fireballAsset?.capabilities?.targetAnchorId).toBe('@lore.lower')
     expect(fireballAsset?.capabilities?.activation).toEqual({
       kind: 'keyword',
       keywords: ['fireball', 'pyro'],
@@ -132,7 +132,7 @@ describe('SillyTavern Importer Extension', () => {
     expect(postHistoryAsset?.body).toBe('Always ensure your spell incantations rhyme.')
 
     expect(artifact.extensionPayloads).toBeUndefined()
-    expect(artifact.card.settingLayer).toBeUndefined()
+    expect(artifact.card.lore).toBeUndefined()
     expect(isPngFile(conversion.avatarBytes!)).toBe(true)
     expect(extractStCardFromPng(conversion.avatarBytes!)).toBeNull()
     expect(conversion.avatarBytes!.byteLength).toBeLessThan(png.byteLength)
@@ -180,14 +180,14 @@ describe('SillyTavern Importer Extension', () => {
 
     const conversion = convertSillyTavernLorebook(mockLorebook)
     expect(conversion.artifact.format).toBe('loom.promptResource')
-    expect(conversion.artifact.resourceKind).toBe('setting')
+    expect(conversion.artifact.resourceKind).toBe('lore')
     expect(conversion.artifact.rootNode.label).toBe('Eldoria Realm Lore')
 
     const children = conversion.artifact.rootNode.children ?? []
     expect(children).toHaveLength(3)
 
     const normalEntry = children.find((c: any) => c.label === 'Capital City')
-    expect(normalEntry?.capabilities?.targetAnchorId).toBe('@setting.lower')
+    expect(normalEntry?.capabilities?.targetAnchorId).toBe('@lore.lower')
     expect(normalEntry?.capabilities?.activation).toEqual({
       kind: 'keyword',
       keywords: ['capital', 'astoria'],
@@ -195,7 +195,7 @@ describe('SillyTavern Importer Extension', () => {
     })
 
     const constantEntry = children.find((c: any) => c.label === 'Constant World Law')
-    expect(constantEntry?.capabilities?.targetAnchorId).toBe('@setting.stable')
+    expect(constantEntry?.capabilities?.targetAnchorId).toBe('@lore.stable')
     expect(constantEntry?.capabilities?.activation).toEqual({ kind: 'always' })
 
     const depthEntry = children.find((c: any) => c.label === 'Combat Rules (End of Prompt)')
@@ -313,7 +313,7 @@ describe('SillyTavern Importer Extension', () => {
     expect(opening?.entries?.[0]?.content?.length).toBeGreaterThan(1000)
 
     // Verify embedded character_book is converted as a standalone Setting module in contextAssets
-    const lorebookModule = artifact.contextAssets.find(a => a.category === 'setting' && a.label === '发条不再转动')
+    const lorebookModule = artifact.contextAssets.find(a => a.category === 'lore' && a.label === '发条不再转动')
     expect(lorebookModule).toBeDefined()
     expect(lorebookModule?.kind).toBe('module')
     expect(lorebookModule?.children).toHaveLength(26)
@@ -321,7 +321,7 @@ describe('SillyTavern Importer Extension', () => {
     // Check stable entry (e.g. 凝滞的新日)
     const stableEntry = lorebookModule?.children?.find(c => c.label === '凝滞的新日')
     expect(stableEntry).toBeDefined()
-    expect(stableEntry?.capabilities?.targetAnchorId).toBe('@setting.stable')
+    expect(stableEntry?.capabilities?.targetAnchorId).toBe('@lore.stable')
     expect(stableEntry?.capabilities?.activation).toEqual({ kind: 'always' })
 
     // Check atDepth entry (e.g. [mvu_update]变量更新规则)
@@ -345,11 +345,11 @@ describe('SillyTavern Importer Extension', () => {
     })
 
     expect(imported.card.promptResourceIds).toHaveLength(1)
-    expect(imported.card.settingLayer?.entries).toHaveLength(0)
+    expect(imported.card.lore?.entries).toHaveLength(0)
     const boundResourceId = imported.card.promptResourceIds![0]!
     const boundResource = await promptResources.getResource(boundResourceId)
     expect(boundResource?.label).toBe('发条不再转动')
-    expect(boundResource?.resourceKind).toBe('setting')
+    expect(boundResource?.resourceKind).toBe('lore')
   })
 
   it('correctly normalizes real Xia Jin preset with prompt_order and role-based message blocks', () => {
@@ -392,8 +392,8 @@ describe('SillyTavern Importer Extension', () => {
     const varsIndex = allEntries.findIndex((e: any) => e.id === varsEntry?.id)
     expect(varsIndex).toBeLessThan(mainIndex)
 
-    // Check in-place anchor position: @setting.stable should be placed after varsEntry and before endRulesEntry
-    const stableAnchor = allEntries.find((e: any) => e.capabilities?.targetAnchorId === '@setting.stable')
+    // Check in-place anchor position: @lore.stable should be placed after varsEntry and before endRulesEntry
+    const stableAnchor = allEntries.find((e: any) => e.capabilities?.targetAnchorId === '@lore.stable')
     expect(stableAnchor).toBeDefined()
     const stableIndex = allEntries.findIndex((e: any) => e.id === stableAnchor?.id)
     expect(stableIndex).toBeGreaterThan(varsIndex)
@@ -434,7 +434,7 @@ describe('SillyTavern Importer Extension', () => {
 
     const shared = await runtime.importPromptResource({ artifact: world.artifact })
     const cardArtifact = structuredClone(card.artifact)
-    const embedded = cardArtifact.contextAssets.find(asset => asset.category === 'setting')!
+    const embedded = cardArtifact.contextAssets.find(asset => asset.category === 'lore')!
     cardArtifact.contextAssets = cardArtifact.contextAssets.filter(asset => asset !== embedded)
     const imported = await runtime.importCardBundle({ artifact: cardArtifact })
     await runtime.updateCardPromptResources({
@@ -464,7 +464,7 @@ describe('SillyTavern Importer Extension', () => {
     const rawJson = readFileSync(lorebookPath, 'utf8')
     const result = convertSillyTavernLorebook(rawJson, 'Rimworld 库')
     expect(result.artifact.format).toBe('loom.promptResource')
-    expect(result.artifact.resourceKind).toBe('setting')
+    expect(result.artifact.resourceKind).toBe('lore')
 
     const children = result.artifact.rootNode.children ?? []
     expect(children.length).toBeGreaterThan(10)
@@ -481,8 +481,8 @@ describe('SillyTavern Importer Extension', () => {
     expect(idx100).toBeLessThan(idx300)
 
     // Position is 0, so even though depth is 4 in raw JSON, it must NOT be @chat.session.post
-    expect(order100Entry?.capabilities?.targetAnchorId).toBe('@setting.lower')
-    expect(order300Entry?.capabilities?.targetAnchorId).toBe('@setting.lower')
+    expect(order100Entry?.capabilities?.targetAnchorId).toBe('@lore.lower')
+    expect(order300Entry?.capabilities?.targetAnchorId).toBe('@lore.lower')
 
     // Verify localDepths are positive and strictly increasing
     for (let i = 1; i < children.length; i++) {

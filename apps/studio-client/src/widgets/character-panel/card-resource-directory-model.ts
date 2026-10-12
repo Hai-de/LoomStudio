@@ -1,7 +1,7 @@
 import type { Card, ContextAssetNode, PromptResource } from '../../entities/index.js'
 import type { FileTreeNode } from '../../shared/ui/file-tree/file-tree-model.js'
 
-export type CardResourceFolder = 'settings' | 'agents' | 'references' | 'rules' | 'scripts' | 'macros' | 'state' | 'extensions' | 'attachments'
+export type CardResourceFolder = 'lore' | 'agents' | 'references' | 'rules' | 'scripts' | 'macros' | 'state' | 'extensions' | 'attachments'
 export type CardResourceLocation = { folder?: CardResourceFolder; item?: string; nodeId?: string }
 export type CardResourceEntry = { id: string; label: string; children?: CardResourceEntry[] }
 export type CardResourceGroup = { key: CardResourceFolder; label: string; entries: CardResourceEntry[] }
@@ -11,7 +11,7 @@ export function classifyCardPromptResources(card: Card | undefined, resources: P
   const bound = (card?.promptResourceIds ?? []).map(id => byId.get(id)).filter((item): item is PromptResource => Boolean(item))
   const externalIds = new Set(card?.externalPromptResourceIds ?? [])
   return {
-    ownedSettings: bound.filter(resource => resource.resourceKind === 'setting' && !externalIds.has(resource.id)
+    ownedLore: bound.filter(resource => resource.resourceKind === 'lore' && !externalIds.has(resource.id)
       && resource.origin?.kind !== 'extension-package' && Boolean(resource.sourceArtifactRef)),
     ownedPresets: bound.filter(resource => resource.resourceKind === 'preset' && !externalIds.has(resource.id)
       && resource.origin?.kind !== 'extension-package' && Boolean(resource.sourceArtifactRef)),
@@ -47,7 +47,7 @@ export function buildCardResourceTree(groups: CardResourceGroup[], promptRoots: 
   return { nodes, targets }
 }
 
-export function readCardSettingTarget(
+export function readCardLoreTarget(
   treeId: string,
   targets: Map<string, CardResourceLocation>,
   resources: readonly PromptResource[],
@@ -55,6 +55,6 @@ export function readCardSettingTarget(
   const target = targets.get(treeId)
   if (!target?.nodeId) return undefined
   const id = target.item?.startsWith('resource:') ? target.item.slice(9) : target.item
-  const resource = resources.find(item => item.id === id && item.resourceKind === 'setting')
+  const resource = resources.find(item => item.id === id && item.resourceKind === 'lore')
   return resource ? { resource, nodeId: target.nodeId } : undefined
 }

@@ -23,13 +23,13 @@ export function buildPromptBuildSteps(input: {
   session?: { cardSnapshot?: Card }
 }, t: Translator): PromptBuildStep[] {
   const card = input.card ?? input.session?.cardSnapshot
-  const settingEntries = card?.settingLayer?.entries ?? []
-  const activeSettings = input.projection?.editorProjection?.sourceRows
-    ? input.projection.editorProjection.sourceRows.filter(row => row.active && row.zoneId?.startsWith('setting.'))
-    : settingEntries.filter(entry => settingEntryMatches(entry, input.input))
-  const inactiveSettings = input.projection?.editorProjection?.sourceRows
-    ? input.projection.editorProjection.sourceRows.filter(row => !row.active && row.zoneId?.startsWith('setting.')).length
-    : settingEntries.length - activeSettings.length
+  const loreEntries = card?.lore?.entries ?? []
+  const activeLore = input.projection?.editorProjection?.sourceRows
+    ? input.projection.editorProjection.sourceRows.filter(row => row.active && row.zoneId?.startsWith('lore.'))
+    : loreEntries.filter(entry => loreEntryMatches(entry, input.input))
+  const inactiveLore = input.projection?.editorProjection?.sourceRows
+    ? input.projection.editorProjection.sourceRows.filter(row => !row.active && row.zoneId?.startsWith('lore.')).length
+    : loreEntries.length - activeLore.length
   const projectionSteps = input.projection ? buildProjectionSteps(input.projection) : []
 
   return [
@@ -47,9 +47,9 @@ export function buildPromptBuildSteps(input: {
     {
       title: t('prompt.step.activationPass'),
       rows: [
-        { label: t('prompt.label.settingLayer'), value: t('prompt.value.activeInactive', { active: activeSettings.length, inactive: inactiveSettings }) },
+        { label: t('prompt.label.lore'), value: t('prompt.value.activeInactive', { active: activeLore.length, inactive: inactiveLore }) },
         { label: t('prompt.label.runtimeFacts'), value: readActivationFacts(input.activationFacts, t) },
-        { label: t('prompt.label.activeEntries'), value: readActiveEntryLabels(activeSettings, t) },
+        { label: t('prompt.label.activeEntries'), value: readActiveEntryLabels(activeLore, t) },
         { label: t('prompt.label.inactiveReasons'), value: readInactiveReasons(input.projection, t) },
         { label: t('prompt.label.macroPass'), value: t('prompt.value.macroExpanded') },
       ],
@@ -114,7 +114,7 @@ function readActivationFacts(facts: ActivationFacts | undefined, t: Translator):
     : t('prompt.value.runtimeFacts', { mode: facts['agent.mode'] })
 }
 
-function settingEntryMatches(entry: JsonObject, input: string): boolean {
+function loreEntryMatches(entry: JsonObject, input: string): boolean {
   if (entry.enabled === false) return false
   const activation = entry.activation
   if (!isObject(activation)) return true

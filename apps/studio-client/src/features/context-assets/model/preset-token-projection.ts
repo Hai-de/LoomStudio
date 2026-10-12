@@ -1,21 +1,21 @@
-import type { ContextAssetNode, PromptResource, SettingMount } from '../../../entities/index.js'
+import type { ContextAssetNode, PromptResource, LoreMount } from '../../../entities/index.js'
 
 const staticAnchors = new Set([
-  '@preset.system', '@setting.stable', '@setting.lower', '@narrative.before',
+  '@preset.system', '@lore.stable', '@lore.lower', '@narrative.before',
   '@narrative.after', '@chat.session.post', '@prompt.tail',
 ])
 
 export function buildPresetTokenProjection(input: {
   preset: PromptResource
   resources: PromptResource[]
-  settingMounts: SettingMount[]
+  loreMounts: LoreMount[]
   timelinePromptResourceIds?: string[]
 }) {
   const boundIds = new Set([
-    ...input.settingMounts.filter(mount => mount.source.kind === 'manual').map(mount => mount.settingResourceId),
+    ...input.loreMounts.filter(mount => mount.source.kind === 'manual').map(mount => mount.loreResourceId),
     ...(input.timelinePromptResourceIds ?? []),
   ])
-  const settings = input.resources.filter(resource => boundIds.has(resource.id) && resource.resourceKind === 'setting')
+  const loreResources = input.resources.filter(resource => boundIds.has(resource.id) && resource.resourceKind === 'lore')
   const incompleteIds = new Set<string>()
   const missing = [...boundIds].some(id => !input.resources.some(resource => resource.id === id))
   function project(node: ContextAssetNode): ContextAssetNode {
@@ -23,9 +23,9 @@ export function buildPresetTokenProjection(input: {
     let incomplete = children.some(child => incompleteIds.has(child.id))
     if (node.kind === 'virtual') {
       const anchorId = node.capabilities?.targetAnchorId || (node.label.startsWith('@') ? node.label : node.label)
-      for (const resource of settings) {
+      for (const resource of loreResources) {
         function select(source: ContextAssetNode): ContextAssetNode | undefined {
-          if (source.kind === 'entry' && (source.capabilities?.targetAnchorId ?? '@setting.stable') !== anchorId) return undefined
+          if (source.kind === 'entry' && (source.capabilities?.targetAnchorId ?? '@lore.stable') !== anchorId) return undefined
           const nested = (source.children ?? []).map(select).filter((child): child is ContextAssetNode => child !== undefined)
           if (source.kind !== 'entry' && !nested.length) return undefined
           return { ...source, id: `${node.id}:${resource.id}:${source.id}`, children: nested }

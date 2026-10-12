@@ -5,7 +5,7 @@ import { buildPresetToolProjection } from '../../../apps/studio-client/src/featu
 import { PresetWorkbench } from '../../../apps/studio-client/src/widgets/preset-workbench/preset-workbench.js'
 import { ContextWorkbench } from '../../../apps/studio-client/src/widgets/context-workbench/context-workbench.js'
 import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/index.js'
-import type { AgentToolDefinition, PresetToolMount, PromptResource, SettingMount } from '../../../apps/studio-client/src/entities/index.js'
+import type { AgentToolDefinition, PresetToolMount, PromptResource, LoreMount } from '../../../apps/studio-client/src/entities/index.js'
 import type { FileTreeNode } from '../../../apps/studio-client/src/shared/ui/file-tree/file-tree.js'
 
 const hooks = vi.hoisted(() => ({ cursor: 0, values: [] as unknown[], effects: [] as (() => void)[] }))
@@ -94,8 +94,8 @@ const preset: PromptResource = {
   rootNode: { id: 'root', kind: 'module', label: 'Preset' }, createdAt: '', updatedAt: '',
 }
 const setting: PromptResource = {
-  ...preset, id: 'setting', resourceKind: 'setting',
-  rootNode: { id: 'setting-root', kind: 'module', label: 'USER SETTING' },
+  ...preset, id: 'lore', resourceKind: 'lore',
+  rootNode: { id: 'lore-root', kind: 'module', label: 'USER SETTING' },
 }
 const availableTool: AgentToolDefinition = {
   id: 'available', name: 'USER TOOL', description: 'User description', version: 1,
@@ -105,12 +105,12 @@ const mount = (toolId: string, defaultEnabled = true): PresetToolMount => ({
   id: `mount:${toolId}`, presetResourceId: 'preset', toolId, orderIndex: 3,
   defaultEnabled, provider: { order: 9 }, origin: {}, createdAt: '',
 })
-const settingMount = (id: string): SettingMount => ({
-  id: `setting-mount:${id}`, settingResourceId: id, source: { kind: 'manual', id: 'global' },
+const loreMount = (id: string): LoreMount => ({
+  id: `setting-mount:${id}`, loreResourceId: id, source: { kind: 'manual', id: 'global' },
   orderIndex: 0, origin: {}, createdAt: '',
 })
 const common = () => ({
-  nodes: [], resources: [preset, setting], settingMounts: [settingMount('missing-setting')],
+  nodes: [], resources: [preset, setting], loreMounts: [loreMount('missing-setting')],
   tools: [availableTool], toolMounts: [mount('available'), mount('missing-tool'), mount('disabled-missing', false)],
   draftResourceIds: [], workspaceId: 'missing-reference-test', searchQuery: '', t,
   onReplaceToolMounts: vi.fn().mockResolvedValue(undefined),
@@ -129,8 +129,8 @@ afterEach(() => vi.unstubAllGlobals())
 describe('missing context projections', () => {
   it('retains deduplicated missing Setting IDs without replacing them with other resources', () => {
     const input = {
-      preset, resources: [preset, setting], settingMounts: [settingMount('gone'), settingMount('setting')],
-      timelinePromptResourceIds: ['gone', 'timeline-gone', 'setting'],
+      preset, resources: [preset, setting], loreMounts: [loreMount('gone'), loreMount('lore')],
+      timelinePromptResourceIds: ['gone', 'timeline-gone', 'lore'],
     }
     const baseline = structuredClone(input)
     expect(resolvePresetBuildContextResources(input)).toEqual({
@@ -152,8 +152,8 @@ describe('missing context projections', () => {
   it('reports missing legacy preset references without activating legacy Setting contributions', () => {
     expect(resolvePresetBuildContextResources({
       preset, resources: [preset, setting],
-      settingMounts: ['setting', 'gone'].map(id => ({
-        ...settingMount(id), source: { kind: 'preset', id: 'preset' },
+      loreMounts: ['lore', 'gone'].map(id => ({
+        ...loreMount(id), source: { kind: 'preset', id: 'preset' },
       })),
     })).toEqual({ resources: [], unavailableResourceIds: ['gone'] })
   })
@@ -223,12 +223,12 @@ describe('missing context projections', () => {
     const onSelectResource = vi.fn()
     const props = {
       ...common(), resources: [preset, setting, sibling, outside, second],
-      card: { id: 'card', promptResourceIds: ['setting', 'sibling'] }, routeResourceId: 'setting', routeAssetId: 'setting-root',
+      card: { id: 'card', promptResourceIds: ['lore', 'sibling'] }, routeResourceId: 'lore', routeAssetId: 'lore-root',
       onSelectResource,
     } as unknown as ComponentProps<typeof ContextWorkbench>
     const root = instance(() => ContextWorkbench(props))
     const ids = () => (child(root(), 'ContextAssetExplorer').props.displayNodes as Array<{ id: string }>).map(item => item.id)
-    expect(ids()).toEqual(['setting-root', 'sibling-root'])
+    expect(ids()).toEqual(['lore-root', 'sibling-root'])
     expect(text(root())).not.toContain(t('promptResource.temporaryOpen'))
     props.routeResourceId = 'outside'
     props.routeAssetId = 'outside-root'
@@ -240,8 +240,8 @@ describe('missing context projections', () => {
     expect(ids()).toEqual(['second-root'])
     props.routeResourceId = undefined
     props.routeAssetId = undefined
-    expect(ids()).toEqual(['setting-root', 'sibling-root'])
-    expect(props.card?.promptResourceIds).toEqual(['setting', 'sibling'])
+    expect(ids()).toEqual(['lore-root', 'sibling-root'])
+    expect(props.card?.promptResourceIds).toEqual(['lore', 'sibling'])
   })
 
   it('keeps missing Card bindings visible and does not substitute the resource library', async () => {
@@ -273,7 +273,7 @@ describe('missing context projections', () => {
     const props = {
       ...common(), view: 'settings', onViewChange: vi.fn(),
       resources: [setting, { ...setting, id: 'logic', resourceKind: 'logic' }],
-      card: { id: 'card', promptResourceIds: ['gone', 'setting', 'logic'] },
+      card: { id: 'card', promptResourceIds: ['gone', 'lore', 'logic'] },
     } as unknown as ComponentProps<typeof ContextWorkbench>
     const root = instance(() => ContextWorkbench(props))
     const tree = root()
@@ -283,14 +283,14 @@ describe('missing context projections', () => {
     const dialog = child(tree, 'ResourceBindingDialog')
     click(instance(() => renderElement(dialog))(), t('context.bindings.removeUnavailable'))
     await Promise.resolve()
-    expect(props.onReplaceCardResources).toHaveBeenCalledExactlyOnceWith('card', ['setting', 'logic'])
-    expect(props.card?.promptResourceIds).toEqual(['gone', 'setting', 'logic'])
+    expect(props.onReplaceCardResources).toHaveBeenCalledExactlyOnceWith('card', ['lore', 'logic'])
+    expect(props.card?.promptResourceIds).toEqual(['gone', 'lore', 'logic'])
   })
 
   it('reports failed Card binding removal and retains the missing IDs', async () => {
     const props = {
       ...common(), view: 'settings', onViewChange: vi.fn(),
-      card: { id: 'card', promptResourceIds: ['gone', 'setting'] },
+      card: { id: 'card', promptResourceIds: ['gone', 'lore'] },
     } as unknown as ComponentProps<typeof ContextWorkbench>
     vi.mocked(props.onReplaceCardResources).mockRejectedValue(new Error('Binding conflict'))
     const tree = instance(() => ContextWorkbench(props))()
@@ -301,6 +301,6 @@ describe('missing context projections', () => {
     const failed = renderDialog()
     expect(elements(failed).find(item => item.props.role === 'alert')?.props.children).toBe('Binding conflict')
     expect(text(failed)).toContain(t('context.bindings.unavailable', { id: 'gone' }))
-    expect(props.card?.promptResourceIds).toEqual(['gone', 'setting'])
+    expect(props.card?.promptResourceIds).toEqual(['gone', 'lore'])
   })
 })

@@ -8,11 +8,11 @@ describe('Preset anchor token projection', () => {
     id: 'preset', version: 1, resourceKind: 'preset', createdAt: '', updatedAt: '',
     rootNode: { id: 'root', kind: 'module', label: '', children: [
       { id: 'prefix', kind: 'entry', label: '', body: 'prefix' },
-      { id: 'anchor', kind: 'virtual', label: '常驻设定', capabilities: { targetAnchorId: '@setting.stable' } },
+      { id: 'anchor', kind: 'virtual', label: '常驻设定', capabilities: { targetAnchorId: '@lore.stable' } },
     ] },
   }
   const setting: PromptResource = {
-    id: 'setting', version: 1, resourceKind: 'setting', createdAt: '', updatedAt: '',
+    id: 'lore', version: 1, resourceKind: 'lore', createdAt: '', updatedAt: '',
     rootNode: { id: 's-root', kind: 'module', label: '', children: [
       { id: 's-entry', kind: 'entry', label: '', body: 'world' },
       { id: 's-conditional', kind: 'folder', label: '', capabilities: { activation: { kind: 'keyword', keywords: ['hit'] } }, children: [
@@ -21,7 +21,7 @@ describe('Preset anchor token projection', () => {
     ] },
   }
   it('aggregates mounted Setting bodies into the anchor and its parent without modifying the Preset', () => {
-    const result = buildPresetTokenProjection({ preset, resources: [preset, setting], settingMounts: [], timelinePromptResourceIds: ['setting', 'setting'] })
+    const result = buildPresetTokenProjection({ preset, resources: [preset, setting], loreMounts: [], timelinePromptResourceIds: ['lore', 'lore'] })
     const entries = collectTokenEntries([result.root])
     expect(entries.map(entry => entry.body)).toEqual(['prefix', 'world', 'conditional'])
     const counts = new Map(entries.map(entry => [entry.id, 10]))
@@ -39,7 +39,7 @@ describe('Preset anchor token projection', () => {
     const input = { ...preset, rootNode: { id: 'root', kind: 'module', label: '', children: [
       { id: 'dynamic', kind: 'virtual', label: '@chat.narrative' },
     ] } } as PromptResource
-    expect(buildPresetTokenProjection({ preset: input, resources: [input], settingMounts: [] }).incompleteIds.has('dynamic')).toBe(true)
-    expect(buildPresetTokenProjection({ preset, resources: [preset], settingMounts: [], timelinePromptResourceIds: ['missing'] }).incompleteIds.has('anchor')).toBe(true)
+    expect(buildPresetTokenProjection({ preset: input, resources: [input], loreMounts: [] }).incompleteIds.has('dynamic')).toBe(true)
+    expect(buildPresetTokenProjection({ preset, resources: [preset], loreMounts: [], timelinePromptResourceIds: ['missing'] }).incompleteIds.has('anchor')).toBe(true)
   })
 })

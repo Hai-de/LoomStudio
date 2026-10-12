@@ -69,7 +69,7 @@ describe('Data Layer shared transaction atomicity', () => {
       BEGIN SELECT RAISE(ABORT, 'injected resource revision failure'); END;
     `)
     try {
-      await expect(runtime.deletePromptResource({ resourceId: fixture.settingId })).rejects.toThrow('injected resource revision failure')
+      await expect(runtime.deletePromptResource({ resourceId: fixture.loreId })).rejects.toThrow('injected resource revision failure')
       await assertDeleteState(fixture)
       expect(changesetCount(fixture.engine)).toBe(beforeChangesets)
       expect(tableCount(fixture.engine, 'prompt_resource_header_revisions')).toBe(beforeRevisions)
@@ -89,15 +89,15 @@ describe('Data Layer shared transaction atomicity', () => {
     const beforeChangesets = changesetCount(fixture.engine)
     const beforeCard = await fixture.documents.get(fixture.cardId)
     const beforeTimeline = await fixture.narratives.getTimeline(fixture.timelineId)
-    const beforeMounts = await fixture.promptResources.listSettingMounts({ settingResourceId: fixture.settingId })
+    const beforeMounts = await fixture.promptResources.listLoreMounts({ loreResourceId: fixture.loreId })
     try {
-      await expect(runtime.deletePromptResource({ resourceId: fixture.settingId })).resolves.toMatchObject({
+      await expect(runtime.deletePromptResource({ resourceId: fixture.loreId })).resolves.toMatchObject({
         deleted: true, detachedReferences: { cards: 0, timelines: 0, presets: 0 },
       })
-      await expect(fixture.promptResources.getResource(fixture.settingId)).resolves.toBeNull()
+      await expect(fixture.promptResources.getResource(fixture.loreId)).resolves.toBeNull()
       await expect(fixture.documents.get(fixture.cardId)).resolves.toEqual(beforeCard)
       await expect(fixture.narratives.getTimeline(fixture.timelineId)).resolves.toEqual(beforeTimeline)
-      await expect(fixture.promptResources.listSettingMounts({ settingResourceId: fixture.settingId })).resolves.toEqual(beforeMounts)
+      await expect(fixture.promptResources.listLoreMounts({ loreResourceId: fixture.loreId })).resolves.toEqual(beforeMounts)
       expect(changesetCount(fixture.engine)).toBe(beforeChangesets + 1)
     } finally {
       await fixture.engine.close()
@@ -145,11 +145,11 @@ describe('Data Layer shared transaction atomicity', () => {
       narratives: fixture.narratives,
     })
 
-    const standaloneSetting = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Standalone Lore' })
+    const standaloneLore = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Standalone Lore' })
     const standalonePreset = await runtime.createPromptResource({ resourceKind: 'preset', name: 'Standalone Preset' })
 
-    const deleteSettingResult = await runtime.deletePromptResource({ resourceId: standaloneSetting.resource.id })
-    expect(deleteSettingResult.deleted).toBe(true)
+    const deleteLoreResult = await runtime.deletePromptResource({ resourceId: standaloneLore.resource.id })
+    expect(deleteLoreResult.deleted).toBe(true)
 
     const deletePresetResult = await runtime.deletePromptResource({ resourceId: standalonePreset.resource.id })
     expect(deletePresetResult.deleted).toBe(true)
@@ -176,29 +176,29 @@ async function createDeleteFixture() {
     promptResources: fixture.promptResources,
     narratives: fixture.narratives,
   })
-  const setting = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Atomic Setting' })
+  const setting = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Atomic Setting' })
   const preset = await runtime.createPromptResource({ resourceKind: 'preset', name: 'Atomic Preset' })
-  await runtime.replaceSettingMounts({ source: { kind: 'preset', id: preset.resource.id }, settingResourceIds: [setting.resource.id] })
+  await runtime.replaceLoreMounts({ source: { kind: 'preset', id: preset.resource.id }, loreResourceIds: [setting.resource.id] })
   const card = await runtime.createCard({ name: 'Atomic Card' })
   await runtime.updateCardPromptResources({ cardId: card.card.id, promptResourceIds: [setting.resource.id] })
   const timeline = await runtime.createNarrativeTimeline({ cardId: card.card.id })
   return {
     ...fixture,
     cardId: card.card.id,
-    settingId: setting.resource.id,
+    loreId: setting.resource.id,
     timelineId: timeline.timeline.id,
   }
 }
 
 async function assertDeleteState(fixture: Awaited<ReturnType<typeof createDeleteFixture>>): Promise<void> {
-  await expect(fixture.promptResources.getResource(fixture.settingId)).resolves.toMatchObject({ id: fixture.settingId })
+  await expect(fixture.promptResources.getResource(fixture.loreId)).resolves.toMatchObject({ id: fixture.loreId })
   await expect(fixture.documents.get(fixture.cardId)).resolves.toMatchObject({
-    content: { promptResourceIds: [fixture.settingId] },
+    content: { promptResourceIds: [fixture.loreId] },
   })
   await expect(fixture.narratives.getTimeline(fixture.timelineId)).resolves.toMatchObject({
-    promptResourceIds: [fixture.settingId],
+    promptResourceIds: [fixture.loreId],
   })
-  await expect(fixture.promptResources.listSettingMounts({ settingResourceId: fixture.settingId })).resolves.toHaveLength(1)
+  await expect(fixture.promptResources.listLoreMounts({ loreResourceId: fixture.loreId })).resolves.toHaveLength(1)
 }
 
 function withFailingDocumentWrites(documents: SqliteDocumentStore): SqliteDocumentStore {

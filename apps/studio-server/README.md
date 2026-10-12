@@ -37,7 +37,11 @@ pnpm exec vitest run tests/unit/studio-server tests/integration/studio-server
 
 ## 入口与组成
 
-- [`src/main.ts`](./src/main.ts)：进程入口、服务组装和关闭顺序（Composition Root）。
+- [`src/main.ts`](./src/main.ts)：直接执行入口，保留 `main`、`createStudioServer` 与类型导出。
+- [`src/cli.ts`](./src/cli.ts)：日志启动、进程信号、终端展示及 CLI 失败清理。
+- [`src/server.ts`](./src/server.ts)：服务组合根、启动与关闭顺序。
+- [`src/extensions/extension-application-adapter.ts`](./src/extensions/extension-application-adapter.ts)：Extension Host 的应用能力、权限与数据适配。
+- [`src/codecs/card-transfer-service.ts`](./src/codecs/card-transfer-service.ts)：Card 媒体读取、PNG/ZIP 导入导出与导入后目录保存。
 - [`src/http/`](./src/http/)：HTTP 传输接入与本地安全认证（`http-server.ts`, `application-session-auth.ts`）。
 - [`src/rpc/`](./src/rpc/)：RPC 路由分发、参数校验与领域处理器（`studio-rpc-router.ts`, `rpc-params.ts`, `handlers/`）。
 - [`src/codecs/`](./src/codecs/)：Card PNG / ZIP 编解码与打包器（`card-png.ts`, `card-bundle-zip.ts`）。
@@ -72,7 +76,7 @@ Card、Asset 的独立二进制入口保持各自上限；此请求预算不是�
 官方内容使用 `official.listContent` / `official.installContent` / `official.exportContent` RPC。
 默认读取仓库根目录下的 `official/starter`，部署时应携带该目录或设置
 `CreateStudioServerOptions.officialContentDirectory`。Server 启动时自动安装缺失的默认预设与
-Setting；保留已有内容、挂载和删除记录，不覆盖用户修改。此步骤由 Server 组合根执行，
+Lore；保留已有内容、挂载和删除记录，不覆盖用户修改。此步骤由 Server 组合根执行，
 Application 初始化本身不安装内容；当前只有本地来源，不包含在线更新。
 详见 [官方内容说明](../../official/README.md)。
 
@@ -93,7 +97,7 @@ Application 初始化本身不安装内容；当前只有本地来源，不包�
 
 Timeline 用户输入经 `application.appendNarrativeInput` 先写入 Narrative Store，再由 Client 投递 Session；`application.editNarrativeNode` 是带分支并发基线的正文编辑，不是运行结束后的自动追加。RPC 层只解析请求并传播可信调用上下文，不补造旧输入的最新版本，也不将整轮 Agent/工具执行包装成一个数据库事务。具体写入合同见[Agent Runtime](../../docs/architecture/application/agent/runtime-and-session.md#6-narrative-边界)。
 
-`application.replaceSettingMounts` 由共享 Schema 校验，接受 `settingResourceIds` 或 `mounts` 二选一；后者保留指定来源的 Mount ID，包括未解析引用，不再强制要求旧资源 ID 数组。`application.updateAgentSession` 不允许改绑 `agentPresetId`。Server 不根据 UI 临时打开或全局资源列表推断消费关系，资源采用与可用性仍由 Runtime 负责，见[Data Architecture](../../docs/architecture/data/README.md)。
+`application.replaceLoreMounts` 由共享 Schema 校验，接受 `loreResourceIds` 或 `mounts` 二选一；后者保留指定来源的 Mount ID，包括未解析引用，不再强制要求旧资源 ID 数组。`application.updateAgentSession` 不允许改绑 `agentPresetId`。Server 不根据 UI 临时打开或全局资源列表推断消费关系，资源采用与可用性仍由 Runtime 负责，见[Data Architecture](../../docs/architecture/data/README.md)。
 
 ## 文档入口
 

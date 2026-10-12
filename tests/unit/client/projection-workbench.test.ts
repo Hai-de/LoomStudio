@@ -20,7 +20,7 @@ function entry(id: string, zoneId: string): ContextAssetNode {
 
 describe('projection workbench reorder updates', () => {
   it('moves an entry into the target zone as well as reordering it', () => {
-    const dragged = entry('new-entry', 'setting.stable')
+    const dragged = entry('new-entry', 'lore.stable')
     const target = entry('assistant-entry', 'preset.system')
     const orderNode: ContextAssetNode = {
       id: 'order',

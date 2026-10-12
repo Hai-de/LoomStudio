@@ -32,7 +32,7 @@ async function setup() {
   const artifact: CardBundleArtifact = {
     schemaVersion: 4, artifactId: 'directory-card', displayName: 'Directory card',
     card: { name: 'Directory card', description: 'Original description' },
-    contextAssets: [{ id: 'root', kind: 'module', category: 'setting', label: 'World', children: [
+    contextAssets: [{ id: 'root', kind: 'module', category: 'lore', label: 'World', children: [
       { id: 'entry', kind: 'entry', label: 'Town', body: 'Original town' },
     ] }],
   }
@@ -121,7 +121,7 @@ describe('Card directory Runtime integration', () => {
 
   it('rolls back a transaction failure and leaves the edited files available for another preview', async () => {
     const f = await setup()
-    await f.promptResources.createResource({ actor: { kind: 'kernel', id: 'fixture' }, resourceKind: 'setting', rootNode: { id: 'occupied', kind: 'module', label: 'Occupied' } })
+    await f.promptResources.createResource({ actor: { kind: 'kernel', id: 'fixture' }, resourceKind: 'lore', rootNode: { id: 'occupied', kind: 'module', label: 'Occupied' } })
     await f.save()
     const oldBaseline = await f.baseline()
     await writeFile(f.description, 'Uncommitted description')

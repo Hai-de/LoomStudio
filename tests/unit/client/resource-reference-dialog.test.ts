@@ -42,7 +42,7 @@ const cardUri = formatEntityReference({ kind: 'entity', type: 'card', id: 'card/
 
 function fixture(uri?: string) {
   const getResource = vi.fn().mockResolvedValue({ resource: {
-    id: 'r', version: 1, resourceKind: 'setting',
+    id: 'r', version: 1, resourceKind: 'lore',
     rootNode: { id: 'n', label: 'User text', kind: 'entry', body: 'First\nSecond' },
   } })
   const getCard = vi.fn().mockResolvedValue({ card: { id: 'card/1', name: 'User card', version: 1 } })

@@ -11,7 +11,7 @@ describe('prompt build steps model', () => {
         cardSnapshot: {
           id: 'card', version: 1, opening: { entries: [] }, createdAt: '', updatedAt: '',
           name: 'Rain Card',
-          settingLayer: {
+          lore: {
             entries: [
               { id: 'always', content: 'Always on.' },
               { id: 'rain', content: 'Rain entry.', activation: { kind: 'keyword', keywords: ['rain'] } },
@@ -24,7 +24,7 @@ describe('prompt build steps model', () => {
 
     const activationStep = steps.find(step => step.title === '2. Activation Pass')
 
-    expect(activationStep?.rows.find(row => row.label === 'Setting Layer')?.value).toBe('2 active / 1 inactive')
+    expect(activationStep?.rows.find(row => row.label === 'Lore')?.value).toBe('2 active / 1 inactive')
     expect(activationStep?.rows.find(row => row.label === 'Active Entries')?.value).toBe('always, rain')
   })
 
@@ -46,9 +46,9 @@ describe('prompt build steps model', () => {
               activationReason: 'activation: conditions not matched',
               fragmentId: 'setting.draft',
               sourceNodeId: 'node.setting.draft',
-              sourcePath: '/Setting/Draft',
-              zoneId: 'setting.stable',
-              slotKey: 'setting-layer:test@setting.stable',
+              sourcePath: '/Lore/Draft',
+              zoneId: 'lore.stable',
+              slotKey: 'lore:test@lore.stable',
             },
           ],
           promptRows: [],
@@ -59,7 +59,7 @@ describe('prompt build steps model', () => {
     const activationStep = steps.find(step => step.title === '2. Activation Pass')
 
     expect(activationStep?.rows.find(row => row.label === 'Runtime Facts')?.value).toBe('agent.mode = finalize, tags = scene:combat')
-    expect(activationStep?.rows.find(row => row.label === 'Inactive Reasons')?.value).toBe('/Setting/Draft: activation: conditions not matched')
+    expect(activationStep?.rows.find(row => row.label === 'Inactive Reasons')?.value).toBe('/Lore/Draft: activation: conditions not matched')
   })
 
   it('surfaces real core trace status and pass order in the final payload step', () => {

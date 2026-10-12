@@ -147,7 +147,7 @@ describe('SillyTavern compatibility', () => {
 
     expect(result.artifact.contextAssets).toHaveLength(1)
     expect(result.artifact.contextAssets[0]).toMatchObject({
-      category: 'setting',
+      category: 'lore',
       children: [{ body: 'Shared entry' }],
     })
   })

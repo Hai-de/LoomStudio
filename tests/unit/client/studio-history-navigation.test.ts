@@ -10,8 +10,8 @@ const fixture = vi.hoisted(() => ({
   selectCard: vi.fn(),
   narrative: {} as Record<string, unknown>,
   resource: {
-    id: 'resource', resourceKind: 'setting', version: 2,
-    rootNode: { id: 'root', kind: 'module', category: 'setting', label: 'Restored' },
+    id: 'resource', resourceKind: 'lore', version: 2,
+    rootNode: { id: 'root', kind: 'module', category: 'lore', label: 'Restored' },
   },
 }))
 

@@ -55,7 +55,7 @@ describe('application runtime card bundle integration', () => {
       rootNode: { label: 'Loom Studio 问答助手' },
       historyPolicy: 'persistent',
     })
-    await expect(runtime.listSettingMounts({ source: { kind: 'preset', id: preset!.id } })).resolves.toMatchObject({ mounts: [{ settingResourceId: setting!.id }] })
+    await expect(runtime.listLoreMounts({ source: { kind: 'preset', id: preset!.id } })).resolves.toMatchObject({ mounts: [{ loreResourceId: setting!.id }] })
     const collectVirtualAnchors = (nodes?: Array<{ kind?: string; capabilities?: { targetAnchorId?: string }; children?: unknown[] }>): string[] => {
       if (!nodes) return []
       return nodes.flatMap(node => [
@@ -69,7 +69,7 @@ describe('application runtime card bundle integration', () => {
       '@chat.session',
       '@chat.input',
     ]))
-    expect(setting).toMatchObject({ resourceKind: 'setting', rootNode: { label: 'Loom Studio 基础知识' } })
+    expect(setting).toMatchObject({ resourceKind: 'lore', rootNode: { label: 'Loom Studio 基础知识' } })
     const updated = await runtime.updatePromptResourceAsset({
       resourceId: preset!.id,
       assetId: preset!.rootNode.id,
@@ -80,7 +80,7 @@ describe('application runtime card bundle integration', () => {
 
   it('creates, duplicates, exports, and imports independent Prompt resources', async () => {
     const { runtime } = createTestRuntime()
-    const created = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Guide Knowledge' })
+    const created = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Guide Knowledge' })
     const entry = await runtime.createPromptResourceAsset({
       resourceId: created.resource.id,
       targetAssetId: created.resource.rootNode.id,
@@ -104,26 +104,26 @@ describe('application runtime card bundle integration', () => {
     expect(imported.resource.rootNode.label).toBe('Guide Knowledge Copy')
   })
 
-  it('binds only Setting resources to a Preset through an explicit relation', async () => {
+  it('binds only Lore resources to a Preset through an explicit relation', async () => {
     const { runtime } = createTestRuntime()
     const preset = await runtime.createPromptResource({ resourceKind: 'preset', name: 'Guide Preset' })
-    const setting = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Guide Knowledge' })
+    const setting = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Guide Knowledge' })
 
-    const updated = await runtime.replaceSettingMounts({
+    const updated = await runtime.replaceLoreMounts({
       source: { kind: 'preset', id: preset.resource.id },
-      settingResourceIds: [setting.resource.id],
+      loreResourceIds: [setting.resource.id],
     })
 
-    expect(updated.mounts).toMatchObject([{ settingResourceId: setting.resource.id }])
-    await expect(runtime.replaceSettingMounts({
+    expect(updated.mounts).toMatchObject([{ loreResourceId: setting.resource.id }])
+    await expect(runtime.replaceLoreMounts({
       source: { kind: 'preset', id: preset.resource.id },
-      settingResourceIds: [preset.resource.id],
-    })).rejects.toThrow('can only link Setting resources')
+      loreResourceIds: [preset.resource.id],
+    })).rejects.toThrow('can only link Lore resources')
   })
 
   it('applies Folder effective enabled and preserves Entry activation', async () => {
     const { runtime, promptResources } = createTestRuntime()
-    const created = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Conditional Knowledge' })
+    const created = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Conditional Knowledge' })
     const withFolder = await runtime.createPromptResourceAsset({
       resourceId: created.resource.id,
       targetAssetId: created.resource.rootNode.id,
@@ -413,7 +413,7 @@ describe('application runtime card bundle integration', () => {
 
   it('cascade deletes prompt resources and portable extension payloads when includePromptResources is true', async () => {
     const { runtime } = createTestRuntime()
-    const resource = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Card Lorebook' })
+    const resource = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Card Lorebook' })
     const payload = await runtime.createPortableExtensionPayload({
       payload: {
         packageId: 'example.script',
@@ -567,7 +567,7 @@ async function readOfficialContentInput() {
     id: string
     version: string
     resources: Array<{ id: string; path: string }>
-    settingMounts: Array<{ presetResourceId: string; settingResourceId: string }>
+    loreMounts: Array<{ presetResourceId: string; loreResourceId: string }>
   }
   return {
     packageId: catalog.id,
@@ -576,7 +576,7 @@ async function readOfficialContentInput() {
       id: resource.id,
       artifact: JSON.parse(await readFile(join(process.cwd(), 'official/starter', resource.path), 'utf8')),
     }))),
-    settingMounts: catalog.settingMounts,
+    loreMounts: catalog.loreMounts,
   }
 }
 

@@ -21,7 +21,7 @@ Kernel 当前负责：
 
 Kernel 明确不负责：
 
-- 定义 Card、Chat、Setting Layer、Prompt 或 Agent schema；
+- 定义 Card、Chat、Lore、Prompt 或 Agent schema；
 - 编译 PromptBuild 领域结构；
 - 选择 Provider、模型或生成参数；
 - 承载前端状态或页面交互；

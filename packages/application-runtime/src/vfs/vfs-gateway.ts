@@ -11,7 +11,7 @@ export function createPromptVfsEntries(input: {
   const nodes = new Map(input.sourceNodes.map(node => [node.id, node]))
   const injected = new Set(input.prompt.messages.flatMap(message => message.fragmentIds))
   const contributions = input.contributions.filter(item =>
-    item.sourceRef.kind === 'preset' || item.sourceRef.kind === 'settingLayer',
+    item.sourceRef.kind === 'preset' || item.sourceRef.kind === 'lore',
   )
   const readable = new Map(contributions.map(item => [item.sourceRef.sourceNodeId, item]))
   const allowed = new Set<string>()

@@ -4,10 +4,10 @@ import type {
   SqliteDataTransaction,
   SqliteDataEngine,
 } from '@loom-studio/data-engine'
-import type { JsonObject, JsonValue, SettingMount, SettingMountSource } from '@loom-studio/shared'
-export type { SettingMount, SettingMountSource } from '@loom-studio/shared'
+import type { JsonObject, JsonValue, LoreMount, LoreMountSource } from '@loom-studio/shared'
+export type { LoreMount, LoreMountSource } from '@loom-studio/shared'
 
-export type PromptResourceKind = 'preset' | 'setting' | 'logic' | 'runtime' | 'history' | 'prompt' | (string & {})
+export type PromptResourceKind = 'preset' | 'lore' | 'logic' | 'runtime' | 'history' | 'prompt' | (string & {})
 export type PromptResourceNodeKind = 'module' | 'folder' | 'entry' | 'script' | 'virtual' | 'slot' | 'message' | (string & {})
 
 export type PromptResourceNode = {
@@ -114,22 +114,22 @@ export type PromptResourcePage = {
   nextCursor?: string
 }
 
-export type AddSettingMountInput = PromptResourceWriteContext & {
-  settingResourceId: string | null
-  reference?: SettingMount['reference']
-  source: SettingMountSource
+export type AddLoreMountInput = PromptResourceWriteContext & {
+  loreResourceId: string | null
+  reference?: LoreMount['reference']
+  source: LoreMountSource
   orderIndex: number
   origin?: JsonObject
 }
 
-export type ReplaceSettingMountsInput = PromptResourceWriteContext & {
-  source: SettingMountSource
-  mounts: Array<Pick<AddSettingMountInput, 'settingResourceId' | 'reference' | 'orderIndex' | 'origin'>>
+export type ReplaceLoreMountsInput = PromptResourceWriteContext & {
+  source: LoreMountSource
+  mounts: Array<Pick<AddLoreMountInput, 'loreResourceId' | 'reference' | 'orderIndex' | 'origin'>>
 }
 
-export type ListSettingMountsInput = {
-  source?: SettingMountSource
-  settingResourceId?: string
+export type ListLoreMountsInput = {
+  source?: LoreMountSource
+  loreResourceId?: string
 }
 
 export type PresetToolMount = {
@@ -179,8 +179,8 @@ export type PromptResourceMutationResult = {
   commit: DataCommitFact
 }
 
-export type SettingMountMutationResult = {
-  mounts: SettingMount[]
+export type LoreMountMutationResult = {
+  mounts: LoreMount[]
   commit: DataCommitFact
 }
 
@@ -194,8 +194,8 @@ export type PromptResourceTransaction = {
   mutateResource(input: Omit<MutatePromptResourceInput, keyof PromptResourceWriteContext>): PromptResource
   deleteResource(input: Omit<DeletePromptResourceInput, keyof PromptResourceWriteContext>): PromptResource
   restoreResource(input: Omit<RestorePromptResourceInput, keyof PromptResourceWriteContext>): PromptResource
-  addSettingMount(input: Omit<AddSettingMountInput, keyof PromptResourceWriteContext>): SettingMount
-  replaceSettingMounts(input: Omit<ReplaceSettingMountsInput, keyof PromptResourceWriteContext>): SettingMount[]
+  addLoreMount(input: Omit<AddLoreMountInput, keyof PromptResourceWriteContext>): LoreMount
+  replaceLoreMounts(input: Omit<ReplaceLoreMountsInput, keyof PromptResourceWriteContext>): LoreMount[]
   addPresetToolMount(input: Omit<AddPresetToolMountInput, keyof PromptResourceWriteContext>): PresetToolMount
   replacePresetToolMounts(input: Omit<ReplacePresetToolMountsInput, keyof PromptResourceWriteContext>): PresetToolMount[]
 }
@@ -205,14 +205,14 @@ export type PromptResourceStore = {
   getResource(id: string, options?: { includeTombstone?: boolean }): Promise<PromptResource | null>
   getResourceMetadataAtVersion(id: string, version: number): Promise<JsonObject | null>
   listResources(input?: ListPromptResourcesInput): Promise<PromptResourcePage>
-  listSettingMounts(input?: ListSettingMountsInput): Promise<SettingMount[]>
+  listLoreMounts(input?: ListLoreMountsInput): Promise<LoreMount[]>
   listPresetToolMounts(input?: ListPresetToolMountsInput): Promise<PresetToolMount[]>
   createResource(input: CreatePromptResourceInput): Promise<PromptResourceMutationResult>
   mutateResource(input: MutatePromptResourceInput): Promise<PromptResourceMutationResult>
   deleteResource(input: DeletePromptResourceInput): Promise<PromptResourceMutationResult>
   restoreResource(input: RestorePromptResourceInput): Promise<PromptResourceMutationResult>
-  addSettingMount(input: AddSettingMountInput): Promise<SettingMountMutationResult>
-  replaceSettingMounts(input: ReplaceSettingMountsInput): Promise<SettingMountMutationResult>
+  addLoreMount(input: AddLoreMountInput): Promise<LoreMountMutationResult>
+  replaceLoreMounts(input: ReplaceLoreMountsInput): Promise<LoreMountMutationResult>
   addPresetToolMount(input: AddPresetToolMountInput): Promise<PresetToolMountMutationResult>
   replacePresetToolMounts(input: ReplacePresetToolMountsInput): Promise<PresetToolMountMutationResult>
   revertChangeset(input: RevertPromptResourceChangesetInput): Promise<PromptResourceMutationResult>

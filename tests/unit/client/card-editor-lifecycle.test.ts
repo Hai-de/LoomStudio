@@ -45,7 +45,7 @@ vi.mock('react', async importOriginal => ({
 
 function card(id: string, name: string, version = 1): Card {
   return {
-    id, name, version, opening: { entries: [] }, settingLayer: { entries: [] },
+    id, name, version, opening: { entries: [] }, lore: { entries: [] },
     createdAt: '2026-09-23', updatedAt: '2026-09-23',
   }
 }

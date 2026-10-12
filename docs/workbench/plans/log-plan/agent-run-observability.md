@@ -185,7 +185,7 @@ Run Trace 负责解释“为什么 Runtime 走到了这里”。
 ### 5.2 Prompt Projection
 
 - 当前 Step 选择了哪些 Runtime Transcript entries；
-- 哪些 Narrative / Setting / Dynamic Mount source 进入 PromptBuild；
+- 哪些 Narrative / Lore / Dynamic Mount source 进入 PromptBuild；
 - 关联 PromptBuild buildId / traceId；
 - 为什么没有投影历史 Run Transcript。
 
@@ -220,7 +220,7 @@ Prompt 具体 composition 细节仍由 PromptBuild Trace 负责，Run Trace 只�
 - validation / review / confirmation；
 - accepted / rejected / revised；
 - Narrative append / patch；
-- State patch / Setting patch；
+- State patch / Lore patch；
 - RunChangeset / changesetId；
 - rollback / discard 边界；
 - Audit ref。

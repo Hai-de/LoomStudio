@@ -149,14 +149,14 @@ describe('application agent session lifecycle', () => {
     const { engine, runtime } = createTestRuntime()
     try {
       const { profile } = await createProfile(runtime)
-      const setting = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Temporary' })
+      const setting = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Temporary' })
       await runtime.createPromptResourceAsset({
         resourceId: setting.resource.id, targetAssetId: setting.resource.rootNode.id, position: 'inside',
         asset: { id: 'temporary-setting', label: 'Temporary', kind: 'entry', body: 'ONLY_THIS_SETTING' },
       })
       const { session } = await runtime.createAgentSession({ agentPresetId: profile.id })
       const addition = {
-        settingResourceIds: [setting.resource.id],
+        loreResourceIds: [setting.resource.id],
         content: [{ targetAnchorId: '@chat.input', content: 'ONLY_THIS_ANCHOR' }],
       }
       const [preview, other] = await Promise.all([
@@ -173,7 +173,7 @@ describe('application agent session lifecycle', () => {
       expect(next.messages.at(-1)?.content).toBe('next')
       expect(next.projection.messages.flatMap(message => message.fragmentIds))
         .not.toContain('runtime.prompt-addition.content.0')
-      expect((await runtime.listSettingMounts({ source: { kind: 'preset', id: profile.id } })).mounts)
+      expect((await runtime.listLoreMounts({ source: { kind: 'preset', id: profile.id } })).mounts)
         .toEqual([])
     } finally { engine.close() }
   })
@@ -185,9 +185,9 @@ describe('application agent session lifecycle', () => {
         content: [{ targetAnchorId: '@custom', content: 'standalone' }],
       }, { kind: 'global' }, 'example.ext')
       expect(JSON.stringify(built.messages)).toContain('standalone')
-      const setting = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Private' })
+      const setting = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Private' })
       await expect(runtime.buildExtensionPrompt({
-        settingResourceIds: [setting.resource.id],
+        loreResourceIds: [setting.resource.id],
       }, { kind: 'global' }, 'example.ext')).rejects.toThrow('not owned')
     } finally { engine.close() }
   })
@@ -739,16 +739,16 @@ describe('application agent session lifecycle', () => {
   it('loads Settings linked by the selected Preset without a Narrative Timeline', async () => {
     const { engine, runtime } = createTestRuntime()
     const preset = await createPreset(runtime, 'Official Assistant', 'Loom Studio 是面向 AI 角色扮演的工作台。')
-    const setting = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Assistant Knowledge' })
+    const setting = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Assistant Knowledge' })
     await runtime.createPromptResourceAsset({
       resourceId: setting.resource.id,
       targetAssetId: setting.resource.rootNode.id,
       position: 'inside',
       asset: { id: 'assistant-knowledge', label: 'Knowledge', kind: 'entry', body: 'Loom Studio 是面向 AI 角色扮演的工作台。' },
     })
-    await runtime.replaceSettingMounts({
+    await runtime.replaceLoreMounts({
       source: { kind: 'preset', id: preset.id },
-      settingResourceIds: [setting.resource.id],
+      loreResourceIds: [setting.resource.id],
     })
     const provider = await runtime.createProviderProfile({
       providerExtensionId: 'official.fake',
@@ -909,12 +909,12 @@ describe('application agent session lifecycle', () => {
     try {
       const first = await createProfile(runtime, 'A instructions')
       const second = await createProfile(runtime, 'B instructions')
-      const setting = await runtime.createPromptResource({ resourceKind: 'setting', name: 'A Setting' })
+      const setting = await runtime.createPromptResource({ resourceKind: 'lore', name: 'A Setting' })
       await runtime.createPromptResourceAsset({
         resourceId: setting.resource.id, targetAssetId: setting.resource.rootNode.id, position: 'inside',
         asset: { id: 'only-a-setting', kind: 'entry', label: 'Only A', body: 'ONLY_A_SETTING', capabilities: { targetAnchorId: '@chat.system' } },
       })
-      await runtime.replaceSettingMounts({ source: { kind: 'preset', id: first.profile.id }, settingResourceIds: [setting.resource.id] })
+      await runtime.replaceLoreMounts({ source: { kind: 'preset', id: first.profile.id }, loreResourceIds: [setting.resource.id] })
       const a = await runtime.createAgentSession({ agentPresetId: first.profile.id })
       const b = await runtime.createAgentSession({ agentPresetId: second.profile.id })
       const preview = await runtime.previewAgentTurn({ agentSessionId: a.session.id, input: 'hello' })

@@ -109,7 +109,7 @@ describe('Timeline State content acceptance', () => {
   })
 
   async function installPrompt(f: Awaited<ReturnType<typeof setup>>) {
-    const setting = (await f.runtime.createPromptResource({ resourceKind: 'setting', name: 'Counter instructions' })).resource
+    const setting = (await f.runtime.createPromptResource({ resourceKind: 'lore', name: 'Counter instructions' })).resource
     await f.runtime.createPromptResourceAsset({
       resourceId: setting.id, targetAssetId: setting.rootNode.id, position: 'inside',
       asset: { id: 'instructions', kind: 'entry', label: 'Instructions', body: 'COUNTER_PROMPT' },
@@ -123,7 +123,7 @@ describe('Timeline State content acceptance', () => {
           installationId: f.installationId, contributionId: 'instructions' } } } }],
       actor: { kind: 'kernel', id: 'test' },
     })
-    await f.runtime.replaceSettingMounts({ source: { kind: 'preset', id: f.preset.id }, settingResourceIds: [setting.id] })
+    await f.runtime.replaceLoreMounts({ source: { kind: 'preset', id: f.preset.id }, loreResourceIds: [setting.id] })
     return setting.id
   }
 
@@ -133,13 +133,13 @@ describe('Timeline State content acceptance', () => {
       const id = await installPrompt(f)
       const input = { timelineId: f.target.timelineId, installationId: f.installationId }
       expect((await f.runtime.inspectTimelineExtensionResources(input)).resources).toMatchObject([
-        { id, kind: 'setting', eligible: true, contributionId: 'instructions' },
+        { id, kind: 'lore', eligible: true, contributionId: 'instructions' },
       ])
       await f.enable(false)
       expect((await f.runtime.inspectTimelineExtensionResources(input)).resources).toMatchObject([{ id, eligible: false }])
       await f.documents.delete({ id: f.installationId, expectedVersion: 1, actor: { kind: 'kernel', id: 'test' } })
       expect((await f.runtime.inspectTimelineExtensionResources(input)).resources).toMatchObject([{ id, eligible: false }])
-      expect((await f.runtime.listSettingMounts({ source: { kind: 'preset', id: f.preset.id } })).mounts).toHaveLength(1)
+      expect((await f.runtime.listLoreMounts({ source: { kind: 'preset', id: f.preset.id } })).mounts).toHaveLength(1)
     } finally { await f.engine.close() }
   })
 

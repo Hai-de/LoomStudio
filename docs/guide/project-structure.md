@@ -83,7 +83,7 @@ Loom Studio 使用 `pnpm` workspace 构建 Monorepo。核心代码区域是 `pac
 - 📦 [`packages/application-runtime/`](../../packages/application-runtime/README.md) (AIRP Layer)
   - Studio 的**业务心脏**。编排 Card、Agent、Narrative Timeline、PromptBuild、Provider Gateway 与相关 Document Types；权威 Narrative / Agent / State / PromptResource 持久化由 `@loom-studio/application-data` 承担。
 - 📦 [`packages/application-data/`](../../packages/application-data/README.md)
-  - 核心领域持久化中枢，在共享 SQLite 中内聚管理 Agent 会话与消息、Narrative 时间线与分支、State 状态值与修订、Prompt Resource 资源树与 SettingMount 挂载关系。
+  - 核心领域持久化中枢，在共享 SQLite 中内聚管理 Agent 会话与消息、Narrative 时间线与分支、State 状态值与修订、Prompt Resource 资源树与 LoreMount 挂载关系。
 - 📦 [`packages/kernel/`](../../packages/kernel/README.md)
   - Studio 的底层发动机，管理内部的核心服务（RPC 注册、事件总线等）。**禁止包含任何 AI/业务（Provider/Agent）逻辑。**
   - 正式架构说明：[`architecture/kernel/README.md`](../architecture/kernel/README.md)。
@@ -116,7 +116,7 @@ Loom Studio 使用 `pnpm` workspace 构建 Monorepo。核心代码区域是 `pac
 - 📦 [`packages/extension-sdk/extension-host/`](../../packages/extension-sdk/extension-host/README.md)
   - 物理嵌套但具有独立 Workspace identity 的 Server Extension Host，负责插件模块加载、授权与生命周期管理。
 - 📦 [`packages/shared/`](../../packages/shared/README.md)
-  - 通用的环境同构工具函数、类型定义 (`JsonValue`, `createId`, 时间处理)、变量宏渲染引擎与 SettingMount 契约。
+  - 通用的环境同构工具函数、类型定义 (`JsonValue`, `createId`, 时间处理)、变量宏渲染引擎与 LoreMount 契约。
 - 📦 [`packages/diagnostics/`](../../packages/diagnostics/README.md) & [`packages/trace-audit/`](../../packages/trace-audit/README.md)
   - 分别提供系统级非阻塞错误/告警收集注册表与编译器运行轨迹/安全审计只增不减存储。
 

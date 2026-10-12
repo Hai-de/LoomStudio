@@ -62,7 +62,7 @@ export type Card = {
     entries: Array<{ role: 'user' | 'assistant'; content: string }>
     alternatives?: Array<{ entries: Array<{ role: 'user' | 'assistant'; content: string }> }>
   }
-  settingLayer: {
+  lore: {
     entries: Array<{
       id?: string
       path?: string
@@ -95,7 +95,7 @@ export type OpeningChatInput = {
   alternatives?: Array<{ entries: Array<{ role?: 'user' | 'assistant'; content: string }> }>
 }
 
-export type SettingLayerInput = {
+export type LoreInput = {
   entries?: Array<{
     id?: string
     path?: string

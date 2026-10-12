@@ -1,6 +1,6 @@
 # Studio Application Architecture
 
-Studio Application 是 Loom Studio 第一方内建的 AIRP 领域层。它定义默认产品体验中的 Card、Session、Setting Layer、PromptBuild、Agent、Runtime 和领域 UI，但不进入 Kernel，也不伪装成 ordinary Extension。
+Studio Application 是 Loom Studio 第一方内建的 AIRP 领域层。它定义默认产品体验中的 Card、Session、Lore、PromptBuild、Agent、Runtime 和领域 UI，但不进入 Kernel，也不伪装成 ordinary Extension。
 
 删除生命周期遵循领域 Scope 与 Ownership，而不是统一盲目级联。创建 Narrative Timeline 时会固化初始 State、Schema 等运行依赖及 Opening 正文，但引用的 Prompt Resource 正文仍按 ID 读取当前版本；删除 Card 默认保留这些 Timeline，也可以由调用方显式选择在同一事务中删除关联 Timeline、Timeline State 与对应 Extension Storage。Card Scope Extension Storage 和 Card-owned Text Transform Rule 始终随 Card 删除。共享 Prompt Resource、Portable Extension Payload 与 Media Asset 不随 Card 自动删除。
 
@@ -25,7 +25,7 @@ Application 的演进与开放问题由 [Plan](../../workbench/plans/README.md) 
 
 Extension 安装可分别以全局或 Card 为目标；资源 origin 关联安装身份，模块启用与 capability grant 也按安装目标记录。安装、资源导入/挂载、模块激活和本轮实际消费是不同事实：Manifest 的静态贡献声明不证明 Runtime 已注册或当前运行已激活。Card/Timeline 解析只允许全局安装及所属 Card 安装的资源；Card 私有包文件通过带 Card 与归档摘要的专用路径读取。
 
-显式资源/包更新提交后，后续资源解析使用当前资源；State、Session Transcript 与 Narrative History 不自动重置或重写。单个 Prompt Resource 导出只包含资源树与作者宏配置，不递归携带规则、脚本、模型绑定、工具实现或关联 Settings；组合分发使用 Card/Extension Package。Card Bundle 中的扩展归档与扩展 Portable Payload 私有数据分开。Loom Script 声明 `client-sandbox` 运行目标不等于任意代码的 OS 级强沙箱。
+显式资源/包更新提交后，后续资源解析使用当前资源；State、Session Transcript 与 Narrative History 不自动重置或重写。单个 Prompt Resource 导出只包含资源树与作者宏配置，不递归携带规则、脚本、模型绑定、工具实现或关联 Lore；组合分发使用 Card/Extension Package。Card Bundle 中的扩展归档与扩展 Portable Payload 私有数据分开。Loom Script 声明 `client-sandbox` 运行目标不等于任意代码的 OS 级强沙箱。
 
 源码入口：[Agent Runtime](../../../packages/application-runtime/src/runtime/agents-runtime.ts)、[资源导入导出](../../../packages/application-runtime/src/runtime/prompt-runtime.ts)、[Extension 安装管理](../../../apps/studio-server/src/extensions/extension-manager.ts)、[Card Bundle](../../../packages/application-runtime/src/cards/workspace.ts)。
 

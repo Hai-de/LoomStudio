@@ -14,7 +14,7 @@ describe('official content installation', () => {
     await fixture.runtime.initialize()
 
     await expect(fixture.promptResources.getResource(officialPromptResourceIds.assistantPreset, { includeTombstone: true })).resolves.toBeNull()
-    await expect(fixture.promptResources.getResource(officialPromptResourceIds.knowledgeSetting, { includeTombstone: true })).resolves.toBeNull()
+    await expect(fixture.promptResources.getResource(officialPromptResourceIds.knowledgeLore, { includeTombstone: true })).resolves.toBeNull()
   })
 
   it('restores missing tool mounts without enabling them or overwriting local content', async () => {
@@ -25,12 +25,12 @@ describe('official content installation', () => {
     const first = await fixture.runtime.installOfficialContent(input)
     expect(first.resources).toEqual([
       { id: officialPromptResourceIds.assistantPreset, created: true },
-      { id: officialPromptResourceIds.knowledgeSetting, created: true },
+      { id: officialPromptResourceIds.knowledgeLore, created: true },
     ])
     expect(first.mutation?.changesetId).toBeTruthy()
     const initialTools = await fixture.runtime.listPresetToolMounts({ presetId: officialPromptResourceIds.assistantPreset })
     expect(initialTools.mounts.length).toBeGreaterThan(0)
-    await expect(fixture.promptResources.listSettingMounts({
+    await expect(fixture.promptResources.listLoreMounts({
       source: { kind: 'preset', id: officialPromptResourceIds.assistantPreset },
     })).resolves.toHaveLength(1)
 
@@ -40,9 +40,9 @@ describe('official content installation', () => {
       assetId: 'official.loom-assistant.instructions',
       body: 'User edited instructions.',
     })
-    await fixture.runtime.replaceSettingMounts({
+    await fixture.runtime.replaceLoreMounts({
       source: { kind: 'preset', id: preset.resource.id },
-      settingResourceIds: [],
+      loreResourceIds: [],
     })
     await fixture.runtime.replacePresetToolMounts({ presetId: preset.resource.id, mounts: [] })
 
@@ -50,7 +50,7 @@ describe('official content installation', () => {
     expect(second.resources).toEqual(input.resources.map(resource => ({ id: resource.id, created: false })))
     expect(second.mutation?.changesetId).toBeTruthy()
     expect((await fixture.runtime.getPromptResource({ resourceId: preset.resource.id })).resource.rootNode.children?.[0]?.children?.[0]?.body).toBe('User edited instructions.')
-    await expect(fixture.promptResources.listSettingMounts({ source: { kind: 'preset', id: preset.resource.id } })).resolves.toHaveLength(0)
+    await expect(fixture.promptResources.listLoreMounts({ source: { kind: 'preset', id: preset.resource.id } })).resolves.toHaveLength(0)
     const restoredTools = await fixture.runtime.listPresetToolMounts({ presetId: preset.resource.id })
     expect(restoredTools.mounts.map(mount => mount.toolId)).toEqual(initialTools.mounts.map(mount => mount.toolId))
     expect(restoredTools.mounts.every(mount => !mount.defaultEnabled)).toBe(true)
@@ -60,7 +60,7 @@ describe('official content installation', () => {
 
     await fixture.runtime.initialize()
     expect((await fixture.runtime.getPromptResource({ resourceId: preset.resource.id })).resource.rootNode.children?.[0]?.children?.[0]?.body).toBe('User edited instructions.')
-    await expect(fixture.promptResources.listSettingMounts({ source: { kind: 'preset', id: preset.resource.id } })).resolves.toHaveLength(0)
+    await expect(fixture.promptResources.listLoreMounts({ source: { kind: 'preset', id: preset.resource.id } })).resolves.toHaveLength(0)
     await expect(fixture.runtime.listPresetToolMounts({ presetId: preset.resource.id })).resolves.toEqual(restoredTools)
   })
 
@@ -69,7 +69,7 @@ describe('official content installation', () => {
     await fixture.runtime.initialize()
     const input = await readStarterInput()
     await fixture.runtime.installOfficialContent(input)
-    const setting = await fixture.runtime.getPromptResource({ resourceId: officialPromptResourceIds.knowledgeSetting })
+    const setting = await fixture.runtime.getPromptResource({ resourceId: officialPromptResourceIds.knowledgeLore })
     const preset = await fixture.runtime.getPromptResource({ resourceId: officialPromptResourceIds.assistantPreset })
     const toolIds = (await fixture.runtime.listPresetToolMounts({ presetId: preset.resource.id })).mounts.map(mount => mount.toolId)
     await fixture.runtime.updatePromptResourceAsset({
@@ -94,8 +94,8 @@ describe('official content installation', () => {
     const restoredPreset = (await fixture.runtime.getPromptResource({ resourceId: preset.resource.id })).resource
     expect(restoredPreset.rootNode.children?.[0]?.children?.[0]?.body)
       .toBe(source === 'updated' ? 'Updated source.' : 'Local edit survives restoration.')
-    await expect(fixture.promptResources.listSettingMounts({ source: { kind: 'preset', id: preset.resource.id } }))
-      .resolves.toMatchObject([{ settingResourceId: setting.resource.id }])
+    await expect(fixture.promptResources.listLoreMounts({ source: { kind: 'preset', id: preset.resource.id } }))
+      .resolves.toMatchObject([{ loreResourceId: setting.resource.id }])
     const restoredTools = (await fixture.runtime.listPresetToolMounts({ presetId: preset.resource.id })).mounts
     expect(restoredTools.map(mount => mount.toolId)).toEqual(toolIds)
     expect(restoredTools.every(mount => !mount.defaultEnabled)).toBe(true)
@@ -109,9 +109,9 @@ describe('official content installation', () => {
     invalidArtifact.resources[1]!.artifact.rootNode.id = invalidArtifact.resources[0]!.artifact.rootNode.id
     invalidArtifact.resources[1]!.artifact.resourceKind = 'preset'
 
-    await expect(fixture.runtime.installOfficialContent(invalidArtifact)).rejects.toThrow('Setting reference is invalid')
+    await expect(fixture.runtime.installOfficialContent(invalidArtifact)).rejects.toThrow('Lore reference is invalid')
     await expect(fixture.promptResources.getResource(officialPromptResourceIds.assistantPreset, { includeTombstone: true })).resolves.toBeNull()
-    await expect(fixture.promptResources.getResource(officialPromptResourceIds.knowledgeSetting, { includeTombstone: true })).resolves.toBeNull()
+    await expect(fixture.promptResources.getResource(officialPromptResourceIds.knowledgeLore, { includeTombstone: true })).resolves.toBeNull()
 
     const malformed = structuredClone(input)
     malformed.resources[1]!.artifact.format = 'invalid' as 'loom.promptResource'
@@ -141,7 +141,7 @@ async function readStarterInput() {
     id: string
     version: string
     resources: Array<{ id: string; path: string }>
-    settingMounts: Array<{ presetResourceId: string; settingResourceId: string }>
+    loreMounts: Array<{ presetResourceId: string; loreResourceId: string }>
   }
   return {
     packageId: catalog.id,
@@ -150,6 +150,6 @@ async function readStarterInput() {
       id: resource.id,
       artifact: JSON.parse(await readFile(join(starterDirectory, resource.path), 'utf8')) as PromptResourceArtifact,
     }))),
-    settingMounts: catalog.settingMounts,
+    loreMounts: catalog.loreMounts,
   }
 }

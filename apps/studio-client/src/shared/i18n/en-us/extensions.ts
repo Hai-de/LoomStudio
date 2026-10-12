@@ -71,7 +71,7 @@ export const messages = {
   'renderer.updateResourcesConfirm': 'Replace global resources for "{{name}}" from {{from}} with {{to}}.\n\nPackage prompts, tool definitions, regex and extractors will use the new version. Removed contributions will be deleted and direct edits overwritten. Local model bindings, State and history are retained.\n\nThis only updates resources from the discovered package; it does not download or update module code. Update and overwrite?',
   'renderer.resourcesImported': 'Extension resources imported',
   'renderer.removeResources': 'Remove resources',
-  'renderer.removeResourcesConfirm': 'Remove every imported Preset, Setting, Agent Tool, and related mount from this Extension? This includes user-edited content.',
+  'renderer.removeResourcesConfirm': 'Remove every imported Preset, Lore, Agent Tool, and related mount from this Extension? This includes user-edited content.',
   'renderer.uninstall': 'Uninstall Package',
   'renderer.uninstallConfirm': 'Uninstall this Package? Imported resources and Extension-created data are retained, while module grants are cleared.',
   'renderer.uninstalled': 'Package uninstalled',

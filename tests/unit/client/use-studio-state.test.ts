@@ -7,8 +7,8 @@ const nodes: ContextAssetNode[] = [
     id: 'resource-root',
     kind: 'module',
     label: 'Resources',
-    category: 'setting',
-    children: [{ id: 'resource-entry', kind: 'entry', label: 'Entry', category: 'setting' }],
+    category: 'lore',
+    children: [{ id: 'resource-entry', kind: 'entry', label: 'Entry', category: 'lore' }],
   },
   { id: 'preset-root', kind: 'module', label: 'Preset', category: 'preset' },
 ]

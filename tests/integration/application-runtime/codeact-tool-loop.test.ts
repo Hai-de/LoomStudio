@@ -63,12 +63,12 @@ async function fixture(mode: 'content' | 'json', finishReason: GatewayChatResult
     presetId: preset.id,
     mounts: [{ toolId, defaultEnabled: true, orderIndex: 0 }],
   })
-  const { resource: setting } = await runtime.createPromptResource({ resourceKind: 'setting', name: 'World' })
+  const { resource: setting } = await runtime.createPromptResource({ resourceKind: 'lore', name: 'World' })
   await runtime.createPromptResourceAsset({
     resourceId: setting.id, targetAssetId: setting.rootNode.id, position: 'inside',
-    asset: { id: 'key-setting', kind: 'entry', label: 'Key', body: 'KEY_SENTINEL belongs to C.', capabilities: { targetAnchorId: '@setting.stable' } },
+    asset: { id: 'key-setting', kind: 'entry', label: 'Key', body: 'KEY_SENTINEL belongs to C.', capabilities: { targetAnchorId: '@lore.stable' } },
   })
-  await runtime.replaceSettingMounts({ source: { kind: 'preset', id: preset.id }, settingResourceIds: [setting.id] })
+  await runtime.replaceLoreMounts({ source: { kind: 'preset', id: preset.id }, loreResourceIds: [setting.id] })
   const { providerProfile } = await runtime.createProviderProfile({
     providerExtensionId: 'official.openai-compatible', displayName: 'Test', config: {}, enabledModelIds: ['test'],
   })

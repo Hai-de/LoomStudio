@@ -82,18 +82,18 @@ export function StudioResourcePanels(props: {
           if (resource) navigation.openResource('preset', id, resource.rootNode.id)
           else void navigation.openUri(formatEntityReference({ kind: 'entity', type: 'resource', id }))
         }}
-        onOpenSetting={(resourceId, nodeId) => navigation.openResource('resource', resourceId, nodeId)}
+        onOpenLore={(resourceId, nodeId) => navigation.openResource('resource', resourceId, nodeId)}
         previewApi={state.api.narratives}
         previewTimelineId={state.narrativeTimeline?.id}
         previewBranchId={state.branch?.id}
         routeResourceId={navigation.route.panel === 'agent' ? navigation.route.resourceId : undefined}
         timelinePromptResourceIds={state.narrativeTimeline?.promptResourceIds}
         card={state.selectedCardDetails}
-        settingMounts={state.settingMounts}
+        loreMounts={state.loreMounts}
         tools={state.agentTools}
         toolMounts={state.presetToolMounts}
         onReplaceToolMounts={state.replacePresetToolMounts}
-        onReplaceSettingMounts={(source, mounts) => state.replaceSettingMounts(source, mounts, 'mounts')}
+        onReplaceLoreMounts={(source, mounts) => state.replaceLoreMounts(source, mounts, 'mounts')}
         onUpdateTool={state.updateAgentTool}
         routeAssetId={navigation.route.panel === 'agent' ? navigation.route.assetId : undefined}
         searchQuery={navigation.route.panel === 'agent' ? navigation.searchQuery : ''}
@@ -112,8 +112,8 @@ export function StudioResourcePanels(props: {
           else void navigation.openUri(formatEntityReference({ kind: 'entity', type: 'resource', id }), replace)
         }}
         card={state.selectedCardDetails}
-        settingMounts={state.settingMounts}
-        onReplaceSettingMounts={state.replaceSettingMounts}
+        loreMounts={state.loreMounts}
+        onReplaceLoreMounts={state.replaceLoreMounts}
         onReplaceCardResources={state.replaceCardPromptResources}
         routeAssetId={navigation.route.panel === 'resource' ? navigation.route.assetId : undefined}
         searchQuery={navigation.route.panel === 'resource' ? navigation.searchQuery : ''}

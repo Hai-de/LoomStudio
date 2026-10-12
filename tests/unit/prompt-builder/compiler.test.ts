@@ -89,9 +89,9 @@ describe('PromptBuildPipeline', () => {
       sourceNodes: [
         node('root', null, 0, 'module'),
         { ...node('session', 'root', 0, 'virtual'), capabilities: { targetAnchorId: '@chat.session' } },
-        { ...node('lower', 'root', 1, 'virtual'), enabled: false, capabilities: { targetAnchorId: '@setting.lower' } },
+        { ...node('lower', 'root', 1, 'virtual'), enabled: false, capabilities: { targetAnchorId: '@lore.lower' } },
       ],
-      contributions: [contribution('dynamic', 'setting', 'Disabled context', '@setting.lower')],
+      contributions: [contribution('dynamic', 'lore', 'Disabled context', '@lore.lower')],
     })
     expect(compiled.messages).toEqual([])
   })

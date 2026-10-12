@@ -15,7 +15,7 @@ async function fixture(body = '作者源码 {{name}}\n第二行', approveMutatio
   const engine = createSqliteDataEngine({ filename: ':memory:', createId, now })
   const store = createPromptResourceStore({ engine, createId, now })
   const { resource } = await store.createResource({
-    actor: { kind: 'kernel', id: 'test' }, resourceKind: 'setting',
+    actor: { kind: 'kernel', id: 'test' }, resourceKind: 'lore',
     rootNode: {
       id: 'root', label: '爱丽丝', kind: 'module', children: [
         { id: 'personality', kind: 'entry', label: '人设', body },
@@ -250,7 +250,7 @@ describe('domain-backed resource VFS', () => {
     const f = await fixture()
     try {
       const { resource: second } = await f.store.createResource({
-        actor: { kind: 'kernel', id: 'test' }, resourceKind: 'setting',
+        actor: { kind: 'kernel', id: 'test' }, resourceKind: 'lore',
         rootNode: { id: 'other-root', kind: 'module', label: '爱丽丝', children: [{ id: 'other-child', kind: 'entry', label: '人设', body: 'second-card' }] },
       })
       expect(await f.fs.search([{ terms: ['second-card'] }], signal)).toContain('No matches')
@@ -412,7 +412,7 @@ describe('domain-backed resource VFS', () => {
         .rejects.toMatchObject({ code: 'vfs.read_required' })
       const other = await f.store.createResource({
         actor: { kind: 'kernel', id: 'test' },
-        resourceKind: 'setting',
+        resourceKind: 'lore',
         rootNode: { id: 'other-root', label: '其他', kind: 'module' },
       })
       const fs = createResourceVfs({

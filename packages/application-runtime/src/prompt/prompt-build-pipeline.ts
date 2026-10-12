@@ -121,8 +121,8 @@ export function planPromptBlocks(input: PromptDataModel): PromptFragment[][] {
       const hasExplicitAnchor = (id: string) => skeletonNodes.some(
         n => n.kind === 'virtual' && (n.capabilities?.targetAnchorId === id || n.id === id),
       )
-      if (!hasExplicitAnchor('@setting.lower')) {
-        appendMounts(activeContributions.filter(c => c.capabilities.targetAnchorId === '@setting.lower'))
+      if (!hasExplicitAnchor('@lore.lower')) {
+        appendMounts(activeContributions.filter(c => c.capabilities.targetAnchorId === '@lore.lower'))
       }
       if (!hasExplicitAnchor('@chat.session.post')) {
         appendMounts(activeContributions.filter(c => c.capabilities.targetAnchorId === '@chat.session.post'))

@@ -1,53 +1,53 @@
 import { z } from 'zod'
 
-export const settingMountSourceSchema = z.discriminatedUnion('kind', [
+export const loreMountSourceSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('manual'), id: z.literal('global').optional() }),
   z.object({ kind: z.literal('preset'), id: z.string() }),
 ])
 
-export const settingMountSchema = z.object({
+export const loreMountSchema = z.object({
   id: z.string(),
-  settingResourceId: z.string(),
-  resolvedSettingResourceId: z.string().nullable().optional(),
+  loreResourceId: z.string(),
+  resolvedLoreResourceId: z.string().nullable().optional(),
   reference: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('package'), contributionId: z.string() }),
     z.object({ kind: z.literal('external'), resourceId: z.string(), origin: z.object({
       packageId: z.string(), contributionId: z.string(), target: z.enum(['global', 'card']),
     }).optional() }),
   ]).optional(),
-  source: settingMountSourceSchema,
+  source: loreMountSourceSchema,
   orderIndex: z.number().int(),
   origin: z.record(z.string(), z.json()),
   createdAt: z.string(),
 })
 
-export const listSettingMountsInputSchema = z.object({
-  source: settingMountSourceSchema.optional(),
+export const listLoreMountsInputSchema = z.object({
+  source: loreMountSourceSchema.optional(),
 })
 
-export const listSettingMountsResultSchema = z.object({
-  mounts: z.array(settingMountSchema),
+export const listLoreMountsResultSchema = z.object({
+  mounts: z.array(loreMountSchema),
 })
 
-export const replaceSettingMountsInputSchema = z.object({
-  source: settingMountSourceSchema,
-  settingResourceIds: z.array(z.string()).optional(),
+export const replaceLoreMountsInputSchema = z.object({
+  source: loreMountSourceSchema,
+  loreResourceIds: z.array(z.string()).optional(),
   mounts: z.array(z.union([
     z.object({ id: z.string() }),
-    z.object({ settingResourceId: z.string() }),
+    z.object({ loreResourceId: z.string() }),
   ])).optional(),
-}).refine(input => (input.settingResourceIds === undefined) !== (input.mounts === undefined), {
-  message: 'Specify exactly one Setting mount list',
+}).refine(input => (input.loreResourceIds === undefined) !== (input.mounts === undefined), {
+  message: 'Specify exactly one Lore mount list',
 })
 
-export const replaceSettingMountsResultSchema = z.object({
-  mounts: z.array(settingMountSchema),
+export const replaceLoreMountsResultSchema = z.object({
+  mounts: z.array(loreMountSchema),
   mutation: z.object({ changesetId: z.string() }),
 })
 
-export type SettingMountSource = z.infer<typeof settingMountSourceSchema>
-export type SettingMount = z.infer<typeof settingMountSchema>
-export type ListSettingMountsInput = z.infer<typeof listSettingMountsInputSchema>
-export type ListSettingMountsResult = z.infer<typeof listSettingMountsResultSchema>
-export type ReplaceSettingMountsInput = z.infer<typeof replaceSettingMountsInputSchema>
-export type ReplaceSettingMountsResult = z.infer<typeof replaceSettingMountsResultSchema>
+export type LoreMountSource = z.infer<typeof loreMountSourceSchema>
+export type LoreMount = z.infer<typeof loreMountSchema>
+export type ListLoreMountsInput = z.infer<typeof listLoreMountsInputSchema>
+export type ListLoreMountsResult = z.infer<typeof listLoreMountsResultSchema>
+export type ReplaceLoreMountsInput = z.infer<typeof replaceLoreMountsInputSchema>
+export type ReplaceLoreMountsResult = z.infer<typeof replaceLoreMountsResultSchema>

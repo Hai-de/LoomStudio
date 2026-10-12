@@ -41,7 +41,7 @@ function artifact(): CardBundleArtifact {
   return {
     schemaVersion: 4, artifactId: 'sync-card', displayName: 'Sync card',
     card: { name: 'Sync card', macros: { mood: 'calm' } },
-    contextAssets: [{ id: 'root', kind: 'module', category: 'setting', label: 'World', children: [
+    contextAssets: [{ id: 'root', kind: 'module', category: 'lore', label: 'World', children: [
       { id: 'entry', kind: 'entry', label: 'Town', body: 'Old town' },
     ] }],
     extensionPayloads: [{ id: 'config', packageId: 'example.config', fileName: 'config.json', format: 'example.config', mediaType: 'application/json', content: '{"value":1}' }],
@@ -99,7 +99,7 @@ describe('Card directory Apply', () => {
 
   it('rolls back earlier Prompt mutations when a later tree operation fails', async () => {
     const f = await fixture()
-    await f.promptResources.createResource({ actor: { kind: 'kernel', id: 'test' }, resourceKind: 'setting', rootNode: { id: 'occupied', kind: 'module', label: 'Other resource' } })
+    await f.promptResources.createResource({ actor: { kind: 'kernel', id: 'test' }, resourceKind: 'lore', rootNode: { id: 'occupied', kind: 'module', label: 'Other resource' } })
     const captured = await f.sync.captureCardDirectoryState({ cardId: f.card.id })
     captured.artifact.contextAssets[0]!.label = 'New label'
     captured.artifact.contextAssets[0]!.children![0]!.body = 'Intermediate write'

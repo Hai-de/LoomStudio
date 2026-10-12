@@ -751,21 +751,21 @@ async function importExtensionPackageResourcesInternal(
       if (mount.orderIndex !== undefined && (!Number.isSafeInteger(mount.orderIndex) || mount.orderIndex < 0)) throw new Error('Invalid Loom Script mount order')
       desiredScriptMountIds.add(id)
     }
-    for (const mount of item.contribution.settingMounts ?? []) {
-      if (item.contribution.resourceKind !== 'preset') throw new Error('Setting mounts require an Agent preset')
+    for (const mount of item.contribution.loreMounts ?? []) {
+      if (item.contribution.resourceKind !== 'preset') throw new Error('Lore mounts require an Agent preset')
       const reference = mount.reference ?? (mount.resourceId ? { kind: 'package' as const, contributionId: mount.resourceId } : undefined)
-      if (!reference || (mount.reference && mount.resourceId)) throw new Error('Invalid extension Setting mount reference')
+      if (!reference || (mount.reference && mount.resourceId)) throw new Error('Invalid extension Lore mount reference')
       if (reference.kind === 'package') {
         const linked = promptContributions.get(reference.contributionId)
-        if (!linked || linked.contribution.resourceKind !== 'setting') throw new Error(`Extension Preset Setting mount is unresolved: ${reference.contributionId}`)
+        if (!linked || linked.contribution.resourceKind !== 'lore') throw new Error(`Extension Preset Lore mount is unresolved: ${reference.contributionId}`)
       } else if (reference.kind === 'external') {
-        if (typeof reference.resourceId !== 'string' || !reference.resourceId.trim()) throw new Error('Invalid external Setting resource ID')
+        if (typeof reference.resourceId !== 'string' || !reference.resourceId.trim()) throw new Error('Invalid external Lore resource ID')
         const source = reference.origin
         if (source && (typeof source.packageId !== 'string' || !source.packageId.trim()
           || typeof source.contributionId !== 'string' || !source.contributionId.trim()
           || (source.target !== 'global' && source.target !== 'card')
-          || (source.target === 'card' && target.kind !== 'card'))) throw new Error('Invalid external Setting origin')
-      } else throw new Error('Invalid extension Setting mount reference')
+          || (source.target === 'card' && target.kind !== 'card'))) throw new Error('Invalid external Lore origin')
+      } else throw new Error('Invalid extension Lore mount reference')
     }
     for (const mount of item.contribution.toolMounts ?? []) {
       const definition = agentToolDefinitions.get(mount.toolId)
@@ -1129,27 +1129,27 @@ async function importExtensionPackageResourcesInternal(
         if (!newlyCreatedPromptIds.has(item.contribution.id) || item.contribution.resourceKind !== 'preset') continue
         const presetResourceId = promptResourceIds.get(item.contribution.id)!
         if (input.update) {
-          resourceTx.replaceSettingMounts({ source: { kind: 'preset', id: presetResourceId }, mounts: [] })
+          resourceTx.replaceLoreMounts({ source: { kind: 'preset', id: presetResourceId }, mounts: [] })
           resourceTx.replacePresetToolMounts({ presetResourceId, mounts: [] })
         }
-        for (const [orderIndex, mount] of (item.contribution.settingMounts ?? []).entries()) {
+        for (const [orderIndex, mount] of (item.contribution.loreMounts ?? []).entries()) {
           const reference = mount.reference ?? { kind: 'package' as const, contributionId: mount.resourceId! }
           const external = reference.kind === 'external' ? reference.origin : undefined
           const sameInstallation = external?.packageId === input.packageId && external.target === target.kind
-            && promptContributions.get(external.contributionId)?.contribution.resourceKind === 'setting'
+            && promptContributions.get(external.contributionId)?.contribution.resourceKind === 'lore'
           const resolved = reference.kind === 'package' ? promptResourceIds.get(reference.contributionId)!
             : sameInstallation ? promptResourceIds.get(external!.contributionId)!
               : external ? existingPromptResources.find(resource => !resource.tombstoned
-                && resource.resourceKind === 'setting'
+                && resource.resourceKind === 'lore'
                 && resource.origin?.kind === 'extension-package'
                 && resource.origin.packageId === external.packageId
                 && resource.origin.contributionId === external.contributionId
                 && resource.origin.installationId === extensionInstallationId(external.packageId,
                   external.target === 'global' ? { kind: 'global' } : target))?.id
                 : undefined
-          resourceTx.addSettingMount({
+          resourceTx.addLoreMount({
             source: { kind: 'preset', id: presetResourceId },
-            settingResourceId: resolved ?? null,
+            loreResourceId: resolved ?? null,
             reference,
             orderIndex: mount.orderIndex ?? orderIndex,
             origin: origin(item.contribution.id),

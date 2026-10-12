@@ -3,7 +3,7 @@ import { ejsProcessor } from '../../../extensions/st-data-compat/src/runtime/ejs
 import type { ExtensionPromptEntry } from '@loom-studio/extension-sdk'
 
 const entry = (id: string, content: string, label = id): ExtensionPromptEntry => ({
-  id, sourceId: 'world', sourceLabel: 'World', sourceNodeId: id, kind: 'settingLayer', label, content,
+  id, sourceId: 'world', sourceLabel: 'World', sourceNodeId: id, kind: 'lore', label, content,
 })
 const context = () => ({
   mode: 'runtime' as const, signal: new AbortController().signal,

@@ -46,12 +46,12 @@ import type {
   ChatMessage,
   JsonObject,
   JsonValue,
-  ListSettingMountsInput,
-  ListSettingMountsResult,
+  ListLoreMountsInput,
+  ListLoreMountsResult,
   MacroInspection,
   MacroSelectionMap,
-  ReplaceSettingMountsInput,
-  ReplaceSettingMountsResult,
+  ReplaceLoreMountsInput,
+  ReplaceLoreMountsResult,
   StateComponentTemplate,
   StateEntityId,
   StateEntityRefAnnotation,
@@ -60,12 +60,12 @@ import type {
   TimelineStateBinding,
 } from '@loom-studio/shared'
 export type {
-  ListSettingMountsInput,
-  ListSettingMountsResult,
-  ReplaceSettingMountsInput,
-  ReplaceSettingMountsResult,
-  SettingMount,
-  SettingMountSource,
+  ListLoreMountsInput,
+  ListLoreMountsResult,
+  ReplaceLoreMountsInput,
+  ReplaceLoreMountsResult,
+  LoreMount,
+  LoreMountSource,
 } from '@loom-studio/shared'
 import type { SecretRef, SecretStore } from '@loom-studio/secret-store'
 import type { StateStore } from '@loom-studio/application-data'
@@ -335,8 +335,8 @@ export type ApplicationRuntime = {
   exportPromptResource(input: ExportPromptResourceInput): Promise<ExportPromptResourceResult>
   updateCardPromptResources(input: UpdateCardPromptResourcesInput, context?: RuntimeRequestContext): Promise<UpdateCardPromptResourcesResult>
   updatePromptResourceMacros(input: UpdatePromptResourceMacrosInput, context?: RuntimeRequestContext): Promise<UpdatePromptResourceMacrosResult>
-  listSettingMounts(input?: ListSettingMountsInput): Promise<ListSettingMountsResult>
-  replaceSettingMounts(input: ReplaceSettingMountsInput, context?: RuntimeRequestContext): Promise<ReplaceSettingMountsResult>
+  listLoreMounts(input?: ListLoreMountsInput): Promise<ListLoreMountsResult>
+  replaceLoreMounts(input: ReplaceLoreMountsInput, context?: RuntimeRequestContext): Promise<ReplaceLoreMountsResult>
   createPromptResourceAsset(input: CreatePromptResourceAssetInput, context?: RuntimeRequestContext): Promise<UpdatePromptResourceResult>
   updatePromptResourceAsset(input: UpdatePromptResourceAssetInput, context?: RuntimeRequestContext): Promise<UpdatePromptResourceResult>
   updatePromptResourceAssets(input: UpdatePromptResourceAssetsInput, context?: RuntimeRequestContext): Promise<UpdatePromptResourceResult>
@@ -397,7 +397,7 @@ export type InstallOfficialContentInput = {
   packageId: string
   packageVersion: string
   resources: Array<{ id: string; artifact: PromptResourceArtifact }>
-  settingMounts: Array<{ presetResourceId: string; settingResourceId: string }>
+  loreMounts: Array<{ presetResourceId: string; loreResourceId: string }>
 }
 
 export type InstallOfficialContentResult = {
@@ -1044,8 +1044,8 @@ export type CreateCardInput = {
   description?: string
   preset?: CardPresetInput
   opening?: OpeningChatInput | string
-  setting?: JsonObject
-  settingLayer?: SettingLayerInput
+
+  lore?: LoreInput
   media?: CardMediaRefs
   macros?: Record<string, string>
   macroOptions?: import("@loom-studio/shared").MacroOptions
@@ -1097,7 +1097,7 @@ export type UpdateCardInput = {
   description?: string
   preset?: CardPresetInput
   opening?: OpeningChatInput | string
-  settingLayer?: SettingLayerInput
+  lore?: LoreInput
   media?: CardMediaRefs
   stateTemplates?: CardStateTemplate[]
   stateDefinitionIds?: string[]
@@ -1401,7 +1401,7 @@ export type UpdateAgentPresetInput = {
   model?: ProviderModelSelection | null
   delivery?: AgentDelivery
   historyPolicy?: AgentHistoryPolicy
-  useCardSettings?: boolean
+  useCardLore?: boolean
   textUses?: Array<{ id: string; kind: 'rule' | 'extractor'; enabled: boolean; orderIndex?: number }>
 }
 
@@ -1444,7 +1444,7 @@ export type ListPromptResourcesResult = {
 export type GetPromptResourceBindingsResult = {
   resourceId: string
   cards: Array<{ id: string; name: string }>
-  settingMounts: ListSettingMountsResult['mounts']
+  loreMounts: ListLoreMountsResult['mounts']
 }
 
 export type CreatePromptResourceInput = {
@@ -1811,7 +1811,7 @@ export type CardSourceContent = {
   media?: CardMediaRefs
   preset: CardPresetContent
   opening: OpeningChatContent
-  settingLayer: SettingLayerContent
+  lore: LoreContent
   macros?: Record<string, string>
   macroOptions?: import("@loom-studio/shared").MacroOptions
   createdAt: string
@@ -1861,32 +1861,32 @@ export type OpeningChatEntryContent = {
   content: string
 }
 
-export type SettingLayerInput = {
-  entries?: SettingEntryInput[]
+export type LoreInput = {
+  entries?: LoreEntryInput[]
 }
 
-export type SettingLayerContent = {
-  entries: SettingEntryContent[]
+export type LoreContent = {
+  entries: LoreEntryContent[]
 }
 
-export type SettingEntryInput = {
+export type LoreEntryInput = {
   id?: string
   path?: string
   title?: string
   content: string
   enabled?: boolean
-  activation?: SettingActivation
+  activation?: LoreActivation
   tags?: string[]
 }
 
-export type SettingEntryContent = {
+export type LoreEntryContent = {
   id: string
   path?: string
   title?: string
   content: string
   enabled: boolean
-  activation: SettingActivation
+  activation: LoreActivation
   tags: string[]
 }
 
-export type SettingActivation = PromptActivation
+export type LoreActivation = PromptActivation

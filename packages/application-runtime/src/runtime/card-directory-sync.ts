@@ -4,7 +4,7 @@ import type { JsonObject, JsonValue } from '@loom-studio/shared'
 import type { ApplicationRuntimeContext } from '../foundation/application-context.js'
 import { applicationDocumentTypes as types } from '../foundation/document-types.js'
 import { listDocuments, readDocument, writeDocument } from '../foundation/document-store.js'
-import { normalizeCardContent, normalizeOpening, normalizePreset, normalizeSettingLayer } from '../cards/card.js'
+import { normalizeCardContent, normalizeOpening, normalizePreset, normalizeLore } from '../cards/card.js'
 import { exportCardArtifact } from '../cards/workspace.js'
 import { normalizeCardBundleArtifact } from '../cards/workspace-codec.js'
 import type { CardBundleArtifact, PortableExtensionPayloadContent } from '../cards/workspace-types.js'
@@ -212,7 +212,7 @@ export function createCardDirectoryRuntimeMethods(ctx: CardDirectoryRuntimeConte
               ...current.card.content,
               name: artifact.card.name, userName: artifact.card.userName, description: artifact.card.description,
               preset: normalizePreset(artifact.card.preset), opening: normalizeOpening(artifact.card.opening),
-              settingLayer: normalizeSettingLayer(artifact.card.settingLayer, undefined), macros: artifact.card.macros,
+              lore: normalizeLore(artifact.card.lore), macros: artifact.card.macros,
               promptResourceIds: artifact.contextAssets.map(node => prompts.get(node.id)!.id),
               ...(artifact.externalContextAssetIds !== undefined || current.card.content.externalPromptResourceIds !== undefined ? {
                 externalPromptResourceIds: (artifact.externalContextAssetIds ?? []).map(id => prompts.get(id)!.id),
@@ -240,8 +240,8 @@ async function sharedReferences(ctx: Pick<CardDirectoryRuntimeContext, 'document
   for (const card of await listDocuments<CardSourceContent>(ctx.documents, types.cardSource)) {
     if (card.id !== cardId) for (const id of [...card.content.promptResourceIds ?? [], ...card.content.portableExtensionPayloadIds ?? [], ...card.content.stateDefinitionIds ?? []]) shared.add(id)
   }
-  for (const mount of await ctx.promptResources.listSettingMounts({})) {
-    shared.add(mount.settingResourceId)
+  for (const mount of await ctx.promptResources.listLoreMounts({})) {
+    shared.add(mount.loreResourceId)
     if (mount.source.kind === 'preset') shared.add(mount.source.id)
   }
   for (const mount of await ctx.promptResources.listPresetToolMounts({})) shared.add(mount.presetResourceId)

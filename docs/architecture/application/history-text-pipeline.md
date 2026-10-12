@@ -19,7 +19,7 @@ Rule 使用 `airp.textTransformRule` Document 持久化，资源定义与预设�
 
 Owner 表示声明来源与 provenance，不等于运行作用域。Workspace / User Override 是公共默认来源，Card 只对对应来源角色生效，Extension 贡献还需匹配当前可用安装。现存 `owner.kind: preset` 仍按匹配预设解析，但配置化不增加新的预设专属归属：扩展携带定义，预设以 `textUses` 引用和使用。Runtime 通过唯一的 Effective Pipeline 解析路径组合 Rule 与 Extractor，PromptBuild、History Projection 与 Inspector 不分别维护来源筛选逻辑。
 
-包内与外部引用同时校验 identity / provenance；缺失或安装不可用时保留 `textUses` 并返回 `text.use_unresolved`，不按名称找替代。公共正则默认参与符合上下文的消费，与公共 Settings 必须显式采用不同；`useCardSettings` 只控制默认角色 Settings，不控制角色正则继承。
+包内与外部引用同时校验 identity / provenance；缺失或安装不可用时保留 `textUses` 并返回 `text.use_unresolved`，不按名称找替代。公共正则默认参与符合上下文的消费，与公共 Lore 必须显式采用不同；`useCardLore` 只控制默认角色 Lore，不控制角色正则继承。
 
 Narrative `display` 可以独立于 Agent 解析。Narrative `prompt` 使用明确的消费 Agent Session 或预设身份组合规则；因此不同 Agent Preset 可以对同一 Narrative 获得隔离的 Prompt 投影。Agent Session Source 直接使用自身 `agentPresetId`。
 

@@ -30,13 +30,13 @@ import type {
   ImportPromptResourceInput,
   ListPromptResourcesInput,
   ListPromptResourcesResult,
-  ListSettingMountsInput,
-  ListSettingMountsResult,
+  ListLoreMountsInput,
+  ListLoreMountsResult,
   MovePromptResourceAssetInput,
   MutationReceipt,
   PromptResourceContent,
-  ReplaceSettingMountsInput,
-  ReplaceSettingMountsResult,
+  ReplaceLoreMountsInput,
+  ReplaceLoreMountsResult,
   RevertPromptResourceChangesetInput,
   RevertPromptResourceChangesetResult,
   RuntimeRequestContext,
@@ -83,12 +83,12 @@ export function createPromptRuntimeMethods(ctx: PromptRuntimeContext) {
       if (!await ctx.promptResources.hasResource(input.resourceId)) throw new Error(`Prompt resource not found: ${input.resourceId}`)
       const [cards, mounts] = await Promise.all([
         ctx.documents.listCardBindings({ type: applicationDocumentTypes.cardSource, resourceId: input.resourceId }),
-        ctx.promptResources.listSettingMounts({ settingResourceId: input.resourceId }),
+        ctx.promptResources.listLoreMounts({ loreResourceId: input.resourceId }),
       ])
       return {
         resourceId: input.resourceId,
         cards,
-        settingMounts: mounts,
+        loreMounts: mounts,
       }
     },
 
@@ -125,7 +125,7 @@ export function createPromptRuntimeMethods(ctx: PromptRuntimeContext) {
       const sourceContent = fromStoredResource(source)
       const duplicateContent = clonePromptResourceContent(sourceContent, ctx.createId, input.name?.trim() || `${sourceContent.rootNode.label} Copy`)
       const sourceMounts = source.resourceKind === 'preset'
-        ? await ctx.promptResources.listSettingMounts({ source: { kind: 'preset', id: source.id } })
+        ? await ctx.promptResources.listLoreMounts({ source: { kind: 'preset', id: source.id } })
         : []
       const sourceToolMounts = source.resourceKind === 'preset'
         ? await ctx.promptResources.listPresetToolMounts({ presetResourceId: source.id })
@@ -136,9 +136,9 @@ export function createPromptRuntimeMethods(ctx: PromptRuntimeContext) {
       }, async dataTx => {
         const resourceTx = ctx.promptResources.transaction(dataTx)
         const created = resourceTx.createResource(toStoredResourceInput({ content: duplicateContent }))
-        const mounts = sourceMounts.map(mount => resourceTx.addSettingMount({
+        const mounts = sourceMounts.map(mount => resourceTx.addLoreMount({
           source: { kind: 'preset', id: created.id },
-          settingResourceId: mount.resolvedSettingResourceId === null ? null : mount.resolvedSettingResourceId ?? mount.settingResourceId,
+          loreResourceId: mount.resolvedLoreResourceId === null ? null : mount.resolvedLoreResourceId ?? mount.loreResourceId,
           ...(mount.reference ? { reference: mount.reference } : {}),
           orderIndex: mount.orderIndex,
           origin: mount.origin,
@@ -163,7 +163,7 @@ export function createPromptRuntimeMethods(ctx: PromptRuntimeContext) {
 
     deletePromptResource: async (input: DeletePromptResourceInput, requestContext?: RuntimeRequestContext): Promise<DeletePromptResourceResult> => {
       const resource = await readMappedResource(ctx.promptResources, input.resourceId)
-      if (resource.resourceKind === 'setting') {
+      if (resource.resourceKind === 'lore') {
         const result = await ctx.promptResources.deleteResource({
           ...promptResourceWriteContext(requestContext),
           reason: 'application.deletePromptResource',
@@ -223,19 +223,19 @@ export function createPromptRuntimeMethods(ctx: PromptRuntimeContext) {
         ...(artifact.resourceKind === 'preset' ? { historyPolicy: 'persistent' as const } : {}),
         ...(artifact.macros !== undefined ? { macros: normalizeMacros(artifact.macros, 'Preset') } : {}),
         ...(artifact.macroOptions !== undefined ? { macroOptions: normalizeMacroOptions(artifact.macroOptions) } : {}),
-        ...(artifact.useCardSettings !== undefined ? { useCardSettings: artifact.useCardSettings } : {}),
+        ...(artifact.useCardLore !== undefined ? { useCardLore: artifact.useCardLore } : {}),
         ...(artifact.textUses !== undefined ? { textUses: structuredClone(artifact.textUses) } : {}),
         createdAt: ctx.now(),
         updatedAt: ctx.now(),
       }
-      const result = await importPromptResourceContent(ctx, content, artifact.scriptAttachments ?? [], requestContext, artifact.textTransformRules, artifact.settingMounts)
+      const result = await importPromptResourceContent(ctx, content, artifact.scriptAttachments ?? [], requestContext, artifact.textTransformRules, artifact.loreMounts)
       return { resource: fromStoredResource(result.resource), mutation: { changesetId: result.commit.changesetId } }
     },
 
     exportPromptResource: async (input: ExportPromptResourceInput): Promise<ExportPromptResourceResult> => {
       const resource = await readMappedResource(ctx.promptResources, input.resourceId)
       const mounts = resource.resourceKind === 'preset'
-        ? await ctx.promptResources.listSettingMounts({ source: { kind: 'preset', id: resource.id } })
+        ? await ctx.promptResources.listLoreMounts({ source: { kind: 'preset', id: resource.id } })
         : []
       return {
         artifact: {
@@ -245,45 +245,45 @@ export function createPromptRuntimeMethods(ctx: PromptRuntimeContext) {
           rootNode: resource.rootNode,
           ...(resource.macros !== undefined ? { macros: structuredClone(resource.macros) } : {}),
           ...(resource.macroOptions !== undefined ? { macroOptions: structuredClone(resource.macroOptions) } : {}),
-          ...(resource.useCardSettings !== undefined ? { useCardSettings: resource.useCardSettings } : {}),
+          ...(resource.useCardLore !== undefined ? { useCardLore: resource.useCardLore } : {}),
           ...(resource.textUses !== undefined ? { textUses: resource.textUses.map(use => ({
             ...structuredClone(use),
             reference: use.reference ?? { kind: 'external' as const, resourceId: use.id },
           })) } : {}),
-          ...(mounts.length ? { settingMounts: mounts.map(mount =>
-            structuredClone(mount.reference ?? { kind: 'external' as const, resourceId: mount.settingResourceId })) } : {}),
+          ...(mounts.length ? { loreMounts: mounts.map(mount =>
+            structuredClone(mount.reference ?? { kind: 'external' as const, resourceId: mount.loreResourceId })) } : {}),
         },
       }
     },
 
-    listSettingMounts: async (input?: ListSettingMountsInput): Promise<ListSettingMountsResult> => ({
-      mounts: await ctx.promptResources.listSettingMounts({ source: input?.source }),
+    listLoreMounts: async (input?: ListLoreMountsInput): Promise<ListLoreMountsResult> => ({
+      mounts: await ctx.promptResources.listLoreMounts({ source: input?.source }),
     }),
 
-    replaceSettingMounts: async (input: ReplaceSettingMountsInput, requestContext?: RuntimeRequestContext): Promise<ReplaceSettingMountsResult> => {
-      if ((input.mounts === undefined) === (input.settingResourceIds === undefined)) throw new Error('Specify exactly one Setting mount list')
-      const existing = input.mounts ? await ctx.promptResources.listSettingMounts({ source: input.source }) : []
-      const mounts = await Promise.all((input.mounts ?? input.settingResourceIds?.map(settingResourceId => ({ settingResourceId })) ?? [])
+    replaceLoreMounts: async (input: ReplaceLoreMountsInput, requestContext?: RuntimeRequestContext): Promise<ReplaceLoreMountsResult> => {
+      if ((input.mounts === undefined) === (input.loreResourceIds === undefined)) throw new Error('Specify exactly one Lore mount list')
+      const existing = input.mounts ? await ctx.promptResources.listLoreMounts({ source: input.source }) : []
+      const mounts = await Promise.all((input.mounts ?? input.loreResourceIds?.map(loreResourceId => ({ loreResourceId })) ?? [])
         .map(async (mount, orderIndex) => {
           if ('id' in mount) {
             const previous = existing.find(item => item.id === mount.id)
-            if (!previous) throw new Error(`Setting mount not found in this source: ${mount.id}`)
-            const resourceId = previous.resolvedSettingResourceId === null ? null : previous.resolvedSettingResourceId ?? previous.settingResourceId
+            if (!previous) throw new Error(`Lore mount not found in this source: ${mount.id}`)
+            const resourceId = previous.resolvedLoreResourceId === null ? null : previous.resolvedLoreResourceId ?? previous.loreResourceId
             const available = resourceId ? await ctx.promptResources.getResource(resourceId) : null
-            return { settingResourceId: available ? resourceId : null,
-              reference: previous.reference ?? { kind: 'external' as const, resourceId: previous.settingResourceId },
+            return { loreResourceId: available ? resourceId : null,
+              reference: previous.reference ?? { kind: 'external' as const, resourceId: previous.loreResourceId },
               orderIndex, origin: previous.origin }
           }
-          return { settingResourceId: mount.settingResourceId, orderIndex }
+          return { loreResourceId: mount.loreResourceId, orderIndex }
         }))
-      for (const settingId of mounts.flatMap(mount => mount.settingResourceId ? [mount.settingResourceId] : [])) {
-        const setting = await ctx.promptResources.getResource(settingId)
-        if (!setting) throw new Error(`Prompt resource not found: ${settingId}`)
-        if (setting.resourceKind !== 'setting') throw new Error(`Prompt resource ${settingId} can only link Setting resources`)
+      for (const loreId of mounts.flatMap(mount => mount.loreResourceId ? [mount.loreResourceId] : [])) {
+        const lore = await ctx.promptResources.getResource(loreId)
+        if (!lore) throw new Error(`Prompt resource not found: ${loreId}`)
+        if (lore.resourceKind !== 'lore') throw new Error(`Prompt resource ${loreId} can only link Lore resources`)
       }
-      const result = await ctx.promptResources.replaceSettingMounts({
+      const result = await ctx.promptResources.replaceLoreMounts({
         ...promptResourceWriteContext(requestContext),
-        reason: 'application.replaceSettingMounts',
+        reason: 'application.replaceLoreMounts',
         source: input.source,
         mounts,
       })
@@ -402,7 +402,7 @@ async function importPromptResourceContent(
   attachments: LoomScriptAttachmentArtifact[],
   requestContext?: RuntimeRequestContext,
   textTransformRules?: Array<Omit<TextTransformRuleDraft, 'owner'>>,
-  settingMounts?: NonNullable<import('../cards/workspace-types.js').PromptResourceArtifact['settingMounts']>,
+  loreMounts?: NonNullable<import('../cards/workspace-types.js').PromptResourceArtifact['loreMounts']>,
 ): Promise<PromptResourceMutationResult> {
   if (attachments.length > 0 && !ctx.blobs) throw new Error('Blob Store is required to import Loom Script attachments')
   const preparedResults = await Promise.allSettled(attachments.map(async attachment => ({
@@ -426,10 +426,10 @@ async function importPromptResourceContent(
   }, async dataTx => {
     const resourceTx = ctx.promptResources.transaction(dataTx)
     const resource = resourceTx.createResource(toStoredResourceInput({ content }))
-    for (const [orderIndex, reference] of (settingMounts ?? []).entries()) {
-      resourceTx.addSettingMount({
+    for (const [orderIndex, reference] of (loreMounts ?? []).entries()) {
+      resourceTx.addLoreMount({
         source: { kind: 'preset', id: resource.id },
-        settingResourceId: null,
+        loreResourceId: null,
         reference, orderIndex,
       })
     }
@@ -524,7 +524,7 @@ export function createEmptyPromptResourceContent(
   const rootNode: PromptResourceContent['rootNode'] = {
     id: createId('prompt-node'),
     label: name.trim(),
-    meta: resourceKind === 'setting' ? 'Setting Layer' : 'Prompt Resource',
+    meta: resourceKind === 'lore' ? 'Lore' : 'Prompt Resource',
     category: resourceKind === 'history' || resourceKind === 'runtime' || resourceKind === 'prompt' ? undefined : resourceKind,
     kind: 'module',
     body: '',

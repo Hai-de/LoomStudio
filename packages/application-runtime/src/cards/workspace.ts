@@ -2,7 +2,7 @@ import type { DocumentRecord, DocumentStore, DocumentTransaction, SqliteDocument
 import type { PromptResourceStore } from '@loom-studio/application-data'
 import { createId, nowIso } from '@loom-studio/shared'
 import { extensionInstallationId } from '@loom-studio/extension-sdk'
-import { normalizeOpening, normalizeOptionalString, normalizePreset, normalizeSettingLayer } from './card.js'
+import { normalizeOpening, normalizeOptionalString, normalizePreset, normalizeLore } from './card.js'
 import { normalizeMacros } from './card.js'
 import { normalizeMacroOptions } from '@loom-studio/shared'
 import { applicationDocumentTypes } from '../foundation/document-types.js'
@@ -286,7 +286,7 @@ export async function importCardBundle(input: {
           timelineStateBindings: structuredClone(artifactStateBindings),
           preset: normalizePreset(artifact.card.preset),
           opening: normalizeOpening(artifact.card.opening),
-          settingLayer: normalizeSettingLayer(artifact.card.settingLayer, undefined),
+          lore: normalizeLore(artifact.card.lore),
           ...(artifact.card.macros !== undefined ? { macros: normalizeMacros(artifact.card.macros, 'Card') } : {}),
           ...(artifact.card.macroOptions !== undefined ? { macroOptions: normalizeMacroOptions(artifact.card.macroOptions) } : {}),
           ...(artifact.card.stateContributionIds !== undefined ? { stateContributionIds: [...artifact.card.stateContributionIds] } : {}),
@@ -296,7 +296,7 @@ export async function importCardBundle(input: {
         },
         expectedVersion: 'new',
       })
-      const bindings = storedResources.filter(resource => resource.rootNode.kind === 'module' && (resource.rootNode.category === 'setting' || resource.rootNode.category === 'preset')).map(resource => ({
+      const bindings = storedResources.filter(resource => resource.rootNode.kind === 'module' && (resource.rootNode.category === 'lore' || resource.rootNode.category === 'preset')).map(resource => ({
         id: `binding.${resource.id}.${resource.rootNode.id}`,
         relationship: 'recommends' as const,
         createdAt: timestamp,
@@ -457,7 +457,7 @@ function buildExportArtifact(input: {
       description: cardContent.description,
       preset: cardContent.preset,
       opening: cardContent.opening,
-      settingLayer: cardContent.settingLayer,
+      lore: cardContent.lore,
       media: cardContent.media,
       macros: cardContent.macros,
       macroOptions: cardContent.macroOptions,

@@ -4,7 +4,7 @@ import { FileTree, type FileTreeNode } from '../../../shared/ui/file-tree/file-t
 import { MasterDetailWorkbench } from '../../../shared/ui/master-detail-workbench/master-detail-workbench.js'
 import styles from './package-resource-drilldown-preview.module.scss'
 
-type Category = 'settings' | 'agents' | 'scripts' | 'attachments'
+type Category = 'lore' | 'agents' | 'scripts' | 'attachments'
 type Resource = { id: string; name: string; category: Category; packageId: string; body: string }
 type Message = { id: string; role: 'system' | 'anchor' | 'user'; title: string; body: string }
 
@@ -13,18 +13,18 @@ const packages = [
   { id: 'image', name: '图像套件扩展', icon: Image },
 ]
 const categories: Array<{ id: Category; name: string; icon: typeof FileText }> = [
-  { id: 'settings', name: 'Settings', icon: Settings2 },
+  { id: 'lore', name: 'Lore', icon: Settings2 },
   { id: 'agents', name: 'Agent 预设', icon: Bot },
   { id: 'scripts', name: '脚本', icon: FileCode2 },
   { id: 'attachments', name: '附件', icon: FileText },
 ]
 const resources: Resource[] = [
-  { id: 'island-world', name: '雾岛世界书', category: 'settings', packageId: 'island', body: '雾岛常年被海雾包围。渡口与白塔是故事最初的两个地点。' },
-  { id: 'island-guide', name: '游玩教程', category: 'settings', packageId: 'island', body: '从渡口进入故事。天黑之前，找到一位愿意交谈的旅人。' },
+  { id: 'island-world', name: '雾岛世界书', category: 'lore', packageId: 'island', body: '雾岛常年被海雾包围。渡口与白塔是故事最初的两个地点。' },
+  { id: 'island-guide', name: '游玩教程', category: 'lore', packageId: 'island', body: '从渡口进入故事。天黑之前，找到一位愿意交谈的旅人。' },
   { id: 'island-agent', name: '雾岛叙事 Agent', category: 'agents', packageId: 'island', body: '' },
   { id: 'island-script', name: '线索面板.loom.js', category: 'scripts', packageId: 'island', body: '// 线索面板\nexport function renderClues(clues) {\n  return clues\n}' },
   { id: 'island-note', name: '创作手记.md', category: 'attachments', packageId: 'island', body: '# 创作手记\n\n灯塔、海雾与陌生人，是故事的三个起点。' },
-  { id: 'image-style', name: '构图与风格手册', category: 'settings', packageId: 'image', body: '先确定主体、场景和光线，再选择镜头距离。' },
+  { id: 'image-style', name: '构图与风格手册', category: 'lore', packageId: 'image', body: '先确定主体、场景和光线，再选择镜头距离。' },
   { id: 'image-agent', name: '生图 Agent', category: 'agents', packageId: 'image', body: '' },
   { id: 'image-script', name: 'image-tools.js', category: 'scripts', packageId: 'image', body: '// 图像工具\nexport async function generateImage(prompt) {\n  return prompt\n}' },
   { id: 'image-readme', name: 'README.md', category: 'attachments', packageId: 'image', body: '# 图像套件\n\n为当前场景生成或修改图片。' },
@@ -107,8 +107,8 @@ export function PackageResourceDrilldownPreview() {
           onClick={() => navigate(() => setMode('package'))}><Package size={17} /></button>
         <button type="button" className={mode === 'domain' && current?.category === 'agents' ? styles.active : ''} title="Agent 面板" aria-label="Agent 面板"
           onClick={() => { const item = resources.find(value => value.category === 'agents' && value.packageId === packageId)!; navigate(() => { setResourceId(item.id); setCategory(item.category); setMode('domain') }) }}><Bot size={17} /></button>
-        <button type="button" className={mode === 'domain' && current?.category === 'settings' ? styles.active : ''} title="Settings 面板" aria-label="Settings 面板"
-          onClick={() => { const item = resources.find(value => value.category === 'settings' && value.packageId === packageId)!; navigate(() => { setResourceId(item.id); setCategory(item.category); setMode('domain') }) }}><Settings2 size={17} /></button>
+        <button type="button" className={mode === 'domain' && current?.category === 'lore' ? styles.active : ''} title="Lore 面板" aria-label="Lore 面板"
+          onClick={() => { const item = resources.find(value => value.category === 'lore' && value.packageId === packageId)!; navigate(() => { setResourceId(item.id); setCategory(item.category); setMode('domain') }) }}><Settings2 size={17} /></button>
       </nav>
     </header>
     <MasterDetailWorkbench masterWidth={238} masterMinWidth={190} mobilePane={mobilePane} onMobilePaneChange={setMobilePane}
@@ -138,14 +138,14 @@ export function PackageResourceDrilldownPreview() {
         {current ? <section className={styles.document} key={current.id}>
           <header className={styles.documentHeader}>
             <div><small>{currentCategory?.name}</small><h1>{current.name}</h1></div>
-            {(current.category === 'agents' || current.category === 'settings') && <button type="button"
-              className={styles.openDomain} title={`在 ${current.category === 'agents' ? 'Agent' : 'Settings'} 面板打开`}
-              aria-label={`在 ${current.category === 'agents' ? 'Agent' : 'Settings'} 面板打开`}
+            {(current.category === 'agents' || current.category === 'lore') && <button type="button"
+              className={styles.openDomain} title={`在 ${current.category === 'agents' ? 'Agent' : 'Lore'} 面板打开`}
+              aria-label={`在 ${current.category === 'agents' ? 'Agent' : 'Lore'} 面板打开`}
               onClick={() => navigate(() => setMode('domain'))}>
               {current.category === 'agents' ? <Bot size={17} /> : <Settings2 size={17} />}
             </button>}
           </header>
-          {current.category === 'settings' ? <div className={styles.editor}>
+          {current.category === 'lore' ? <div className={styles.editor}>
             <label className={styles.check}><input type="checkbox" checked={enabled[current.id] ?? false}
               onChange={event => setEnabled(previous => ({ ...previous, [current.id]: event.target.checked }))} />作者启用</label>
             <label htmlFor={`body-${current.id}`}>正文</label>

@@ -12,7 +12,7 @@
 
 - `data/` 根目录、角色目录保存、目录发现、确认导入、原 Card Apply、媒体读取与变更通知。
 - Card Bundle ZIP v2、PNG 内嵌 ZIP、脚本与 Text Pipeline 文件化。
-- Preset / Setting Prompt Resource ZIP 首切片。
+- Preset / Lore Prompt Resource ZIP 首切片。
 - Extension 本地 ZIP 安装、路径安全检查、临时解包与现有激活流程。
 - 官方 starter、显式安装、官方内容导出和完整 Character Status 样例。
 - Card Bundle、Prompt Resource 与 Card Directory 的脚本 Blob 写入使用 prepared write；已 finalized 的 hash 文件可能被其他准备中的写入共享，附件失败不会删除这些共享字节。
@@ -20,11 +20,11 @@
 
 ## 后续阶段
 
-1. 资源本体导出与包分发分离，转入 [资源包与 Agent 预设底层计划](../../archive/plans/resource-packages-and-agent-presets-backend-plan.md)。不再按“Preset / Setting 独立携带完整附件包”方向续建。
+1. 资源本体导出与包分发分离，转入 [资源包与 Agent 预设底层计划](../../archive/plans/resource-packages-and-agent-presets-backend-plan.md)。不再按“Preset / Lore 独立携带完整附件包”方向续建。
 2. 完成角色卡包与扩展包的外部资源链接、用户自定义更新来源、Git 更新和非 Git 版本替换；后续支持自动检测新版，不仅检测角色依赖的扩展。
 3. 讨论并实现 Workspace 开发模式：编辑源、草稿、显式 Apply 与权限边界。
 
-2026-09-27：角色卡包与扩展包保留为包身份，扩展允许纯资源；Agent 预设与 Setting 是可独立导出的资源。现有带附件 artifact 的读取和无损迁移由上述底层计划负责，本说明不表示已改变现有导出格式。相关工作台改进见 [独立 UI 计划](../../archive/plans/ui/resource-workbench-and-agent-presets-plan.md)。
+2026-09-27：角色卡包与扩展包保留为包身份，扩展允许纯资源；Agent 预设与 Lore 是可独立导出的资源。现有带附件 artifact 的读取和无损迁移由上述底层计划负责，本说明不表示已改变现有导出格式。相关工作台改进见 [独立 UI 计划](../../archive/plans/ui/resource-workbench-and-agent-presets-plan.md)。
 
 ## 已确认边界
 

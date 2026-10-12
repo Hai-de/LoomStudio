@@ -23,7 +23,7 @@ function createTree(): PromptResourceTreeNode {
         id: 'folder', kind: 'folder', label: 'Folder',
         children: [
           {
-            id: 'entry-a', kind: 'entry', label: 'A', category: 'setting',
+            id: 'entry-a', kind: 'entry', label: 'A', category: 'lore',
             body: '', enabled: false, meta: '',
             capabilities: { projection: { order: 0 }, custom: [null, false, ''] },
             extra: { custom: { value: 0 } },
@@ -77,7 +77,7 @@ describe('Prompt Resource write result contract', () => {
     const { engine, store } = createStore()
     try {
       const created = await store.createResource({
-        actor, resourceKind: 'setting', rootNode: createTree(), metadata: { original: true },
+        actor, resourceKind: 'lore', rootNode: createTree(), metadata: { original: true },
       })
       expect(await store.getResource(created.resource.id)).toEqual(created.resource)
       expect(created.resource.rootNode).not.toHaveProperty('extra')
@@ -114,7 +114,7 @@ describe('Prompt Resource write result contract', () => {
   it('shows why an in-memory tree cannot bypass SQL JSON normalization unchanged', async () => {
     const { engine, store } = createStore()
     try {
-      const created = await store.createResource({ actor, resourceKind: 'setting', rootNode: createTree() })
+      const created = await store.createResource({ actor, resourceKind: 'lore', rootNode: createTree() })
       const capabilities = Object.assign(Object.create(null), { custom: -0 })
       const updated = await store.mutateResource({
         actor, resourceId: created.resource.id, expectedVersion: 1,

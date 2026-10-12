@@ -8,7 +8,7 @@ import type {
   CardMediaRefs,
   CardExtensionAdoption,
   OpeningChatInput,
-  SettingLayerInput,
+  LoreInput,
 } from '../types.js'
 import type { PromptCompositionCapabilities } from '../prompt/prompt-builder.js'
 import type { PromptActivation } from '../prompt/prompt-activation.js'
@@ -27,7 +27,7 @@ export type CardBundleArtifact = {
     description?: string
     preset?: CardPresetInput
     opening?: OpeningChatInput | string
-    settingLayer?: SettingLayerInput
+    lore?: LoreInput
     media?: CardMediaRefs
     macros?: Record<string, string>
     macroOptions?: import("@loom-studio/shared").MacroOptions
@@ -77,12 +77,12 @@ export type PortableExtensionPayloadContent = Omit<PortableExtensionPayloadArtif
   updatedAt: string
 }
 
-export type PromptResourceKind = 'preset' | 'setting' | 'logic' | 'runtime' | 'history' | 'prompt' | (string & {})
+export type PromptResourceKind = 'preset' | 'lore' | 'logic' | 'runtime' | 'history' | 'prompt' | (string & {})
 
 export type PromptResourceContent = {
   resourceKind: PromptResourceKind
   rootNode: PromptResourceNode
-  useCardSettings?: boolean
+  useCardLore?: boolean
   textUses?: Array<{ id: string; kind: 'rule' | 'extractor'; enabled: boolean; orderIndex?: number; reference?: NonNullable<import('@loom-studio/extension-sdk').ExtensionPromptResourceContribution['textUses']>[number]['reference'] }>
   historyPolicy?: AgentHistoryPolicy
   model?: ProviderModelSelection
@@ -107,9 +107,9 @@ export type PromptResourceArtifact = {
   rootNode: PromptResourceNode
   macros?: Record<string, string>
   macroOptions?: import("@loom-studio/shared").MacroOptions
-  useCardSettings?: boolean
+  useCardLore?: boolean
   textUses?: PromptResourceContent['textUses']
-  settingMounts?: Array<NonNullable<import('@loom-studio/shared').SettingMount['reference']>>
+  loreMounts?: Array<NonNullable<import('@loom-studio/shared').LoreMount['reference']>>
   textTransformRules?: Array<Omit<TextTransformRuleDraft, 'owner'>>
   scriptAttachments?: LoomScriptAttachmentArtifact[]
 }
@@ -168,7 +168,7 @@ export type CardBundleBindingEndpoint = {
 
 export type PromptResourceNode = {
   body?: string
-  category?: 'preset' | 'setting' | 'logic' | 'runtime' | 'history' | (string & {})
+  category?: 'preset' | 'lore' | 'logic' | 'runtime' | 'history' | (string & {})
   children?: PromptResourceNode[]
   configRows?: Array<{ label: string; value: string }>
   enabled?: boolean

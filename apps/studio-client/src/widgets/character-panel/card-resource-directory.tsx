@@ -18,7 +18,7 @@ import { CardResourceOverview, type CardDirectoryApi } from './card-resource-ove
 import { cardMediaUrl, useCardMediaRevision } from '../../shared/lib/card-media.js'
 import { useRestorableScroll } from '../../shared/hooks/use-restorable-scroll.js'
 import styles from './card-resource-overview.module.scss'
-import { buildCardResourceTree, classifyCardPromptResources, readCardSettingTarget, type CardResourceFolder, type CardResourceGroup, type CardResourceLocation } from './card-resource-directory-model.js'
+import { buildCardResourceTree, classifyCardPromptResources, readCardLoreTarget, type CardResourceFolder, type CardResourceGroup, type CardResourceLocation } from './card-resource-directory-model.js'
 
 type FolderKey = CardResourceFolder
 type Location = CardResourceLocation
@@ -32,7 +32,7 @@ export function CardResourceDirectory(props: {
   onChangeNode(id: string, partial: Partial<ContextAssetNode>): void
   onCommitNode(id: string, partial: Partial<ContextAssetNode>): void
   onRefreshCards?(): Promise<unknown>
-  onOpenSetting?(resource: PromptResource, nodeId: string): void
+  onOpenLore?(resource: PromptResource, nodeId: string): void
   selectedTreeId?: string
   expandedTreeIds?: string[]
   onTreeStateChange?(selectedId: string | undefined, expandedIds: string[]): void
@@ -59,10 +59,10 @@ export function CardResourceDirectory(props: {
   const [editorMode, setEditorMode] = useState<LongTextEditorMode>('source')
   const current = card.data?.card
   const boundIds = [...new Set([...(current?.promptResourceIds ?? []), ...(current?.externalPromptResourceIds ?? [])])]
-  const boundSettings = props.resources.filter(resource => boundIds.includes(resource.id) && resource.resourceKind === 'setting')
+  const boundLore = props.resources.filter(resource => boundIds.includes(resource.id) && resource.resourceKind === 'lore')
   const tokens = useResourceTokenSnapshot([
-    ...boundSettings.map(resource => resource.rootNode),
-    ...(current?.settingLayer.entries ?? []).map((entry, index) => ({
+    ...boundLore.map(resource => resource.rootNode),
+    ...(current?.lore.entries ?? []).map((entry, index) => ({
       id: `inline:${cardId}:${index}`, kind: 'entry', label: entry.title ?? '', body: entry.content,
     })),
   ], `${endpoint}:${cardId}`)
@@ -72,15 +72,15 @@ export function CardResourceDirectory(props: {
     queryFn: async () => Promise.all(payloadIds.map(id => api.portableExtensionPayloads.get(id).then(result => result.payload))),
     enabled: payloadIds.length > 0,
   })
-  const { ownedSettings, ownedPresets, references, extensionResources } = classifyCardPromptResources(current, props.resources)
+  const { ownedLore, ownedPresets, references, extensionResources } = classifyCardPromptResources(current, props.resources)
   const ownRules = rules.data?.rules ?? []
   const ownScripts = scripts.data?.scripts ?? []
   const stateDefinitions = definitions.data?.definitions ?? []
   const installs = extensions.data?.items ?? []
   const groups: CardResourceGroup[] = [
-    { key: 'settings', label: t('context.authoring.settings'), entries: [
-      ...(current?.settingLayer.entries ?? []).map((entry, index) => ({ id: `card-setting:${index}`, label: entry.title || entry.path || String(index + 1) })),
-      ...ownedSettings.map(resource => ({ id: resource.id, label: resource.rootNode.label })),
+    { key: 'lore', label: t('context.authoring.lore'), entries: [
+      ...(current?.lore.entries ?? []).map((entry, index) => ({ id: `card-lore:${index}`, label: entry.title || entry.path || String(index + 1) })),
+      ...ownedLore.map(resource => ({ id: resource.id, label: resource.rootNode.label })),
     ] },
     { key: 'agents', label: t('rail.agent'), entries: ownedPresets.map(resource => ({ id: resource.id, label: resource.rootNode.label })) },
     { key: 'rules', label: t('rail.textTransform'), entries: ownRules.map(rule => ({ id: rule.id, label: rule.name })) },
@@ -115,12 +115,12 @@ export function CardResourceDirectory(props: {
   ]
   const visible = groups.filter(group => group.entries.length)
   const folder = visible.find(group => group.key === location.folder)
-  const resource = [...ownedSettings, ...ownedPresets, ...references, ...extensionResources]
+  const resource = [...ownedLore, ...ownedPresets, ...references, ...extensionResources]
     .find(item => item.id === (location.item?.startsWith('resource:') ? location.item.slice(9) : location.item))
-  const node = resource && ['settings', 'agents', 'references', 'extensions'].includes(location.folder ?? '')
+  const node = resource && ['lore', 'agents', 'references', 'extensions'].includes(location.folder ?? '')
     ? findNode(resource.rootNode, location.nodeId ?? resource.rootNode.id) : undefined
   const promptRoots = new Map([
-    ...[...ownedSettings, ...ownedPresets, ...references].map(resource => [resource.id, resource.rootNode] as const),
+    ...[...ownedLore, ...ownedPresets, ...references].map(resource => [resource.id, resource.rootNode] as const),
     ...extensionResources.map(resource => [`resource:${resource.id}`, resource.rootNode] as const),
   ])
   const { nodes, targets } = buildCardResourceTree(visible, promptRoots)
@@ -159,10 +159,10 @@ export function CardResourceDirectory(props: {
         }}
         onSelect={item => {
           const target = targets.get(item.id)
-          const selectedSetting = readCardSettingTarget(item.id, targets, [...ownedSettings, ...references, ...extensionResources])
-          if (selectedSetting && props.onOpenSetting) {
+          const selectedLore = readCardLoreTarget(item.id, targets, [...ownedLore, ...references, ...extensionResources])
+          if (selectedLore && props.onOpenLore) {
             props.onTreeStateChange?.(item.id, expandedIds)
-            props.onOpenSetting(selectedSetting.resource, selectedSetting.nodeId)
+            props.onOpenLore(selectedLore.resource, selectedLore.nodeId)
             return
           }
           if (item.children?.length) {
@@ -178,7 +178,7 @@ export function CardResourceDirectory(props: {
           ? icon(item.id as FolderKey) : item.kind === 'folder'
             ? <Folder size={16} aria-hidden="true" /> : <FileText size={16} aria-hidden="true" />} />
     </div> : null}
-    {location.item && resource && ['settings', 'agents', 'references', 'extensions'].includes(location.folder ?? '')
+    {location.item && resource && ['lore', 'agents', 'references', 'extensions'].includes(location.folder ?? '')
       ? <div className={styles.directoryDetail}>
       {location.folder === 'references' || location.folder === 'extensions'
         ? <p className={styles.readOnlyOrigin}>{resource.origin?.kind === 'extension-package'
@@ -187,19 +187,19 @@ export function CardResourceDirectory(props: {
             : resource.sourceArtifactRef ? t('directory.cardResource')
               : t('directory.userResource')} · {resource.id}</p> : null}
       <ContextAssetEditor key={`${cardId}:${resource.id}:${node?.id}`}
-        activationEditable={node?.category === 'setting'}
+        activationEditable={node?.category === 'lore'}
         editorMode={editorMode} metadataOpen={metadataOpen}
         node={node} t={t}
         onChangeNode={props.onChangeNode}
         onCommitNode={props.onCommitNode}
         onEditorModeChange={setEditorMode} onMetadataOpenChange={setMetadataOpen} />
     </div> : null}
-    {location.item?.startsWith('card-setting:') && location.folder === 'settings' && current
-      ? <CardSettingEntry key={`${cardId}:${location.item}`} card={current} index={Number(location.item.slice(13))}
+    {location.item?.startsWith('card-lore:') && location.folder === 'lore' && current
+      ? <CardLoreEntry key={`${cardId}:${location.item}`} card={current} index={Number(location.item.slice('card-lore:'.length))}
           onSave={async (partial, expectedVersion, onCommitted) => {
-            const entries = current.settingLayer.entries.map((entry, index) => index === Number(location.item!.slice(13))
+            const entries = current.lore.entries.map((entry, index) => index === Number(location.item!.slice('card-lore:'.length))
               ? { ...entry, ...(partial.label !== undefined ? { title: partial.label } : {}), ...(partial.body !== undefined ? { content: partial.body } : {}) } : entry)
-            const result = await api.cards.update({ cardId, expectedVersion, settingLayer: { entries } })
+            const result = await api.cards.update({ cardId, expectedVersion, lore: { entries } })
             onCommitted(result.card.version)
             await queryClient.invalidateQueries({ queryKey: ['card-resource-directory', endpoint, cardId, 'card'] })
             await props.onRefreshCards?.()
@@ -409,10 +409,10 @@ function CardMacroEditor(props: { card: Card; name: string; onSave(name: string,
     }} />
 }
 
-function CardSettingEntry(props: { card: Card; index: number; onSave(partial: Partial<ContextAssetNode>, version: number, onCommitted: (version: number) => void): Promise<void>; t: Translator }) {
-  const entry = props.card.settingLayer.entries[props.index]
+function CardLoreEntry(props: { card: Card; index: number; onSave(partial: Partial<ContextAssetNode>, version: number, onCommitted: (version: number) => void): Promise<void>; t: Translator }) {
+  const entry = props.card.lore.entries[props.index]
   const [node, setNode] = useState<ContextAssetNode>(() => ({
-    id: `card-setting:${props.index}`, kind: 'entry', category: 'setting',
+    id: `card-lore:${props.index}`, kind: 'entry', category: 'lore',
     label: entry?.title || entry?.path || String(props.index + 1), body: entry?.content ?? '',
   }))
   const [error, setError] = useState('')
@@ -462,7 +462,7 @@ function findNode(root: ContextAssetNode, id: string): ContextAssetNode | undefi
 }
 
 function icon(folder: FolderKey) {
-  const Icon = ({ settings: BookOpen, agents: BookOpen, references: Link2, rules: Regex, scripts: ScrollText,
+  const Icon = ({ lore: BookOpen, agents: BookOpen, references: Link2, rules: Regex, scripts: ScrollText,
     macros: Braces, state: Braces, extensions: Folder, attachments: Image })[folder]
   return <Icon size={16} aria-hidden="true" />
 }

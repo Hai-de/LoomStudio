@@ -43,7 +43,7 @@ async function setup() {
         preset: { macroOptions: { tone: [{ id: 'quiet', label: 'Quiet', value: 'soft' }, { id: 'loud', label: 'Loud', value: 'bold' }] } },
       },
       contextAssets: [{
-        id: 'book', kind: 'module', label: 'World', category: 'setting',
+        id: 'book', kind: 'module', label: 'World', category: 'lore',
         children: [{ id: 'entry', kind: 'entry', label: 'Entry', body: 'World text' }],
       }],
       extensionPayloads: [{

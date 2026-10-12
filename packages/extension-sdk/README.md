@@ -6,7 +6,7 @@ Extension SDK 定义 Extension 作者侧的 TypeScript 合同。它描述 Manife
 
 Package 可以没有 Module，仅携带声明式 Prompt Resource、工具定义或转换规则。静态贡献只有经 Studio 显式导入后才形成 Application 资源；声明本身不代表已安装、已授权或已激活。
 
-Preset contribution 的 `settingMounts` / `textUses` 表达资源使用关系，支持包内 contribution 引用或外部引用；`toolMounts` 配置工具使用。它们不创建预设专属资源 Owner，也不会将外部引用内容自动打包。一个扩展可携带多个预设并共享定义，模块生命周期仍由 Host 管理，不跟随 Session 选择自动启停。
+Preset contribution 的 `loreMounts` / `textUses` 表达资源使用关系，支持包内 contribution 引用或外部引用；`toolMounts` 配置工具使用。它们不创建预设专属资源 Owner，也不会将外部引用内容自动打包。一个扩展可携带多个预设并共享定义，模块生命周期仍由 Host 管理，不跟随 Session 选择自动启停。
 
 Server Module 可用授权的 `ctx.prompt.build` 构建本安装资源或逐次 Anchor 内容，也可用 `ctx.ai.invokeModel` 显式指定模型进行直接调用；两者不要求 Session，不选择默认预设或绕过安装资源/凭据边界。接口详情见[Provider 与 PromptBuild](../../docs/architecture/application/agent/provider-and-prompt-build.md#extension-直接构建与模型调用)。
 
@@ -84,7 +84,7 @@ Timeline 的处理器，模块没有 `state.read` 时仍不会收到 State 快�
 
 Agent 检查点保存 Prompt 准备和工具间接消费的原始扩展凭据，后续 Step/恢复不重新授予旧 Prompt 新代次资格。
 暂停来源的工具被过滤并记录诊断，挂载保留；其他 Card 的私有工具引用仍拒绝。扩展管理页“携带资源”
-可查看 Settings、工具、文本规则与脚本的来源资格；资格不等于挂载或授权。
+可查看 Lore、工具、文本规则与脚本的来源资格；资格不等于挂载或授权。
 
 声明 Timeline 参与的 Client Module 只在当前故事已采用且安装/版本匹配时激活，
 `ctx.timeline.target` 提供本实例固定的 Timeline/Branch。切换目标、暂停或执行代次变化时，

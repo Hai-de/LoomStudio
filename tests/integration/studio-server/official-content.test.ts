@@ -30,8 +30,8 @@ describe('official content installation', () => {
       expect(installed.mutation).toBeUndefined()
       await expect(callRpc(port, 'application.listPromptResources', {})).resolves.toEqual(before)
       const presetId = content!.resources.find(resource => resource.resourceKind === 'preset')!.id
-      await expect(callRpc(port, 'application.listSettingMounts', { source: { kind: 'preset', id: presetId } })).resolves.toMatchObject({
-        mounts: [{ settingResourceId: 'prompt-resource.official.loom-knowledge' }],
+      await expect(callRpc(port, 'application.listLoreMounts', { source: { kind: 'preset', id: presetId } })).resolves.toMatchObject({
+        mounts: [{ loreResourceId: 'prompt-resource.official.loom-knowledge' }],
       })
       const preset = await callRpc<{ resource: { version: number } }>(port, 'application.getPromptResource', { resourceId: presetId })
       await callRpc(port, 'application.updatePromptResourceMacros', { resourceId: presetId, expectedVersion: preset.resource.version, macros: { difficulty: 'custom' } })
@@ -43,7 +43,7 @@ describe('official content installation', () => {
       const exported = await callRpc<{ base64: string; fileName: string }>(port, 'official.exportContent', input)
       expect(exported.fileName).toBe('official.starter-0.1.0.zip')
       const files = unzipSync(Buffer.from(exported.base64, 'base64'))
-      expect(Object.keys(files).sort()).toEqual(['catalog.json', 'presets/assistant.json', 'settings/knowledge.json'])
+      expect(Object.keys(files).sort()).toEqual(['catalog.json', 'lore/knowledge.json', 'presets/assistant.json'])
       const directory = await mkdtemp(join(tmpdir(), 'loom-official-roundtrip-'))
       try {
         for (const [path, bytes] of Object.entries(files)) {
@@ -79,7 +79,7 @@ describe('official content installation', () => {
     try {
       await writeFile(join(directory, 'catalog.json'), JSON.stringify({
         id: 'official.test', version: '0.1.0', name: 'Test',
-        resources: [{ id: 'invalid', path: '../outside.json' }], settingMounts: [], agents: [],
+        resources: [{ id: 'invalid', path: '../outside.json' }], loreMounts: [], agents: [],
       }))
       await expect(readOfficialContent(directory)).rejects.toThrow('Invalid official content path')
     } finally {

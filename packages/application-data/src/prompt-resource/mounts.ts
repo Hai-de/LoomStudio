@@ -3,15 +3,15 @@ import type { DatabaseSync } from 'node:sqlite'
 import {
   PromptResourceStoreError,
   type AddPresetToolMountInput,
-  type AddSettingMountInput,
+  type AddLoreMountInput,
   type ListPresetToolMountsInput,
-  type ListSettingMountsInput,
+  type ListLoreMountsInput,
   type PresetToolMount,
   type PromptResourceWriteContext,
   type ReplacePresetToolMountsInput,
-  type ReplaceSettingMountsInput,
-  type SettingMount,
-  type SettingMountSource,
+  type ReplaceLoreMountsInput,
+  type LoreMount,
+  type LoreMountSource,
 } from './types.js'
 import {
   parseObject,
@@ -28,17 +28,17 @@ import {
   recordDeletedPresetToolMountOperations,
 } from './mutations.js'
 
-function mountFromRow(row: Record<string, unknown>): SettingMount {
+function mountFromRow(row: Record<string, unknown>): LoreMount {
   const sourceKind = row.source_kind
   const sourceId = row.source_id
-  if ((sourceKind !== 'manual' && sourceKind !== 'preset') || typeof sourceId !== 'string') throw new PromptResourceStoreError('prompt_resource.mount_invalid', 'Invalid setting mount row')
-  const reference = row.reference_json === null ? undefined : parseObject(String(row.reference_json), 'Setting mount reference') as SettingMount['reference']
+  if ((sourceKind !== 'manual' && sourceKind !== 'preset') || typeof sourceId !== 'string') throw new PromptResourceStoreError('prompt_resource.mount_invalid', 'Invalid lore mount row')
+  const reference = row.reference_json === null ? undefined : parseObject(String(row.reference_json), 'Lore mount reference') as LoreMount['reference']
   return {
     id: String(row.id),
-    settingResourceId: row.setting_resource_id === null
+    loreResourceId: row.lore_resource_id === null
       ? reference?.kind === 'external' ? reference.resourceId : reference?.contributionId ?? ''
-      : String(row.setting_resource_id),
-    ...(reference ? { reference, resolvedSettingResourceId: row.setting_resource_id === null ? null : String(row.setting_resource_id) } : {}),
+      : String(row.lore_resource_id),
+    ...(reference ? { reference, resolvedLoreResourceId: row.lore_resource_id === null ? null : String(row.lore_resource_id) } : {}),
     source: sourceKind === 'manual' ? { kind: 'manual', id: 'global' } : { kind: 'preset', id: sourceId },
     orderIndex: Number(row.order_index),
     origin: parseObject(String(row.origin_json), 'origin'),
@@ -46,20 +46,20 @@ function mountFromRow(row: Record<string, unknown>): SettingMount {
   }
 }
 
-function validateMountReference(reference: SettingMount['reference']): void {
+function validateMountReference(reference: LoreMount['reference']): void {
   if (reference?.kind === 'package') {
-    validateId(reference.contributionId, 'Setting contributionId')
+    validateId(reference.contributionId, 'Lore contributionId')
   } else if (reference?.kind === 'external') {
-    validateId(reference.resourceId, 'external Setting resourceId')
+    validateId(reference.resourceId, 'external Lore resourceId')
     if (reference.origin) {
-      validateId(reference.origin.packageId, 'external Setting packageId')
-      validateId(reference.origin.contributionId, 'external Setting contributionId')
+      validateId(reference.origin.packageId, 'external Lore packageId')
+      validateId(reference.origin.contributionId, 'external Lore contributionId')
       if (reference.origin.target !== 'global' && reference.origin.target !== 'card') {
-        throw new PromptResourceStoreError('prompt_resource.mount_reference_invalid', 'Invalid external Setting target')
+        throw new PromptResourceStoreError('prompt_resource.mount_reference_invalid', 'Invalid external Lore target')
       }
     }
   } else if (reference !== undefined) {
-    throw new PromptResourceStoreError('prompt_resource.mount_reference_invalid', 'Invalid Setting mount reference')
+    throw new PromptResourceStoreError('prompt_resource.mount_reference_invalid', 'Invalid Lore mount reference')
   }
 }
 
@@ -86,9 +86,9 @@ function presetToolMountFromRow(row: Record<string, unknown>): PresetToolMount {
   }
 }
 
-function validateMountSource(database: DatabaseSync, source: SettingMountSource, requireTarget = true): void {
+function validateMountSource(database: DatabaseSync, source: LoreMountSource, requireTarget = true): void {
   if (source.kind === 'manual') {
-    if (source.id !== undefined && source.id !== 'global') throw new PromptResourceStoreError('prompt_resource.mount_source_invalid', 'Manual Setting mount source id must be global')
+    if (source.id !== undefined && source.id !== 'global') throw new PromptResourceStoreError('prompt_resource.mount_source_invalid', 'Manual Lore mount source id must be global')
     return
   }
   validateId(source.id, 'presetId')
@@ -97,9 +97,9 @@ function validateMountSource(database: DatabaseSync, source: SettingMountSource,
   if (!requireTarget) return
 }
 
-function requireSetting(database: DatabaseSync, id: string): void {
+function requireLore(database: DatabaseSync, id: string): void {
   const row = requireResourceRow(database, id)
-  if (row.resource_kind !== 'setting' || row.tombstoned) throw new PromptResourceStoreError('prompt_resource.setting_invalid', `Mount target is not an active Setting: ${id}`)
+  if (row.resource_kind !== 'lore' || row.tombstoned) throw new PromptResourceStoreError('prompt_resource.lore_invalid', `Mount target is not an active Lore: ${id}`)
 }
 
 function requirePreset(database: DatabaseSync, id: string): void {
@@ -125,34 +125,34 @@ function validatePresetToolMountFields(input: Pick<AddPresetToolMountInput, 'def
 }
 
 function isMountUniqueConstraint(error: unknown): boolean {
-  return error instanceof Error && error.message.includes('UNIQUE constraint failed: global_setting_mounts.')
+  return error instanceof Error && error.message.includes('UNIQUE constraint failed: global_lore_mounts.')
 }
 
 function isPresetToolMountUniqueConstraint(error: unknown): boolean {
   return error instanceof Error && error.message.includes('UNIQUE constraint failed: preset_tool_mounts.')
 }
 
-export function applyAddSettingMount(
+export function applyAddLoreMount(
   database: DatabaseSync,
   tx: SqliteDataTransaction,
-  input: Omit<AddSettingMountInput, keyof PromptResourceWriteContext>,
+  input: Omit<AddLoreMountInput, keyof PromptResourceWriteContext>,
   nextId: (prefix: string) => string,
   now: () => string,
-): SettingMount {
+): LoreMount {
   validateMountSource(database, input.source)
   validateMountReference(input.reference)
-  if (input.settingResourceId === null) {
-    if (!input.reference) throw new PromptResourceStoreError('prompt_resource.mount_reference_invalid', 'Unresolved Setting mount requires a reference')
+  if (input.loreResourceId === null) {
+    if (!input.reference) throw new PromptResourceStoreError('prompt_resource.mount_reference_invalid', 'Unresolved Lore mount requires a reference')
   } else {
-    validateId(input.settingResourceId, 'settingResourceId')
-    requireSetting(database, input.settingResourceId)
+    validateId(input.loreResourceId, 'loreResourceId')
+    requireLore(database, input.loreResourceId)
   }
   validateOrderIndex(input.orderIndex)
   if (input.origin !== undefined) validateJsonObject(input.origin, 'mount origin')
-  const mount: SettingMount = {
-    id: nextId('setting-mount'),
-    settingResourceId: input.settingResourceId ?? (input.reference?.kind === 'external' ? input.reference.resourceId : input.reference?.contributionId ?? ''),
-    ...(input.reference ? { resolvedSettingResourceId: input.settingResourceId } : {}),
+  const mount: LoreMount = {
+    id: nextId('lore-mount'),
+    loreResourceId: input.loreResourceId ?? (input.reference?.kind === 'external' ? input.reference.resourceId : input.reference?.contributionId ?? ''),
+    ...(input.reference ? { resolvedLoreResourceId: input.loreResourceId } : {}),
     ...(input.reference ? { reference: input.reference } : {}),
     source: input.source.kind === 'manual' ? { kind: 'manual', id: 'global' } : { kind: 'preset', id: input.source.id },
     orderIndex: input.orderIndex,
@@ -161,13 +161,13 @@ export function applyAddSettingMount(
   }
   try {
     database.prepare(`
-      INSERT INTO global_setting_mounts (
-        id, setting_resource_id, reference_json, source_kind, source_id, order_index, origin_json, created_at
+      INSERT INTO global_lore_mounts (
+        id, lore_resource_id, reference_json, source_kind, source_id, order_index, origin_json, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       mount.id,
-      input.settingResourceId,
-      mount.reference ? stringifyJson(mount.reference, 'Setting mount reference') : null,
+      input.loreResourceId,
+      mount.reference ? stringifyJson(mount.reference, 'Lore mount reference') : null,
       mount.source.kind,
       mount.source.id ?? 'global',
       mount.orderIndex,
@@ -176,7 +176,7 @@ export function applyAddSettingMount(
     )
   } catch (error) {
     if (isMountUniqueConstraint(error)) {
-      throw new PromptResourceStoreError('prompt_resource.mount_conflict', `Setting mount already exists: ${mount.settingResourceId}`)
+      throw new PromptResourceStoreError('prompt_resource.mount_conflict', `Lore mount already exists: ${mount.loreResourceId}`)
     }
     throw error
   }
@@ -187,33 +187,33 @@ export function applyAddSettingMount(
   return mount
 }
 
-export function applyReplaceSettingMounts(
+export function applyReplaceLoreMounts(
   database: DatabaseSync,
   tx: SqliteDataTransaction,
-  input: Omit<ReplaceSettingMountsInput, keyof PromptResourceWriteContext>,
+  input: Omit<ReplaceLoreMountsInput, keyof PromptResourceWriteContext>,
   nextId: (prefix: string) => string,
   now: () => string,
-): SettingMount[] {
+): LoreMount[] {
   validateMountSource(database, input.source)
   const seen = new Set<string>()
   for (const mount of input.mounts) {
-    const identity = mount.settingResourceId ?? JSON.stringify(mount.reference)
-    if (seen.has(identity)) throw new PromptResourceStoreError('prompt_resource.mount_duplicate', `Setting mount is duplicated: ${identity}`)
+    const identity = mount.loreResourceId ?? JSON.stringify(mount.reference)
+    if (seen.has(identity)) throw new PromptResourceStoreError('prompt_resource.mount_duplicate', `Lore mount is duplicated: ${identity}`)
     seen.add(identity)
     validateMountReference(mount.reference)
-    if (mount.settingResourceId !== null) {
-      validateId(mount.settingResourceId, 'settingResourceId')
-      requireSetting(database, mount.settingResourceId)
+    if (mount.loreResourceId !== null) {
+      validateId(mount.loreResourceId, 'loreResourceId')
+      requireLore(database, mount.loreResourceId)
     } else if (!mount.reference) {
-      throw new PromptResourceStoreError('prompt_resource.mount_reference_invalid', 'Unresolved Setting mount requires a reference')
+      throw new PromptResourceStoreError('prompt_resource.mount_reference_invalid', 'Unresolved Lore mount requires a reference')
     }
     validateOrderIndex(mount.orderIndex)
     if (mount.origin !== undefined) validateJsonObject(mount.origin, 'mount origin')
   }
   const sourceId = input.source.kind === 'manual' ? 'global' : input.source.id
   recordDeletedMountOperations(database, tx, 'source_kind = ? AND source_id = ?', input.source.kind, sourceId)
-  database.prepare('DELETE FROM global_setting_mounts WHERE source_kind = ? AND source_id = ?').run(input.source.kind, sourceId)
-  const mounts = input.mounts.map(mount => applyAddSettingMount(database, tx, {
+  database.prepare('DELETE FROM global_lore_mounts WHERE source_kind = ? AND source_id = ?').run(input.source.kind, sourceId)
+  const mounts = input.mounts.map(mount => applyAddLoreMount(database, tx, {
     ...mount,
     source: input.source,
   }, nextId, now))
@@ -299,19 +299,19 @@ export function applyReplacePresetToolMounts(
   }, nextId, now))
 }
 
-export function listMounts(database: DatabaseSync, input: ListSettingMountsInput = {}): SettingMount[] {
+export function listMounts(database: DatabaseSync, input: ListLoreMountsInput = {}): LoreMount[] {
   if (input.source) {
     if (input.source.kind === 'preset') validateId(input.source.id, 'presetId')
     else if (input.source.id !== undefined && input.source.id !== 'global') {
-      throw new PromptResourceStoreError('prompt_resource.mount_source_invalid', 'Manual Setting mount source id must be global')
+      throw new PromptResourceStoreError('prompt_resource.mount_source_invalid', 'Manual Lore mount source id must be global')
     }
   }
   const clauses: string[] = []
   const values: string[] = []
   if (input.source) { clauses.push('source_kind = ?', 'source_id = ?'); values.push(input.source.kind, input.source.id ?? 'global') }
-  if (input.settingResourceId) { validateId(input.settingResourceId, 'settingResourceId'); clauses.push('setting_resource_id = ?'); values.push(input.settingResourceId) }
+  if (input.loreResourceId) { validateId(input.loreResourceId, 'loreResourceId'); clauses.push('lore_resource_id = ?'); values.push(input.loreResourceId) }
   const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : ''
-  return (database.prepare(`SELECT id, setting_resource_id, reference_json, source_kind, source_id, order_index, origin_json, created_at FROM global_setting_mounts ${where} ORDER BY order_index ASC, id ASC`).all(...values) as Array<Record<string, unknown>>).map(mountFromRow)
+  return (database.prepare(`SELECT id, lore_resource_id, reference_json, source_kind, source_id, order_index, origin_json, created_at FROM global_lore_mounts ${where} ORDER BY order_index ASC, id ASC`).all(...values) as Array<Record<string, unknown>>).map(mountFromRow)
 }
 
 export function listPresetToolMounts(database: DatabaseSync, input: ListPresetToolMountsInput = {}): PresetToolMount[] {

@@ -16,7 +16,7 @@
 - 不恢复 Agent Profile，不新增独立预设安装包。完整配套预设以轻量扩展分发，纯骨架仍可按单资源导出。
 - SQL 保留独立资源身份与版本，使用配置持久化。来源/所有者仍是用户、角色、扩展；不新增预设来源、所有权或资源父子关系。
 - 区分包来源/安装目标、资源归属、使用引用、运行生效范围和状态存储范围。
-- Settings、正则、工具等使用已有或必要的引用配置表达采用关系，不区分“预设内部专属”与“外部引用”两种机制。
+- Lore、正则、工具等使用已有或必要的引用配置表达采用关系，不区分“预设内部专属”与“外部引用”两种机制。
 - 扩展可提供默认使用配置，导入为正常可编辑挂载；注册资源不等于执行或全局启用，只有一个使用者也不改变所有权。
 - 同一内容可被多个预设使用，各自的使用开关/顺序不改写共享定义；平台不为了这种复用自动复制资源。
 - 预设可以被不同运行上下文使用；停止其中一次运行不得终止其他调用。不据此直接增加长期预设实例系统。
@@ -34,11 +34,11 @@
 - 生成期间不更换主写作接收方。暂停后若改用其他预设/Session，不能继续旧任务，需重新发消息；旧历史和已提交副作用保留。
 - 不建设跨预设历史工具转换；新 Session 不自动继承旧 Transcript、工具执行状态或 continuation。
 - 换 Session 不等于换 Timeline；临时创作对话的输入和回复不得自动写入剧情正文。
-- 从预设详情跳到 Settings/正则等编辑页。目标不在当前集合时，临时目录替换显示，不追加到主写作集合。
+- 从预设详情跳到 Lore/正则等编辑页。目标不在当前集合时，临时目录替换显示，不追加到主写作集合。
 - 临时打开可编辑原资源；顶部历史返回恢复原页面和选中项。打开/返回都不能安装、启用或挂载资源。
 - 全部资源保持可浏览；静态“选入/启用”不伪装成本轮已触发。动态触发结果归调试。
-- 公共 Settings 来源不默认注入，由用户显式配置采用；角色世界书可以默认选入但可取消，不能因为角色归属或 Timeline 关联被强制注入。
-- Settings 的来源选择属于预设/资源使用配置，不因只读浏览发生变化；取消使用不删除原资源。此规则不覆盖已确认默认参与的全局公共正则。
+- 公共 Lore 来源不默认注入，由用户显式配置采用；角色世界书可以默认选入但可取消，不能因为角色归属或 Timeline 关联被强制注入。
+- Lore 的来源选择属于预设/资源使用配置，不因只读浏览发生变化；取消使用不删除原资源。此规则不覆盖已确认默认参与的全局公共正则。
 
 ## 当前事实与复用入口
 
@@ -47,14 +47,14 @@
 | 当前事实 | 入口 |
 | --- | --- |
 | PromptResource 按资源、节点、修订存储，节点有 parent_id；版本冲突仍为资源级 | [schema](../../../packages/application-data/src/prompt-resource/schema.ts)、[mutations](../../../packages/application-data/src/prompt-resource/mutations.ts) |
-| Settings 与工具已有独立 Mount 结构 | [mounts](../../../packages/application-data/src/prompt-resource/mounts.ts) |
-| 扩展导入保存 settingMounts、toolMounts、scriptMounts；后者指向预设 | [扩展导入](../../../packages/application-runtime/src/runtime/extensions-runtime.ts) |
-| 暂停前已把全局 Settings 自动收集改为当前预设 Mount；来源与角色选择、往返和 UI 仍未完成 | [agent-turn](../../../packages/application-runtime/src/agents/agent-turn.ts) |
+| Lore 与工具已有独立 Mount 结构 | [mounts](../../../packages/application-data/src/prompt-resource/mounts.ts) |
+| 扩展导入保存 loreMounts、toolMounts、scriptMounts；后者指向预设 | [扩展导入](../../../packages/application-runtime/src/runtime/extensions-runtime.ts) |
+| 暂停前已把全局 Lore 自动收集改为当前预设 Mount；来源与角色选择、往返和 UI 仍未完成 | [agent-turn](../../../packages/application-runtime/src/agents/agent-turn.ts) |
 | 正则已有 preset owner 匹配；扩展规则的 owner 与 origin 需要保留区分 | [文本管线](../../../packages/application-runtime/src/runtime/transforms-runtime.ts)、[规则类型](../../../packages/application-runtime/src/transforms/history-text.ts) |
 | 暂停前已移除 Session 改绑字段并在 Store/Runtime/RPC 拒绝额外字段；主接收方分离仍未完成 | [Session 类型](../../../packages/application-data/src/agent/types.ts)、[Agent Runtime](../../../packages/application-runtime/src/runtime/agents-runtime.ts) |
 | Extension Host 有模块作用域、取消与 dispose；这不是预设使用实例管理 | [Host 实例](../../../packages/extension-sdk/extension-host/src/instance.ts) |
 | 已有逐次 Prompt 附加、独立 build、显式 invokeModel | [已归档 API 计划](../../archive/plans/extension-prompt-and-model-api-plan.md) |
-| 正式导航支持资源引用目标，已有 Settings 临时打开入口；其他类别需逐项核实接线 | [导航](../../../apps/studio-client/src/shared/studio-shell/use-studio-navigation.ts)、[资源面板](../../../apps/studio-client/src/app/studio-resource-panels.tsx) |
+| 正式导航支持资源引用目标，已有 Lore 临时打开入口；其他类别需逐项核实接线 | [导航](../../../apps/studio-client/src/shared/studio-shell/use-studio-navigation.ts)、[资源面板](../../../apps/studio-client/src/app/studio-resource-panels.tsx) |
 | VFS 是 ID/版本绑定的目录投影，不要求整包 JSON 存储 | [资源 VFS](../../../packages/application-runtime/src/vfs/resource-filesystem.ts) |
 
 已确认草稿：
@@ -70,8 +70,8 @@
 
 - 预设是运行前置的声明式消费配置，不承担扩展安装、代码生命周期、执行权限或 Transcript 持久化。
 - 本地使用配置引用稳定的资源/工具 ID，不用名称或文件路径作为身份。重命名和目录投影变化不应断开引用。
-- Settings 优先复用 Setting Mount，工具复用 Preset Tool Mount；正则按现有规则身份增加必要使用配置，不造统一万能绑定表。
-- 现有 `SettingMount.source.kind = preset` 表示挂载的消费位置，不表示 Setting 的作者来源或所有者；保留概念区分，不为词名重新造存储。
+- Lore 优先复用 Lore Mount，工具复用 Preset Tool Mount；正则按现有规则身份增加必要使用配置，不造统一万能绑定表。
+- 现有 `LoreMount.source.kind = preset` 表示挂载的消费位置，不表示 Lore 的作者来源或所有者；保留概念区分，不为词名重新造存储。
 - 扩展分发使用包内局部贡献 ID，导入通过现有映射解析为安装后的领域 ID；外部引用需要明确的解析合同，不写死另一台机器的数据库 ID。
 - 外部引用与包内局部 ID 必须区分；有扩展来源时用包与贡献身份在合法安装上下文中解析。用户自有资源没有可移植来源时保留原身份为未解析引用，不将异机数据库 ID 冒充已解析本地资源，不建设自动依赖安装器。
 - 引用不代表归属，也不触发递归打包或自动复制依赖。导出只包含实际纳入扩展文件与贡献清单的资源；外部资源须经显式复制或移动改变归属后才进入包。
@@ -90,8 +90,8 @@
 `packages/application-runtime/src/runtime/extensions-runtime.ts`、`src/transforms/`、
 `packages/extension-sdk/src/index.ts`、必要的 Shared 合同与 Server 扩展解析/编解码。
 
-1. 列出 Settings、正则/提取器、工具、宏、脚本现有定义/来源/使用配置的对照表，确定每一项唯一权威字段。
-2. 复用 Settings/工具 Mount，为缺少的正则采用关系补必要配置；保留资源原来源，不加 preset 所有者或文件夹嵌套约束。
+1. 列出 Lore、正则/提取器、工具、宏、脚本现有定义/来源/使用配置的对照表，确定每一项唯一权威字段。
+2. 复用 Lore/工具 Mount，为缺少的正则采用关系补必要配置；保留资源原来源，不加 preset 所有者或文件夹嵌套约束。
 3. 同包局部 ID 导入时解析为稳定领域 ID，校验预设存在、类型、安装边界；更新/导出/复制时保留或正确重映射。
 4. 保留现有共享工具挂载；作者宏继续使用已有预设配置，不拆成新的宏资源库。
 5. 预设删除只处理其使用配置；资源删除/扩展更新后保留失效引用与可见诊断，不顺带删除使用者的 Transcript/State。包更新仍遵循既有覆盖策略，不另外保存旧预设副本。
@@ -107,8 +107,8 @@
 现有宏/工具编译消费者、`src/types.ts`、必要 RPC 合同。
 
 1. 基于调用预设的使用配置和合法角色/安装上下文收集资源；不基于当前 UI 选中项或资源“属于某预设”。
-2. 接通预设 Settings 的实际消费，合并所配置来源与显式 Mount；按身份去重，保留顺序与来源。
-   公共来源只有被显式配置采用后才进入候选集合；角色默认世界书支持取消选入。不要无条件合并全部全局 Mount 或强制合并全部角色 Settings。
+2. 接通预设 Lore 的实际消费，合并所配置来源与显式 Mount；按身份去重，保留顺序与来源。
+   公共来源只有被显式配置采用后才进入候选集合；角色默认世界书支持取消选入。不要无条件合并全部全局 Mount 或强制合并全部角色 Lore。
 3. Preview/Run 使用同一准备路径；资源启用后仍经过 Activation、关键词、宏等已有规则。
 4. 正则/提取器按公共规则和当前预设的使用配置参与，不依赖新增预设所有权；预设显式配置优先于全局配置，同一规则被预设禁用时不能因公共来源再次加入。
    子 Agent 默认采用全局公共正则；角色自有正则是否参与取决于明确的角色处理上下文，不因 Session 出现在同一面板就自动纳入。
@@ -163,8 +163,8 @@ Preview 与 Run 相同输入下收集一致，未触发条目不伪装成已注�
 `app/studio-resource-panels.tsx`、必要的状态/API 接线。
 
 - 移除预设详情的“设为主写作预设”；可保留“用此预设新建对话”。
-- 预设详情保留工具/模型/编排编辑，列出采用的 Settings、正则和现有脚本挂载的编辑入口。
-- 2026-10-02 UI 调整：模型配置保留顶部公共区；使用配置分为 Settings、正则 / 提取器、工具三个子 Tab。角色世界书开关放在 Settings 页，资源行与图标操作统一；Tab 切换不卸载草稿所有者，不丢未保存字段或保存中状态。
+- 预设详情保留工具/模型/编排编辑，列出采用的 Lore、正则和现有脚本挂载的编辑入口。
+- 2026-10-02 UI 调整：模型配置保留顶部公共区；使用配置分为 Lore、正则 / 提取器、工具三个子 Tab。角色世界书开关放在 Lore 页，资源行与图标操作统一；Tab 切换不卸载草稿所有者，不丢未保存字段或保存中状态。
 - 使用配置启用状态与实际运行状态分开显示，不用一个 Toggle 同时表示两者；不为预设另建脚本生命周期。
 - Session 列表加号选择预设创建对话，每个对话显示绑定预设，不提供原地更换预设控件。
 - 创建界面提供“设为主写作对话”勾选项，创建成功后才按用户选择更换主接收方，失败保留旧接收方。
@@ -180,12 +180,12 @@ Preview 与 Run 相同输入下收集一致，未触发条目不伪装成已注�
 `shared/studio-shell/`、`app/studio-resource-panels.tsx` 及相邻面板接线。
 
 - 注册表不增加预设选择器。“当前使用”跟随主写作，“全部资源”保持稳定、按真实归属展示。
-- 预设引用不改写 Settings 来源；在子预设中采用资源不把它挂到主写作。
-- 预设的 Settings 使用配置支持手动采用公共来源、取消角色世界书；注册表展示实际选入，不以“全局存在”冒充“所有 Agent 使用”。
+- 预设引用不改写 Lore 来源；在子预设中采用资源不把它挂到主写作。
+- 预设的 Lore 使用配置支持手动采用公共来源、取消角色世界书；注册表展示实际选入，不以“全局存在”冒充“所有 Agent 使用”。
 - 从预设详情跳到相应编辑器。目标不属于当前集合时临时替换目录，保持原资源身份和可编辑性。
 - 复用 Header 历史返回，恢复原预设、节点与页面状态，不新增竖排或局部“回原视图”按钮。
 - 临时打开期间不修改主选择、引用关系或全局启用状态；编辑提交走正常版本校验，失败保留草稿。
-- Settings、正则、宏按各自已有编辑器接线；宏是预设作者配置，不强行伪造成独立资源。
+- Lore、正则、宏按各自已有编辑器接线；宏是预设作者配置，不强行伪造成独立资源。
 - 脚本、附件可以留在包/预设详情编辑，不为一致外观强制所有资源跳转。
 - 不搬用草稿的内部状态为业务真值，不修改无关 Dock 或重做统一工作台。
 
@@ -197,11 +197,11 @@ U2 可先复用正式临时导航，依赖 B1/B2 的归属与有效资源结果�
 每阶段由实施者提供一次最小证据，集成者不机械重跑：
 
 - B1：真实 SQLite 引用往返/版本冲突/跨安装拒绝、共享定义的独立使用配置用例，避免只断言对象形状。
-- B2：两个预设、一个公共规则、一个仅由 A 采用的 Settings 的 Preview/Run 与后台隔离用例。
+- B2：两个预设、一个公共规则、一个仅由 A 采用的 Lore 的 Preview/Run 与后台隔离用例。
 - B3：按真实缺口验证主选择通知/调用结果、权限可见性与订阅释放；无切换自动计费或停包副作用，不为预设实例系统编写测试。
 - B4/U1：Session 不能改绑预设；查看子会话不改变主接收方，Narrative 投递只到主会话；换目标不能恢复旧任务，新建不继承工具历史，失败不丢输入。
 - U2：跳转编辑未挂载资源、返回恢复、无挂载副作用；既有导航测试优先扩展。
-- 官方助手实验：使用 `official/extensions/loom-assistant` 实际文件，预设引用包内知识 Settings 与默认关闭、由预设显式采用的 `assistant-note` Display 正则。验证导入映射、Preview 知识注入、`<LoomNote>` 的 Display 投影，以及其他预设不采用时原文不变；不以仅注册成功代替生效证据。真实模型输出与浏览器 Markdown 观感另行验收。
+- 官方助手实验：使用 `official/extensions/loom-assistant` 实际文件，预设引用包内知识 Lore 与默认关闭、由预设显式采用的 `assistant-note` Display 正则。验证导入映射、Preview 知识注入、`<LoomNote>` 的 Display 投影，以及其他预设不采用时原文不变；不以仅注册成功代替生效证据。真实模型输出与浏览器 Markdown 观感另行验收。
 - 仅公共接口改变时补相关包类型检查；不默认执行全仓测试或构建。
 - 视觉与手感由用户验收；自动化不能替代。实际 DOM/事件问题才做定向浏览器诊断。
 
@@ -211,7 +211,7 @@ U2 可先复用正式临时导航，依赖 B1/B2 的归属与有效资源结果�
 
 - **可执行贡献已收束**：平台提供上下文、必要事件与调用能力，扩展自行编排和管理副作用；不建立预设独立实例，不因切换主写作自动停用整个扩展。具体事件名称与载荷按现有合同和真实消费者确定，不预先铺满事件目录。
 - **暂停恢复已确认**：改用其他 Session/预设不能继续旧任务，需重新发消息；保留历史与已提交事实，不构造跨预设 continuation。
-- **来源选择已收束**：公共 Settings 不默认注入，用户显式配置采用；角色世界书可取消选入。子 Agent 默认使用全局公共正则，角色自有正则不保证继承；不能把来源选择扩大为额外数据访问授权。
+- **来源选择已收束**：公共 Lore 不默认注入，用户显式配置采用；角色世界书可取消选入。子 Agent 默认使用全局公共正则，角色自有正则不保证继承；不能把来源选择扩大为额外数据访问授权。
 - **跨预设保留正则效果**：用户提出未来按规则添加持久化选项，可能覆盖 Display 与提示词处理；本阶段保留现有历史 Display 语义，不建设来源快照、规则副本或删除后保留机制。
 
 配置化后的引用决策已确认：
@@ -235,49 +235,49 @@ U2 可先复用正式临时导航，依赖 B1/B2 的归属与有效资源结果�
 
 - [x] 关系模型和 DEV 草稿交互讨论完成。
 - [x] 后端/UI 实施入口、阶段、边界和引用决策记录。
-- [x] B1 Settings Mount 与 textUses 使用配置、包内映射及外部未解析引用往返。
-- [x] B2 预设采用 Settings、取消角色默认 Settings、正则/提取器采用配置与诊断。
+- [x] B1 Lore Mount 与 textUses 使用配置、包内映射及外部未解析引用往返。
+- [x] B2 预设采用 Lore、取消角色默认 Lore、正则/提取器采用配置与诊断。
 - [x] B3 核对现有 Host 订阅释放、Prompt Build 日志及 Run RPC；无确认的新事件消费者，本轮不增加事件系统。
 - [x] B4 后端固定预设 Session、暂停任务 abandon 与两条恢复路径拒绝。
 - [x] U1/U2 正式 UI 接线及聚焦验证（不代表完整端到端验收）。
-- [x] 官方助手实际资源实验（Settings/规则/提取器导入、Preview 和 Display 投影）。
+- [x] 官方助手实际资源实验（Lore/规则/提取器导入、Preview 和 Display 投影）。
 - [ ] 浏览器交互、视觉与真实模型输出人工验收。
 
-后端验证：共享规则 A/B 隔离 1 例、Setting Preview/Run 1 例、取消角色默认 Settings 1 例、
-暂停任务 abandon 与双路径拒绝恢复 1 例；规则包内/外部映射 2 例、缺失外部 Setting 往返 1 例通过。
-Settings Mount 聚焦 2 例、固定 Session 3 例也已通过；暂停前 Settings Mount 失败已修正，不再作为当前失败。
+后端验证：共享规则 A/B 隔离 1 例、Lore Preview/Run 1 例、取消角色默认 Lore 1 例、
+暂停任务 abandon 与双路径拒绝恢复 1 例；规则包内/外部映射 2 例、缺失外部 Lore 往返 1 例通过。
+Lore Mount 聚焦 2 例、固定 Session 3 例也已通过；暂停前 Lore Mount 失败已修正，不再作为当前失败。
 最后后端修改后 application-data/application-runtime/extension-sdk/studio-server 定向类型检查通过。
 Mount v4→v5 真实 SQLite 迁移聚焦 1 例通过，原 ID、来源、顺序、目标和 origin 保留，FK 检查为空。
 
-前端已接固定 Session、主接收与查看态分离、显式首次建主、textUses/useCardSettings 的版本保存与临时编辑；
+前端已接固定 Session、主接收与查看态分离、显式首次建主、textUses/useCardLore 的版本保存与临时编辑；
 暂停换主使用 abandon，取消失败保留目标。首用与子会话投递聚焦用例通过；
-Settings 空引用接线完成，按 Mount ID 保留、排序和删除缺失项，保存新增本地资源不丢未解析关系，聚焦 1 例通过。
+Lore 空引用接线完成，按 Mount ID 保留、排序和删除缺失项，保存新增本地资源不丢未解析关系，聚焦 1 例通过。
 client 类型检查仅剩既有 `preset.panel.views` 翻译键诊断；未把类型检查阻塞称为通过，也未运行完整旧 Narrative 测试文件。
 
-DEV 草稿已移除预设所有权字段和专属目录，使用关系独立于资源归属，演示两个预设共享同一 Settings 且启用配置独立；两处 TSX 语法检查通过。
+DEV 草稿已移除预设所有权字段和专属目录，使用关系独立于资源归属，演示两个预设共享同一 Lore 且启用配置独立；两处 TSX 语法检查通过。
 尚无本轮浏览器或真实模型验收；整体视觉与手感由用户确认。
 官方助手实验 2 例通过：测试读取实际 manifest 的全部 Prompt、正则与提取器贡献，证明安装 ID 映射、
 知识与展示说明进入 Preview、助手的 `<LoomNote>` 转为 Markdown，而未采用规则的预设保持原文。
 官方示例同步修正知识节点命名空间与禁止自行指定 owner 的旧规则/提取器；默认关闭，通过助手预设显式采用。
 测试 fixture 未提供 blobStore，跳过 scriptMounts，不能作为 Loom Script 导入或渲染器验收。
 手动试用前需更新或重新导入修改后的官方助手包；本轮没有操作用户数据库或调用真实模型。
-2026-10-02 配置详情子 Tab 与紧凑列表已实施；Settings 搜索/采用、排序/编辑/移除及工具来源折叠保留。
-`preset-text-uses`、`preset-setting-uses` 聚焦 2 例通过，覆盖跨 Tab 草稿与保存中状态、CAS 失败后完整重试、缺失 Mount 身份保留。client 定向类型检查仍仅报既有 `preset.panel.views` 翻译键诊断，未做本轮浏览器视觉验收。
-随后按用户反馈改为复用正式 FileTree：Settings 与正则/提取器按来源文件夹折叠，搜索覆盖已采用和候选资源，移除逐行分隔线，缺失引用保留在单独目录。
-修复 RPC `replaceSettingMounts` 的旧 `settingResourceIds` 前置检查，统一由共享 Schema 接受 Mount 身份列表或旧资源 ID 列表。
+2026-10-02 配置详情子 Tab 与紧凑列表已实施；Lore 搜索/采用、排序/编辑/移除及工具来源折叠保留。
+`preset-text-uses`、`preset-lore-uses` 聚焦 2 例通过，覆盖跨 Tab 草稿与保存中状态、CAS 失败后完整重试、缺失 Mount 身份保留。client 定向类型检查仍仅报既有 `preset.panel.views` 翻译键诊断，未做本轮浏览器视觉验收。
+随后按用户反馈改为复用正式 FileTree：Lore 与正则/提取器按来源文件夹折叠，搜索覆盖已采用和候选资源，移除逐行分隔线，缺失引用保留在单独目录。
+修复 RPC `replaceLoreMounts` 的旧 `loreResourceIds` 前置检查，统一由共享 Schema 接受 Mount 身份列表或旧资源 ID 列表。
 此次三文件聚焦测试共 4 例通过，覆盖来源搜索、折叠、草稿与 Mount 身份保留、新旧 RPC 输入和非法输入拒绝；server 类型检查通过，client 仍仅有既有翻译键错误。未操作用户数据库验证保存，未做浏览器视觉验收。
 扩展 ZIP 仍只打包实际磁盘文件，不支持将数据库编辑自动回写 ZIP；引用不会自动变为包内容。
 主接收方是客户端本地持久选择，没有跨客户端共享的后端主路由约束。
 旧包体系计划维持归档，不重新打开整套重构。
 2026-10-02 后续 UI 修订：工具配置也复用 FileTree，保留来源折叠、搜索及工具说明展开，删除旧树和逐行分隔线。
-Settings、正则/提取器、工具统一使用 Settings 目录的图标开关；启用资源图标高亮，停用行弱化。
-按用户新决定取消 Settings 上下移控件（不改现有持久化顺序合同），取消列表编辑按钮，点击 Settings/规则资源行跳转编辑。
+Lore、正则/提取器、工具统一使用 Lore 目录的图标开关；启用资源图标高亮，停用行弱化。
+按用户新决定取消 Lore 上下移控件（不改现有持久化顺序合同），取消列表编辑按钮，点击 Lore/规则资源行跳转编辑。
 两文件聚焦 3 例通过，覆盖引用身份、开关保存、工具挂载参数保留与说明展开、跨 Tab 草稿和 CAS 失败重试。
 client 定向类型检查仍仅报既有 `preset.panel.views` 翻译键诊断；视觉与实际浏览器点击仍由用户验收。
-2026-10-02 当前角色 Settings 展示修正：预设配置接入当前角色绑定，角色资源分组置顶、资源使用星号，区分随角色默认采用与显式引用。
-显示状态跟随 `useCardSettings` 草稿，不为了展示添加 Mount；默认采用由角色世界书总开关控制，关闭后仍可显式采用，资源触发条件不因此跳过。
+2026-10-02 当前角色 Lore 展示修正：预设配置接入当前角色绑定，角色资源分组置顶、资源使用星号，区分随角色默认采用与显式引用。
+显示状态跟随 `useCardLore` 草稿，不为了展示添加 Mount；默认采用由角色世界书总开关控制，关闭后仍可显式采用，资源触发条件不因此跳过。
 两文件聚焦 4 例通过，新增覆盖角色分组排序、星号标记、继承状态及草稿联动；client 类型检查仍仅有既有翻译键错误，未做浏览器人工验收。
 2026-10-02 文档收尾：按当前源码同步 Agent、PromptBuild、Data、文本管线、Extension 和导航 Architecture，以及 Client / Server / application-data / application-runtime / shared / extension-sdk README。
-移除“允许 Session 改绑”“预设 Settings 仅兼容”等过时描述，补齐消费配置与归属分离、空引用、导出边界及正式 FileTree 交互；现存旧正则 Preset Owner 按实际支持记录，不宣称已删除。本轮只改文档，核对相对链接与标题锚点及 Diff，不重跑代码测试或模型调用。
+移除“允许 Session 改绑”“预设 Lore 仅兼容”等过时描述，补齐消费配置与归属分离、空引用、导出边界及正式 FileTree 交互；现存旧正则 Preset Owner 按实际支持记录，不宣称已删除。本轮只改文档，核对相对链接与标题锚点及 Diff，不重跑代码测试或模型调用。
 2026-10-02 Agent Chat 会话选择后续改进：抽出 `AgentSessionPicker`，用名称输入框和搜索弹窗代替原生下拉，支持按名称/预设搜索、直接重命名和独立指定主写作。
 新建对话弹窗改为来源可搜索的预设列表，保留可选主写作及固定 Session 绑定；复用现有重命名/换主/创建操作，不新增 RPC 或生命周期。两个聚焦文件 7 例及 client 类型检查通过；未操作用户数据、未做浏览器视觉验收。

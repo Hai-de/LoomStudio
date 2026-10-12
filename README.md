@@ -74,7 +74,7 @@ Loom Studio 将提示词编排（PromptBuild）、非线性时间线分支（Nar
 ```mermaid
 flowchart TD
     card["Card Bundle<br/>角色资源"] --> prompt
-    settings["Setting Layers<br/>设定资源"] --> prompt
+    settings["Lore<br/>设定资源"] --> prompt
     prompt["PromptBuild DFS Pipeline<br/>有序树与局部 Slot"] --> messages
     messages["Compiled Messages[]<br/>独立 Message 块"] --> provider
     provider["Provider Gateway & LLM"] --> output

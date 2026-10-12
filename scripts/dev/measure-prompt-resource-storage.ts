@@ -16,7 +16,7 @@ import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import type { JsonValue } from '../../packages/shared/src/index.js'
 
-const SETTING_ENTRY_COUNT = 500
+const LORE_ENTRY_COUNT = 500
 const PRESET_ENTRY_COUNT = 100
 const UPDATE_COUNT = 100
 const ENTRY_BODY_BYTES = 1024
@@ -29,7 +29,7 @@ const DOCUMENT_TYPE = 'airp.promptResource'
 type FixtureNode = {
   id: string
   kind: 'module' | 'entry'
-  category: 'setting' | 'preset'
+  category: 'lore' | 'preset'
   label: string
   enabled: true
   body: string
@@ -37,7 +37,7 @@ type FixtureNode = {
 }
 
 type FixtureResource = {
-  resourceKind: 'setting' | 'preset'
+  resourceKind: 'lore' | 'preset'
   rootNode: FixtureNode
 }
 
@@ -130,16 +130,16 @@ async function createEngineBundle(
 
 async function measureV1(
   root: string,
-  fixture: { setting: FixtureResource; preset: FixtureResource },
+  fixture: { lore: FixtureResource; preset: FixtureResource },
 ): Promise<StorageMeasurement> {
   const bundle = await createEngineBundle(root, 'v1-document-store')
   let documents: SqliteDocumentStore | undefined
   try {
     documents = createSqliteDocumentStore({ engine: bundle.engine })
     await documents.write({
-      id: 'fixture.setting',
+      id: 'fixture.lore',
       type: DOCUMENT_TYPE,
-      content: fixture.setting as unknown as JsonValue,
+      content: fixture.lore as unknown as JsonValue,
       actor: ACTOR,
       reason: 'storage-characterization.create',
     })
@@ -156,10 +156,10 @@ async function measureV1(
     let version = 1
     const startedAt = performance.now()
     for (let revision = 1; revision <= UPDATE_COUNT; revision += 1) {
-      const content = structuredClone(fixture.setting)
+      const content = structuredClone(fixture.lore)
       content.rootNode.children![0]!.body = makeBody(0, revision)
       const result = await documents.write({
-        id: 'fixture.setting',
+        id: 'fixture.lore',
         type: DOCUMENT_TYPE,
         content: content as unknown as JsonValue,
         expectedVersion: version,
@@ -211,7 +211,7 @@ async function measureV1(
 
 async function measureV2(
   root: string,
-  fixture: { setting: FixtureResource; preset: FixtureResource },
+  fixture: { lore: FixtureResource; preset: FixtureResource },
 ): Promise<StorageMeasurement> {
   const bundle = await createEngineBundle(root, 'v2-prompt-resource-store')
   let store: PromptResourceStore | undefined
@@ -222,9 +222,9 @@ async function measureV2(
       now: () => '2026-08-19T00:00:00.000Z',
     })
     await store.createResource({
-      id: 'fixture.setting',
-      resourceKind: 'setting',
-      rootNode: fixture.setting.rootNode,
+      id: 'fixture.lore',
+      resourceKind: 'lore',
+      rootNode: fixture.lore.rootNode,
       actor: ACTOR,
       reason: 'storage-characterization.create',
     })
@@ -242,14 +242,14 @@ async function measureV2(
     const startedAt = performance.now()
     for (let revision = 1; revision <= UPDATE_COUNT; revision += 1) {
       const result = await store.mutateResource({
-        resourceId: 'fixture.setting',
+        resourceId: 'fixture.lore',
         expectedVersion: version,
         actor: ACTOR,
         reason: 'storage-characterization.update',
         mutations: [
           {
             kind: 'node.update',
-            nodeId: 'fixture.setting.entry.000',
+            nodeId: 'fixture.lore.entry.000',
             patch: { body: makeBody(0, revision) },
           },
         ],
@@ -312,7 +312,7 @@ const root = await mkdtemp(
 )
 try {
   const fixture = {
-    setting: makeResource('setting', SETTING_ENTRY_COUNT),
+    lore: makeResource('lore', LORE_ENTRY_COUNT),
     preset: makeResource('preset', PRESET_ENTRY_COUNT),
   }
   const v1 = await measureV1(root, fixture)
@@ -322,11 +322,11 @@ try {
       {
         characterization: 'local-only; not a performance SLA',
         fixture: {
-          settingEntries: SETTING_ENTRY_COUNT,
+          loreEntries: LORE_ENTRY_COUNT,
           presetEntries: PRESET_ENTRY_COUNT,
           updateCount: UPDATE_COUNT,
           entryBodyBytes: ENTRY_BODY_BYTES,
-          updatedNode: 'fixture.setting.entry.000',
+          updatedNode: 'fixture.lore.entry.000',
         },
         v1DocumentStore: v1,
         v2PromptResourceStore: v2,

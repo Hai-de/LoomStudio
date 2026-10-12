@@ -12,13 +12,13 @@ const resources: RegistryResourcePreview[] = [
     usage: ['独立创作对话', '后台编排任务'], body: '梳理人物动机与剧情走向，不直接续写正文。',
   },
   {
-    id: 'narrative-guide', category: 'settings', name: '正文写作约定', owner: '扩展 · 创作套件',
-    provenance: '创作套件 / Settings', globalDefault: false, current: false,
+    id: 'narrative-guide', category: 'lore', name: '正文写作约定', owner: '扩展 · 创作套件',
+    provenance: '创作套件 / Lore', globalDefault: false, current: false,
     usage: ['Agent 预设 · 叙事助手'], body: '# 正文写作\n\n以角色行动推进故事，保留玩家的决策空间。',
   },
   {
-    id: 'director-guide', category: 'settings', name: '剧情节拍与伏笔手册', owner: '扩展 · 创作套件',
-    provenance: '创作套件 / Settings', globalDefault: false, current: false,
+    id: 'director-guide', category: 'lore', name: '剧情节拍与伏笔手册', owner: '扩展 · 创作套件',
+    provenance: '创作套件 / Lore', globalDefault: false, current: false,
     usage: ['Agent 预设 · 剧情编排'], body: '# 剧情编排\n\n先列出未回收的伏笔，再提出三种后续走向。\n\n不要把分析过程写入正文。',
   },
   {
@@ -37,8 +37,8 @@ const resources: RegistryResourcePreview[] = [
     usage: ['扩展 · 生图套件'], body: '整理画面描述并调用生成图片工具。',
   },
   {
-    id: 'image-guide', category: 'settings', name: '构图与风格手册', owner: '扩展 · 生图套件',
-    provenance: '生图套件 / Settings', globalDefault: false, current: true,
+    id: 'image-guide', category: 'lore', name: '构图与风格手册', owner: '扩展 · 生图套件',
+    provenance: '生图套件 / Lore', globalDefault: false, current: true,
     usage: ['Agent 预设 · 生图 Agent'], body: '# 构图约定\n\n先明确主体，再补充场景、光线与镜头。\n\n保持人物外观与当前叙事一致。',
   },
   {
@@ -47,8 +47,8 @@ const resources: RegistryResourcePreview[] = [
     usage: ['扩展 · 生图套件'], body: '提供工具：生成图片、修改图片。\n运行位置：扩展 Server Module。',
   },
   {
-    id: 'island-world', category: 'settings', name: '雾岛世界书', owner: '角色 · 雾岛档案',
-    provenance: '雾岛档案 / Settings', globalDefault: false, current: false, readOnly: true,
+    id: 'island-world', category: 'lore', name: '雾岛世界书', owner: '角色 · 雾岛档案',
+    provenance: '雾岛档案 / Lore', globalDefault: false, current: false, readOnly: true,
     usage: ['角色 · 雾岛档案'],
     body: '# 雾岛\n\n一座被浓雾包围的离岛，每周只有一班渡轮抵达。\n\n## 场景\n\n- **白塔**：岛上唯一能看见海平线的地方。\n- **渡口**：失去姓名的旅人聚集在这里。\n\n## 叙事约定\n\n线索应从人物的行动中逐渐浮现，不提前揭示谜底。',
     entries: [
@@ -57,8 +57,8 @@ const resources: RegistryResourcePreview[] = [
     ],
   },
   {
-    id: 'island-guide', category: 'settings', name: '游玩教程', owner: '角色 · 雾岛档案',
-    provenance: '雾岛档案 / Settings', globalDefault: false, current: false, readOnly: true, autoInject: false,
+    id: 'island-guide', category: 'lore', name: '游玩教程', owner: '角色 · 雾岛档案',
+    provenance: '雾岛档案 / Lore', globalDefault: false, current: false, readOnly: true, autoInject: false,
     usage: ['角色 · 雾岛档案'],
     body: '# 初次抵达雾岛\n\n1. 从渡口进入故事。\n2. 选择一个愿意交谈的旅人。\n3. 在天黑前寻找住处。\n\n> 不需要提前阅读所有线索。',
   },
@@ -88,7 +88,7 @@ const resources: RegistryResourcePreview[] = [
 ## 快速开始
 
 1. 启用天气扩展。
-2. 在作品中引用「天气与环境描述」Setting。
+2. 在作品中引用「天气与环境描述」Lore。
 3. 选择需要显示天气的消息位置。
 
 ## 文本与显示
@@ -108,9 +108,9 @@ const resources: RegistryResourcePreview[] = [
 `,
   },
   {
-    id: 'card-guide', category: 'settings', name: '使用教程', owner: '角色 · 港城来信',
-    provenance: '角色 Settings / 使用教程', globalDefault: false, current: true, autoInject: false,
-    usage: ['角色 · 港城来信 / Settings'],
+    id: 'card-guide', category: 'lore', name: '使用教程', owner: '角色 · 港城来信',
+    provenance: '角色 Lore / 使用教程', globalDefault: false, current: true, autoInject: false,
+    usage: ['角色 · 港城来信 / Lore'],
     body: `# 欢迎来到港城
 
 从一封没有寄出的信开始你的故事。
@@ -137,15 +137,15 @@ const resources: RegistryResourcePreview[] = [
 > 初次游玩建议从旧港开始，向邮局询问那封没有地址的信。
 `,
   },
-  { id: 'style', category: 'settings', name: '通用叙事文风', owner: '工作区自有', provenance: '用户创建', globalDefault: true, current: true, usage: ['全局默认'], body: '使用具体的动作与感官细节推进叙事。\n\n保持人物视角的一致性，避免替玩家决定行动。对话应体现人物各自的语气与立场。' },
-  { id: 'world', category: 'settings', name: '港城世界书', owner: '角色 · 港城来信', provenance: '随角色包导入', globalDefault: false, current: true, usage: ['角色 · 港城来信'], body: '一座依山临海的城市。旧港、山间住宅与新城区通过有轨电车相连。', entries: [
+  { id: 'style', category: 'lore', name: '通用叙事文风', owner: '工作区自有', provenance: '用户创建', globalDefault: true, current: true, usage: ['全局默认'], body: '使用具体的动作与感官细节推进叙事。\n\n保持人物视角的一致性，避免替玩家决定行动。对话应体现人物各自的语气与立场。' },
+  { id: 'world', category: 'lore', name: '港城世界书', owner: '角色 · 港城来信', provenance: '随角色包导入', globalDefault: false, current: true, usage: ['角色 · 港城来信'], body: '一座依山临海的城市。旧港、山间住宅与新城区通过有轨电车相连。', entries: [
     { id: 'world-port', name: '旧港', body: '入夜后，灯塔每隔十二秒扫过海面。邮局在最后一班电车离站后关门。' },
     { id: 'world-tram', name: '有轨电车', body: '末班电车在夜里十一点驶离旧港，沿山坡前往住宅区。' },
     { id: 'world-post', name: '邮局与未寄出的信', body: '柜台下存放着一个旧木匣，里面是没有收件地址的信。' },
   ] },
-  { id: 'weather', category: 'settings', name: '天气与环境描述', owner: '扩展 · 天气系统', provenance: '天气系统 / 环境文本', globalDefault: true, current: true, usage: ['全局默认', 'Agent 预设 · 叙事助手'], body: '天气变化应影响人物的行动与环境细节。\n\n当前天气：{{weather}}\n避免在每一轮重复完整天气信息。' },
-  { id: 'combat', category: 'settings', name: '战斗规则与回合结算的补充说明', owner: '扩展 · 战斗系统', provenance: '战斗系统 / 规则文本', globalDefault: false, current: false, usage: [], body: '每次行动先描述意图，再根据角色状态确定结果。\n\n本条目尚未挂载到当前作品。' },
-  { id: 'copy', category: 'settings', name: '我的环境描述', owner: '工作区自有', provenance: '复制自扩展 · 天气系统 / 天气与环境描述', globalDefault: false, current: false, usage: [], body: '优先呈现与当前场景有关的环境变化。\n\n雨天突出声音与能见度，不重复天气概述。' },
+  { id: 'weather', category: 'lore', name: '天气与环境描述', owner: '扩展 · 天气系统', provenance: '天气系统 / 环境文本', globalDefault: true, current: true, usage: ['全局默认', 'Agent 预设 · 叙事助手'], body: '天气变化应影响人物的行动与环境细节。\n\n当前天气：{{weather}}\n避免在每一轮重复完整天气信息。' },
+  { id: 'combat', category: 'lore', name: '战斗规则与回合结算的补充说明', owner: '扩展 · 战斗系统', provenance: '战斗系统 / 规则文本', globalDefault: false, current: false, usage: [], body: '每次行动先描述意图，再根据角色状态确定结果。\n\n本条目尚未挂载到当前作品。' },
+  { id: 'copy', category: 'lore', name: '我的环境描述', owner: '工作区自有', provenance: '复制自扩展 · 天气系统 / 天气与环境描述', globalDefault: false, current: false, usage: [], body: '优先呈现与当前场景有关的环境变化。\n\n雨天突出声音与能见度，不重复天气概述。' },
   { id: 'regex', category: 'transforms', name: '隐藏内部标记', owner: '角色 · 港城来信', provenance: '随角色包导入', globalDefault: false, current: true, usage: ['角色 · 港城来信 / Display'], body: '匹配：<internal>[\\s\\S]*?</internal>\n替换：空文本\n阶段：Display' },
   { id: 'macro-a', category: 'macros', name: '文风', owner: '工作区自有', provenance: '用户创建', globalDefault: false, current: true, usage: ['Agent 预设 · 叙事助手'], body: '默认值：克制、细腻，以动作表达情绪。\n\n候选：\n  简洁叙述\n  细节描写' },
   { id: 'macro-b', category: 'macros', name: '文风', owner: '角色 · 港城来信', provenance: '角色作者配置', globalDefault: false, current: true, usage: ['角色 · 港城来信'], body: '默认值：潮湿的海风、缓慢的日常与未寄出的信。\n\n此处是角色自身的作者配置。' },
@@ -176,7 +176,7 @@ export function ResourceRegistryPreview() {
         model: '轻量模型',
         prompts: [
           { id: 'director-system', name: '编排约定', kind: 'text', body: '分析剧情结构，输出候选走向，不直接续写正文。' },
-          { id: 'director-settings', name: '@settings', kind: 'anchor', body: '剧情编排专属 Settings。' },
+          { id: 'director-lore', name: '@lore', kind: 'anchor', body: '剧情编排专属 Lore。' },
         ],
         tools: [
           { id: 'official/read_state', name: '读取状态', owner: '平台内置', description: '读取人物关系与剧情状态。', enabled: true },
@@ -186,7 +186,7 @@ export function ResourceRegistryPreview() {
         model: '叙事模型',
         prompts: [
           { id: 'narrative-system', name: '叙事约定', kind: 'text', body: '# 叙事约定\n\n以具体动作推进故事，不替玩家决定行动。\n\n文风：{{文风}}' },
-          { id: 'narrative-settings', name: '@settings', kind: 'anchor', body: '锚点：Settings\n来源：当前生效的角色与全局 Settings。' },
+          { id: 'narrative-lore', name: '@lore', kind: 'anchor', body: '锚点：Lore\n来源：当前生效的角色与全局 Lore。' },
           { id: 'narrative-tools', name: '@tools', kind: 'anchor', body: '锚点：工具说明\n来源：叙事助手启用的工具。' },
           { id: 'narrative-history', name: '@history', kind: 'anchor', body: '锚点：历史消息\n范围：当前叙事会话。' },
           { id: 'narrative-input', name: '@input', kind: 'anchor', body: '锚点：当前输入\n位置：历史消息之后。' },
@@ -200,7 +200,7 @@ export function ResourceRegistryPreview() {
         model: '视觉模型',
         prompts: [
           { id: 'image-system', name: '图像生成约定', kind: 'text', body: '# 图像生成约定\n\n整理主体、场景与镜头，再调用生成图片工具。\n\n保持人物外观与叙事一致。' },
-          { id: 'image-settings', name: '@settings', kind: 'anchor', body: '锚点：Settings\n引用：生图套件 / 构图与风格手册。' },
+          { id: 'image-lore', name: '@lore', kind: 'anchor', body: '锚点：Lore\n引用：生图套件 / 构图与风格手册。' },
           { id: 'image-tools', name: '@tools', kind: 'anchor', body: '锚点：工具说明\n来源：生图 Agent 启用的工具。' },
           { id: 'image-input', name: '@input', kind: 'anchor', body: '锚点：当前输入\n内容：本次画面描述。' },
         ],

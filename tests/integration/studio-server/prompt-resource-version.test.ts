@@ -15,7 +15,7 @@ describe('Prompt Resource editing baseline', () => {
       const documents = createSqliteDocumentStore({ engine })
       const promptResources = createPromptResourceStore({ engine, createId, now })
       const runtime = createApplicationRuntime({ dataEngine: engine, documents, promptResources })
-      const { resource } = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Original' })
+      const { resource } = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Original' })
       const { resource: latest } = await runtime.updatePromptResourceAsset({
         resourceId: resource.id, assetId: resource.rootNode.id, expectedVersion: resource.version, label: 'Agent edit',
       })

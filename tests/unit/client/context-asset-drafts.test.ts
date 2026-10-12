@@ -23,7 +23,7 @@ beforeEach(() => { hooks.cursor = 0; hooks.values = [] })
 
 function resource(version = 1, body = 'Saved'): PromptResource {
   return {
-    id: 'resource', version, resourceKind: 'setting',
+    id: 'resource', version, resourceKind: 'lore',
     rootNode: { id: 'root', kind: 'folder', label: 'Root', children: [{ id: 'entry', kind: 'entry', label: 'Entry', body }] },
     createdAt: '', updatedAt: '',
   }

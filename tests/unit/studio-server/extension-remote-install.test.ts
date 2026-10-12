@@ -250,7 +250,7 @@ describe('remote extension install lifecycle', () => {
   it('imports declared resources only after confirmation, without enabling modules or replacing existing resources', async () => {
     const { runtime, host, importPackageResources, listInstallations } = await manager()
     const source = fixture('test.resources')
-    const contributions = { promptResources: [{ id: 'setting', resourceKind: 'setting' as const, source: './resource.json' }] }
+    const contributions = { promptResources: [{ id: 'lore', resourceKind: 'lore' as const, source: './resource.json' }] }
     fixtures.get(source.url)!.manifest.contributes = contributions
     const preview = await runtime.previewRemoteInstall!({ sources: [source] }) as { token: string }
     expect(importPackageResources).not.toHaveBeenCalled()
@@ -275,7 +275,7 @@ describe('remote extension install lifecycle', () => {
     const { runtime, root, importPackageResources } = await manager()
     const source = fixture('test.resources')
     fixtures.get(source.url)!.manifest.contributes = {
-      promptResources: [{ id: 'setting', resourceKind: 'setting', source: './resource.json' }],
+      promptResources: [{ id: 'lore', resourceKind: 'lore', source: './resource.json' }],
     }
     importPackageResources.mockRejectedValueOnce(new Error('Invalid setting'))
     const { result } = await install(runtime, source)

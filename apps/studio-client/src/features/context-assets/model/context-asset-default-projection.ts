@@ -20,8 +20,8 @@ export function createDefaultProjection(
   }
 
   const preset = category === 'preset'
-  const zoneId = preset ? 'preset.system' : 'setting.stable'
-  const slotKey = preset ? 'preset:default-airp-preset@preset.system' : 'setting-layer:city-layers-main@setting.stable'
+  const zoneId = preset ? 'preset.system' : 'lore.stable'
+  const slotKey = preset ? 'preset:default-airp-preset@preset.system' : 'lore:city-layers-main@lore.stable'
   const entryOrder = readNextEntryOrder(siblings, slotKey)
 
   return {

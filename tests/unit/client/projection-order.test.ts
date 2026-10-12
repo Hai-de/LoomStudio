@@ -19,27 +19,27 @@ function entry(id: string, zoneId: string, slotKey = `${id}@${zoneId}`): Context
 describe('projection order runlist', () => {
   const entries = buildProjectionOrder([
     entry('system-a', 'preset.system'),
-    entry('lower-a', 'setting.lower', 'setting-layer:city-main@setting.lower'),
-    entry('lower-b', 'setting.lower', 'setting-layer:city-main@setting.lower'),
+    entry('lower-a', 'lore.lower', 'lore:city-main@lore.lower'),
+    entry('lower-b', 'lore.lower', 'lore:city-main@lore.lower'),
     entry('tail-a', 'fresh.tail'),
   ])
 
   it('keeps zones and slot members as separate display levels', () => {
     const zones = buildProjectionZones(entries)
 
-    expect(zones.map(zone => zone.id)).toEqual(['preset.system', 'setting.lower', 'fresh.tail'])
+    expect(zones.map(zone => zone.id)).toEqual(['preset.system', 'lore.lower', 'fresh.tail'])
     expect(zones[1]?.rows).toHaveLength(1)
     expect(zones[1]?.rows[0]).toMatchObject({ type: 'slot', entries: [{ node: { id: 'lower-a' } }, { node: { id: 'lower-b' } }] })
   })
 
   it('moves a zone as one contiguous sequence without changing its members', () => {
-    expect(moveProjectionZone(entries, 'fresh.tail', 'setting.lower')).toEqual([
+    expect(moveProjectionZone(entries, 'fresh.tail', 'lore.lower')).toEqual([
       'system-a',
       'tail-a',
       'lower-a',
       'lower-b',
     ])
-    expect(moveProjectionZone(entries, 'preset.system', 'setting.lower')).toEqual([
+    expect(moveProjectionZone(entries, 'preset.system', 'lore.lower')).toEqual([
       'lower-a',
       'lower-b',
       'system-a',

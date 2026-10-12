@@ -180,17 +180,17 @@ describe('bundled default preset', () => {
         presetId: preset.id,
         mounts: tools.map((tool, index) => ({ toolId: tool.id, orderIndex: index, defaultEnabled: true })),
       })
-      const { resource: setting } = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Story' })
+      const { resource: setting } = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Story' })
       for (const [id, anchor, activation] of [
-        ['STABLE_SETTING', '@setting.stable', { kind: 'always' as const }],
-        ['DYNAMIC_SETTING', '@setting.lower', { kind: 'keyword' as const, keywords: ['CURRENT_INPUT'] }],
+        ['STABLE_SETTING', '@lore.stable', { kind: 'always' as const }],
+        ['DYNAMIC_SETTING', '@lore.lower', { kind: 'keyword' as const, keywords: ['CURRENT_INPUT'] }],
       ] satisfies Array<[string, string, PromptActivation]>) {
         await runtime.createPromptResourceAsset({
           resourceId: setting.id, targetAssetId: setting.rootNode.id, position: 'inside',
           asset: { id, kind: 'entry', label: id, body: id, capabilities: { targetAnchorId: anchor, activation } },
         })
       }
-      await runtime.replaceSettingMounts({ source: { kind: 'preset', id: preset.id }, settingResourceIds: [setting.id] })
+      await runtime.replaceLoreMounts({ source: { kind: 'preset', id: preset.id }, loreResourceIds: [setting.id] })
       const { card } = await runtime.createCard({ name: 'Story', opening: 'NARRATIVE_RAW' })
       const { timeline } = await runtime.createNarrativeTimeline({ cardId: card.id })
       await runtime.upsertTextTransformRule({
@@ -221,7 +221,7 @@ describe('bundled default preset', () => {
       const contents = request.messages.map(message => message.content)
       expect(contents[0]).toContain('清晰自然')
       expect(contents[1]).toContain('CONTENT_TOOL_DEFINITION')
-      expect(contents[2]).toContain('<setting>\n\nSTABLE_SETTING\n\n</setting>')
+      expect(contents[2]).toContain('<lore>\n\nSTABLE_SETTING\n\n</lore>')
       expect(contents.slice(3)).toEqual([
         'NARRATIVE_PROJECTED', 'PREVIOUS_USER', 'SESSION_REPLY', 'DYNAMIC_SETTING', 'CURRENT_INPUT',
       ])

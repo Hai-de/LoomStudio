@@ -48,7 +48,7 @@ Content Tools
 
 Provider-managed Tool 不是 System Message。Loom Studio 可以控制顶层 Tool 数组的顺序，但 Provider 没有承诺它在内部位于第一个 System Message 前或后。
 
-Content Tool 拥有真实 Anchor / Slot placement，并与 Preset、Setting、Narrative 和 Session 等 Prompt Source 一起进入统一 PromptBuild Pipeline。
+Content Tool 拥有真实 Anchor / Slot placement，并与 Preset、Lore、Narrative 和 Session 等 Prompt Source 一起进入统一 PromptBuild Pipeline。
 
 ## 4. Tool Prompt Build
 
@@ -88,7 +88,7 @@ Preset 挂载与预览是构建表面的静态投影：
 
 - **删除不破坏业务引用**：删除 Provider、Model 或 Agent Preset 等业务配置时，不因存在下游引用而强制阻断删除，也不自动级联解绑。原有引用关系完整保留，等待用户显式切换或重新绑定。
 - **配置展示容错与按需报错**：列表、详情与历史面板保留失效引用身份并呈现不可用状态，等待用户显式切换。执行或预览需要的 Agent Preset、Provider/Model 等依赖在解析时明确失败，不必等到发出网络请求，也不自动选择默认替代项。
-- **宽松 Prompt 构建门禁**：可选 Setting/Tool 贡献缺失时跳过并记录构建诊断，无法展开的变量宏保留原文和警告。存储错误、越权、非法输入及必要依赖缺失不属于可跳过情形，不能统一吞错后继续构建。
+- **宽松 Prompt 构建门禁**：可选 Lore/Tool 贡献缺失时跳过并记录构建诊断，无法展开的变量宏保留原文和警告。存储错误、越权、非法输入及必要依赖缺失不属于可跳过情形，不能统一吞错后继续构建。
 
 宽松跳过仅适用于可选贡献：Session 指向的 Agent Preset 及实际调用的必要依赖缺失时，仍明确失败，不替换为默认资源。删除 Preset 或扩展导入资源保留外部业务引用，但仍清理被删资源自身拥有的附属资源；这与跨领域自动解绑不同。
 
@@ -96,7 +96,7 @@ Preset 挂载与预览是构建表面的静态投影：
 
 Extension Server Module 可在 `ai.invoke` capability 下调用 `ctx.ai.invokeModel({ model, messages, providerOptions?, delivery?, signal?, onEvent? })`。模型必须显式指定 Provider Profile 与已启用的 Model ID；平台从 Secret Store 在网关内部取凭据，不向扩展返回 API Key，也不回退 Agent Preset。`onEvent` 只转发普通网关的实际流事件；fake Provider 的整段结果不是 token delta。原有 `ctx.ai.invoke({ profileId, input })` 仍是独立的 capability-profile 合同。
 
-Agent Turn 的 `promptAddition` 仅对该次 Preview/Run 生效，附加 Setting ID 与 Anchor 内容由共用准备路径编译，不修改持久 Mount。扩展 `ctx.prompt.build` 可不带 Session/model 独立构建；传入的资源 ID 仅允许引用本扩展安装导入的 Preset/Setting，运行时创建结构化内容的来源身份。它不执行 Agent Loop、不自动挑选模型，也不授予读取其他安装或用户资源的能力。
+Agent Turn 的 `promptAddition` 仅对该次 Preview/Run 生效，附加 Lore ID 与 Anchor 内容由共用准备路径编译，不修改持久 Mount。扩展 `ctx.prompt.build` 可不带 Session/model 独立构建；传入的资源 ID 仅允许引用本扩展安装导入的 Preset/Lore，运行时创建结构化内容的来源身份。它不执行 Agent Loop、不自动挑选模型，也不授予读取其他安装或用户资源的能力。
 
 ## 8. 明确不属于当前合同
 

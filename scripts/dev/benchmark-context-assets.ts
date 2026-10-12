@@ -48,14 +48,14 @@ function createContextAssetFixture(size: number): ContextAssetNode[] {
     id: `entry-${index}`,
     kind: 'entry',
     label: `District ${index}`,
-    meta: index % 5 === 0 ? 'setting location maintenance' : 'setting location',
+    meta: index % 5 === 0 ? 'lore location maintenance' : 'lore location',
     body: `Archive entry ${index}. The maintenance gate belongs to district ${index % 100}.`,
     projection: {
       lifecycle: 'always',
       order: `entry: ${index * 10}`,
-      slotKey: 'setting-layer:benchmark@setting.stable',
+      slotKey: 'lore:benchmark@lore.stable',
       sourceKind: 'actual',
-      zoneId: 'setting.stable',
+      zoneId: 'lore.stable',
       entryOrder: index * 10,
     },
   }))
@@ -63,8 +63,8 @@ function createContextAssetFixture(size: number): ContextAssetNode[] {
   return [{
     id: 'benchmark-root',
     kind: 'module',
-    category: 'setting',
-    label: 'Benchmark Setting',
+    category: 'lore',
+    label: 'Benchmark Lore',
     children,
   }]
 }

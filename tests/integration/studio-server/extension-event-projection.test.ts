@@ -99,17 +99,17 @@ describe('Card extension platform event projection', () => {
         rootNode: { id: 'preset-root', kind: 'module', label: 'Preset', children: [] },
       })
       const setting = await promptResources.createResource({
-        actor, id: 'setting', resourceKind: 'setting',
-        rootNode: { id: 'setting-root', kind: 'module', label: 'Setting', children: [] },
+        actor, id: 'lore', resourceKind: 'lore',
+        rootNode: { id: 'lore-root', kind: 'module', label: 'Setting', children: [] },
       })
-      const mount = await promptResources.addSettingMount({
-        actor, source: { kind: 'preset', id: preset.resource.id }, settingResourceId: setting.resource.id, orderIndex: 0,
+      const mount = await promptResources.addLoreMount({
+        actor, source: { kind: 'preset', id: preset.resource.id }, loreResourceId: setting.resource.id, orderIndex: 0,
       })
       const tool = await promptResources.addPresetToolMount({
         actor, presetResourceId: preset.resource.id, toolId: 'example/tool', orderIndex: 0, defaultEnabled: true,
       })
-      const manual = await promptResources.addSettingMount({
-        actor, source: { kind: 'manual' }, settingResourceId: setting.resource.id, orderIndex: 0,
+      const manual = await promptResources.addLoreMount({
+        actor, source: { kind: 'manual' }, loreResourceId: setting.resource.id, orderIndex: 0,
       })
       const moved = await promptResources.mutateResource({
         actor, resourceId: preset.resource.id, expectedVersion: 1,

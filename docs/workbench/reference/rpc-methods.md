@@ -26,7 +26,7 @@
 | 工具启用；`application.listPresetToolMounts`、`application.replacePresetToolMounts` | [agents.ts](../../../apps/studio-server/src/rpc/handlers/application/agents.ts) | [Tool 系统](../../architecture/application/agent/tool-system.md) |
 | 正文、时间线、分支；`application.appendNarrativeInput`、`application.editNarrativeNode` | [timeline.ts](../../../apps/studio-server/src/rpc/handlers/application/timeline.ts) | [narrative-runtime.ts](../../../packages/application-runtime/src/runtime/narrative-runtime.ts)、[Narrative 边界](../../architecture/application/agent/runtime-and-session.md#6-narrative-边界) |
 | Prompt Resource、资源树；`application.getPromptResource`、`application.updatePromptResourceAsset` | [workspaces.ts](../../../apps/studio-server/src/rpc/handlers/application/workspaces.ts) | [prompt-runtime.ts](../../../packages/application-runtime/src/runtime/prompt-runtime.ts)、[PromptBuild](../../architecture/application/prompt-build/README.md) |
-| 世界书采用；`application.listSettingMounts`、`application.replaceSettingMounts` | [workspaces.ts](../../../apps/studio-server/src/rpc/handlers/application/workspaces.ts) | [资源归属与使用配置](../../architecture/application/prompt-build/README.md#资源归属与使用配置) |
+| 世界书采用；`application.listLoreMounts`、`application.replaceLoreMounts` | [workspaces.ts](../../../apps/studio-server/src/rpc/handlers/application/workspaces.ts) | [资源归属与使用配置](../../architecture/application/prompt-build/README.md#资源归属与使用配置) |
 | Provider 账号与凭据；`application.createProviderProfile`、`application.replaceProviderCredential` | [providers.ts](../../../apps/studio-server/src/rpc/handlers/application/providers.ts) | [providers-runtime.ts](../../../packages/application-runtime/src/runtime/providers-runtime.ts) |
 | State、变量；`application.getStateSnapshot`、`application.applyStateMutation` | [states.ts](../../../apps/studio-server/src/rpc/handlers/application/states.ts) | [State 与变量](../../architecture/application/state-and-variables.md) |
 | 正则、提取器、显示；`application.projectHistory`、`application.listTextTransformRules` | [text-transforms.ts](../../../apps/studio-server/src/rpc/handlers/application/text-transforms.ts) | [History Text Pipeline](../../architecture/application/history-text-pipeline.md) |
@@ -42,7 +42,7 @@
 | `extensions.*`：安装、卸载、资源导入、授权、重载 | [Kernel handlers.ts](../../../packages/kernel/src/handlers.ts)注册，委托 [Server Extension Manager](../../../apps/studio-server/src/extensions/extension-manager.ts)；[安装及生命周期合同](../../architecture/extensions/README.md) |
 | `ai.*` | [ai-gateway-rpc.ts](../../../apps/studio-server/src/rpc/handlers/ai-gateway-rpc.ts) |
 | `logs.*` | [logs-rpc.ts](../../../apps/studio-server/src/rpc/handlers/logs-rpc.ts)；[日志查询与隐私边界](../../architecture/platform/logging.md) |
-| `settings.*` | [settings-rpc.ts](../../../apps/studio-server/src/rpc/handlers/settings-rpc.ts)，不是 Setting Prompt Resource |
+| `settings.*` | [settings-rpc.ts](../../../apps/studio-server/src/rpc/handlers/settings-rpc.ts)，不是 Lore Prompt Resource |
 | `official.*` | [official-content.ts](../../../apps/studio-server/src/official/official-content.ts)；[官方内容](../../../official/README.md) |
 | `directories.*` | [card-directory-catalog.ts](../../../apps/studio-server/src/resource-directories/card-directory-catalog.ts) |
 | HTTP 认证、Asset、Card 文件、Extension 文件与 SSE | [Server README](../../../apps/studio-server/README.md#当前-http-面)、[http/](../../../apps/studio-server/src/http/)；不把文件接口当成 RPC |
@@ -50,14 +50,14 @@
 ## 旧名称与合同陷阱
 
 - `application.createAgentProfile` 等 Agent Profile CRUD 已取消。当前存在 `application.createAgentPreset` / `getAgentPreset` / `listAgentPresets` / `updateAgentPreset` / `deleteAgentPreset`；底层复用 Prompt Resource，并不因此不存在 Preset RPC。
-- `SettingMount.source.kind = preset` 是当前消费配置，不是仅供兼容的旧数据。`replaceSettingMounts` 接受 `settingResourceIds` 或 `mounts` 二选一；后者可按既有 Mount ID 保留失效引用。准确校验见 Handler 使用的共享 Schema 与 Runtime。
+- `LoreMount.source.kind = preset` 是当前消费配置，不是仅供兼容的旧数据。`replaceLoreMounts` 接受 `loreResourceIds` 或 `mounts` 二选一；后者可按既有 Mount ID 保留失效引用。准确校验见 Handler 使用的共享 Schema 与 Runtime。
 - Session 固定绑定 Preset；查看 Session、主写作选择和 Run 恢复是不同操作。删除资源后的引用处理不按“所有删除都拒绝”或“全部级联”推断。
 - 旧 `createSession` / `submitTurn`、Agent Profile、Prompt Resource 整份 Document 存储不能作为新调用的合同。类型入口见 [Core Types](core-types.md)与 [Document Types](document-types.md)。
 
 已知精确方法时，直接在对应文件查找，例如：
 
 ```bash
-rg -n -F 'application.replaceSettingMounts' apps/studio-server/src/rpc/handlers/application/workspaces.ts
+rg -n -F 'application.replaceLoreMounts' apps/studio-server/src/rpc/handlers/application/workspaces.ts
 ```
 
-验证选择对应 Handler / Runtime / Store 的真实风险，不默认跑全套。会话运行的例子：[agent-run-rpc.test.ts](../../../tests/unit/studio-server/agent-run-rpc.test.ts)与 [agent-run-recovery.test.ts](../../../tests/integration/application-runtime/agent-run-recovery.test.ts)；Setting Mount 参数边界见 [setting-mount-rpc.test.ts](../../../tests/unit/studio-server/setting-mount-rpc.test.ts)。
+验证选择对应 Handler / Runtime / Store 的真实风险，不默认跑全套。会话运行的例子：[agent-run-rpc.test.ts](../../../tests/unit/studio-server/agent-run-rpc.test.ts)与 [agent-run-recovery.test.ts](../../../tests/integration/application-runtime/agent-run-recovery.test.ts)；Lore Mount 参数边界见 [lore-mount-rpc.test.ts](../../../tests/unit/studio-server/lore-mount-rpc.test.ts)。

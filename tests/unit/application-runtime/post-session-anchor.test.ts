@@ -53,19 +53,19 @@ describe('Prompt Anchor System: @chat.session.post', () => {
       },
       {
         id: 'lower-setting-1',
-        sourceRef: { kind: 'settingLayer' as const, sourceId: 'setting-1', sourceNodeId: 'low1' },
+        sourceRef: { kind: 'lore' as const, sourceId: 'setting-1', sourceNodeId: 'low1' },
         content: '[Dynamic Lore: Eldoria is raining today]',
-        capabilities: { targetAnchorId: '@setting.lower', localDepth: 5, roleHint: 'system' as const },
+        capabilities: { targetAnchorId: '@lore.lower', localDepth: 5, roleHint: 'system' as const },
       },
       {
         id: 'post-rule-2',
-        sourceRef: { kind: 'settingLayer' as const, sourceId: 'setting-1', sourceNodeId: 'e2' },
+        sourceRef: { kind: 'lore' as const, sourceId: 'setting-1', sourceNodeId: 'e2' },
         content: '[Output format requirement: keep concise]',
         capabilities: { targetAnchorId: '@chat.session.post', localDepth: 20, roleHint: 'system' as const },
       },
       {
         id: 'post-rule-1',
-        sourceRef: { kind: 'settingLayer' as const, sourceId: 'setting-1', sourceNodeId: 'e1' },
+        sourceRef: { kind: 'lore' as const, sourceId: 'setting-1', sourceNodeId: 'e1' },
         content: '[Do not break character]',
         capabilities: { targetAnchorId: '@chat.session.post', localDepth: 10, roleHint: 'system' as const },
       },
@@ -97,7 +97,7 @@ describe('Prompt Anchor System: @chat.session.post', () => {
     expect(sessionIdx).toBeLessThan(postSessionIdx)
     expect(postSessionIdx).toBeLessThan(userInputIdx)
 
-    // Contains @setting.lower first, then sorted @chat.session.post entries
+    // Contains @lore.lower first, then sorted @chat.session.post entries
     expect(postSessionMsg.content).toBe('[Dynamic Lore: Eldoria is raining today]\n\n[Do not break character]\n\n[Output format requirement: keep concise]')
   })
 
@@ -150,13 +150,13 @@ describe('Prompt Anchor System: @chat.session.post', () => {
       },
       {
         id: 'lower-setting-content',
-        sourceRef: { kind: 'settingLayer' as const, sourceId: 'setting-1', sourceNodeId: 'low1' },
+        sourceRef: { kind: 'lore' as const, sourceId: 'setting-1', sourceNodeId: 'low1' },
         content: 'Triggered dynamic lower setting entry',
-        capabilities: { targetAnchorId: '@setting.lower', localDepth: 10, roleHint: 'system' as const },
+        capabilities: { targetAnchorId: '@lore.lower', localDepth: 10, roleHint: 'system' as const },
       },
       {
         id: 'post-session-fallback',
-        sourceRef: { kind: 'settingLayer' as const, sourceId: 'setting-1', sourceNodeId: 'p1' },
+        sourceRef: { kind: 'lore' as const, sourceId: 'setting-1', sourceNodeId: 'p1' },
         content: 'Jailbreak post-session instruction',
         capabilities: { targetAnchorId: '@chat.session.post', localDepth: 10, roleHint: 'system' as const },
       },
@@ -181,13 +181,13 @@ describe('Prompt Anchor System: @chat.session.post', () => {
 
     // In old preset fallback: Historical dialogue -> Triggered dynamic lower setting entry -> Jailbreak post-session instruction -> Current input
     const historyPos = content.indexOf('Historical dialogue')
-    const lowerSettingPos = content.indexOf('Triggered dynamic lower setting entry')
+    const lowerLorePos = content.indexOf('Triggered dynamic lower setting entry')
     const fallbackPos = content.indexOf('Jailbreak post-session instruction')
     const inputPos = content.indexOf('Current input')
 
     expect(historyPos).toBeGreaterThanOrEqual(0)
-    expect(lowerSettingPos).toBeGreaterThan(historyPos)
-    expect(fallbackPos).toBeGreaterThan(lowerSettingPos)
+    expect(lowerLorePos).toBeGreaterThan(historyPos)
+    expect(fallbackPos).toBeGreaterThan(lowerLorePos)
     expect(inputPos).toBeGreaterThan(fallbackPos)
   })
 })

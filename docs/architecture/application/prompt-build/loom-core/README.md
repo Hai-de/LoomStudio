@@ -2,7 +2,7 @@
 
 `@loom/core` 是同步、线性、可追踪、可重放的 Fragment pipeline engine。文档沿用 PromptBuild 下的分类位置；当前实际集成入口是 Kernel 的 Loom Runner，Agent PromptBuild 使用独立的 Application DFS 编译器。两条调用链见 [Studio 集成](studio-integration.md)。
 
-这只是文档归属，不改变技术边界：`packages/core` 是独立 package，public API 不包含 Card、Session、Setting Layer、Prompt、Agent 或 Provider 类型。
+这只是文档归属，不改变技术边界：`packages/core` 是独立 package，public API 不包含 Card、Session、Lore、Prompt、Agent 或 Provider 类型。
 
 ## 1. 定位
 
@@ -100,7 +100,7 @@ Trace
 
 | 能力 | 归属 |
 |---|---|
-| Card、Session、Setting Layer、Agent | Studio Application |
+| Card、Session、Lore、Agent | Studio Application |
 | Source Adapter 与多数据源合并 | PromptBuild / 调用方 |
 | Activation、过滤、排序和 Slot Fill 策略 | Application 编译器；若接入 Core，再由领域 Pass 承担 |
 | 模板、宏、变量和 late binding | PromptBuild / 领域工具 |

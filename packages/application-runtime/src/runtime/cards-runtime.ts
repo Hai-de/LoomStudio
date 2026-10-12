@@ -15,7 +15,7 @@ import {
   normalizeOpening,
   normalizeOptionalString,
   normalizePreset,
-  normalizeSettingLayer,
+  normalizeLore,
   toCardSource,
   toCardSummary,
 } from '../cards/card.js'
@@ -137,7 +137,7 @@ async function deleteCards(
         for (const other of await listDocuments<CardSourceContent>(ctx.documents, applicationDocumentTypes.cardSource)) {
           if (!deletedCardIds.has(other.id)) for (const id of other.content.promptResourceIds ?? []) retainedResources.add(id)
         }
-        for (const mount of await ctx.promptResources.listSettingMounts({})) retainedResources.add(mount.settingResourceId)
+        for (const mount of await ctx.promptResources.listLoreMounts({})) retainedResources.add(mount.loreResourceId)
         if (ctx.narratives) {
           const timelines = await collectPages(async cursor => {
             const page = await ctx.narratives!.listTimelines({ cursor, limit: 100 })
@@ -299,7 +299,7 @@ export function createCardsRuntimeMethods(ctx: CardsRuntimeContext) {
             media: normalizeCardMedia(input.media),
             preset: normalizePreset(input.preset),
             opening: normalizeOpening(input.opening),
-            settingLayer: normalizeSettingLayer(input.settingLayer, input.setting),
+            lore: normalizeLore(input.lore),
             ...(input.macros !== undefined ? { macros: normalizeMacros(input.macros, 'Card') } : {}),
             ...(input.macroOptions !== undefined ? { macroOptions: normalizeMacroOptions(input.macroOptions) } : {}),
             createdAt: timestamp,
@@ -501,7 +501,7 @@ export function createCardsRuntimeMethods(ctx: CardsRuntimeContext) {
             ...(input.description !== undefined ? { description: input.description } : {}),
             ...(input.preset !== undefined ? { preset: normalizePreset(input.preset) } : {}),
             ...(input.opening !== undefined ? { opening: normalizeOpening(input.opening) } : {}),
-            ...(input.settingLayer !== undefined ? { settingLayer: normalizeSettingLayer(input.settingLayer, undefined) } : {}),
+            ...(input.lore !== undefined ? { lore: normalizeLore(input.lore) } : {}),
             ...(input.media !== undefined ? { media: normalizeCardMedia(input.media) } : {}),
             ...(input.stateTemplates !== undefined ? { stateTemplates: structuredClone(input.stateTemplates) } : {}),
             ...(input.stateDefinitionIds !== undefined ? { stateDefinitionIds: [...input.stateDefinitionIds] } : {}),

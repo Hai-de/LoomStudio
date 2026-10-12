@@ -2,16 +2,13 @@ import type { DocumentRecord, DocumentStore } from '@loom-studio/document-store'
 import { estimateRequestTokens } from '@loom-studio/ai-gateway'
 import { readLogFailure } from '@loom-studio/logging'
 import type {
-  PromptResourceNodeDraft,
-  PromptResourceNodePatch,
-  PromptResourceTreeNode,
   PromptResourceMutation,
 } from '@loom-studio/application-data'
 import type { ApplicationRuntimeContext } from '../foundation/application-context.js'
 import { applicationDocumentTypes } from '../foundation/document-types.js'
 import { listDocuments, readDocument, toVersioned, writeDocument } from '../foundation/document-store.js'
 import { createAgentToolRegistry, type ToolDefinition } from '../agents/tool-registry.js'
-import { listPresetScriptAttachments } from '../vfs/script-attachments.js'
+import { createAgentToolScope } from '../agents/agent-tool-scope.js'
 import {
   compileAgentToolSet,
   createContentToolPromptRuntimeInputs,
@@ -29,16 +26,14 @@ import { buildOpenAIChatPayload, type OpenAIChatPayload } from '../providers/pro
 import { fromStoredResource, readMappedResource, toStoredResourceInput } from '../prompt/prompt-resource-mapper.js'
 import { isPromptActivation, type ActivationFacts } from '../prompt/prompt-activation.js'
 import { readTimelineRuntimeContext } from '../narrative/timeline-runtime-context.js'
-import { projectNarrativeSample } from '../narrative/projection.js'
 import { createNarrativeSampler } from '../narrative/sampling.js'
 import { readNarrativeContext } from '../narrative/context-provider.js'
-import { createNarrativeReader } from '../narrative/access.js'
 import { readTimelinePresetConfig } from '../prompt/timeline-preset-config.js'
 import { normalizeMacroSelections } from '@loom-studio/shared'
 import { resolveEffectiveTextPipeline } from './transforms-runtime.js'
 import { isExtensionResourceAvailable, readAvailableExtensionInstallations } from './extension-resource-access.js'
 import { createEmptyPromptResourceContent, createPromptRuntimeMethods } from './prompt-runtime.js'
-import { getApplicationStateSnapshot, applyApplicationStateMutation } from '../state/state.js'
+import { getApplicationStateSnapshot } from '../state/state.js'
 import type {
   AgentPresetResult,
   CreateAgentPresetInput,
@@ -74,7 +69,6 @@ import type {
   ReplacePresetToolMountsInput,
   ReplacePresetToolMountsResult,
   RuntimeRequestContext,
-  StateMutationOperation,
   UpdateAgentSessionInput,
   UpdateAgentSessionResult,
   UpdateAgentToolInput,
@@ -163,7 +157,7 @@ export function createAgentsRuntimeMethods(ctx: AgentsRuntimeContext) {
       else if (input.model !== undefined) metadata.model = input.model
       if (input.delivery !== undefined) metadata.delivery = input.delivery
       if (input.historyPolicy !== undefined) metadata.historyPolicy = input.historyPolicy
-      if (input.useCardSettings !== undefined) metadata.useCardSettings = input.useCardSettings
+      if (input.useCardLore !== undefined) metadata.useCardLore = input.useCardLore
       if (input.textUses !== undefined) {
         if (!Array.isArray(input.textUses) || input.textUses.some(use =>
           typeof use.id !== 'string' || !use.id.trim()
@@ -792,7 +786,7 @@ async function prepareAgentTurn(
         ? agentPage.entries
         : [],
       promptResources: ctx.promptResources,
-      contextResourceIds: preset.useCardSettings === false ? [] : card?.promptResourceIds ?? [],
+      contextResourceIds: preset.useCardLore === false ? [] : card?.promptResourceIds ?? [],
       narrative: narrativePage ? {
         nodes: narrativeNodes,
         timeline: narrativePage.timeline,
@@ -850,286 +844,14 @@ async function prepareAgentTurn(
         message: 'CodeAct is enabled, but its tutorial anchor is absent or disabled. Mount the instructions in the selected preset.',
       })
     }
-    prompt.toolExecutionScope.vfsAttachments = () => listPresetScriptAttachments(ctx, preset.id, prompt.toolExecutionScope.availableExtensionInstallations)
-    if (requestContext?.agentRun?.onMutationApproval)
-      prompt.toolExecutionScope.approveMutation = requestContext.agentRun.onMutationApproval
-    if (requestContext?.agentRun?.onHistoryReadApproval)
-      prompt.toolExecutionScope.requestHistoryApproval = requestContext.agentRun.onHistoryReadApproval
-    const allowedTimelineTarget = narrativePage
-      ? { scope: 'timeline' as const, timelineId: narrativePage.timeline.id, branchId: narrativePage.branch.id }
-      : undefined
-    prompt.toolExecutionScope.state = {
-      defaultTarget: allowedTimelineTarget ?? { scope: 'global' as const },
-      canAccess: target => target.scope === 'global'
-        || (allowedTimelineTarget !== undefined
-          && target.timelineId === allowedTimelineTarget.timelineId
-          && target.branchId === allowedTimelineTarget.branchId),
-      read: async target => {
-        const snapshot = await getApplicationStateSnapshot(ctx, target)
-        return { revisionId: snapshot.revisionId, value: snapshot.value }
-      },
-      update: async stateInput => {
-        const result = await applyApplicationStateMutation(ctx, {
-          target: stateInput.target,
-          expectedRevisionId: stateInput.expectedRevisionId,
-          operations: stateInput.operations as unknown as StateMutationOperation[],
-          idempotencyKey: stateInput.idempotencyKey,
-        }, requestContext)
-        return { revisionId: result.snapshot.revisionId }
-      },
-      write: async stateInput => {
-        if (!stateInput.pointer)
-          throw Object.assign(new Error('Write a State property under /state/data, not the complete State snapshot.'), { code: 'vfs.write_unsupported' })
-        const result = await applyApplicationStateMutation(ctx, {
-          target: stateInput.target,
-          expectedRevisionId: stateInput.expectedRevisionId,
-          operations: [{ op: 'set', path: stateInput.pointer, value: stateInput.value }],
-          idempotencyKey: stateInput.idempotencyKey,
-        }, requestContext)
-        return {
-          revisionId: result.snapshot.revisionId,
-          changesetId: result.mutation.changesetId,
-        }
-      },
-    }
-    prompt.toolExecutionScope.mutatePromptResource = async resourceInput => {
-      const resource = await ctx.promptResources.getResource(resourceInput.resourceId)
-      if (!resource) throw new Error(`Prompt Resource not found: ${resourceInput.resourceId}`)
-      if (!isExtensionResourceAvailable(resource.metadata.origin, prompt.toolExecutionScope.availableExtensionInstallations)) {
-        throw new Error(`Prompt Resource is not available in this context: ${resourceInput.resourceId}`)
-      }
-      const result = await ctx.promptResources.mutateResource({
-        ...resourceInput,
-        ...promptResourceWriteContext(requestContext),
-        reason: 'application.tool.updatePromptResource',
-      })
-      return {
-        id: result.resource.id,
-        version: result.resource.version,
-        changesetId: result.commit.changesetId,
-      }
-    }
-    prompt.toolExecutionScope.writePromptResource = async input => {
-      const resource = await ctx.promptResources.getResource(input.resourceId)
-      if (!resource)
-        throw Object.assign(new Error(`Prompt Resource not found: ${input.resourceId}`), { code: 'vfs.not_found' })
-      if (resource.version !== input.expectedVersion)
-        throw Object.assign(new Error('Prompt Resource changed after it was read. Read it again before writing.'), { code: 'vfs.baseline_changed' })
-      const result = await ctx.promptResources.mutateResource({
-        resourceId: input.resourceId,
-        expectedVersion: input.expectedVersion,
-        mutations: [{
-          kind: 'node.update',
-          nodeId: input.nodeId,
-          patch: { body: input.body },
-        }],
-        ...promptResourceWriteContext(requestContext),
-        reason: 'application.codeact.write',
-      })
-      return { version: result.resource.version, changesetId: result.commit.changesetId }
-    }
-    prompt.toolExecutionScope.configurePromptResource = async input => {
-      const resource = await ctx.promptResources.getResource(input.resourceId)
-      if (!resource)
-        throw Object.assign(new Error(`Prompt Resource not found: ${input.resourceId}`), { code: 'vfs.not_found' })
-      if (resource.version !== input.expectedVersion)
-        throw Object.assign(new Error('Prompt Resource changed after it was read. Read it again before writing Metadata.'), { code: 'vfs.baseline_changed' })
-      const result = await ctx.promptResources.mutateResource({
-        resourceId: input.resourceId,
-        expectedVersion: input.expectedVersion,
-        mutations: [{
-          kind: 'node.update',
-          nodeId: input.nodeId,
-          patch: input.patch as PromptResourceNodePatch,
-        }],
-        ...promptResourceWriteContext(requestContext),
-        reason: 'application.codeact.configure',
-      })
-      return { version: result.resource.version, changesetId: result.commit.changesetId }
-    }
-    prompt.toolExecutionScope.movePromptResource = async input => {
-      const resource = await ctx.promptResources.getResource(input.resourceId)
-      if (!resource)
-        throw Object.assign(new Error(`Prompt Resource not found: ${input.resourceId}`), { code: 'vfs.not_found' })
-      if (resource.version !== input.expectedVersion)
-        throw Object.assign(new Error('Prompt Resource changed after it was read. Read it again before moving the node.'), { code: 'vfs.baseline_changed' })
-      const result = await ctx.promptResources.mutateResource({
-        resourceId: input.resourceId,
-        expectedVersion: input.expectedVersion,
-        mutations: [{
-          kind: 'node.move',
-          nodeId: input.nodeId,
-          parentId: input.parentNodeId,
-          orderIndex: input.orderIndex,
-        }],
-        ...promptResourceWriteContext(requestContext),
-        reason: 'application.codeact.move',
-      })
-      return { version: result.resource.version, changesetId: result.commit.changesetId }
-    }
-    prompt.toolExecutionScope.deletePromptResourceNode = async input => {
-      const resource = await ctx.promptResources.getResource(input.resourceId)
-      if (!resource)
-        throw Object.assign(new Error(`Prompt Resource not found: ${input.resourceId}`), { code: 'vfs.not_found' })
-      if (resource.version !== input.expectedVersion)
-        throw Object.assign(new Error('Prompt Resource changed after it was read. Read it again before deleting the node.'), { code: 'vfs.baseline_changed' })
-      const result = await ctx.promptResources.mutateResource({
-        resourceId: input.resourceId,
-        expectedVersion: input.expectedVersion,
-        mutations: [{
-          kind: 'node.delete',
-          nodeId: input.nodeId,
-        }],
-        ...promptResourceWriteContext(requestContext),
-        reason: 'application.codeact.delete',
-      })
-      return { version: result.resource.version, changesetId: result.commit.changesetId }
-    }
-    prompt.toolExecutionScope.createPromptResourceNode = async input => {
-      const resource = await ctx.promptResources.getResource(input.resourceId)
-      if (!resource)
-        throw Object.assign(new Error(`Prompt Resource not found: ${input.resourceId}`), { code: 'vfs.not_found' })
-      if (resource.version !== input.expectedVersion)
-        throw Object.assign(new Error('Prompt Resource changed after it was read. Read it again before creating a node.'), { code: 'vfs.baseline_changed' })
-      const nodeId = ctx.createId('prompt-node')
-      const result = await ctx.promptResources.mutateResource({
-        resourceId: input.resourceId,
-        expectedVersion: input.expectedVersion,
-        mutations: [{
-          kind: 'node.create',
-          parentId: input.parentNodeId,
-          node: { ...input.node, id: nodeId },
-        }],
-        ...promptResourceWriteContext(requestContext),
-        reason: 'application.codeact.create',
-      })
-      return { nodeId, version: result.resource.version, changesetId: result.commit.changesetId }
-    }
-    prompt.toolExecutionScope.copyPromptResourceNode = async input => {
-      const resource = await ctx.promptResources.getResource(input.resourceId)
-      if (!resource)
-        throw Object.assign(new Error(`Prompt Resource not found: ${input.resourceId}`), { code: 'vfs.not_found' })
-      if (resource.version !== input.expectedVersion)
-        throw Object.assign(new Error('Prompt Resource changed after it was read. Read it again before copying the node.'), { code: 'vfs.baseline_changed' })
-      if (resource.rootNodeId === input.sourceNodeId)
-        throw Object.assign(new Error('Prompt Resource root must be copied as a resource, not as a node.'), { code: 'vfs.root_copy' })
-      const source = findPromptResourceTreeNode(resource.rootNode, input.sourceNodeId)
-      if (!source)
-        throw Object.assign(new Error(`Prompt Resource node not found: ${input.sourceNodeId}`), { code: 'vfs.not_found' })
-      const mutations: Array<{
-        kind: 'node.create'
-        parentId: string
-        node: PromptResourceNodeDraft
-      }> = []
-      let nodeCount = 0
-      const append = (node: PromptResourceTreeNode, parentId: string, orderIndex?: number, isRoot = false): string => {
-        const id = ctx.createId('prompt-node')
-        nodeCount += 1
-        mutations.push({
-          kind: 'node.create',
-          parentId,
-          node: {
-            id,
-            label: isRoot && input.name !== undefined ? input.name : node.label,
-            kind: node.kind,
-            ...(orderIndex === undefined ? {} : { orderIndex }),
-            ...(node.category === undefined ? {} : { category: node.category }),
-            ...(node.meta === undefined ? {} : { meta: node.meta }),
-            ...(node.enabled === undefined ? {} : { enabled: node.enabled }),
-            ...(node.body === undefined ? {} : { body: node.body }),
-            ...(node.capabilities === undefined ? {} : { capabilities: node.capabilities }),
-            ...(node.extra === undefined ? {} : { extra: node.extra }),
-          },
-        })
-        node.children?.forEach((child, index) => append(child, id, index))
-        return id
-      }
-      const nodeId = append(source, input.parentNodeId, undefined, true)
-      const result = await ctx.promptResources.mutateResource({
-        resourceId: input.resourceId,
-        expectedVersion: input.expectedVersion,
-        mutations,
-        ...promptResourceWriteContext(requestContext),
-        reason: 'application.codeact.copy',
-      })
-      return { nodeId, nodeCount, version: result.resource.version, changesetId: result.commit.changesetId }
-    }
-    prompt.toolExecutionScope.duplicatePromptResource = async input => {
-      const source = await ctx.promptResources.getResource(input.resourceId)
-      if (!source)
-        throw Object.assign(new Error(`Prompt Resource not found: ${input.resourceId}`), { code: 'vfs.not_found' })
-      if (source.version !== input.expectedVersion)
-        throw Object.assign(new Error('Prompt Resource changed after it was read. Read it again before copying the resource.'), { code: 'vfs.baseline_changed' })
-      const duplicate = await createPromptRuntimeMethods(ctx).duplicatePromptResource({
-        resourceId: input.resourceId,
-        ...(input.name === undefined ? {} : { name: input.name }),
-      }, requestContext)
-      return {
-        resourceId: duplicate.resource.id,
-        label: duplicate.resource.rootNode.label,
-        version: duplicate.resource.version,
-        changesetId: duplicate.mutation.changesetId,
-      }
-    }
-    if (narrativePage && narratives) {
-      const narrativeReader = createNarrativeReader({
-        store: narratives, context: ctx.narrativeContext,
-        timelineId: narrativePage.timeline.id, branchId: narrativePage.branch.id,
-        cardId: narrativePage.timeline.createdFrom?.cardId,
-      })
-      prompt.toolExecutionScope.narrative = {
-        timelineId: narrativePage.timeline.id,
-        branchId: narrativePage.branch.id,
-        sample: async (input, signal, approveHistory) => {
-          const sample = await narrativeReader.sample(input, signal, approveHistory)
-          if (input.view !== 'prompt') return sample
-          return projectNarrativeSample(sample, {
-            phase: 'prompt', rules: narrativeTextPipeline!.rules,
-            maxNodes: input.maxNodes, maxCharacters: input.maxCharacters,
-          })
-        },
-        appendNode: async ({ content }) => {
-          const currentBranch = await narratives.getBranch(narrativePage.branch.id)
-          if (!currentBranch) throw new Error(`Narrative branch not found: ${narrativePage.branch.id}`)
-          const result = await narratives.appendNode({
-            ...narrativeWriteContext(requestContext, 'application.tool.appendNarrative'),
-            timelineId: narrativePage.timeline.id,
-            branchId: narrativePage.branch.id,
-            expectedHeadNodeId: currentBranch.headNodeId ?? null,
-            stateRevisionId: currentBranch.stateHeadRevisionId,
-            body: { format: 'loom-markdown.v1', raw: content },
-            source: {
-              agentSessionId: session.id,
-              runId,
-            },
-          })
-          return { nodeId: result.node.id }
-        },
-        editNode: async ({ nodeId, content, expectedRaw }) => {
-          const branch = await narratives.getBranch(narrativePage.branch.id)
-          const target = await narratives.getNode(nodeId)
-          if (!branch?.headNodeId || !target || target.timelineId !== narrativePage.timeline.id) {
-            throw new Error(`Narrative node ${nodeId} is not editable from branch ${narrativePage.branch.id}`)
-          }
-          const expectedHeadNodeId = branch.headNodeId
-          const result = await ctx.dataEngine.transact(
-            narrativeWriteContext(requestContext, 'application.tool.editNarrative'),
-            async dataTx => {
-              const edited = narratives.transaction(dataTx).editBranchNode({
-                timelineId: narrativePage.timeline.id,
-                branchId: narrativePage.branch.id,
-                nodeId,
-                expectedHeadNodeId,
-                expectedBody: expectedRaw === undefined ? target.body : { ...target.body, raw: expectedRaw },
-                body: { format: 'loom-markdown.v1', raw: content },
-              })
-              return { nodeId: edited.replacements[0]!.node.id }
-            },
-          )
-          return result.value
-        },
-      }
-    }
+    prompt.toolExecutionScope = createAgentToolScope(ctx, {
+      base: prompt.toolExecutionScope,
+      presetId: preset.id,
+      sessionId: session.id,
+      runId,
+      ...(narrativePage ? { narrative: { page: narrativePage, rules: narrativeTextPipeline!.rules } } : {}),
+      requestContext,
+    })
     const durationMs = readDurationMs(startedAt)
     ctx.logger?.info(`${mode} prompt build completed · ${prompt.messages.length} messages`, {
       event: 'prompt.build.completed',
@@ -1192,16 +914,4 @@ async function buildProviderPayloadPreview(input: {
 
 function readDurationMs(startedAt: number): number {
   return Math.round((performance.now() - startedAt) * 100) / 100
-}
-
-function findPromptResourceTreeNode(
-  root: PromptResourceTreeNode,
-  nodeId: string,
-): PromptResourceTreeNode | undefined {
-  if (root.id === nodeId) return root
-  for (const child of root.children ?? []) {
-    const found = findPromptResourceTreeNode(child, nodeId)
-    if (found) return found
-  }
-  return undefined
 }

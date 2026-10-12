@@ -86,7 +86,7 @@ export async function handleAgentsRpc(
         model: isRecord(params) && params.model === null ? null : readOptionalProviderModelSelection(params, 'model'),
         delivery: readOptionalDelivery(params),
         historyPolicy: readOptionalHistoryPolicy(params),
-        useCardSettings: readOptionalBoolean(params, 'useCardSettings'),
+        useCardLore: readOptionalBoolean(params, 'useCardLore'),
         textUses: readPresetTextUses(params),
       }, context) as unknown as JsonValue
 

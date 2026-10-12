@@ -24,7 +24,7 @@ PromptBuild 的目标不是输出大量普通日志，而是让一次构建可�
 - 最终 compiled payload 与 source document 如何关联；
 - 哪些内容被裁剪、隐藏或脱敏。
 
-PromptBuild Trace 是 Application Layer 的解释模型，不应退化为 Kernel Log，也不应要求 Loom Core 理解 Card、Setting Layer、Agent 或 Runtime 语义。
+PromptBuild Trace 是 Application Layer 的解释模型，不应退化为 Kernel Log，也不应要求 Loom Core 理解 Card、Lore、Agent 或 Runtime 语义。
 
 ---
 
@@ -87,7 +87,7 @@ correlationId / callId
 - Diagnostic refs；
 - redaction metadata。
 
-普通 Log 不保存完整 prompt、完整 Setting 内容、完整 ToolResult 或完整 provider payload。
+普通 Log 不保存完整 prompt、完整 Lore 内容、完整 ToolResult 或完整 provider payload。
 
 ---
 
@@ -114,7 +114,7 @@ modelProfileId?
 记录 Runtime 为本次 build 显式选择了哪些 source：
 
 - Composition Skeleton / Preset；
-- Setting Layer projection；
+- Lore projection；
 - Narrative projection；
 - 当前 Runtime input；
 - 当前 Run Transcript projection；

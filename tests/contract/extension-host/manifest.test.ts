@@ -251,12 +251,12 @@ describe('extension manifest contract', () => {
       engines: { studio: '^0.1.0' },
       contributes: {
         promptResources: [
-          { id: 'setting', resourceKind: 'setting', source: './resources/setting.json' },
+          { id: 'lore', resourceKind: 'lore', source: './resources/setting.json' },
           {
             id: 'preset',
             resourceKind: 'preset',
             source: './resources/preset.json',
-            settingMounts: [{ resourceId: 'setting' }],
+            loreMounts: [{ resourceId: 'lore' }],
             toolMounts: [
               { toolId: 'example.capability-pack/echo', defaultEnabled: true },
               { toolId: 'example.capability-pack/write', content: { zone: 'tools.content', slot: 'official' } },
@@ -332,7 +332,7 @@ describe('extension manifest contract', () => {
   })
 
   describe('Preset Setting references', () => {
-    const parseMounts = (settingMounts: unknown[]) => parseExtensionManifest({
+    const parseMounts = (loreMounts: unknown[]) => parseExtensionManifest({
       manifestVersion: 2,
       id: 'example.references',
       version: '0.1.0',
@@ -340,15 +340,15 @@ describe('extension manifest contract', () => {
       engines: { studio: '^0.1.0' },
       contributes: {
         promptResources: [
-          { id: 'setting', resourceKind: 'setting', source: './setting.json' },
-          { id: 'preset', resourceKind: 'preset', source: './preset.json', settingMounts },
+          { id: 'lore', resourceKind: 'lore', source: './setting.json' },
+          { id: 'preset', resourceKind: 'preset', source: './preset.json', loreMounts },
         ],
       },
     })
 
     it.each([
-      { resourceId: 'setting' },
-      { reference: { kind: 'package', contributionId: 'setting' } },
+      { resourceId: 'lore' },
+      { reference: { kind: 'package', contributionId: 'lore' } },
       { reference: { kind: 'external', resourceId: 'missing-on-this-device' } },
       { reference: { kind: 'external', resourceId: 'external-setting', origin: {
         packageId: 'other.package', contributionId: 'knowledge', target: 'card',
@@ -360,8 +360,8 @@ describe('extension manifest contract', () => {
     it.each([
       {},
       { reference: null },
-      { resourceId: 'setting', reference: { kind: 'package', contributionId: 'setting' } },
-      { reference: { kind: 'unknown', resourceId: 'setting' } },
+      { resourceId: 'lore', reference: { kind: 'package', contributionId: 'lore' } },
+      { reference: { kind: 'unknown', resourceId: 'lore' } },
       { reference: { kind: 'package', contributionId: 'missing' } },
       { reference: { kind: 'package', contributionId: 'preset' } },
       { reference: { kind: 'external', resourceId: '' } },
@@ -378,14 +378,14 @@ describe('extension manifest contract', () => {
 
     it('rejects duplicate package references across the legacy and current forms', () => {
       expect(() => parseMounts([
-        { resourceId: 'setting' },
-        { reference: { kind: 'package', contributionId: 'setting' } },
+        { resourceId: 'lore' },
+        { reference: { kind: 'package', contributionId: 'lore' } },
       ])).toThrow('must be unique')
     })
 
     it('rejects duplicate external references without conflating them with package IDs', () => {
-      const external = { reference: { kind: 'external', resourceId: 'setting' } }
-      expect(() => parseMounts([{ resourceId: 'setting' }, external])).not.toThrow()
+      const external = { reference: { kind: 'external', resourceId: 'lore' } }
+      expect(() => parseMounts([{ resourceId: 'lore' }, external])).not.toThrow()
       expect(() => parseMounts([external, external])).toThrow('must be unique')
     })
   })

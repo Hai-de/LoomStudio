@@ -9,13 +9,13 @@
     },
     {
       "id": "prompt-resource.official.loom-knowledge",
-      "path": "settings/knowledge.json"
+      "path": "lore/knowledge.json"
     }
   ],
-  "settingMounts": [
+  "loreMounts": [
     {
       "presetResourceId": "prompt-resource.official.loom-assistant",
-      "settingResourceId": "prompt-resource.official.loom-knowledge"
+      "loreResourceId": "prompt-resource.official.loom-knowledge"
     }
   ]
 }

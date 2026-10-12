@@ -129,7 +129,7 @@ export function readContextAssetTreeActions(
   const isPreset = node.category === 'preset'
   const isPresetRoot = isPreset && node.kind === 'module'
   const canAddEntryOrAnchor = canAdd && !isPresetRoot
-  const isSettingLayer = node.category === 'setting' && node.kind === 'module'
+  const isLore = node.category === 'lore' && node.kind === 'module'
   const items: MenuAction[] = []
 
   if (canToggleContextAssetEnabled(node)) {
@@ -139,7 +139,7 @@ export function readContextAssetTreeActions(
       label: input.t('context.actionEnable'),
       onSelect: () => input.onToggleEnabled(node.id, node.enabled === false),
     })
-    if (isSettingLayer || canAdd || canDuplicate) items.push({ id: 'state-separator', type: 'separator' })
+    if (isLore || canAdd || canDuplicate) items.push({ id: 'state-separator', type: 'separator' })
   }
   if (canAddEntryOrAnchor) items.push({ icon: <Plus aria-hidden="true" />, id: 'add', label: input.t('context.actionAdd'), onSelect: () => input.onAdd(node.id) })
   if (canAdd && input.onAddFolder) items.push({ icon: <FolderPlus aria-hidden="true" />, id: 'addFolder', label: input.t('context.actionAddFolder'), onSelect: () => input.onAddFolder!(node.id) })

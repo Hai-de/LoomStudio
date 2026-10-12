@@ -6,7 +6,7 @@ Studio Application 的 Agent 子系统负责组织模型调用、PromptBuild、T
 
 ```text
 Agent Preset
-  -> Prompt Resource 树 + 模型绑定 + Settings / textUses / Tool Mount
+  -> Prompt Resource 树 + 模型绑定 + Lore / textUses / Tool Mount
   -> PromptBuild + Tool Prompt Build
   -> AI Gateway Provider Step
   -> Tool Invocation / Result Loop
@@ -43,7 +43,7 @@ Extension Manifest 中的 Agent Preset 贡献属于静态声明。显式导入�
 
 Session 创建后固定 `agentPresetId`，不能通过 `updateAgentSession` 改绑；使用另一预设应创建另一 Session。主写作指客户端为 Narrative 输入选择的接收 Session，与当前查看对象分离。生成中不允许换主，旧暂停任务须先成功放弃，不跨预设续跑。固定绑定不冻结预设资源版本，详细边界见[身份与绑定](runtime-and-session.md#1-身份与绑定)。
 
-预设资源使用配置与包归属分离：Settings 通过 Mount 显式采用，角色默认采用可关闭，正则/提取器以 `textUses` 覆盖公共默认。引用不自动将资源收入包，预设切换也不启动独立代码实例或停用整个扩展，见[PromptBuild](../prompt-build/README.md#资源归属与使用配置)。
+预设资源使用配置与包归属分离：Lore 通过 Mount 显式采用，角色默认采用可关闭，正则/提取器以 `textUses` 覆盖公共默认。引用不自动将资源收入包，预设切换也不启动独立代码实例或停用整个扩展，见[PromptBuild](../prompt-build/README.md#资源归属与使用配置)。
 
 当前尚未完成：
 

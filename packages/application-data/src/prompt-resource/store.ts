@@ -22,14 +22,15 @@ import {
   migrateVersionThree,
   migrateVersionFour,
   migrateVersionFive,
+  migrateVersionSix,
   assertPromptResourceSchema,
   migrationNamespace,
 } from './schema.js'
 import {
   applyAddPresetToolMount,
-  applyAddSettingMount,
+  applyAddLoreMount,
   applyReplacePresetToolMounts,
-  applyReplaceSettingMounts,
+  applyReplaceLoreMounts,
   listMounts,
   listPresetToolMounts,
 } from './mounts.js'
@@ -55,6 +56,7 @@ export function createPromptResourceStore(options: PromptResourceStoreOptions): 
       { version: 3, migrate: migrateVersionThree },
       { version: 4, migrate: migrateVersionFour },
       { version: 5, migrate: migrateVersionFive },
+      { version: 6, migrate: migrateVersionSix },
     ],
   })
   const database = engine.database
@@ -66,8 +68,8 @@ export function createPromptResourceStore(options: PromptResourceStoreOptions): 
       mutateResource: input => applyMutateResource(database, tx, input, now),
       deleteResource: input => applyDeleteResource(database, tx, input, now),
       restoreResource: input => applyRestoreResource(database, tx, input, now),
-      addSettingMount: input => applyAddSettingMount(database, tx, input, nextId, now),
-      replaceSettingMounts: input => applyReplaceSettingMounts(database, tx, input, nextId, now),
+      addLoreMount: input => applyAddLoreMount(database, tx, input, nextId, now),
+      replaceLoreMounts: input => applyReplaceLoreMounts(database, tx, input, nextId, now),
       addPresetToolMount: input => applyAddPresetToolMount(database, tx, input, nextId, now),
       replacePresetToolMounts: input => applyReplacePresetToolMounts(database, tx, input, nextId, now),
     }
@@ -87,7 +89,7 @@ export function createPromptResourceStore(options: PromptResourceStoreOptions): 
     getResource: (id, readOptions) => engine.read(database => readResource(database, id, readOptions?.includeTombstone ?? false)),
     getResourceMetadataAtVersion: (id, version) => engine.read(database => readResourceMetadataAtVersion(database, id, version)),
     listResources: input => engine.read(database => listResources(database, input)),
-    listSettingMounts: input => engine.read(database => listMounts(database, input)),
+    listLoreMounts: input => engine.read(database => listMounts(database, input)),
     listPresetToolMounts: input => engine.read(database => listPresetToolMounts(database, input)),
     createResource: async input => {
       const result = await runTransaction(input, tx => transaction(tx).createResource(input))
@@ -105,12 +107,12 @@ export function createPromptResourceStore(options: PromptResourceStoreOptions): 
       const result = await runTransaction(input, tx => transaction(tx).restoreResource(input))
       return { resource: result.value, commit: result.commit }
     },
-    addSettingMount: async input => {
-      const result = await runTransaction(input, tx => transaction(tx).addSettingMount(input))
+    addLoreMount: async input => {
+      const result = await runTransaction(input, tx => transaction(tx).addLoreMount(input))
       return { mounts: [result.value], commit: result.commit }
     },
-    replaceSettingMounts: async input => {
-      const result = await runTransaction(input, tx => transaction(tx).replaceSettingMounts(input))
+    replaceLoreMounts: async input => {
+      const result = await runTransaction(input, tx => transaction(tx).replaceLoreMounts(input))
       return { mounts: result.value, commit: result.commit }
     },
     addPresetToolMount: async input => {

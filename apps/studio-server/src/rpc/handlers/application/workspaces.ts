@@ -12,9 +12,9 @@ import { isPromptActivation, isPromptResourceArtifact } from '@loom-studio/appli
 import { decodePromptResourceZip, encodePromptResourceZip } from '../../../codecs/prompt-resource-zip.js'
 import type { PromptResourceConverter } from '../../../extensions/import-conversion.js'
 import {
-  listSettingMountsInputSchema,
-  replaceSettingMountsInputSchema,
-  settingMountSourceSchema,
+  listLoreMountsInputSchema,
+  replaceLoreMountsInputSchema,
+  loreMountSourceSchema,
   type JsonValue,
 } from '@loom-studio/shared'
 import {
@@ -122,11 +122,11 @@ export async function handleWorkspacesRpc(
         macroOptions: readOptionalObject(params, 'macroOptions') as import('@loom-studio/shared').MacroOptions | undefined,
       }, context) as unknown as JsonValue
 
-    case 'application.listSettingMounts':
-      return await runtime.listSettingMounts(readListSettingMountsInput(params)) as unknown as JsonValue
+    case 'application.listLoreMounts':
+      return await runtime.listLoreMounts(readListLoreMountsInput(params)) as unknown as JsonValue
 
-    case 'application.replaceSettingMounts':
-      return await runtime.replaceSettingMounts(readReplaceSettingMountsInput(params), context) as unknown as JsonValue
+    case 'application.replaceLoreMounts':
+      return await runtime.replaceLoreMounts(readReplaceLoreMountsInput(params), context) as unknown as JsonValue
 
     case 'application.createPromptResourceAsset':
       return await runtime.createPromptResourceAsset({
@@ -188,16 +188,16 @@ function readRequiredStringRecord(params: JsonValue | undefined, key: string): R
   return value as Record<string, string>
 }
 
-function readListSettingMountsInput(params: JsonValue | undefined) {
-  const result = listSettingMountsInputSchema.safeParse(params ?? {})
-  if (!result.success) throw new Error('Expected Setting mount source param: source')
+function readListLoreMountsInput(params: JsonValue | undefined) {
+  const result = listLoreMountsInputSchema.safeParse(params ?? {})
+  if (!result.success) throw new Error('Expected Lore mount source param: source')
   return result.data
 }
 
-function readReplaceSettingMountsInput(params: JsonValue | undefined) {
-  const source = settingMountSourceSchema.safeParse(isRecord(params) ? params.source : undefined)
-  if (!source.success) throw new Error('Expected Setting mount source param: source')
-  return replaceSettingMountsInputSchema.parse(params)
+function readReplaceLoreMountsInput(params: JsonValue | undefined) {
+  const source = loreMountSourceSchema.safeParse(isRecord(params) ? params.source : undefined)
+  if (!source.success) throw new Error('Expected Lore mount source param: source')
+  return replaceLoreMountsInputSchema.parse(params)
 }
 
 function readOptionalPromptResourceKind(params: JsonValue | undefined, key: string): PromptResourceKind | undefined {
@@ -207,7 +207,7 @@ function readOptionalPromptResourceKind(params: JsonValue | undefined, key: stri
 
 function readPromptResourceKind(params: JsonValue | undefined, key: string): PromptResourceKind {
   const value = readString(params, key)
-  if (value === 'preset' || value === 'setting' || value === 'logic' || value === 'runtime' || value === 'history' || value === 'prompt') {
+  if (value === 'preset' || value === 'lore' || value === 'logic' || value === 'runtime' || value === 'history' || value === 'prompt') {
     return value
   }
   throw new Error(`Expected Prompt Resource kind param: ${key}`)

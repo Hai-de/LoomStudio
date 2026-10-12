@@ -183,7 +183,7 @@ export function createStudioPanels(input: {
         endpoint={state.endpoint}
         onChangeResourceNode={state.previewContextAsset}
         onCommitResourceNode={(id, partial) => { void state.updateContextAsset(id, partial).catch(() => undefined) }}
-        onOpenSetting={(resource, nodeId) => { void navigation.openResource('resource', resource.id, nodeId) }}
+        onOpenLore={(resource, nodeId) => { void navigation.openResource('resource', resource.id, nodeId) }}
         resourceDirectoryOpen={navigation.searchParams.get('characterView') === 'attachments'}
         resourceDirectorySelectedId={navigation.searchParams.get('cardResourceNode') ?? undefined}
         resourceDirectoryExpandedIds={navigation.searchParams.getAll('cardResourceExpanded')}
@@ -264,7 +264,7 @@ export function createStudioPanels(input: {
       const boundIds = new Set(state.selectedCardDetails?.promptResourceIds ?? [])
       if (activePresetId) boundIds.add(activePresetId)
       
-      const globalMountIds = new Set(state.settingMounts.filter(m => m.source.id === 'global').map(m => m.settingResourceId))
+      const globalMountIds = new Set(state.loreMounts.filter(m => m.source.id === 'global').map(m => m.loreResourceId))
 
       for (const resource of state.promptResources) {
         if (boundIds.has(resource.id) || globalMountIds.has(resource.id)) {

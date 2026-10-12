@@ -1,9 +1,9 @@
-import type { PromptResource, SettingMount } from '../../../entities/index.js'
+import type { PromptResource, LoreMount } from '../../../entities/index.js'
 
 type ResolvePresetBuildContextResourcesInput = {
   preset?: PromptResource
   resources: PromptResource[]
-  settingMounts: SettingMount[]
+  loreMounts: LoreMount[]
   timelinePromptResourceIds?: string[]
 }
 
@@ -12,10 +12,10 @@ export function resolvePresetBuildContextResources(
 ): { resources: PromptResource[]; unavailableResourceIds: string[] } {
   const resourcesById = new Map(input.resources.map(resource => [resource.id, resource]))
   const resourceIds = [
-    ...input.settingMounts
+    ...input.loreMounts
       .filter(mount => mount.source.kind === 'manual')
       .sort((left, right) => left.orderIndex - right.orderIndex || left.id.localeCompare(right.id))
-      .map(mount => mount.settingResourceId),
+      .map(mount => mount.loreResourceId),
     ...(input.timelinePromptResourceIds ?? []),
   ]
   const seen = new Set<string>()
@@ -28,14 +28,14 @@ export function resolvePresetBuildContextResources(
 
     const resource = resourcesById.get(resourceId)
     if (!resource) unavailableResourceIds.push(resourceId)
-    if (resource?.resourceKind === 'setting') resolved.push(resource)
+    if (resource?.resourceKind === 'lore') resolved.push(resource)
   }
 
-  for (const mount of input.settingMounts) {
+  for (const mount of input.loreMounts) {
     if (mount.source.kind !== 'preset' || mount.source.id !== input.preset?.id
-      || seen.has(mount.settingResourceId) || resourcesById.has(mount.settingResourceId)) continue
-    seen.add(mount.settingResourceId)
-    unavailableResourceIds.push(mount.settingResourceId)
+      || seen.has(mount.loreResourceId) || resourcesById.has(mount.loreResourceId)) continue
+    seen.add(mount.loreResourceId)
+    unavailableResourceIds.push(mount.loreResourceId)
   }
 
   return { resources: resolved, unavailableResourceIds }

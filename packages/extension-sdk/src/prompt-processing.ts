@@ -5,7 +5,7 @@ export type ExtensionPromptEntry = {
   id: string
   sourceId: string
   sourceNodeId: string
-  kind: 'preset' | 'settingLayer'
+  kind: 'preset' | 'lore'
   label: string
   sourceLabel?: string
   metadata?: JsonObject

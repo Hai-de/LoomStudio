@@ -21,7 +21,7 @@
 Loom Studio 同时存在几种性质不同的上下文：
 
 - Preset 作者规定的稳定 Agent 行为；
-- Card / Setting 作者规定的被动注入内容；
+- Card / Lore 作者规定的被动注入内容；
 - Narrative Timeline 中已经发生的剧情；
 - Agent Session 中发生的工作过程；
 - Agent 在当前 Run 中变化的 State、工具结果和工作区；
@@ -81,11 +81,11 @@ Session 记忆不能替代 Narrative 记忆；Narrative 摘要也不应携带某
 > 配置选择用宏；多方汇集用 Anchor。
 
 - 配置要求从候选中取一项或限定数量的若干项，选择结果共同构成本次配置值，使用宏。例如文风单选、推演策略选择。
-- 多个贡献在本次都需要独立表达，不通过选择一个来覆盖其他贡献，使用 Anchor。例如多本世界书汇入 `Setting.stable`、多条运行提醒以及不同来源的记忆贡献。这里的名称只作示意，不新增正式 ID。
+- 多个贡献在本次都需要独立表达，不通过选择一个来覆盖其他贡献，使用 Anchor。例如多本世界书汇入 `Lore.stable`、多条运行提醒以及不同来源的记忆贡献。这里的名称只作示意，不新增正式 ID。
 - 宏候选也可以来自多方，所以“有多个来源”本身不等于必须使用 Anchor；关键是先选出配置值，还是保留多份贡献一起编排。
 - 配置中的受限多选与数量 / Token 预算不同。Anchor 为控制载荷而限制条目数，并不会因此变成宏。
 
-- Anchor 接收独立 Contribution，保留来源、激活与局部排序；可以容纳许多 Setting，不负责关闭或替换预设的其他 Entry。
+- Anchor 接收独立 Contribution，保留来源、激活与局部排序；可以容纳许多 Lore，不负责关闭或替换预设的其他 Entry。
 - 配置宏在宿主 Entry 中提供一个明确的取值位置。Preset 可提供默认值和候选，角色卡可提供同一配置项的作品候选，用户选择本次采用哪个值或来源。
 - 字符串宏可以是长文风或长段推演说明。长度不是选择宏或 Anchor 的依据；需要独立编排身份时使用 Anchor，只需替换宿主中的文本时使用宏。
 - 宏展开后跟随宿主 Entry 的位置、角色与生命周期，不生成新节点、不递归展开宏、不执行 ST 的 `setvar` 或任意脚本，不赋值到 State。
@@ -99,7 +99,7 @@ Session 记忆不能替代 Narrative 记忆；Narrative 摘要也不应携带某
 
 ```text
 固定的写作要求
-  文风：{{Setting.wenfeng_macro}}
+  文风：{{Lore.wenfeng_macro}}
 固定的检查步骤
   剧情推进：{{cot.剧情推进}}
 固定的收束步骤
@@ -111,12 +111,12 @@ Session 记忆不能替代 Narrative 记忆；Narrative 摘要也不应携带某
 
 ### 2.6 设置与职责
 
-这里区分 Setting 内容资源和设置面板：前者保存作者内容，后者选择当前使用哪份配置文本。存储位置不自动决定覆盖优先级。
+这里区分 Lore 内容资源和设置面板：前者保存作者内容，后者选择当前使用哪份配置文本。存储位置不自动决定覆盖优先级。
 
 | 责任方 | 负责的内容 | 不负责的内容 |
 | --- | --- | --- |
 | Preset 作者 | 树顺序、固定 Entry、包裹、Anchor、公开配置宏及其默认候选 | 根据切卡动作修改其他作品的数据 |
-| 角色卡作者 | 常驻 / 动态 Setting 的贡献，以及与预设公开配置项匹配的作品宏候选 | 自动篡改共享预设正文、开关或所有会话的选择 |
+| 角色卡作者 | 常驻 / 动态 Lore 的贡献，以及与预设公开配置项匹配的作品宏候选 | 自动篡改共享预设正文、开关或所有会话的选择 |
 | 扩展作者 | 通过正式来源提供数据、独立贡献或宏候选；分别服务对应调用 | 以加载顺序抢占同名宏，或把副作用藏在宏展开中 |
 | 用户设置 | 选择预设候选；确认是否采用角色卡候选；查看有效值和来源并切回默认 | 手工维护每次切卡的关闭 / 恢复脚本 |
 | PromptBuild | 使用本次已解析的宏值与贡献构建 Prompt，保留来源诊断 | 代替用户猜测同名候选谁胜出，或写回源配置 |
@@ -143,7 +143,7 @@ Session 记忆不能替代 Narrative 记忆；Narrative 摘要也不应携带某
   稳定工具说明
   可选的前置补充 Anchor
   Preset 作者包裹开头
-  常驻 Setting Anchor：接收独立贡献
+  常驻 Lore Anchor：接收独立贡献
   Preset 作者包裹结尾
 
 Narrative 基线
@@ -156,7 +156,7 @@ Narrative 基线
   必要的较早工作记录，保留消息与工具协议边界
 
 本次交互的动态上下文
-  条件 Setting Anchor：本次交互开始前计算的贡献
+  条件 Lore Anchor：本次交互开始前计算的贡献
   状态视图等明确来源提供的上下文
 
 当前输入
@@ -181,7 +181,7 @@ Notice、Workspace 和普通尾部贡献需要独立分块，不能仅因都在�
 
 ```text
 读取交互开始前的输入、Narrative 基线和 State
-  -> 计算 Active Setting
+  -> 计算 Active Lore
   -> 冻结本次交互的 Passive Context Snapshot
 ```
 
@@ -199,7 +199,7 @@ entry: relationship.alice.80
 action: read_context(entry)
 ```
 
-Runtime Notice 默认只说明新可用内容，不全文复制被动 Setting。Agent 需要完整内容时通过主动读取获得。
+Runtime Notice 默认只说明新可用内容，不全文复制被动 Lore。Agent 需要完整内容时通过主动读取获得。
 
 建议保留独立 Anchor：
 
@@ -221,7 +221,7 @@ list / search
   -> Tool Result / Fresh Context Mount
 ```
 
-被动 Setting、Runtime Notice 和主动读取必须保持可解释的来源与生命周期差异。
+被动 Lore、Runtime Notice 和主动读取必须保持可解释的来源与生命周期差异。
 
 ## 5. Narrative / Session 记忆投影
 
@@ -361,14 +361,14 @@ Narrative 使用普通 Anchor 定位，不因采样引入带参数的特殊锚�
 - Prompt / CodeAct：复用同一 Narrative 文本加工函数；CodeAct 的 prompt 视图使用宿主选定的规则，不能由脚本指定其他 Preset。保持默认 raw，保持当前默认 Prompt 窗口，不偷偷实施有效 Head 策略。
 - 写集：`narrative/sampling.ts`、新的正文加工 helper、`runtime/transforms-runtime.ts`、`agents/agent-turn.ts`、`runtime/agents-runtime.ts`、CodeAct Context / 教程、Runtime 导出类型及定向测试。
 - 主要验证：真实 Store 的跨页次序、区间边界、预算续读、读取间新增节点和取消；无 Session 加工、规则覆盖、原文不变；两种 CodeAct 传输下 raw / prompt 与被动 Prompt 内容一致。公共接口变化补 Runtime build，不跑全仓验收。
-- 停止边界：Memory 默认范围的持久化与采用、历史权限分层、引用展开、Session 总结与消息回放不在本轮自行定案。正文不增加宏求值层，见第 16 节后续澄清；Setting 的重新渲染仍遵循其上下文生命周期。当前 Timeline / Branch 绑定不是历史分层授权已经完成的证明。
+- 停止边界：Memory 默认范围的持久化与采用、历史权限分层、引用展开、Session 总结与消息回放不在本轮自行定案。正文不增加宏求值层，见第 16 节后续澄清；Lore 的重新渲染仍遵循其上下文生命周期。当前 Timeline / Branch 绑定不是历史分层授权已经完成的证明。
 
 本计划暂不：
 
 - 设计完整的记忆插件算法或 LV1 / LV2 / LV3 Schema；
 - 实现自动总结 Agent；
 - 改造 CodeAct 执行协议；
-- 增加通用 Anchor 替换 / 继承引擎，或把 Preset 与 Setting 强制合并为一个资源；
+- 增加通用 Anchor 替换 / 继承引擎，或把 Preset 与 Lore 强制合并为一个资源；
 - 承诺具体 Provider 的缓存命中率或注意力收益；
 - 让 Prompt 在 Provider 调用进行中实时变化；
 - 让被动关键词在同一交互中递归触发；
@@ -428,14 +428,14 @@ Narrative 使用普通 Anchor 定位，不因采样引入带参数的特殊锚�
 - [`docs/archive/discussion/application/memory-summary-v0.md`](../../archive/discussion/application/memory-summary-v0.md)
 - [`docs/architecture/application/prompt-build/README.md`](../../architecture/application/prompt-build/README.md)
 - [`docs/workbench/plans/agent-runtime-session-and-workspace-plan.md`](./agent-runtime-session-and-workspace-plan.md)
-- [Setting Layer 与配置宏职责](../../archive/discussion/application/prompt/setting-layer-prompt-source-v0.md)
+- [Lore 与配置宏职责](../../archive/discussion/application/prompt/setting-layer-prompt-source-v0.md)
 
 ## 11. 接下来逐项讨论
 
 以下是开放问题，不把先前候选或助手建议自动升级为最终合同：
 
 1. 默认骨架：在已确认的 Anchor / 配置宏分工下，收束官方必备 / 可选位置、包裹和作者协作；不再以新增替换 Anchor 解决文风选择。
-2. 生命周期：交互、Run、Session 的工作段重建时点；被动 Setting 重算；Workspace / Notice 更新位置；Memory 指针何时被下一次 PromptBuild 消费。
+2. 生命周期：交互、Run、Session 的工作段重建时点；被动 Lore 重算；Workspace / Notice 更新位置；Memory 指针何时被下一次 PromptBuild 消费。
 3. 记忆接线合同：Memory 侧提供摘要与 Raw 范围贡献，PromptBuild 消费；失败时继续使用旧贡献。摘要策略及配置转至独立记忆 Plan，不再讨论两个自动总结触发器。
 4. 缓存与失效：尾部变化和前部重建的区别、同一前缀如何识别；不把内部投影版本变化直接等同于 Provider 缓存命中或失效。
 5. 激活语义：关键词扫描来源、状态变化是通知还是全文、主动读取要求、停用与旧上下文残留的区别。
@@ -443,7 +443,7 @@ Narrative 使用普通 Anchor 定位，不因采样引入带参数的特殊锚�
 
 默认骨架讨论需对照 [正式 PromptBuild 架构](../../architecture/application/prompt-build/README.md)、[新建预设模板](../../../packages/application-runtime/src/runtime/prompt-runtime.ts) 和 [官方问答助手](../../../official/starter/presets/assistant.json)。两份模板目前不同；`@fresh.tail` 在官方助手里实际位于前部，名称不保证物理位置。历史 MessageBlock 归档可作为设计依据，但不将旧 Zone / Core Pipeline 合同当作现行实现。
 
-2026-09-20 讨论轮仅更新本 Plan 与 Setting Layer 讨论中的职责说明。后续生命周期与采样实施仍需定向验证范围包含关系、分支归属、节点顺序、raw / prompt 选择及有无 Session 两条消费者路径。宏设置需验证无作品候选、用户接受 / 拒绝候选和切卡不改源配置。实际缓存与注意力效果尚未验证。
+2026-09-20 讨论轮仅更新本 Plan 与 Lore 讨论中的职责说明。后续生命周期与采样实施仍需定向验证范围包含关系、分支归属、节点顺序、raw / prompt 选择及有无 Session 两条消费者路径。宏设置需验证无作品候选、用户接受 / 拒绝候选和切卡不改源配置。实际缓存与注意力效果尚未验证。
 
 ## 12. 默认骨架与原生输入接线切片（2026-09-21）
 
@@ -452,7 +452,7 @@ Narrative 使用普通 Anchor 定位，不因采样引入带参数的特殊锚�
 ### 目标与文件边界
 
 1. 默认模板作为普通 JSON Artifact 随 Application Runtime 包交付，新建预设从它创建独立资源。只维护一个模板源，不依赖问答包已安装，不迁移现有用户预设。涉及 Runtime 的模板 JSON、加载 / 复制函数与 JSON 构建配置。
-2. 稳定身份、文风、推演与输出要求放在 Narrative / Session / 动态内容之前。默认宏必须可解析。保留常驻 / 条件 Setting、记忆、文本工具、输入、Workspace、Notice 与普通尾部的位置，未接入来源保持为空。
+2. 稳定身份、文风、推演与输出要求放在 Narrative / Session / 动态内容之前。默认宏必须可解析。保留常驻 / 条件 Lore、记忆、文本工具、输入、Workspace、Notice 与普通尾部的位置，未接入来源保持为空。
 3. 修复原生编译链：Preset Entry 按树输出且遵守开关 / Activation；外部 Source 不独立混入骨架；Session 保留消息边界；文本 Tool 描述进入锚点，Native Tool Schema 仍与 messages 平级。涉及 workspace-codec、prompt-build-pipeline、prompt-builder、agent-turn。
 4. 复用现有 Narrative 分支窗口，本切片不新增采样参数或总结指针；明确当前窗口与未实现项。现有 Tool Loop 和另一任务的 CodeAct / 返回协议不改写。
 
@@ -470,8 +470,8 @@ Narrative 使用普通 Anchor 定位，不因采样引入带参数的特殊锚�
 ### 实际实现与剩余边界
 
 - 已落地包内 JSON 模板、独立实例化、稳定宏前缀、原位 Entry、选定骨架隔离及 Session 文本消息边界。
-- 新增预设条目不再自动投向 `@chat.system`；已有显式目标与 Setting 默认目标保持原状，不做数据迁移。
-- 原生 Content / Native Tools、常驻与条件 Setting、Narrative 文本变换、Session 文本历史及最新输入已通过实际测试 Gateway 请求验证；工具默认挂载仍关闭。
+- 新增预设条目不再自动投向 `@chat.system`；已有显式目标与 Lore 默认目标保持原状，不做数据迁移。
+- 原生 Content / Native Tools、常驻与条件 Lore、Narrative 文本变换、Session 文本历史及最新输入已通过实际测试 Gateway 请求验证；工具默认挂载仍关闭。
 - 未改现有 Tool Loop / CodeAct。预留的记忆、Skills、State、Workspace、Notice 等位置可以接收显式贡献，但不新增自动生产者。
 - 当前仍是 Narrative 最近 100 节点、Session 最近 100 Transcript Entry 的既有窗口。跨 Run 的 tool-invocation / tool-result 完整回放仍不在现有文本投影中，不能把本切片称为完整 Session 生命周期交付。
 - 整个 Plan 保持 Open；后续应先收束基线采用与上下文生命周期，再实施记忆 / 动态工作区。真实模型效果、Provider 缓存与 UI 人工体验未验收。
@@ -487,11 +487,11 @@ Narrative 使用普通 Anchor 定位，不因采样引入带参数的特殊锚�
 
 用户要求验证完整的交互来回，不能仅检查关键字符串出现或分散的工具单测。测试为 [`default-preset-lifecycle.test.ts`](../../../tests/integration/application-runtime/default-preset-lifecycle.test.ts)。
 
-使用真实 Runtime、磁盘临时 SQLite、注册工具执行器、Narrative Store、Session Store 与 PromptBuild；仅将 Gateway 替换为脚本化模型。工具通过实际 Scope 执行正文追加，不 Mock 写入结果。模拟剧情记忆、Memo、工作区与提醒内容由测试作者预先挂为 Setting Contribution，不代表自动记忆插件已经实现。
+使用真实 Runtime、磁盘临时 SQLite、注册工具执行器、Narrative Store、Session Store 与 PromptBuild；仅将 Gateway 替换为脚本化模型。工具通过实际 Scope 执行正文追加，不 Mock 写入结果。模拟剧情记忆、Memo、工作区与提醒内容由测试作者预先挂为 Lore Contribution，不代表自动记忆插件已经实现。
 
 ### 仿真场景
 
-1. 创建 Default，装入两个不同来源的设定，验证 localDepth 顺序、常驻包裹、剧情前后包裹、剧情记忆、Session Memo、条件 Setting、普通尾部、Workspace、Notice 的独立位置。
+1. 创建 Default，装入两个不同来源的设定，验证 localDepth 顺序、常驻包裹、剧情前后包裹、剧情记忆、Session Memo、条件 Lore、普通尾部、Workspace、Notice 的独立位置。
 2. 创建 105 节点主剧情，从第 103 节点分支并追加两条不同正文。断言当前 100 节点窗口从第 6 节点开始，只含选中分支；仅 Prompt 文本被正则变换，原始正文不改。
 3. 第一轮用户输入：Native 工具读剧情，Content freeform 工具写正文，Native 工具再次读取确认写入，模型结束，共四次 Provider 请求。逐条比对完整消息、角色、顺序、call ID 与结果，确认 Run 内前缀不因正文写入变化。
 4. 第二轮用户输入：正文再次写入成功，随后 Provider 故障。断言写入保留、工具事实持久化、Run 标记 failed，不把故障当成正常结束。
@@ -565,7 +565,7 @@ Narrative 使用普通 Anchor 定位，不因采样引入带参数的特殊锚�
 4. **记忆来源**：例如首次读取 1～15 生成摘要，保留 16～20；第二次在旧记忆基础上处理 16～30，保留 31～35。参考范围可以更广，声明覆盖范围不能因此扩大。
 5. **Session 工作交接**：刷新前把计划、未完成事项和用户约束写入记事板；不把剧情正文再总结一份塞进去。不在工具调用和结果之间切断工作段。
 6. **Runtime**：负责工作交接、Session 工作段退出和安全交互边界；不保存 Narrative 投影快照。若整理期间分支或源版本变化，必须校验处理，不能把边界之后的新写入一并丢弃。
-7. **PromptBuild**：消费 Memory / Sampling 侧为本次消费者请求准备的贡献，不自行推进指针。动态 Setting、最新输入和尾部内容可按各自规则变化，不能据此声称整个 Prompt 前缀绝对不变或已验证 Provider 缓存命中。
+7. **PromptBuild**：消费 Memory / Sampling 侧为本次消费者请求准备的贡献，不自行推进指针。动态 Lore、最新输入和尾部内容可按各自规则变化，不能据此声称整个 Prompt 前缀绝对不变或已验证 Provider 缓存命中。
 
 新 Session 可以从同一分支当前可用摘要和消费者请求的 Raw 范围初始化。例如在 100 楼创建 B，可以请求覆盖 1～90 的记忆与 91～100 正文；A 不需要保存一份 Narrative 快照，下一次请求仍按主 Agent 的默认范围策略取用。两者共享权威剧情数据，不共享可变的 Session 工作段。
 
@@ -633,7 +633,7 @@ Session 单独因为容量压力整理时，不自动推进 Memory 指针。此�
 
 | 类型 | 例子 | 所有者 | 进入时机 |
 | --- | --- | --- | --- |
-| 交互前被动 Setting | 关键词、状态条件刚刚满足的条目 | Setting / Runtime | 新一次 PromptBuild 前重新求值 |
+| 交互前被动 Lore | 关键词、状态条件刚刚满足的条目 | Lore / Runtime | 新一次 PromptBuild 前重新求值 |
 | Runtime Notice | “关系达到阈值，有新资料可读” | Runtime / Extension | 状态写入成功后的下一次 Provider Step 或下一次交互 |
 | Fresh Context | Agent 主动读取的完整资料 | Tool / Runtime | 当前 Tool Result 或下一 Provider Step，按 Tool 合同消费 |
 
@@ -641,20 +641,20 @@ Session 单独因为容量压力整理时，不自动推进 Memory 指针。此�
 
 - 一次 Provider 请求开始后，不递归扫描新正文，不修改已经发出的消息；
 - 同一 Agent Run 的后续 Provider Step 可以根据 Tool Result 增加 Fresh Context；
-- 被动 Setting 是否在同一 Run 的下一 Provider Step 重新激活，需要由 Runtime 选择“只下一次交互”还是“每个 Provider Step”；
+- 被动 Lore 是否在同一 Run 的下一 Provider Step 重新激活，需要由 Runtime 选择“只下一次交互”还是“每个 Provider Step”；
 - Notice 只表达可用事实，不复制完整资料，不自动等同于授权；
 - Workspace 是工作状态投影，不进入 Narrative Memory，也不自动成为 Session Transcript。
 
-当前代码已经具备 `always`、`manual`、`keyword`、`condition`、`all` 和 `activationFacts` 的求值路径，因此这里不新增另一套 Setting 激活架构。建议维持：关键词被动 Setting 在一次用户交互开始时冻结；工具主动读取和 Fresh Context 可以影响当前 Run 的后续 Step；跨交互的新状态在下一次 PromptBuild 重新求值。
+当前代码已经具备 `always`、`manual`、`keyword`、`condition`、`all` 和 `activationFacts` 的求值路径，因此这里不新增另一套 Lore 激活架构。建议维持：关键词被动 Lore 在一次用户交互开始时冻结；工具主动读取和 Fresh Context 可以影响当前 Run 的后续 Step；跨交互的新状态在下一次 PromptBuild 重新求值。
 
-静态 Setting 或改变前方 Prompt 结构的 Setting 修改，可以立即持久化到 Setting 数据源，但只在安全采用点进入 Prompt；它应触发工作交接提醒。纯 `@runtime.state` 数值变化可以在下一 Provider Step 以 State / Notice 形式进入，不自动触发 Narrative 总结。这不保证整个 Run 看见的内容绝对不变，而是避免后台递归改写已经准备好的被动集合。
+静态 Lore 或改变前方 Prompt 结构的 Lore 修改，可以立即持久化到 Lore 数据源，但只在安全采用点进入 Prompt；它应触发工作交接提醒。纯 `@runtime.state` 数值变化可以在下一 Provider Step 以 State / Notice 形式进入，不自动触发 Narrative 总结。这不保证整个 Run 看见的内容绝对不变，而是避免后台递归改写已经准备好的被动集合。
 
 仍需讨论：
 
 - State 工具写入后，下一 Provider Step 是否允许生成 Notice；
 - Notice 是否需要确认、去重和 TTL；
 - Fresh Context 进入 Tool Result、独立 system 消息，还是 `@fresh.tail`；
-- 被动 Setting 停用后，旧 Session 消息是否仍然保留历史事实。
+- 被动 Lore 停用后，旧 Session 消息是否仍然保留历史事实。
 
 ### 15.3 预算与触发器如何衔接
 
@@ -717,11 +717,11 @@ CodeAct 默认 `view: 'raw'`；选择 `prompt` 时使用宿主准备本轮 Promp
 
 ### State 宏的职责澄清（2026-09-24，已确认）
 
-State 宏主要用于 Setting 等提示词资源及 UI 的变量展示，不把模型生成的 Narrative 正文视为待执行宏的模板。默认生成链路中，Setting 的宏先展开为具体文本，再注入给模型；例如好感度由 20 变成 80，变化的是后续被采用的 Setting 投影和 UI 状态展示，不是回头重新解释第 10 楼正文。
+State 宏主要用于 Lore 等提示词资源及 UI 的变量展示，不把模型生成的 Narrative 正文视为待执行宏的模板。默认生成链路中，Lore 的宏先展开为具体文本，再注入给模型；例如好感度由 20 变成 80，变化的是后续被采用的 Lore 投影和 UI 状态展示，不是回头重新解释第 10 楼正文。
 
 因此撤销“正文宏应读取历史 State 还是最新 State”的待决问题，不为这一假设增加历史宏快照、正文模板标记或第二次宏求值。正文仍可按所选正则规则加工，但字面出现的 `{{...}}` 不自动当作 State 引用执行。
 
-该结论不等于模型在任何工具路径下都不可能看见宏源码：显式读取作者原文、源码编辑或调试路径应保留源码与渲染视图的区别，也不在本轮新增开关。Setting 何时采用更新、UI 如何展示变量仍归各自生命周期，不因 State 变化就自动重建整个 Narrative 前缀。
+该结论不等于模型在任何工具路径下都不可能看见宏源码：显式读取作者原文、源码编辑或调试路径应保留源码与渲染视图的区别，也不在本轮新增开关。Lore 何时采用更新、UI 如何展示变量仍归各自生命周期，不因 State 变化就自动重建整个 Narrative 前缀。
 
 ### 修复与边界
 
@@ -772,7 +772,7 @@ State 宏主要用于 Setting 等提示词资源及 UI 的变量展示，不把�
 | 默认 Memory + Raw | 第 19 节已接通注册来源，校验明确范围并注入 Memory / Raw。官方默认生产者尚未安装接线；无来源旧路径保留迁移诊断，不是无插件兜底。 |
 | Session 工作交接 | 已有持久化 `work-summary`、工作段退出、记事文本携带及重开恢复；保留全部原始 Transcript。自动生成交接文本、触发与确认 UI 尚未完成。 |
 | 失败与多 Session | 真实工具 / SQLite 仿真覆盖 32 楼准备、40 楼交接通知发布、41 楼保持范围、新 Session 共用剧情但不继承工作记录，以及发布失败的独立收据；后台自动调度和真实模型效果仍未验证。 |
-| 动态 Setting / Notice | 已有激活求值与临时 Fresh Context；状态变化提醒、停用残留、交互快照和临时挂载的跨轮行为尚未整体交付。 |
+| 动态 Lore / Notice | 已有激活求值与临时 Fresh Context；状态变化提醒、停用残留、交互快照和临时挂载的跨轮行为尚未整体交付。 |
 | 配置宏设置 | 第 20 节已交付候选编辑、显式选择、默认恢复、Timeline + Preset 引用持久化及 Preview / Invoke 共用解析。19 项定向测试通过；没有自动确认弹窗，UI 视觉待用户验收，存档缺少 Card 快照等来源的限制明确保留。 |
 
 下一实施入口是默认有效范围的生产与消费接线。已确认它不归每个 Session 保存，也不由 PromptBuild 猜测。2026-09-24 用户补充：官方记忆插件默认自带且可替换，因此默认范围提供者按基础能力存在来设计；没有安装记忆插件的自动兜底不是本轮前置。不创建独立的无插件基线或 Session 投影快照。
@@ -783,7 +783,7 @@ State 宏主要用于 Setting 等提示词资源及 UI 的变量展示，不把�
 
 **目标**：让记忆插件发布的 Memory 与固定 Raw 范围实际进入默认 Prompt；普通正文追加不能扩大该范围。官方专用记忆插件与未来自由文档式记忆使用同一个接收边界，不建立两套投影系统。
 
-已确认：官方插件负责默认能力和自身持久化；自由记忆可以用 Setting 注入记忆锚点，但仅有记忆文本不自动改变 Raw 范围。Agent 主动更新范围属于后续兜底，不是当前实施前置。
+已确认：官方插件负责默认能力和自身持久化；自由记忆可以用 Lore 注入记忆锚点，但仅有记忆文本不自动改变 Raw 范围。Agent 主动更新范围属于后续兜底，不是当前实施前置。
 
 最小实施设计：
 

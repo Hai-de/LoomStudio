@@ -17,8 +17,8 @@ export function buildUserResourceTree(
   const own = resources.filter(isUserPromptResource)
   const groups = [
     { id: 'presets', title: t('rail.agent'), items: own.filter(resource => resource.resourceKind === 'preset') },
-    { id: 'settings', title: t('context.authoring.settings'), items: own.filter(resource => resource.resourceKind === 'setting') },
-    { id: 'other', title: t('rail.resource'), items: own.filter(resource => resource.resourceKind !== 'preset' && resource.resourceKind !== 'setting') },
+    { id: 'lore', title: t('context.authoring.lore'), items: own.filter(resource => resource.resourceKind === 'lore') },
+    { id: 'other', title: t('rail.resource'), items: own.filter(resource => resource.resourceKind !== 'preset' && resource.resourceKind !== 'lore') },
   ]
   const ownRules = rules.filter(rule => rule.owner.kind === 'workspace')
   const resourcesByNode = new Map<string, PromptResource>()

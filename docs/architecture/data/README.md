@@ -2,10 +2,16 @@
 
 本分类用于收录 Loom Studio 已实现并稳定的数据基础语义，包括 Document、Revision、Changeset、持久化、Workspace 同步边界以及 Trace/Audit 数据。
 
+## Lore 命名升级
+
+Prompt Resource schema v6 将设定资源分类、挂载表/列、已知锚点协议字段和历史资源修订统一为 Lore；`application.lore-documents` v1 迁移 Card 当前/历史字段与 Agent 恢复快照中的 Prompt 来源。保留所有资源身份、版本及作者正文，不更改 State 或扩展私有数据。旧版数据库迁移步骤保持原名，新运行合同只使用 Lore。
+
+Server 检测到旧 Prompt Resource schema 时，先在数据目录的 `backups/` 创建 SQLite 快照，再进行升级。离线处理可运行 `pnpm exec tsx scripts/data/migrate-lore.ts <数据库路径>`；须先停写并备份。文件型角色目录与 SQLite 分开迁移：`pnpm exec tsx scripts/data/migrate-lore-files.ts <数据目录>` 预览，追加 `--apply` 写入结构文件和基线。已有文件编辑冲突保持为冲突，不把用户未保存改动默认为新基线；正文文件不改写。
+
 放置规则：
 
 - 与业务无关的持久化原语放在这里；
-- Card、Session、Setting Layer 等业务 Document schema 放在 [`../application/`](../application/)；
+- Card、Session、Lore 等业务 Document schema 放在 [`../application/`](../application/)；
 - Extension 私有 schema 由对应 Extension 负责；
 - Kernel 如何通过 RPC 暴露数据能力记录在 [`../kernel/`](../kernel/)；
 - UI Undo/Redo history 不等同于 Document Store 的持久化历史。
@@ -116,7 +122,7 @@ Studio Server 已注入 Agent Store。当前公开生命周期 RPC 包括：
 - `application.getAgentTranscriptPage`；
 - `application.deleteAgentSession`。
 
-`appendAgentTranscriptEntries` 当前只作为 Application Runtime 内部能力，不公开给普通 Client，避免绕过 Agent Runtime 伪造运行事实。`agentPresetId` 在 Session 创建时直接绑定 `resourceKind: preset` 的 Prompt Resource，后续更新不允许改绑；其 metadata 保存可空模型绑定、调用配置、`useCardSettings` 与 `textUses`，Tool Mount 决定唯一工具使用集合，调用时不接受第二套临时绑定。
+`appendAgentTranscriptEntries` 当前只作为 Application Runtime 内部能力，不公开给普通 Client，避免绕过 Agent Runtime 伪造运行事实。`agentPresetId` 在 Session 创建时直接绑定 `resourceKind: preset` 的 Prompt Resource，后续更新不允许改绑；其 metadata 保存可空模型绑定、调用配置、`useCardLore` 与 `textUses`，Tool Mount 决定唯一工具使用集合，调用时不接受第二套临时绑定。
 
 Prompt Resource 不再使用 `airp.promptResource` Document 作为权威存储。它由 Application-owned `PromptResourceStore` 管理，并与同一个 SQLite Data Engine 共享 transaction / Changeset：
 
@@ -124,12 +130,12 @@ Prompt Resource 不再使用 `airp.promptResource` Document 作为权威存储�
 - `prompt_resource_nodes`：Resource Node 当前状态；
 - `prompt_resource_node_revisions`：受影响 Node 的 before/after Revision；
 - `prompt_resource_header_revisions`：Header before/after Revision；
-- `global_setting_mounts`：表名沿用，但 Registry 同时保存 `manual/global` 与 `preset/<id>` 消费关系；预设来源已是正式使用配置，不是旧兼容数据；
+- `global_lore_mounts`：表名沿用，但 Registry 同时保存 `manual/global` 与 `preset/<id>` 消费关系；预设来源已是正式使用配置，不是旧兼容数据；
 - `preset_tool_mounts`：Preset 到 Workspace Tool Definition 的挂载关系、默认开关、Activation 与 Provider / Content 投影策略。
 
-`PromptResourceContent`、嵌套 `rootNode.children[]` 和 `loom.promptResource` 是当前 RPC、PromptBuild 与 Card Bundle 使用的兼容投影/外部格式，不是 SQL 权威模型。Setting Mount 通过独立的 `application.listSettingMounts` / `application.replaceSettingMounts` API 读取和修改；Preset Tool Mount 通过 `application.listPresetToolMounts` / `application.replacePresetToolMounts` 读取和修改。两者都不嵌入 Prompt Resource 响应，也不复制被引用的 Setting 或 Tool Definition。
+`PromptResourceContent`、嵌套 `rootNode.children[]` 和 `loom.promptResource` 是当前 RPC、PromptBuild 与 Card Bundle 使用的兼容投影/外部格式，不是 SQL 权威模型。Lore Mount 通过独立的 `application.listLoreMounts` / `application.replaceLoreMounts` API 读取和修改；Preset Tool Mount 通过 `application.listPresetToolMounts` / `application.replacePresetToolMounts` 读取和修改。两者都不嵌入 Prompt Resource 响应，也不复制被引用的 Lore 或 Tool Definition。
 
-Setting Mount 保留原身份与引用，`resolvedSettingResourceId: null` 表示当前无法解析，不等于应当删除。替换列表必须二选一：`settingResourceIds: string[]` 或 `mounts: ({ id } | { settingResourceId })[]`；前者按资源 ID 配置，后者可保留原 Mount ID（包括失效引用）并追加资源。Mount ID 必须属于请求指定的来源，不能用另一预设的 Mount 旁路写入。资源是否可消费与包内引用映射由 Runtime 处理，Schema 只验证形状。
+Lore Mount 保留原身份与引用，`resolvedLoreResourceId: null` 表示当前无法解析，不等于应当删除。替换列表必须二选一：`loreResourceIds: string[]` 或 `mounts: ({ id } | { loreResourceId })[]`；前者按资源 ID 配置，后者可保留原 Mount ID（包括失效引用）并追加资源。Mount ID 必须属于请求指定的来源，不能用另一预设的 Mount 旁路写入。资源是否可消费与包内引用映射由 Runtime 处理，Schema 只验证形状。
 
 资源编辑携带读取时的 `expectedVersion`，Store 在写入事务内检查版本；Server 不应替旧内容临时读取最新版本来绕过冲突。前端保留失败草稿、显式读取新版本后重新应用已编辑字段的策略属于[Application UI](../application/ui/README.md)，不是 Store 的自动合并行为。
 
@@ -140,7 +146,7 @@ Setting Mount 保留原身份与引用，`resolvedSettingResourceId: null` 表�
 
 旧 `airp.agentPreset` 与 `airp.agentProfile` Document 均不再是 Agent 权威类型，不提供其兼容读取。当前 Agent Preset CRUD 直接操作 PromptResourceStore。
 
-`createAgentSession` 必须引用真实 Agent Preset。`previewAgentTurn` 与 `invokeAgentTurn` 共用同一 Prompt 构建入口；后者从 Agent Session、直接引用的预设、该预设的 Setting Mount、按 `useCardSettings` 选入的当前 Card Settings 及 Provider Model 准备 Provider 输入。公共 Settings 不因出现在全局 Registry 中就自动注入，消费合同见[PromptBuild](../application/prompt-build/README.md#资源归属与使用配置)。Tool Loop 在调用 Provider 前保存用户 Message 与 running 状态，之后分阶段保存 Observation、Invocation、Result 和终态；Provider 失败仍可能保留本轮运行事实及已经完成的 Tool 副作用。工作台的选中资源和临时打开状态只是编辑状态，不参与运行时绑定。
+`createAgentSession` 必须引用真实 Agent Preset。`previewAgentTurn` 与 `invokeAgentTurn` 共用同一 Prompt 构建入口；后者从 Agent Session、直接引用的预设、该预设的 Lore Mount、按 `useCardLore` 选入的当前 Card Lore 及 Provider Model 准备 Provider 输入。公共 Lore 不因出现在全局 Registry 中就自动注入，消费合同见[PromptBuild](../application/prompt-build/README.md#资源归属与使用配置)。Tool Loop 在调用 Provider 前保存用户 Message 与 running 状态，之后分阶段保存 Observation、Invocation、Result 和终态；Provider 失败仍可能保留本轮运行事实及已经完成的 Tool 副作用。工作台的选中资源和临时打开状态只是编辑状态，不参与运行时绑定。
 
 游玩用户输入先通过 `appendNarrativeInput` 写入正式 Timeline 节点，成功后再复制至 Agent Session。写入使用明确的 Branch Head 和固定 `nodeId`；同一输入的显式重试返回原节点及原 Changeset，内容、原 parent 或归属不匹配则失败。初始写入失败时不投递 Session；投递失败不删除已提交的用户节点。
 

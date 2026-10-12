@@ -213,7 +213,7 @@ export function applyDeleteResource(
   const version = row.version + 1
   if (row.resource_kind === 'preset') {
     recordDeletedMountOperations(database, tx, 'source_kind = ? AND source_id = ?', 'preset', input.resourceId)
-    database.prepare('DELETE FROM global_setting_mounts WHERE source_kind = ? AND source_id = ?').run('preset', input.resourceId)
+    database.prepare('DELETE FROM global_lore_mounts WHERE source_kind = ? AND source_id = ?').run('preset', input.resourceId)
     recordDeletedPresetToolMountOperations(database, tx, input.resourceId)
     database.prepare('DELETE FROM preset_tool_mounts WHERE preset_resource_id = ?').run(input.resourceId)
   }
@@ -502,7 +502,7 @@ export function operation(kind: DataCommitOperation['kind'], entityId: string, e
 }
 
 export function recordDeletedMountOperations(database: DatabaseSync, tx: SqliteDataTransaction, where: string, ...values: string[]): void {
-  const rows = database.prepare(`SELECT id, source_kind, source_id FROM global_setting_mounts WHERE ${where} ORDER BY id ASC`)
+  const rows = database.prepare(`SELECT id, source_kind, source_id FROM global_lore_mounts WHERE ${where} ORDER BY id ASC`)
     .all(...values) as Array<{ id: string; source_kind: string; source_id: string }>
   if (rows.length > 0) tx.recordOperations(rows.map(row => ({
     ...operation('delete', row.id, 'prompt-resource.mount'),

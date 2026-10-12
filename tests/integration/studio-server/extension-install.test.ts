@@ -162,11 +162,11 @@ describe('Studio Server Extension Package install lifecycle', () => {
       const archive = zipSync({
         'manifest.json': new TextEncoder().encode(JSON.stringify({
           ...JSON.parse(await readFile(join(sourceDirectory, 'manifest.json'), 'utf8')),
-          contributes: { promptResources: [{ id: 'welcome', resourceKind: 'setting', source: './welcome.json' }] },
+          contributes: { promptResources: [{ id: 'welcome', resourceKind: 'lore', source: './welcome.json' }] },
         })),
         'welcome.json': new TextEncoder().encode(JSON.stringify({
-          format: 'loom.promptResource', schemaVersion: 2, resourceKind: 'setting',
-          rootNode: { id: 'example.installed.welcome', label: 'Installed welcome', category: 'setting', kind: 'module', children: [] },
+          format: 'loom.promptResource', schemaVersion: 2, resourceKind: 'lore',
+          rootNode: { id: 'example.installed.welcome', label: 'Installed welcome', category: 'lore', kind: 'module', children: [] },
         })),
         'icon.png': await readFile(join(sourceDirectory, 'icon.png')),
         'dist/index.js': await readFile(join(sourceDirectory, 'dist/index.js')),

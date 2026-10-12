@@ -6,14 +6,14 @@
   overflow: hidden;
 }
 
-.globalSettingOptions {
+.globalLoreOptions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   min-height: 0;
 }
 
-.globalSettingPill {
+.globalLorePill {
   align-items: center;
   color: var(--loom-color-text);
   display: inline-flex;
@@ -37,7 +37,7 @@
   }
 }
 
-.globalSettingPillReadonly {
+.globalLorePillReadonly {
   align-items: center;
   color: var(--loom-color-text);
   display: inline-flex;

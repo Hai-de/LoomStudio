@@ -46,7 +46,7 @@
             "scriptId": "assistant-script"
           }
         ],
-        "settingMounts": [
+        "loreMounts": [
           {
             "resourceId": "official.loom-assistant.knowledge"
           }
@@ -71,8 +71,8 @@
       },
       {
         "id": "official.loom-assistant.knowledge",
-        "resourceKind": "setting",
-        "source": "./resources/knowledge-setting.json"
+        "resourceKind": "lore",
+        "source": "./resources/knowledge-lore.json"
       }
     ]
   }

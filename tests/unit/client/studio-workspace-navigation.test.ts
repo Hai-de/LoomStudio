@@ -9,7 +9,7 @@ import {
 const entry = { pathname: '/studio', search: '', hash: '', state: null }
 const position: StudioWorkspace = {
   panel: 'resource', timelineId: 'timeline', branchId: 'branch',
-  cardId: 'card', resourceId: 'setting', assetId: 'root', search: 'q=hello',
+  cardId: 'card', resourceId: 'lore', assetId: 'root', search: 'q=hello',
 }
 
 afterEach(() => vi.unstubAllGlobals())

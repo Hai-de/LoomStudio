@@ -42,7 +42,7 @@ describe('card bundle artifact boundary', () => {
     expect(imported.card.promptResourceIds).toHaveLength(2)
     expect(imported.card.importBundleId).toBe(imported.importBundle.id)
     expect(imported.card.preset).toEqual({ system: 'Bundle system prompt.' })
-    expect(imported.card.settingLayer.entries).toEqual([
+    expect(imported.card.lore.entries).toEqual([
       expect.objectContaining({ id: 'bundle-setting', content: 'Bundle setting content.' }),
     ])
     expect(imported.importBundle.documentIds).toEqual([imported.card.id, imported.importBundle.id])
@@ -126,7 +126,7 @@ describe('card bundle artifact boundary', () => {
       exportedFromCardId: imported.card.id,
     })
     expect(exported.card.preset).toEqual({ system: 'Bundle system prompt.' })
-    expect(exported.card.settingLayer?.entries).toEqual([
+    expect(exported.card.lore?.entries).toEqual([
       expect.objectContaining({ id: 'bundle-setting', content: 'Bundle setting content.' }),
     ])
   })
@@ -142,7 +142,7 @@ describe('card bundle artifact boundary', () => {
     expect(second.card.promptResourceIds).not.toEqual(first.card.promptResourceIds)
     expect(second.importBundle.documentIds).toEqual([second.card.id, second.importBundle.id])
     expect(second.card.preset).toEqual(first.card.preset)
-    expect(second.card.settingLayer).toEqual(first.card.settingLayer)
+    expect(second.card.lore).toEqual(first.card.lore)
   })
 
   it('keeps external provenance per Card through ID remapping and reference edits', async () => {
@@ -403,7 +403,7 @@ function createArtifact(): CardBundleArtifact {
     card: {
       name: 'Test Card',
       preset: { system: 'Bundle system prompt.' },
-      settingLayer: {
+      lore: {
         entries: [{
           id: 'bundle-setting',
           content: 'Bundle setting content.',
@@ -429,7 +429,7 @@ function createArtifact(): CardBundleArtifact {
       {
         id: 'setting-main',
         label: 'Setting',
-        category: 'setting',
+        category: 'lore',
         kind: 'module',
         children: [],
       },

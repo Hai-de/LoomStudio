@@ -124,7 +124,7 @@ describe('Studio Server Extension Package resources', () => {
         importedIds.push(result.promptResources[0]!.resourceId)
         const file = await authenticatedFetch(port, fileUrl)
         expect(file.status).toBe(200)
-        expect(await file.json()).toEqual(promptResource('setting', 'clothes', packageId))
+        expect(await file.json()).toEqual(promptResource('lore', 'clothes', packageId))
         expect((await authenticatedFetch(port, fileUrl.replace('/1.0.0/', '/9.0.0/'))).status).toBe(404)
         expect((await authenticatedFetch(port, fileUrl.replace('resources/clothes.json', '%2e%2e%2fmanifest.json'))).status).toBe(404)
       }
@@ -160,7 +160,7 @@ describe('Studio Server Extension Package resources', () => {
         packageVersion: '2.0.0', expectedInstallationVersion: a.version,
       })
       expect((await authenticatedFetch(port, oldFileUrl)).status).toBe(404)
-      expect(await (await authenticatedFetch(port, newFileUrl)).json()).toEqual(promptResource('setting', 'new-clothes', packageId))
+      expect(await (await authenticatedFetch(port, newFileUrl)).json()).toEqual(promptResource('lore', 'new-clothes', packageId))
       const replaced = await callRpc<{ card: { version: number } }>(port, 'application.attachCardExtensionPackage', {
         cardId: card.id, expectedVersion: attached.card.version,
         archive: {
@@ -240,7 +240,7 @@ describe('Studio Server Extension Package resources', () => {
       const installed = await callRpc<{ package: { resources: Record<string, unknown> } }>(port, 'extensions.installPackage', { sourceDirectory })
       expect(installed.package.resources).toMatchObject({
         promptResources: [
-          { id: 'setting', resourceKind: 'setting' },
+          { id: 'lore', resourceKind: 'lore' },
           { id: 'preset', resourceKind: 'preset' },
         ],
         agentTools: [
@@ -294,14 +294,14 @@ describe('Studio Server Extension Package resources', () => {
       const importedResources = resources.resources.filter(resource => resource.origin?.packageId === 'example.package-resources')
       expect(importedResources).toEqual(expect.arrayContaining([
         expect.objectContaining({ resourceKind: 'preset', origin: expect.objectContaining({ contributionId: 'preset' }) }),
-        expect.objectContaining({ resourceKind: 'setting', origin: expect.objectContaining({ contributionId: 'setting' }) }),
+        expect.objectContaining({ resourceKind: 'lore', origin: expect.objectContaining({ contributionId: 'lore' }) }),
       ]))
       const preset = importedResources.find(resource => resource.resourceKind === 'preset')!
-      const setting = importedResources.find(resource => resource.resourceKind === 'setting')!
+      const setting = importedResources.find(resource => resource.resourceKind === 'lore')!
 
-      await expect(callRpc<{ mounts: Array<{ settingResourceId: string }> }>(port, 'application.listSettingMounts', {
+      await expect(callRpc<{ mounts: Array<{ loreResourceId: string }> }>(port, 'application.listLoreMounts', {
         source: { kind: 'preset', id: preset.id },
-      })).resolves.toMatchObject({ mounts: [{ settingResourceId: setting.id }] })
+      })).resolves.toMatchObject({ mounts: [{ loreResourceId: setting.id }] })
       await expect(callRpc<{ mounts: Array<{ toolId: string; defaultEnabled: boolean }> }>(port, 'application.listPresetToolMounts', {
         presetId: preset.id,
       })).resolves.toMatchObject({
@@ -379,15 +379,15 @@ describe('Studio Server Extension Package resources', () => {
         resourceKind: 'preset',
         name: 'Local Preset',
       })
-      const settingId = imported.promptResources.find(resource => resource.contributionId === 'setting')!.resourceId
+      const loreId = imported.promptResources.find(resource => resource.contributionId === 'lore')!.resourceId
       const packagePresetId = imported.promptResources.find(resource => resource.contributionId === 'preset')!.resourceId
       const manualSource = { kind: 'manual', id: 'global' }
       const localSource = { kind: 'preset', id: localPreset.resource.id }
       for (const source of [manualSource, localSource]) {
-        await callRpc(port, 'application.replaceSettingMounts', { source, settingResourceIds: [settingId] })
+        await callRpc(port, 'application.replaceLoreMounts', { source, loreResourceIds: [loreId] })
       }
-      const manualMounts = await callRpc(port, 'application.listSettingMounts', { source: manualSource })
-      const localMounts = await callRpc(port, 'application.listSettingMounts', { source: localSource })
+      const manualMounts = await callRpc(port, 'application.listLoreMounts', { source: manualSource })
+      const localMounts = await callRpc(port, 'application.listLoreMounts', { source: localSource })
       await callRpc(port, 'application.replacePresetToolMounts', {
         presetId: localPreset.resource.id,
         mounts: [{
@@ -410,13 +410,13 @@ describe('Studio Server Extension Package resources', () => {
       const session = await callRpc<{ session: { id: string } }>(port, 'application.createAgentSession', { agentPresetId: profile.agentPreset.id })
       const card = await callRpc<{ card: { id: string } }>(port, 'application.createCard', { name: 'External Card' })
       await callRpc(port, 'application.updateCardPromptResources', {
-        cardId: card.card.id, promptResourceIds: [settingId, packagePresetId],
+        cardId: card.card.id, promptResourceIds: [loreId, packagePresetId],
       })
       const timeline = await callRpc<{ timeline: { id: string } }>(port, 'application.createNarrativeTimeline', { cardId: card.card.id })
       const cardBefore = await callRpc(port, 'application.getCard', { cardId: card.card.id })
       const timelineBefore = await callRpc(port, 'application.getNarrativeTimeline', { timelineId: timeline.timeline.id })
-      expect(cardBefore).toMatchObject({ card: { promptResourceIds: [settingId, packagePresetId] } })
-      expect(timelineBefore).toMatchObject({ timeline: { promptResourceIds: [settingId, packagePresetId] } })
+      expect(cardBefore).toMatchObject({ card: { promptResourceIds: [loreId, packagePresetId] } })
+      expect(timelineBefore).toMatchObject({ timeline: { promptResourceIds: [loreId, packagePresetId] } })
       expect(profileBefore).toMatchObject({
         agentPreset: { id: packagePresetId },
       })
@@ -454,10 +454,10 @@ describe('Studio Server Extension Package resources', () => {
         presetId: localPreset.resource.id,
       })).resolves.toEqual(localToolMounts)
       await expect(callRpc(port, 'application.listPresetToolMounts', { presetId: packagePresetId })).resolves.toEqual({ mounts: [] })
-      await expect(callRpc(port, 'application.listSettingMounts', { source: manualSource })).resolves.toEqual(manualMounts)
-      await expect(callRpc(port, 'application.listSettingMounts', { source: localSource })).resolves.toEqual(localMounts)
+      await expect(callRpc(port, 'application.listLoreMounts', { source: manualSource })).resolves.toEqual(manualMounts)
+      await expect(callRpc(port, 'application.listLoreMounts', { source: localSource })).resolves.toEqual(localMounts)
       const remainingMounts = await callRpc<{ mounts: Array<{ source: { kind: string; id: string } }> }>(
-        port, 'application.listSettingMounts', {},
+        port, 'application.listLoreMounts', {},
       )
       expect(remainingMounts.mounts.filter(mount =>
         mount.source.kind === 'preset' && mount.source.id === packagePresetId)).toEqual([])
@@ -540,12 +540,12 @@ async function writeCapabilityPackage(root: string): Promise<string> {
     }],
     contributes: {
       promptResources: [
-        { id: 'setting', resourceKind: 'setting', source: './resources/setting.json' },
+        { id: 'lore', resourceKind: 'lore', source: './resources/setting.json' },
         {
           id: 'preset',
           resourceKind: 'preset',
           source: './resources/preset.json',
-          settingMounts: [{ resourceId: 'setting' }],
+          loreMounts: [{ resourceId: 'lore' }],
           toolMounts: [
             { toolId: 'example.package-resources/echo', defaultEnabled: false },
             {
@@ -564,7 +564,7 @@ async function writeCapabilityPackage(root: string): Promise<string> {
       textExtractors: [{ id: 'world-state', source: './resources/world-state.json' }],
     },
   }))
-  await writeFile(join(directory, 'resources/setting.json'), JSON.stringify(promptResource('setting', 'setting')))
+  await writeFile(join(directory, 'resources/setting.json'), JSON.stringify(promptResource('lore', 'lore')))
   await writeFile(join(directory, 'resources/preset.json'), JSON.stringify(promptResource('preset', 'preset')))
   await writeFile(join(directory, 'resources/echo.json'), JSON.stringify({
     name: 'extension_echo',
@@ -622,19 +622,19 @@ async function writeVersionedResourcePackage(root: string, version: string, cont
     contributes: {
       promptResources: [{
         id: contributionId,
-        resourceKind: 'setting',
+        resourceKind: 'lore',
         source: `./resources/${contributionId}.json`,
       }],
     },
   }))
   await writeFile(
     join(directory, `resources/${contributionId}.json`),
-    JSON.stringify(promptResource('setting', contributionId, 'example.package-versioned-resources')),
+    JSON.stringify(promptResource('lore', contributionId, 'example.package-versioned-resources')),
   )
   return directory
 }
 
-function promptResource(resourceKind: 'preset' | 'setting', id: string, packageId = 'example.package-resources') {
+function promptResource(resourceKind: 'preset' | 'lore', id: string, packageId = 'example.package-resources') {
   return {
     format: 'loom.promptResource',
     schemaVersion: 1,

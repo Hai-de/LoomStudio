@@ -1,6 +1,6 @@
 # 文件化角色包
 
-Card 的作者文件、ZIP 包与 PNG 分发共用同一套编解码。SQLite 仍是应用的权威存储；目录和 ZIP 不是新的运行数据库。此次只实现 Card Bundle，不代表独立 Preset / Setting Bundle、通用 VFS 或 Dev Workspace 同步已经完成。
+Card 的作者文件、ZIP 包与 PNG 分发共用同一套编解码。SQLite 仍是应用的权威存储；目录和 ZIP 不是新的运行数据库。此次只实现 Card Bundle，不代表独立 Preset / Lore Bundle、通用 VFS 或 Dev Workspace 同步已经完成。
 
 Card Bundle 可携带 `extensionPackages` 中的 Extension Package 归档，与扩展 Portable Payload 分开索引。导入归档不会自动激活其中代码。角色安装的 Client 文件通过带 Card ID、包版本及归档 SHA-256 的私有 URL 提供，读取时校验该 Card 当前安装归档，不以同名全局包回退。安装记录、资源导入、模块启用和授权是分开的生命周期操作。
 
@@ -54,10 +54,10 @@ assets/background.webp
 - `manifest.json` 使用 `schema: "loom.cardBundle.zip.v2"`；`resources` 索引 Card 与领域文件，`media`、`scriptAttachments`、`extensionPayloads` 继续索引独立载荷。所有文件引用相对于包根目录。
 - `mediaTypes` 按媒体相对路径记录原 MIME。已知媒体使用对应后缀，未知 MIME 使用 `.bin` 而不是伪装成 PNG；未声明 MIME 的已有标准图片路径仍可按后缀读取。GIF、APNG、SVG 和视频等内部素材不改变 ZIP/PNG 外层协议，保存媒体不等于已提供播放器或允许执行内容。
 - `resources.metadata` 保存 Artifact 版本、身份和包说明，不嵌入 Card 主体或正文树。
-- `card.json` 的 `config` 保存名字、用户名字和其他 Card 配置；description、宏、preset system、opening 与旧 settingLayer 正文保存文件引用。
+- `card.json` 的 `config` 保存名字、用户名字和其他 Card 配置；description、宏、preset system、opening 与旧 lore 正文保存文件引用。
 - `opening.entries` 是默认开场的连续内容，`opening.alternatives[].entries` 是其他可选开场的内容序列。默认正文继续存于 `opening/<entry>.md`，备选正文存于 `opening/alternatives/<candidate>/<entry>.md`。旧包不含 alternatives 时仍只有默认开场；候选只在创建 Timeline 时选择，不导出运行时 Swipe 状态。
 - 每个 Prompt 根拥有一个 `index.json`。节点的 `metadata` 保存原有 ID、kind、label、capabilities、orderList 等；`body` 为 Markdown 路径，`children` 数组保留树结构与顺序。普通条目直接生成 `<名称>.md`；真正的 module / folder / 非空子树才使用目录，其自有正文为 `_content.md`。空正文与缺失正文区分，虚拟节点不强制生成正文文件。旧 `body.md` 路径仍按索引读取。
-- 旧 Card 内联 `settingLayer` 有独立内容时写入 `settings/<名称>.md`，不再生成 `settings/legacy`；与资源树同 ID、同正文时复用同一个 Markdown 文件，仍保留双方元数据，不静默修改已有数据库内容。
+- 旧 Card 内联 `lore` 有独立内容时写入 `lore/<名称>.md`，不再生成 `lore/legacy`；与资源树同 ID、同正文时复用同一个 Markdown 文件，仍保留双方元数据，不静默修改已有数据库内容。
 - `state/index.json` 的 `artifact` 保存 State Artifact 头，`contribution` 保存贡献 ID 及实体类型、模板、实体、挂载、绑定的有序文件引用。读取时恢复并验证完整 `loom.state` Artifact；索引文件本身不是可单独导入的 State Artifact。
 - 有统一 State Contribution 时不重复导出旧 `stateTemplates` / `timelineStateBindings` 副本；旧 Card 只有这些字段时仍能单独分文件恢复。运行 State、Revision 与 Timeline 快照不导出。
 - Card 自有 Rule / Extractor 保存为独立 JSON，只携带声明字段；不携带 owner、数据库 ID、时间戳、origin 或运行覆盖。导入时在同一业务事务中创建新记录并绑定新 Card，相同 orderIndex 的数组顺序保留。
@@ -88,11 +88,11 @@ fflate 继续负责解压；单独的完整性元数据读取核对中央目录�
 
 PNG 外层上限包含 128 MiB ZIP 对应的 Base64 和 64 MiB 封面预算。导入与导出头像/背景时通用移除 PNG 的 tEXt/iTXt/zTXt 文本块与 IEND 后尾部，避免把原卡元数据当成图片再次装包；保留色彩与 APNG 动画块，不做有损转码。PNG 外层和完整 ZIP 内仍各含一份封面，大动画封面会因此明显增大；当前不使用外部封面引用协议。没有签名或远程来源认证合同。
 
-ST 扩展导入时只将世界书写入 Prompt Resource，不再复制进内联 settingLayer，也不再把完整 ST JSON 生成 Portable Payload。包内 `extensions/` 仅来自 Card 的显式 Portable Payload 绑定，不会扫描或打包当前启用的全局扩展。旧导入产生的源卡附件仍是已有用户记录，不能由核心按 ST 特判删除；需通过正式 API 显式解绑，不能删除其他扩展的合法载荷。
+ST 扩展导入时只将世界书写入 Prompt Resource，不再复制进内联 lore，也不再把完整 ST JSON 生成 Portable Payload。包内 `extensions/` 仅来自 Card 的显式 Portable Payload 绑定，不会扫描或打包当前启用的全局扩展。旧导入产生的源卡附件仍是已有用户记录，不能由核心按 ST 特判删除；需通过正式 API 显式解绑，不能删除其他扩展的合法载荷。
 
 文件解析与领域声明校验在进入应用导入前完成。资源、脚本和文本管线记录复用现有导入事务；媒体 Asset 创建仍先于领域事务，不宣称所有 Asset 与领域写入已具备跨存储原子性。
 
-单独导出的 Prompt Resource 是白名单 Artifact，不递归携带脚本、规则、模型绑定、工具实现或关联 Settings。旧 Artifact reader 仍接受历史附件字段，但旧附件迁移为 Extension Package 或并列资源的完整、无损转换流程尚未完成。
+单独导出的 Prompt Resource 是白名单 Artifact，不递归携带脚本、规则、模型绑定、工具实现或关联 Lore。旧 Artifact reader 仍接受历史附件字段，但旧附件迁移为 Extension Package 或并列资源的完整、无损转换流程尚未完成。
 
 ## 实现位置
 

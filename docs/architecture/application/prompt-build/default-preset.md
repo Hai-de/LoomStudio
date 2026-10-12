@@ -18,11 +18,11 @@
 | --- | --- | --- |
 | 稳定前缀 | 身份 Entry、写作宏；`@chat.system`、`@preset.system` | 模板正文；显式指向该位置的资源贡献 |
 | 稳定工具说明 | `@chat.tools`、`@runtime.skills` | Content Tool 编译结果；Skills 自动生产尚未接入 |
-| 常驻资料 | 包裹 Entry、`@setting.stable` | 指向该位置的 Setting Entry |
+| 常驻资料 | 包裹 Entry、`@lore.stable` | 指向该位置的 Lore Entry |
 | 剧情基线 | `@narrative.before`、`@memory.narrative`、`@chat.narrative`、`@narrative.after` | 已注册记忆来源的摘要与固定 Raw 范围；前后补充为显式资源贡献 |
 | 工作记忆 | `@memory.session` | 当前 Session 最新已保存的工作交接文本 |
 | Session 原生消息 | `@chat.session` | 上次交接之后的文本、允许回放的 reasoning、Native / Content 工具事实 |
-| 本次动态上下文 | `@setting.lower`、`@runtime.state`、`@memory.recalled`、`@chat.session.post`、`@tools.dynamic` | 条件 Setting 与显式贡献；State、召回、动态工具自动生产尚未接入 |
+| 本次动态上下文 | `@lore.lower`、`@runtime.state`、`@memory.recalled`、`@chat.session.post`、`@tools.dynamic` | 条件 Lore 与显式贡献；State、召回、动态工具自动生产尚未接入 |
 | 最新输入 | `@chat.input` | 当前调用输入，单独 user 消息 |
 | 普通尾部 | `@prompt.tail`、`@fresh.tail` | 只留位置 |
 | 工作区 | `@runtime.workspace` | 只留位置 |
@@ -30,12 +30,12 @@
 
 “只留位置”表示编译器可以消费对应 `PromptContribution`，不表示已经存在扩展注册 API、默认生产者或跨 Step 更新机制。不能用一段固定占位说明冒充运行时内容。
 
-新增 Setting Entry 仍沿用既有 `@chat.system` 默认投影；要放入常驻或动态位置，作者须明确设置目标 Anchor。本次不迁移已有 Setting。
+新增 Lore Entry 仍沿用既有 `@chat.system` 默认投影；要放入常驻或动态位置，作者须明确设置目标 Anchor。本次不迁移已有 Lore。
 
 ## 原生构建链
 
 ```text
-Preset 有序树 + 已挂载 Setting + 宏检查结果
+Preset 有序树 + 已挂载 Lore + 宏检查结果
 Narrative 共用采样器 -> 共用 prompt 阶段文本变换 -> @chat.narrative
 已发布记忆来源 -> @memory.narrative + 固定 Narrative 采样范围
 最新 Session 工作交接 -> @memory.session
@@ -66,7 +66,7 @@ Session Contribution 可携带原生消息批次：Native 调用与 `tool` 结�
 
 ## 验证入口
 
-[`default-preset.test.ts`](../../../../tests/integration/application-runtime/default-preset.test.ts) 使用临时 SQLite 与测试 Gateway，验证创建、复制、宏、Setting、Narrative 文本变换、Session、工具双通道、Preview 与实际请求一致性，以及预留块与编辑位置。
+[`default-preset.test.ts`](../../../../tests/integration/application-runtime/default-preset.test.ts) 使用临时 SQLite 与测试 Gateway，验证创建、复制、宏、Lore、Narrative 文本变换、Session、工具双通道、Preview 与实际请求一致性，以及预留块与编辑位置。
 
 [`compiler.test.ts`](../../../../tests/unit/prompt-builder/compiler.test.ts) 验证骨架隔离、节点开关 / Activation、Session 边界和禁用显式锚点不被旧 fallback 重新注入。自动化验证不代替真实模型的写作效果与缓存测量。
 

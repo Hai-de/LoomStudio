@@ -8,12 +8,12 @@ type FileNode = {
 
 type Card = CardBundleArtifact['card']
 type CardFile = {
-  config: Omit<Card, 'description' | 'opening' | 'settingLayer' | 'preset' | 'macros' | 'media'>
+  config: Omit<Card, 'description' | 'opening' | 'lore' | 'preset' | 'macros' | 'media'>
   description?: string
   macros?: string
   preset?: { system?: string; macros?: string; macroOptions?: string }
   opening?: { text: string } | Exclude<Card['opening'], string | undefined>
-  settingLayer?: { entries?: Array<Record<string, unknown> & { content: string }> }
+  lore?: { entries?: Array<Record<string, unknown> & { content: string }> }
 }
 
 export type CardFilesIndex = {
@@ -57,7 +57,7 @@ export function projectCardFiles(artifact: CardBundleArtifact, files: Record<str
     const directory = `${artifact.externalContextAssetIds?.includes(value.id) ? 'external/' : ''}prompts/${fileStem(value, index)}`
     return json(`${directory}/index.json`, node(value, directory))
   })
-  const { description, opening, settingLayer, preset, macros, ...cardFields } = artifact.card
+  const { description, opening, lore, preset, macros, ...cardFields } = artifact.card
   const config = Object.fromEntries(Object.entries(cardFields).filter(([key]) => key !== 'media')) as CardFile['config']
   const card: CardFile = { config }
   if (description !== undefined) card.description = text('card/description.md', description)
@@ -84,13 +84,13 @@ export function projectCardFiles(artifact: CardBundleArtifact, files: Record<str
         })),
       } : {}) }
   }
-  if (settingLayer !== undefined) {
-    card.settingLayer = { ...(settingLayer.entries !== undefined ? {
-      entries: settingLayer.entries.map(({ content, ...entry }, index) => {
+  if (lore !== undefined) {
+    card.lore = { ...(lore.entries !== undefined ? {
+      entries: lore.entries.map(({ content, ...entry }, index) => {
         const projected = entry.id === undefined ? undefined : nodeBodies.get(entry.id)
         return {
           ...entry,
-          content: projected?.body === content ? projected.path : text(`settings/${fileStem(entry, index)}.md`, content),
+          content: projected?.body === content ? projected.path : text(`lore/${fileStem(entry, index)}.md`, content),
         }
       }),
     } : {}) }
@@ -180,9 +180,9 @@ export function restoreCardFiles(index: CardFilesIndex, files: Map<string, Uint8
       } : {}),
     }
   }
-  if (stored.settingLayer !== undefined) {
-    card.settingLayer = { ...(stored.settingLayer.entries !== undefined ? {
-      entries: stored.settingLayer.entries.map(entry => ({ ...entry, content: text(entry.content) })),
+  if (stored.lore !== undefined) {
+    card.lore = { ...(stored.lore.entries !== undefined ? {
+      entries: stored.lore.entries.map(entry => ({ ...entry, content: text(entry.content) })),
     } : {}) }
   }
   const artifact: CardBundleArtifact = {
@@ -252,7 +252,7 @@ export async function loadCardResourceFiles(index: CardFilesIndex, load: (path: 
       }
     }
   }
-  for (const entry of card.settingLayer?.entries ?? []) await load(entry.content)
+  for (const entry of card.lore?.entries ?? []) await load(entry.content)
   if (!Array.isArray(index.contextAssets)) throw new Error('Expected a Card file reference list')
   for (const path of index.contextAssets) await node(await json<FileNode>(path))
   if (index.state !== undefined) {

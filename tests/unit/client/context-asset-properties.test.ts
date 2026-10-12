@@ -101,7 +101,7 @@ function baseTree(): ContextAssetNode[] {
     id: 'root',
     label: 'Setting Root',
     kind: 'module',
-    category: 'setting',
+    category: 'lore',
     children: [{
       id: 'folder',
       label: 'Entries',
@@ -112,7 +112,7 @@ function baseTree(): ContextAssetNode[] {
       label: 'Order',
       kind: 'order',
       orderList: ['entry-a', 'entry-b'],
-      slotRanks: [{ zoneId: 'setting.stable', slotKey: 'slot-a', rankKey: 'a0' }, { zoneId: 'setting.stable', slotKey: 'slot-b', rankKey: 'a1' }],
+      slotRanks: [{ zoneId: 'lore.stable', slotKey: 'slot-a', rankKey: 'a0' }, { zoneId: 'lore.stable', slotKey: 'slot-b', rankKey: 'a1' }],
     }],
   }]
 }
@@ -125,7 +125,7 @@ function entry(id: string, slotKey: string, entryOrder: number): ContextAssetNod
     enabled: true,
     body: '',
     projection: {
-      zoneId: 'setting.stable',
+      zoneId: 'lore.stable',
       lifecycle: 'always',
       slotKey,
       entryOrder,

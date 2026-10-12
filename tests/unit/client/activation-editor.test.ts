@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest'
 describe('context asset activation editor model', () => {
   it('writes condition activation for preset and setting prompt-facing nodes', () => {
     const preset = node('preset-entry', 'preset')
-    const setting = node('setting-entry', 'setting')
+    const setting = node('setting-entry', 'lore')
     const draft = updateActivationDraft(readActivationDraft(preset), {
       mode: 'condition',
       conditionPreset: 'agent.mode',
@@ -28,14 +28,14 @@ describe('context asset activation editor model', () => {
   })
 
   it('writes activation on module, folder, and entry nodes', () => {
-    const draft = updateActivationDraft(readActivationDraft(node('module', 'setting', 'module')), {
+    const draft = updateActivationDraft(readActivationDraft(node('module', 'lore', 'module')), {
       mode: 'condition',
       conditionPreset: 'tags',
       conditionValue: 'scene:combat',
     })
 
     expect(['module', 'folder', 'entry'].map(kind => buildActivationUpdate({
-      node: node(kind, 'setting', kind as ContextAssetNode['kind']),
+      node: node(kind, 'lore', kind as ContextAssetNode['kind']),
       draft,
     }).capabilities?.activation)).toEqual([
       { kind: 'condition', conditions: [{ fact: 'tags', includes: 'scene:combat' }] },
@@ -45,11 +45,11 @@ describe('context asset activation editor model', () => {
   })
 
   it('normalizes keyword activation input', () => {
-    const draft = updateActivationDraft(readActivationDraft(node('entry', 'setting')), {
+    const draft = updateActivationDraft(readActivationDraft(node('entry', 'lore')), {
       mode: 'keyword',
       keywords: ' 雨，镜市, 雨， ,地下 \n 暗巷 ',
     })
-    const update = buildActivationUpdate({ node: node('entry', 'setting'), draft })
+    const update = buildActivationUpdate({ node: node('entry', 'lore'), draft })
 
     expect(normalizeKeywords(draft.keywords)).toEqual(['雨', '镜市', '地下', '暗巷'])
     expect(update.capabilities?.activation).toEqual({
@@ -61,7 +61,7 @@ describe('context asset activation editor model', () => {
 
   it('keeps custom activation untouched until the user switches modes', () => {
     const customNode = {
-      ...node('custom', 'setting'),
+      ...node('custom', 'lore'),
       capabilities: {
         activation: { kind: 'all', activations: [{ kind: 'manual' }] },
       },
@@ -82,8 +82,8 @@ function node(id: string, category: ContextAssetNode['category'], kind: ContextA
     projection: {
       lifecycle: 'always',
       order: 'entry: 10',
-      slotKey: category === 'preset' ? 'preset:test@preset.system' : 'setting-layer:test@setting.stable',
-      zoneId: category === 'preset' ? 'preset.system' : 'setting.stable',
+      slotKey: category === 'preset' ? 'preset:test@preset.system' : 'lore:test@lore.stable',
+      zoneId: category === 'preset' ? 'preset.system' : 'lore.stable',
     },
   }
 }

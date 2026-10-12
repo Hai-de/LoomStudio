@@ -13,7 +13,7 @@ describe('User resources navigation and tree model', () => {
     expect(isUserPromptResource({ sourceArtifactRef: { artifactId: 'card-bundle' } })).toBe(false)
     expect(isUserPromptResource({ origin: { kind: 'builtin', key: 'starter' } })).toBe(false)
     expect(isUserPromptResource({ origin: {
-      kind: 'extension-package', packageId: 'package', packageVersion: '1', contributionId: 'setting',
+      kind: 'extension-package', packageId: 'package', packageVersion: '1', contributionId: 'lore',
     } })).toBe(false)
   })
 
@@ -36,11 +36,11 @@ describe('User resources navigation and tree model', () => {
       updatedAt: '',
     }
 
-    const settingResource: PromptResource = {
+    const loreResource: PromptResource = {
       id: 'res-setting-1',
       version: 1,
-      resourceKind: 'setting',
-      rootNode: { id: 'node-setting-root', kind: 'module', label: 'Custom Setting' },
+      resourceKind: 'lore',
+      rootNode: { id: 'node-lore-root', kind: 'module', label: 'Custom Lore' },
       createdAt: '',
       updatedAt: '',
     }
@@ -48,9 +48,9 @@ describe('User resources navigation and tree model', () => {
     const foreignResource: PromptResource = {
       id: 'res-builtin-1',
       version: 1,
-      resourceKind: 'setting',
+      resourceKind: 'lore',
       origin: { kind: 'builtin', key: 'sys' },
-      rootNode: { id: 'node-ext-root', kind: 'module', label: 'System Setting' },
+      rootNode: { id: 'node-ext-root', kind: 'module', label: 'System Lore' },
       createdAt: '',
       updatedAt: '',
     }
@@ -62,7 +62,7 @@ describe('User resources navigation and tree model', () => {
 
     const t = createTranslator('zh-CN')
     const { nodes, resourcesByNode } = buildUserResourceTree(
-      [presetResource, settingResource, foreignResource],
+      [presetResource, loreResource, foreignResource],
       rules,
       t,
     )
@@ -75,11 +75,11 @@ describe('User resources navigation and tree model', () => {
     expect(presetGroup?.children?.[0].label).toBe('Custom Preset')
     expect(presetGroup?.children?.[0].children?.[0].id).toBe('child-1')
 
-    // Settings group
-    const settingGroup = nodes.find(n => n.id === 'user:settings')
+    // Lore group
+    const settingGroup = nodes.find(n => n.id === 'user:lore')
     expect(settingGroup).toBeDefined()
     expect(settingGroup?.children).toHaveLength(1)
-    expect(settingGroup?.children?.[0].id).toBe('node-setting-root')
+    expect(settingGroup?.children?.[0].id).toBe('node-lore-root')
 
     // Rules group (filters to workspace-only rules)
     const ruleGroup = nodes.find(n => n.id === 'user:rules')
@@ -90,7 +90,7 @@ describe('User resources navigation and tree model', () => {
     // Verify lookup index by node id
     expect(resourcesByNode.get('node-preset-root')).toBe(presetResource)
     expect(resourcesByNode.get('child-1')).toBe(presetResource)
-    expect(resourcesByNode.get('node-setting-root')).toBe(settingResource)
+    expect(resourcesByNode.get('node-lore-root')).toBe(loreResource)
     expect(resourcesByNode.get('node-ext-root')).toBeUndefined()
   })
 })

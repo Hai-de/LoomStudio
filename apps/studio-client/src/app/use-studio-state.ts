@@ -60,11 +60,11 @@ export function useStudioState(transportLogger: Logger) {
     refreshPresetToolMounts,
     refreshPromptResourceLibrary,
     refreshPromptResource,
-    refreshSettingMounts,
+    refreshLoreMounts,
     setPresetToolMounts,
     setPromptResources,
-    setSettingMounts,
-    settingMounts,
+    setLoreMounts,
+    loreMounts,
   } = promptResourceState
   const cardsState = useCards({
     api,
@@ -105,7 +105,7 @@ export function useStudioState(transportLogger: Logger) {
   const agentPresets = useAgentPresets({
     api,
     refreshResources: async () => {
-      await Promise.all([refreshPromptResourceLibrary(), refreshPresetToolMounts(), refreshSettingMounts()])
+      await Promise.all([refreshPromptResourceLibrary(), refreshPresetToolMounts(), refreshLoreMounts()])
     },
     runAction: action => operations.run('agent-presets', action).then(() => undefined),
   })
@@ -138,7 +138,7 @@ export function useStudioState(transportLogger: Logger) {
   async function refreshResourceConsumers(): Promise<void> {
     await Promise.all([
       refreshPromptResourceLibrary(),
-      refreshSettingMounts(),
+      refreshLoreMounts(),
       refreshPresetToolMounts(),
       agentPresets.refreshAgentPresets(),
     ])
@@ -196,7 +196,7 @@ export function useStudioState(transportLogger: Logger) {
     recordEdit: editHistory.record,
     promptResources,
     setPromptResources,
-    setSettingMounts,
+    setLoreMounts,
     setPresetToolMounts,
     invalidatePromptResourceState: promptResourceState.invalidate,
     refreshAgentPresets: agentPresets.refreshAgentPresets,
@@ -399,7 +399,7 @@ export function useStudioState(transportLogger: Logger) {
     customCss, setCustomCss,
     // context assets
     promptResources,
-    settingMounts,
+    loreMounts,
     presetToolMounts,
     contextAssets: contextAssetState.nodes,
     promptResourceDrafts: contextAssetState.resources,

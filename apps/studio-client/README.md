@@ -11,9 +11,13 @@ Studio Client 是 React/Vite Web Client，负责页面组合、交互状态和 t
 | 任务 / 关键词 | 第一实现入口 | 相关验证入口 |
 |---|---|---|
 | 角色卡列表、创建、选择、Card | [use-cards.ts](src/features/cards/model/use-cards.ts)、[character-panel/](src/widgets/character-panel/) | [card-operation-failures.test.ts](../../tests/unit/client/card-operation-failures.test.ts) |
+| 角色资料/开场编辑、远程导入、目录发现 | [use-character-profile-editor.ts](src/features/cards/model/use-character-profile-editor.ts)、[use-remote-card-import.ts](src/features/cards/model/use-remote-card-import.ts)、[use-card-directory-discovery.ts](src/features/cards/model/use-card-directory-discovery.ts) | [card-editor-lifecycle.test.ts](../../tests/unit/client/card-editor-lifecycle.test.ts)；Widget 布局仍归 CharacterPanel |
+| 历史面板预览、批量删除结果 | [use-history-previews.ts](src/features/sessions/model/use-history-previews.ts)、[delete-history-items.ts](src/features/sessions/model/delete-history-items.ts) | [sessions-panel-source.test.ts](../../tests/unit/client/sessions-panel-source.test.ts) |
+| Timeline/Session 目录缓存、Run 轮询与重放 | [use-narrative-collections.ts](src/features/narrative-runtime/model/use-narrative-collections.ts)、[agent-run-observer.ts](src/features/narrative-runtime/model/agent-run-observer.ts) | [card-timeline-selection.test.ts](../../tests/unit/client/card-timeline-selection.test.ts)、[narrative-run-recovery.test.ts](../../tests/unit/client/narrative-run-recovery.test.ts) |
+| Text Transform 作者编辑与运行检查 | [use-text-transform-controller.ts](src/features/text-transforms/model/use-text-transform-controller.ts)、[use-text-transform-inspection.ts](src/features/text-transforms/model/use-text-transform-inspection.ts) | [text-transform-source.test.ts](../../tests/unit/client/text-transform-source.test.ts) |
 | 剧情、主写作、Agent Session、输入投递 | [use-narrative-runtime.ts](src/features/narrative-runtime/model/use-narrative-runtime.ts) | [use-narrative-runtime.test.ts](../../tests/unit/client/use-narrative-runtime.test.ts)、[narrative-session-lifecycle.test.ts](../../tests/unit/client/narrative-session-lifecycle.test.ts) |
 | Session 搜索、改名、查看与主对话选择 | [agent-session-picker.tsx](src/widgets/agent-chat-panel/agent-session-picker.tsx) | [agent-session-picker.test.ts](../../tests/unit/client/agent-session-picker.test.ts) |
-| Agent Preset、预设选择与 Settings 使用 | [use-agent-presets.ts](src/features/agent-presets/model/use-agent-presets.ts)、[preset-workbench.tsx](src/widgets/preset-workbench/preset-workbench.tsx) | [preset-setting-uses.test.ts](../../tests/unit/client/preset-setting-uses.test.ts)（使用配置 UI） |
+| Agent Preset、预设选择与 Lore 使用 | [use-agent-presets.ts](src/features/agent-presets/model/use-agent-presets.ts)、[preset-workbench.tsx](src/widgets/preset-workbench/preset-workbench.tsx) | [preset-lore-uses.test.ts](../../tests/unit/client/preset-lore-uses.test.ts)（使用配置 UI） |
 | 世界书、Context Assets、资源树操作 | [tree-ops.ts](src/features/context-assets/model/tree-ops.ts)、[use-context-assets.ts](src/features/context-assets/model/use-context-assets.ts) | [context-assets.test.ts](../../tests/unit/client/context-assets.test.ts) |
 | 投影、projection order、编排视图 | [projection-order.ts](src/features/context-assets/model/projection-order.ts)、[projection-workbench.ts](src/features/context-assets/model/projection-workbench.ts) | [projection-order.test.ts](../../tests/unit/client/projection-order.test.ts)、[projection-workbench.test.ts](../../tests/unit/client/projection-workbench.test.ts) |
 | PromptBuild 展示步骤 | [build-prompt-build-steps.ts](src/features/prompt-build/model/build-prompt-build-steps.ts) | [prompt-build-steps.test.ts](../../tests/unit/client/prompt-build-steps.test.ts) |
@@ -75,9 +79,9 @@ pnpm exec vitest run tests/unit/client
 
 普通面板切换使用同一 `/studio` 的 History State，显式 URI 负责资源身份与外部跳转，不能重新用每个面板的 Path 覆盖 Timeline 上下文。恢复优先级和来源隔离见[导航架构](../../docs/architecture/ui/navigation-and-routing.md)。
 
-资源浏览按归属进入角色或扩展面板；浏览角色不切换当前游玩角色。临时按原 ID 打开单项资源只改变查看/编辑目标，不改变归属、安装或挂载。复杂 Settings 由专用面板承载；当前不维护独立工作区包成员清单。目录或 Manifest 静态声明不等于某轮运行的实际激活结果。
+资源浏览按归属进入角色或扩展面板；浏览角色不切换当前游玩角色。临时按原 ID 打开单项资源只改变查看/编辑目标，不改变归属、安装或挂载。复杂 Lore 由专用面板承载；当前不维护独立工作区包成员清单。目录或 Manifest 静态声明不等于某轮运行的实际激活结果。
 
-Agent Preset 配置使用 Settings、正则 / 提取器、工具三个子 Tab，复用来源 FileTree、搜索和图标开关；Settings / 规则行点击跳转定义编辑，工具说明按行展开。当前角色 Settings 置顶并用星号标记，显示随 `useCardSettings` 草稿变化，不为展示增加 Mount；默认采用由角色世界书总开关控制，关闭后仍可显式采用。目录不显示实际触发结果，不提供额外编辑按钮或 Settings 上下移控件。详见[资源浏览与消费配置](../../docs/architecture/ui/navigation-and-routing.md#资源浏览与消费配置)。
+Agent Preset 配置使用 Lore、正则 / 提取器、工具三个子 Tab，复用来源 FileTree、搜索和图标开关；Lore / 规则行点击跳转定义编辑，工具说明按行展开。当前角色 Lore 置顶并用星号标记，显示随 `useCardLore` 草稿变化，不为展示增加 Mount；默认采用由角色世界书总开关控制，关闭后仍可显式采用。目录不显示实际触发结果，不提供额外编辑按钮或 Lore 上下移控件。详见[资源浏览与消费配置](../../docs/architecture/ui/navigation-and-routing.md#资源浏览与消费配置)。
 
 Session 不能中途改绑预设。“主写作”是 Narrative 输入接收 Session，与正在查看的 Session 分离；选择按 endpoint 存储范围和 Timeline 在本机持久化，不是后端全局主槽位。生成时禁止换主；暂停任务须先成功放弃，不能借切换恢复旧任务。具体合同见[Agent Runtime 与 Session](../../docs/architecture/application/agent/runtime-and-session.md#1-身份与绑定)。
 
@@ -132,7 +136,7 @@ URL / History 路由导航       -> React Router
 
 ### 关键依赖使用提醒
 - **本地偏好沿用 Zustand**：面板折叠、展开偏好、主题外观写入所属 store。工作区导航恢复由 `shared/studio-shell/studio-workspace.ts` 按 endpoint 持久化位置；组件不得另建平行 `localStorage` 状态。
-- **服务端状态必须用 TanStack Query**：Prompt Resource、Setting Mount 等远端实体必须由 Query 管理缓存与失效，表单未保存草稿不进入 Query Cache。
+- **服务端状态必须用 TanStack Query**：Prompt Resource、Lore Mount 等远端实体必须由 Query 管理缓存与失效，表单未保存草稿不进入 Query Cache。
 - **长文本与代码编辑**：需要语法、搜索或高亮的场景必须复用 CodeMirror / Lezer；短文本用原生 input/textarea。
 - **消息展示**：复用 `features/message-content`；Markdown 使用 `react-markdown` / `remark-gfm`，HTML 使用现有消毒和隔离路径。不能绕过这些入口手写正则 parser 或直接注入未经处理的 HTML。
 - **菜单与弹层**：上下文菜单与下拉菜单必须基于 Radix primitives，不手写底层 focus/dismiss 机制；轻量反馈使用 Sonner。

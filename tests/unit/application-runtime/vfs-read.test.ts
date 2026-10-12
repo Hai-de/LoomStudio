@@ -73,7 +73,7 @@ describe('CodeAct read-only VFS', () => {
       contributions: ['a', 'b', 'session', 'narrative', 'disabled'].map(id => ({
         id,
         sourceRef: { kind: id === 'session' ? 'sessionHistory' as const
-          : id === 'narrative' ? 'narrativeHistory' as const : 'settingLayer' as const, sourceId: 's', sourceNodeId: id },
+          : id === 'narrative' ? 'narrativeHistory' as const : 'lore' as const, sourceId: 's', sourceNodeId: id },
         content: id, capabilities: {},
       })),
     })

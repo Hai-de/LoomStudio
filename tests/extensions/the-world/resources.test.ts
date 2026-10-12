@@ -63,9 +63,9 @@ describe('The World prompt resources', () => {
       expect((await runtime.listPresetToolMounts({ presetId })).mounts.every(mount => !mount.defaultEnabled)).toBe(true)
       expect(before.toolExposures).toEqual([])
 
-      await runtime.replaceSettingMounts({
+      await runtime.replaceLoreMounts({
         source: { kind: 'preset', id: presetId },
-        settingResourceIds: [imported.promptResources[0]!.resourceId],
+        loreResourceIds: [imported.promptResources[0]!.resourceId],
       })
       await runtime.replacePresetToolMounts({
         presetId,

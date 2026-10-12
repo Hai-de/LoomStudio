@@ -8,7 +8,7 @@ import { prepareLoomMarkdown } from '../../../apps/studio-client/src/shared/ui/m
 
 function apiFixture() {
   const getResource = vi.fn().mockResolvedValue({ resource: {
-    id: 'r', version: 2, resourceKind: 'setting',
+    id: 'r', version: 2, resourceKind: 'lore',
     rootNode: { id: 'root', label: 'Root', kind: 'module', children: [{ id: 'n', label: 'Name', kind: 'entry', body: 'first\nsecond\nthird' }] },
   } })
   const getState = vi.fn().mockResolvedValue({ snapshot: { revisionId: 'rev', value: { inventory: ['key'] } } })
@@ -36,7 +36,7 @@ describe('resource reference navigation model', () => {
     expect(parseEntityReference(view.uri!)).toEqual(reference)
     expect(view).not.toHaveProperty('href')
   })
-  it.each(['setting', 'preset'])('returns a resource URI with the root node for %s', async resourceKind => {
+  it.each(['lore', 'preset'])('returns a resource URI with the root node for %s', async resourceKind => {
     const get = vi.fn().mockResolvedValue({ resource: {
       id: 'resource/1', resourceKind, rootNode: { id: 'root/2', label: 'User resource' },
     } })

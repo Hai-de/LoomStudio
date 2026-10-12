@@ -1,9 +1,9 @@
 import type { ClientJsonValue } from '@loom-studio/client-bridge'
 export type {
-  ListSettingMountsResult,
-  ReplaceSettingMountsResult,
-  SettingMount,
-  SettingMountSource,
+  ListLoreMountsResult,
+  ReplaceLoreMountsResult,
+  LoreMount,
+  LoreMountSource,
 } from '@loom-studio/shared'
 import type { MutationReceipt } from './common.js'
 import type { Card } from './card.js'
@@ -22,7 +22,7 @@ export type CardBundleArtifact = {
     description?: string
     preset?: ClientJsonValue
     opening?: ClientJsonValue
-    settingLayer?: ClientJsonValue
+    lore?: ClientJsonValue
   }
   contextAssets: ContextAssetNode[]
   stateTemplates?: Array<{
@@ -82,12 +82,12 @@ export type PromptResource = {
   macroOptions?: import("@loom-studio/shared").MacroOptions
   id: string
   version: number
-  resourceKind: 'preset' | 'setting' | 'logic' | 'runtime' | 'history' | 'prompt'
+  resourceKind: 'preset' | 'lore' | 'logic' | 'runtime' | 'history' | 'prompt'
   rootNode: ContextAssetNode
   historyPolicy?: 'persistent' | 'ephemeral'
   model?: import('./provider.js').ProviderModelSelection
   delivery?: 'stream' | 'complete'
-  useCardSettings?: boolean
+  useCardLore?: boolean
   textUses?: Array<{ id: string; kind: 'rule' | 'extractor'; enabled: boolean; orderIndex?: number }>
   origin?: { kind: 'builtin'; key: string } | import('./extension.js').ExtensionPackageResourceOrigin
   sourceArtifactRef?: ClientJsonValue
@@ -165,7 +165,7 @@ export type ListPromptResourcesResult = {
 export type GetPromptResourceBindingsResult = {
   resourceId: string
   cards: Array<{ id: string; name: string }>
-  settingMounts: import('@loom-studio/shared').SettingMount[]
+  loreMounts: import('@loom-studio/shared').LoreMount[]
 }
 
 export type CreatePromptResourceResult = {

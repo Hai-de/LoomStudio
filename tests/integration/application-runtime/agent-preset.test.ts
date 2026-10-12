@@ -28,7 +28,7 @@ describe('Agent preset resource', () => {
       }
       const install = (source: PromptResourceArtifact) => runtime.installOfficialContent({
         packageId: 'official.starter', packageVersion: '0.1.0',
-        resources: [{ id, artifact: source }], settingMounts: [],
+        resources: [{ id, artifact: source }], loreMounts: [],
       })
       await install(artifact)
       const { mounts } = await runtime.listPresetToolMounts({ presetId: id })
@@ -136,7 +136,7 @@ describe('Agent preset resource', () => {
         presetId = 'prompt-resource.official.loom-assistant'
         await runtime.installOfficialContent({
           packageId: 'official.starter', packageVersion: '0.1.0',
-          resources: [{ id: presetId, artifact }], settingMounts: [],
+          resources: [{ id: presetId, artifact }], loreMounts: [],
         })
       }
       const { agentPreset: unbound } = await runtime.getAgentPreset({ agentPresetId: presetId })
@@ -171,7 +171,7 @@ describe('Agent preset resource', () => {
       const documents = createSqliteDocumentStore({ engine })
       const promptResources = createPromptResourceStore({ engine })
       const runtime = createApplicationRuntime({ dataEngine: engine, documents, promptResources })
-      const { resource } = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Lore' })
+      const { resource } = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Lore' })
       await expect(runtime.updateAgentPreset({
         agentPresetId: resource.id, expectedVersion: resource.version, delivery: 'complete',
       })).rejects.toThrow('Agent Preset not found')

@@ -19,7 +19,7 @@ import { zhCN } from '../../../apps/studio-client/src/shared/i18n/zh-cn.js'
 const api = {} as TextTransformProps['api']
 const card: Card = {
   id: 'card-1', version: 1, name: 'User content unchanged',
-  opening: { entries: [] }, settingLayer: { entries: [] }, createdAt: 'now', updatedAt: 'now',
+  opening: { entries: [] }, lore: { entries: [] }, createdAt: 'now', updatedAt: 'now',
 }
 const noop = () => undefined
 

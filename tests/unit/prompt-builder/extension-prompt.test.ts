@@ -7,14 +7,14 @@ describe('extension prompt resource authorization', () => {
   it('rejects another installation even when the resource is available in the context', async () => {
     const promptResources = {
       getResource: vi.fn(async () => ({
-        resourceKind: 'setting',
+        resourceKind: 'lore',
         metadata: {
           origin: { kind: 'extension-package', packageId: 'other.pkg', installationId: 'other-install' },
         },
       })),
     } as unknown as PromptResourceStore
     await expect(readExtensionPromptInputs({
-      addition: { settingResourceIds: ['other-setting'] },
+      addition: { loreResourceIds: ['other-setting'] },
       promptResources,
       installations: new Map([['other-install', 'other.pkg'], ['own-install', 'own.pkg']]),
       variables: createVariableRenderContext(),

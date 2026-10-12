@@ -231,3 +231,5 @@ export function assertPromptResourceSchema(database: DatabaseSync): void {
     throw new Error(`Prompt Resource SQLite schema contains ${violations.length} foreign key violations`)
   }
 }
+
+export { migrateLorePromptData as migrateVersionSix } from './lore-migration.js'

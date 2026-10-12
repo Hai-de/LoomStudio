@@ -56,7 +56,7 @@ describe('Session tool history projection', () => {
       ...input, sourceNodes: input.sourceNodes.map(node => ({ ...node, enabled: node.id !== '@chat.session' })),
     }).messages).toEqual([])
     expect(() => compilePromptDataModel({
-      ...input, contributions: [{ ...contribution, sourceRef: { ...contribution.sourceRef, kind: 'settingLayer' } }],
+      ...input, contributions: [{ ...contribution, sourceRef: { ...contribution.sourceRef, kind: 'lore' } }],
     })).toThrow(/must come from Session/)
   })
 

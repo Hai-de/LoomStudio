@@ -345,7 +345,7 @@ describe('studio server SillyTavern silent import pipeline', () => {
         artifact: stLorebook,
       })
 
-      expect(result.resource.resourceKind).toBe('setting')
+      expect(result.resource.resourceKind).toBe('lore')
       expect(result.resource.rootNode.label).toBe('Cyberpunk City Lore')
       expect(result.resource.rootNode.children).toHaveLength(2)
     })
@@ -404,7 +404,7 @@ describe('studio server SillyTavern silent import pipeline', () => {
       await callRpc(port, 'extensions.disableModule', module)
       await expect(importLore()).rejects.toThrow('method not found')
       await expect(callRpc(port, 'application.importPromptResource', {
-        artifact: nativeSetting('Native without extension'),
+        artifact: nativeLore('Native without extension'),
       })).resolves.toHaveProperty('resource')
       const response = await authenticatedFetch(port, '/cards/import/png', {
         method: 'POST',
@@ -429,9 +429,9 @@ describe('studio server SillyTavern silent import pipeline', () => {
   })
 })
 
-function nativeSetting(label: string) {
+function nativeLore(label: string) {
   return {
-    format: 'loom.promptResource', schemaVersion: 2, resourceKind: 'setting',
-    rootNode: { id: 'test.setting', label, meta: '', category: 'setting', kind: 'module', body: '', children: [] },
+    format: 'loom.promptResource', schemaVersion: 2, resourceKind: 'lore',
+    rootNode: { id: 'test.setting', label, meta: '', category: 'lore', kind: 'module', body: '', children: [] },
   }
 }

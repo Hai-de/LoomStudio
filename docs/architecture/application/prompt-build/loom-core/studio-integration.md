@@ -20,7 +20,7 @@ Kernel RPC loom.run
 
 ## 2. PromptBuild 的职责
 
-PromptBuild 从领域 Store 与 Runtime 输入准备 SourceNode / PromptContribution，展开宏、计算 Activation，按 Preset 有序树及 Anchor 内部的 `localDepth` 编译消息。Card、Setting、Timeline、Agent 和 Provider 语义由 Application 拥有，不能下沉到 Core。
+PromptBuild 从领域 Store 与 Runtime 输入准备 SourceNode / PromptContribution，展开宏、计算 Activation，按 Preset 有序树及 Anchor 内部的 `localDepth` 编译消息。Card、Lore、Timeline、Agent 和 Provider 语义由 Application 拥有，不能下沉到 Core。
 
 源码入口：
 

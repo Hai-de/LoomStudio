@@ -32,7 +32,7 @@ export type AgentMutationApproval = {
     maxCharacters: number
   }
 }
-import type { CardDirectoryPreview, CardDirectorySaveResult, CardDirectoryCatalog, OpenCardDirectoryResult, CardDirectoryAttachment, ReplaceSettingMountsInput } from '@loom-studio/shared'
+import type { CardDirectoryPreview, CardDirectorySaveResult, CardDirectoryCatalog, OpenCardDirectoryResult, CardDirectoryAttachment, ReplaceLoreMountsInput } from '@loom-studio/shared'
 import type { OfficialContentPackage } from '../../entities/official-content.js'
 import type { LogQuery, LogPage, LogHistoryQuery, LogHistoryPage } from '@loom-studio/logging'
 import type { ExtensionConfigEntry, ExtensionEntityRef, ExtensionInstallationTarget, ExtensionRecordEntry, ExtensionStorageScope } from '@loom-studio/extension-sdk'
@@ -79,7 +79,7 @@ import type {
   ListPromptResourcesResult,
   ListPresetToolMountsResult,
   ListProviderProfilesResult,
-  ListSettingMountsResult,
+  ListLoreMountsResult,
   ManagedExtensionModule,
   ManagedExtensionPackage,
   ListStateDefinitionsResult,
@@ -107,13 +107,13 @@ import type {
   MutatePortableExtensionPayloadResult,
   PresetToolMountInput,
   ProviderModelSelection,
-  ReplaceSettingMountsResult,
+  ReplaceLoreMountsResult,
   ReplacePresetToolMountsResult,
   RegisteredAiGatewayProvider,
   ResolvedLoomScriptRendererMount,
   UnavailableLoomScriptMount,
-  SettingLayerInput,
-  SettingMountSource,
+  LoreInput,
+  LoreMountSource,
   StateTarget,
   StateDefinitionDraft,
   UpsertStateDefinitionResult,
@@ -155,7 +155,7 @@ type CreateCardInput = {
   description?: string
   preset?: CardPresetInput | string
   opening?: OpeningChatInput | string
-  settingLayer?: SettingLayerInput
+  lore?: LoreInput
   media?: CardMedia
   promptResourceIds?: string[]
 }
@@ -170,7 +170,7 @@ type UpdateCardInput = {
   description?: string
   preset?: CardPresetInput | string
   opening?: OpeningChatInput | string
-  settingLayer?: SettingLayerInput
+  lore?: LoreInput
   media?: CardMedia
   promptResourceIds?: string[]
   stateTemplates?: Array<{
@@ -257,7 +257,7 @@ type UpdateAgentPresetInput = {
   name?: string
   model?: ProviderModelSelection | null
   delivery?: 'stream' | 'complete'
-  useCardSettings?: boolean
+  useCardLore?: boolean
   textUses?: Array<{ id: string; kind: 'rule' | 'extractor'; enabled: boolean; orderIndex?: number }>
 }
 
@@ -587,7 +587,7 @@ export type StudioApi = {
     getBindings(resourceId: string): Promise<GetPromptResourceBindingsResult>
     updateMacros(input: { resourceId: string; expectedVersion: number; macros: Record<string, string>; macroOptions?: import('@loom-studio/shared').MacroOptions }): Promise<UpdatePromptResourceResult>
     get(resourceId: string): Promise<GetPromptResourceResult>
-    list(resourceKind?: 'preset' | 'setting'): Promise<ListPromptResourcesResult>
+    list(resourceKind?: 'preset' | 'lore'): Promise<ListPromptResourcesResult>
     create(input: CreatePromptResourceInput): Promise<CreatePromptResourceResult>
     duplicate(input: DuplicatePromptResourceInput): Promise<CreatePromptResourceResult>
     delete(resourceId: string): Promise<DeletePromptResourceResult>
@@ -597,8 +597,8 @@ export type StudioApi = {
     exportZip(resourceId: string): Promise<{ fileName: string; base64: string }>
     updateAsset(input: UpdatePromptResourceAssetInput): Promise<UpdatePromptResourceResult>
     updateAssets(input: UpdatePromptResourceAssetsInput): Promise<UpdatePromptResourceResult>
-    listSettingMounts(source?: SettingMountSource): Promise<ListSettingMountsResult>
-    replaceSettingMounts(input: ReplaceSettingMountsInput): Promise<ReplaceSettingMountsResult>
+    listLoreMounts(source?: LoreMountSource): Promise<ListLoreMountsResult>
+    replaceLoreMounts(input: ReplaceLoreMountsInput): Promise<ReplaceLoreMountsResult>
     listPresetToolMounts(input?: { presetId?: string; toolId?: string }): Promise<ListPresetToolMountsResult>
     replacePresetToolMounts(input: { presetId: string; mounts: PresetToolMountInput[] }): Promise<ReplacePresetToolMountsResult>
     createAsset(input: CreatePromptResourceAssetInput): Promise<UpdatePromptResourceResult>
@@ -885,8 +885,8 @@ export function createStudioApi(bridge: ClientBridge): StudioApi {
       createAsset: input => rpc.call<UpdatePromptResourceResult>('application.createPromptResourceAsset', input),
       updateAsset: input => rpc.call<UpdatePromptResourceResult>('application.updatePromptResourceAsset', input),
       updateAssets: input => rpc.call<UpdatePromptResourceResult>('application.updatePromptResourceAssets', input),
-      listSettingMounts: source => rpc.call<ListSettingMountsResult>('application.listSettingMounts', source ? { source } : {}),
-      replaceSettingMounts: input => rpc.call<ReplaceSettingMountsResult>('application.replaceSettingMounts', input),
+      listLoreMounts: source => rpc.call<ListLoreMountsResult>('application.listLoreMounts', source ? { source } : {}),
+      replaceLoreMounts: input => rpc.call<ReplaceLoreMountsResult>('application.replaceLoreMounts', input),
       listPresetToolMounts: input => rpc.call<ListPresetToolMountsResult>('application.listPresetToolMounts', (input ?? {})),
       replacePresetToolMounts: input => rpc.call<ReplacePresetToolMountsResult>('application.replacePresetToolMounts', input),
       moveAsset: input => rpc.call<UpdatePromptResourceResult>('application.movePromptResourceAsset', input),

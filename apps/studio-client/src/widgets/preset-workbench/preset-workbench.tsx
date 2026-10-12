@@ -28,7 +28,7 @@ import { createDefaultPresetToolMountInput, toPresetToolMountInput, togglePreset
 import { FileTree, type FileTreeNode } from '../../shared/ui/file-tree/file-tree.js'
 import { buildPresetToolProjection } from '../../features/context-assets/model/preset-tool-projection.js'
 import { findCompositionItem } from '../../features/context-assets/model/composition-items.js'
-import type { AgentToolDefinition, Card, ContextAssetNode, PresetToolMount, PresetToolMountInput, PromptCompositionItem, PromptResource, SettingMount, TextExtractor, TextTransformRule } from '../../entities/index.js'
+import type { AgentToolDefinition, Card, ContextAssetNode, PresetToolMount, PresetToolMountInput, PromptCompositionItem, PromptResource, LoreMount, TextExtractor, TextTransformRule } from '../../entities/index.js'
 import styles from './preset-workbench.module.scss'
 import { AgentModelEditor } from '../agent-panel/agent-model-editor.js'
 import type { MacroAuthoringSource } from '../../features/state-variables/ui/macro-authoring-panel.js'
@@ -69,7 +69,7 @@ type PresetWorkbenchProps = {
   extensionInstallations?: import('../../entities/index.js').ListExtensionInstallationsResult['installations']
   nodes: ContextAssetNode[]
   resources: PromptResource[]
-  settingMounts: SettingMount[]
+  loreMounts: LoreMount[]
   tools: AgentToolDefinition[]
   toolMounts: PresetToolMount[]
   timelinePromptResourceIds?: string[]
@@ -97,7 +97,7 @@ type PresetWorkbenchProps = {
   onExportResourceZip?: (resourceId: string) => Promise<void>
   onImportResourceZip?: (file: File) => Promise<string | undefined>
   onReplaceToolMounts: (presetId: string, mounts: PresetToolMountInput[]) => Promise<void>
-  onReplaceSettingMounts: (source: { kind: 'preset'; id: string }, mounts: Array<{ id: string } | { settingResourceId: string }>) => Promise<void>
+  onReplaceLoreMounts: (source: { kind: 'preset'; id: string }, mounts: Array<{ id: string } | { loreResourceId: string }>) => Promise<void>
   onUpdateTool: (tool: AgentToolDefinition) => Promise<void> | void
   onSaveMacros: (resourceId: string, input: Parameters<MacroAuthoringSource['onSave']>[0]) => ReturnType<MacroAuthoringSource['onSave']>
   routeAssetId?: string
@@ -106,7 +106,7 @@ type PresetWorkbenchProps = {
   onSearchQueryChange(value: string): void
   selectedResourceId?: string
   onSelectResource?: (resourceId: string) => void
-  onOpenSetting?: (resourceId: string, nodeId: string) => void
+  onOpenLore?: (resourceId: string, nodeId: string) => void
   previewApi: StudioApi['narratives']
   previewTimelineId?: string
   previewBranchId?: string
@@ -163,14 +163,14 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
   const selectedNode = findContextNode(workbenchNodes, selectedId)
   const detailNode = selectedNode
   const tokenProjection = useMemo(() => detailNode?.kind === 'virtual' && selectedResource ? buildPresetTokenProjection({
-    preset: selectedResource, resources: props.resources, settingMounts: props.settingMounts,
+    preset: selectedResource, resources: props.resources, loreMounts: props.loreMounts,
     timelinePromptResourceIds: props.timelinePromptResourceIds,
-  }) : undefined, [detailNode?.kind, selectedResource, props.resources, props.settingMounts, props.timelinePromptResourceIds])
+  }) : undefined, [detailNode?.kind, selectedResource, props.resources, props.loreMounts, props.timelinePromptResourceIds])
   const declarations = useMemo(() => detailNode?.kind === 'virtual' && selectedResource
     ? presetAnchorDeclarations({
       anchor: detailNode, presetId: selectedResource.id, resources: props.resources,
-      settingMounts: props.settingMounts, timelinePromptResourceIds: props.timelinePromptResourceIds,
-    }) : undefined, [detailNode, selectedResource?.id, props.resources, props.settingMounts, props.timelinePromptResourceIds])
+      loreMounts: props.loreMounts, timelinePromptResourceIds: props.timelinePromptResourceIds,
+    }) : undefined, [detailNode, selectedResource?.id, props.resources, props.loreMounts, props.timelinePromptResourceIds])
   const declarationNodes = useMemo(() => declarations?.nodes.map(node => ({
     ...node,
     label: ({
@@ -423,18 +423,18 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
           providerAccounts={props.providerAccounts}
           tools={props.tools}
           toolMounts={props.toolMounts}
-          settingMounts={props.settingMounts}
+          loreMounts={props.loreMounts}
           card={props.card}
           resources={props.resources}
           unavailableMounts={toolProjection.unavailableMounts}
           t={props.t}
           onSaveModel={props.onSaveModel}
           onReplaceMounts={replaceToolMounts}
-          onReplaceSettingMounts={props.onReplaceSettingMounts}
+          onReplaceLoreMounts={props.onReplaceLoreMounts}
           onDuplicate={() => props.onDuplicateResource(selectedResource.id).then(() => {})}
           onDelete={() => props.onDeleteResource(selectedResource.id)}
           onExport={() => props.onExportResource(selectedResource.id)}
-          onOpenSetting={props.onOpenSetting}
+          onOpenLore={props.onOpenLore}
         />
       ) : (
         <div className={styles.detailStack}>
@@ -485,7 +485,7 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
                 }}
                 onSelect={item => {
                   const target = declarations.targets.get(item.id)
-                  if (target) props.onOpenSetting?.(target.resource.id, target.node.id)
+                  if (target) props.onOpenLore?.(target.resource.id, target.node.id)
                   else setDeclarationExpandedIds(current => current.includes(item.id)
                     ? current.filter(id => id !== item.id) : [...current, item.id])
                 }}
@@ -517,18 +517,18 @@ export function AgentPresetOverview(props: {
   providerAccounts: ProviderAccount[]
   tools: AgentToolDefinition[]
   toolMounts: PresetToolMount[]
-  settingMounts: SettingMount[]
+  loreMounts: LoreMount[]
   card?: Card
   resources: PromptResource[]
   unavailableMounts: PresetToolMount[]
   t: Translator
   onSaveModel(input: Parameters<StudioApi['agentPresets']['update']>[0]): Promise<PromptResource>
   onReplaceMounts(presetId: string, mounts: PresetToolMountInput[]): Promise<void>
-  onReplaceSettingMounts(source: { kind: 'preset'; id: string }, mounts: Array<{ id: string } | { settingResourceId: string }>): Promise<void>
+  onReplaceLoreMounts(source: { kind: 'preset'; id: string }, mounts: Array<{ id: string } | { loreResourceId: string }>): Promise<void>
   onDuplicate(): Promise<void>
   onDelete(): Promise<void>
   onExport(): Promise<void>
-  onOpenSetting?: (resourceId: string, nodeId: string) => void
+  onOpenLore?: (resourceId: string, nodeId: string) => void
 }) {
   const origin = props.preset.origin
   const isBuiltin = origin?.kind === 'builtin'
@@ -550,7 +550,7 @@ export function AgentPresetOverview(props: {
     props.toolMounts.filter(m => m.presetResourceId === props.preset.id),
     [props.toolMounts, props.preset.id]
   )
-  const usedSettings = props.settingMounts
+  const usedLore = props.loreMounts
     .filter(mount => mount.source.kind === 'preset' && mount.source.id === props.preset.id)
     .sort((a, b) => a.orderIndex - b.orderIndex)
   const mountedToolMap = useMemo(() =>
@@ -579,37 +579,37 @@ export function AgentPresetOverview(props: {
   const [toolQuery, setToolQuery] = useState('')
   const [pendingToolId, setPendingToolId] = useState<string>()
   const [toolError, setToolError] = useState<string>()
-  const [settingBusy, setSettingBusy] = useState(false)
-  const [settingError, setSettingError] = useState<string>()
-  const [settingQuery, setSettingQuery] = useState('')
-  const [collapsedSettingSources, setCollapsedSettingSources] = useState<string[]>([])
-  const settingRows = [
-    ...usedSettings.map(mount => {
-      const resourceId = mount.resolvedSettingResourceId === null ? undefined
-        : mount.resolvedSettingResourceId ?? mount.settingResourceId
-      const resource = props.resources.find(item => item.id === resourceId && item.resourceKind === 'setting')
+  const [loreBusy, setLoreBusy] = useState(false)
+  const [loreError, setLoreError] = useState<string>()
+  const [loreQuery, setLoreQuery] = useState('')
+  const [collapsedLoreSources, setCollapsedLoreSources] = useState<string[]>([])
+  const loreRows = [
+    ...usedLore.map(mount => {
+      const resourceId = mount.resolvedLoreResourceId === null ? undefined
+        : mount.resolvedLoreResourceId ?? mount.loreResourceId
+      const resource = props.resources.find(item => item.id === resourceId && item.resourceKind === 'lore')
       return { id: `mount:${mount.id}`, mount, resource }
     }),
-    ...props.resources.filter(item => item.resourceKind === 'setting'
-      && !usedSettings.some(mount => (mount.resolvedSettingResourceId ?? mount.settingResourceId) === item.id))
+    ...props.resources.filter(item => item.resourceKind === 'lore'
+      && !usedLore.some(mount => (mount.resolvedLoreResourceId ?? mount.loreResourceId) === item.id))
       .map(resource => ({ id: `resource:${resource.id}`, mount: undefined, resource })),
   ]
-  const settingRowsById = new Map(settingRows.map(row => [row.id, row]))
-  const cardSettingIds = new Set(props.card?.promptResourceIds ?? [])
-  const isCardSetting = (nodeId: string) => {
-    const resource = settingRowsById.get(nodeId)?.resource
-    return Boolean(resource && cardSettingIds.has(resource.id))
+  const loreRowsById = new Map(loreRows.map(row => [row.id, row]))
+  const cardLoreIds = new Set(props.card?.promptResourceIds ?? [])
+  const isCardLore = (nodeId: string) => {
+    const resource = loreRowsById.get(nodeId)?.resource
+    return Boolean(resource && cardLoreIds.has(resource.id))
   }
-  const settingNodes = (useCardSettings: boolean) => usageFolders(
-    [...settingRows.filter(row => isCardSetting(row.id)), ...settingRows.filter(row => !isCardSetting(row.id))].map(row => ({
-    source: isCardSetting(row.id) ? `当前角色 · ${props.card!.name}`
+  const loreNodes = (useCardLore: boolean) => usageFolders(
+    [...loreRows.filter(row => isCardLore(row.id)), ...loreRows.filter(row => !isCardLore(row.id))].map(row => ({
+    source: isCardLore(row.id) ? `当前角色 · ${props.card!.name}`
       : row.resource ? usageSource(row.resource.origin, Boolean(row.resource.sourceArtifactRef)) : '不可用引用',
     node: {
-      id: row.id, label: row.resource?.rootNode.label ?? `Settings 引用不可用：${row.mount!.settingResourceId}`,
-      kind: 'entry' as const, meta: isCardSetting(row.id) && useCardSettings
+      id: row.id, label: row.resource?.rootNode.label ?? `Lore 引用不可用：${row.mount!.loreResourceId}`,
+      kind: 'entry' as const, meta: isCardLore(row.id) && useCardLore
         ? '随角色默认采用' : row.mount ? row.resource ? '已采用' : '未解析' : '未采用',
     },
-  })), settingQuery)
+  })), loreQuery)
   const toolsByNodeId = new Map(props.tools.map(tool => [`tool:${tool.id}`, tool]))
   const toolEnabled = (nodeId: string) => {
     const tool = toolsByNodeId.get(nodeId)
@@ -641,19 +641,19 @@ export function AgentPresetOverview(props: {
   }))
   const expandedToolIds = [...toolNodes.filter(node => !collapsedToolSources.includes(node.id)).map(node => node.id), ...expandedToolDetails]
 
-  async function saveSettings(mounts: Array<{ id: string } | { settingResourceId: string }>) {
-    if (settingBusy) return
-    setSettingBusy(true)
-    setSettingError(undefined)
+  async function saveLore(mounts: Array<{ id: string } | { loreResourceId: string }>) {
+    if (loreBusy) return
+    setLoreBusy(true)
+    setLoreError(undefined)
     try {
-      await props.onReplaceSettingMounts({ kind: 'preset', id: props.preset.id }, mounts)
+      await props.onReplaceLoreMounts({ kind: 'preset', id: props.preset.id }, mounts)
     } catch (error) {
-      setSettingError(error instanceof Error ? error.message : String(error))
+      setLoreError(error instanceof Error ? error.message : String(error))
     } finally {
-      setSettingBusy(false)
+      setLoreBusy(false)
     }
   }
-  const currentSettingMounts = () => usedSettings.map(mount => ({ id: mount.id }))
+  const currentLoreMounts = () => usedLore.map(mount => ({ id: mount.id }))
 
   async function handleToggleTool(tool: AgentToolDefinition) {
     if (pendingToolId) return
@@ -710,52 +710,52 @@ export function AgentPresetOverview(props: {
 
       <PresetTextUses preset={props.preset} api={props.textTransformsApi}
         onSave={props.onSaveModel} onOpen={props.onOpenTextUse}
-        settingsContent={useCardSettings => {
-          const nodes = settingNodes(useCardSettings)
-          const enabled = (nodeId: string) => Boolean(settingRowsById.get(nodeId)?.mount
-            || (isCardSetting(nodeId) && useCardSettings))
-          return <section className={styles.presetResourceList} aria-label="Settings 使用资源">
-        <SearchField aria-label="搜索 Settings" placeholder="搜索名称或来源"
-          clearLabel="清除搜索" value={settingQuery} onClear={() => setSettingQuery('')}
-          onChange={event => { setSettingQuery(event.target.value); setCollapsedSettingSources([]) }} />
-        {settingError ? <p role="alert">{settingError}</p> : null}
-        <FileTree ariaLabel="Settings 来源目录" nodes={nodes}
-          expandedIds={nodes.filter(node => !collapsedSettingSources.includes(node.id)).map(node => node.id)}
-          onExpandedIdsChange={ids => setCollapsedSettingSources(nodes.filter(node => !ids.includes(node.id)).map(node => node.id))}
+        loreContent={useCardLore => {
+          const nodes = loreNodes(useCardLore)
+          const enabled = (nodeId: string) => Boolean(loreRowsById.get(nodeId)?.mount
+            || (isCardLore(nodeId) && useCardLore))
+          return <section className={styles.presetResourceList} aria-label="Lore 使用资源">
+        <SearchField aria-label="搜索 Lore" placeholder="搜索名称或来源"
+          clearLabel="清除搜索" value={loreQuery} onClear={() => setLoreQuery('')}
+          onChange={event => { setLoreQuery(event.target.value); setCollapsedLoreSources([]) }} />
+        {loreError ? <p role="alert">{loreError}</p> : null}
+        <FileTree ariaLabel="Lore 来源目录" nodes={nodes}
+          expandedIds={nodes.filter(node => !collapsedLoreSources.includes(node.id)).map(node => node.id)}
+          onExpandedIdsChange={ids => setCollapsedLoreSources(nodes.filter(node => !ids.includes(node.id)).map(node => node.id))}
           getDisclosureLabel={(node, expanded) => `${expanded ? '收起' : '展开'}${node.label}`}
           getDragLabel={node => node.label} moreActionsLabel="更多操作"
           isMuted={node => {
-            const row = settingRowsById.get(node.id)
+            const row = loreRowsById.get(node.id)
             return Boolean(row && (!enabled(node.id) || !row.resource))
           }}
           onSelect={node => {
-            const resource = settingRowsById.get(node.id)?.resource
-            if (resource) props.onOpenSetting?.(resource.id, resource.rootNode.id)
+            const resource = loreRowsById.get(node.id)?.resource
+            if (resource) props.onOpenLore?.(resource.id, resource.rootNode.id)
           }}
           renderIcon={(node, expanded) => node.kind === 'folder'
             ? expanded ? <FolderOpen size={15} /> : <Folder size={15} />
-            : isCardSetting(node.id)
+            : isCardLore(node.id)
               ? <Star size={15} className={enabled(node.id) ? styles.usageEnabledIcon : undefined} />
               : <BookOpen size={15} className={enabled(node.id) ? styles.usageEnabledIcon : undefined} />}
           renderTrailing={node => {
-            const row = settingRowsById.get(node.id)
+            const row = loreRowsById.get(node.id)
             if (!row) return null
             const { mount, resource } = row
-            const inherited = isCardSetting(node.id) && useCardSettings
+            const inherited = isCardLore(node.id) && useCardLore
             return resource ? <button type="button" className={styles.declarationToggle}
-                aria-label={`${enabled(node.id) ? '停用' : '启用'} Settings：${resource.rootNode.label}`}
+                aria-label={`${enabled(node.id) ? '停用' : '启用'} Lore：${resource.rootNode.label}`}
                 title={inherited ? '随角色默认采用，由“使用角色世界书”控制' : mount ? '停用条目' : '启用条目'}
-                aria-pressed={enabled(node.id)} disabled={settingBusy || inherited}
-                onClick={() => void saveSettings(mount
-                  ? currentSettingMounts().filter(item => item.id !== mount.id)
-                  : [...currentSettingMounts(), { settingResourceId: resource.id }])}>
+                aria-pressed={enabled(node.id)} disabled={loreBusy || inherited}
+                onClick={() => void saveLore(mount
+                  ? currentLoreMounts().filter(item => item.id !== mount.id)
+                  : [...currentLoreMounts(), { loreResourceId: resource.id }])}>
                 {enabled(node.id) ? <ToggleRight aria-hidden="true" /> : <ToggleLeft aria-hidden="true" />}
-              </button> : <IconButton aria-label="移除 Settings" title="移除引用" size="small" disabled={settingBusy}
-                onClick={() => void saveSettings(currentSettingMounts().filter(item => item.id !== mount!.id))}>
+              </button> : <IconButton aria-label="移除 Lore" title="移除引用" size="small" disabled={loreBusy}
+                onClick={() => void saveLore(currentLoreMounts().filter(item => item.id !== mount!.id))}>
                 <Trash2 size={14} aria-hidden="true" />
               </IconButton>
           }} />
-        {!nodes.length && <p className={styles.presetResourceEmpty}>没有匹配的 Settings</p>}
+        {!nodes.length && <p className={styles.presetResourceEmpty}>没有匹配的 Lore</p>}
       </section>}}
       toolsContent={<section className={styles.presetResourceList} aria-label={props.t('preset.tools.mountTitle')}>
         <SearchField aria-label="搜索工具" placeholder="搜索名称或来源"
@@ -807,7 +807,7 @@ export function PresetTextUses(props: {
   api: StudioApi['textTransforms']
   onSave(input: Parameters<StudioApi['agentPresets']['update']>[0]): Promise<PromptResource>
   onOpen?: (kind: 'rule' | 'extractor', id: string) => void
-  settingsContent?: ReactNode | ((useCardSettings: boolean) => ReactNode)
+  loreContent?: ReactNode | ((useCardLore: boolean) => ReactNode)
   toolsContent?: ReactNode
 }) {
   type TextUse = NonNullable<PromptResource['textUses']>[number]
@@ -819,14 +819,14 @@ export function PresetTextUses(props: {
   const [extractors, setExtractors] = useState<TextExtractor[]>([])
   const [draft, setDraft] = useState(() => ({
     textUses: editableUses(props.preset.textUses),
-    useCardSettings: props.preset.useCardSettings ?? true,
+    useCardLore: props.preset.useCardLore ?? true,
   }))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
-  const [activeTab, setActiveTab] = useState<'settings' | 'text' | 'tools'>('settings')
+  const [activeTab, setActiveTab] = useState<'lore' | 'text' | 'tools'>('lore')
   const [textQuery, setTextQuery] = useState('')
   const [collapsedTextSources, setCollapsedTextSources] = useState<string[]>([])
-  const dirty = draft.useCardSettings !== (props.preset.useCardSettings ?? true)
+  const dirty = draft.useCardLore !== (props.preset.useCardLore ?? true)
     || JSON.stringify(draft.textUses) !== JSON.stringify(editableUses(props.preset.textUses))
 
   useEffect(() => {
@@ -861,9 +861,9 @@ export function PresetTextUses(props: {
         agentPresetId: props.preset.id,
         expectedVersion: props.preset.version,
         textUses: draft.textUses,
-        useCardSettings: draft.useCardSettings,
+        useCardLore: draft.useCardLore,
       })
-      setDraft({ textUses: editableUses(saved.textUses), useCardSettings: saved.useCardSettings ?? true })
+      setDraft({ textUses: editableUses(saved.textUses), useCardLore: saved.useCardLore ?? true })
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
@@ -903,21 +903,21 @@ export function PresetTextUses(props: {
 
   return <div className={styles.presetUsageConfig}>
     <PanelTabs items={[
-      { id: 'settings', label: 'Settings' },
+      { id: 'lore', label: 'Lore' },
       { id: 'text', label: '正则 / 提取器' },
       { id: 'tools', label: '工具' },
     ]} activeId={activeTab} onChange={setActiveTab} ariaLabel="预设使用配置" size="compact" />
-    <section role="tabpanel" aria-label="Settings" hidden={activeTab !== 'settings'} className={styles.presetUsagePanel}>
+    <section role="tabpanel" aria-label="Lore" hidden={activeTab !== 'lore'} className={styles.presetUsagePanel}>
       <div className={styles.presetUsageOption}>
         <span className={styles.presetResourceName}>使用角色世界书</span>
         <button type="button" className={styles.declarationToggle} aria-label="使用角色世界书"
-          title={draft.useCardSettings ? '停用角色世界书' : '启用角色世界书'}
-          aria-pressed={draft.useCardSettings} disabled={busy}
-          onClick={() => setDraft(current => ({ ...current, useCardSettings: !current.useCardSettings }))}>
-          {draft.useCardSettings ? <ToggleRight aria-hidden="true" /> : <ToggleLeft aria-hidden="true" />}
+          title={draft.useCardLore ? '停用角色世界书' : '启用角色世界书'}
+          aria-pressed={draft.useCardLore} disabled={busy}
+          onClick={() => setDraft(current => ({ ...current, useCardLore: !current.useCardLore }))}>
+          {draft.useCardLore ? <ToggleRight aria-hidden="true" /> : <ToggleLeft aria-hidden="true" />}
         </button>
       </div>
-      {typeof props.settingsContent === 'function' ? props.settingsContent(draft.useCardSettings) : props.settingsContent}
+      {typeof props.loreContent === 'function' ? props.loreContent(draft.useCardLore) : props.loreContent}
     </section>
     <section role="tabpanel" aria-label="正则 / 提取器" hidden={activeTab !== 'text'} className={styles.presetUsagePanel}>
       <SearchField aria-label="搜索正则与提取器" placeholder="搜索名称或来源"

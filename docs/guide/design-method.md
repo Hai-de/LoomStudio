@@ -23,7 +23,7 @@ Domain Discovery + Scenario-Driven Design + Spec-Gated Implementation
 
 含义：
 
-- 用 DDD 式的领域发现识别 Card、Session、Opening、Setting Layer、Composition Skeleton、Runtime、Provider Adapter 等边界；
+- 用 DDD 式的领域发现识别 Card、Session、Opening、Lore、Composition Skeleton、Runtime、Provider Adapter 等边界；
 - 用真实使用场景检查这些边界是否帮到了作者、玩家、插件作者和 provider adapter 作者；
 - 用 Architecture 记录已验证事实，用 Plan 记录已经决定的非平庸改动；
 - 只有跨域、长期、难逆转且需要保留取舍理由的决策才写 ADR；ADR 不是默认实施门槛；
@@ -44,7 +44,7 @@ Card
 Session
 Chat / Timeline
 Opening
-Setting Layer
+Lore
 Composition Skeleton
 Knowledge / Memory
 State / Mutation
@@ -153,7 +153,7 @@ Loom Studio 需要领域发现，因为很多概念不是纯技术结构：
 - `messages[]` 不是 Chat 本体；
 - Opening 不是特殊第一条 Chat message；
 - Card 不等于 Character；
-- Setting Layer 不等于应用 Preferences；
+- Lore 不等于应用 Preferences；
 - Composition Skeleton 不等于 provider request body。
 
 这些判断属于领域边界判断。

@@ -32,8 +32,8 @@ export async function processPrompt(input: PromptDataModel, processing: {
     const processorId = contribution.capabilities.processorId
     if (!processorId) continue
     const kind = contribution.sourceRef.kind
-    if (contribution.messages || (kind !== 'preset' && kind !== 'settingLayer'))
-      throw new Error('Prompt processors only accept authored Preset and Setting text')
+    if (contribution.messages || (kind !== 'preset' && kind !== 'lore'))
+      throw new Error('Prompt processors only accept authored Preset and Lore text')
     const node = nodes.get(contribution.sourceRef.sourceNodeId)
     if (node?.enabled === false) continue
     if (entries.has(contribution.id)) throw new Error(`Duplicate processed Prompt entry: ${contribution.id}`)

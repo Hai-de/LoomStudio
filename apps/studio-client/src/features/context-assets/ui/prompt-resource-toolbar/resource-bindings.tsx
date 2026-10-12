@@ -31,7 +31,7 @@ export function ResourceBindings(props: ResourceBindingsSource & {
               {query.data.cards.map(card => (
                 <li key={`card:${card.id}`}>{props.t('promptResource.bindingCard', { name: card.name })}</li>
               ))}
-              {query.data.settingMounts.map(mount => (
+              {query.data.loreMounts.map(mount => (
                 <li key={mount.id}>
                   {mount.source.kind === 'manual'
                     ? props.t('promptResource.bindingGlobal')
@@ -40,7 +40,7 @@ export function ResourceBindings(props: ResourceBindingsSource & {
                     })}
                 </li>
               ))}
-              {!query.data.cards.length && !query.data.settingMounts.length
+              {!query.data.cards.length && !query.data.loreMounts.length
                 ? <li>{props.t('promptResource.bindingsEmpty')}</li> : null}
             </ul>
           ) : null : null}

@@ -2,7 +2,7 @@ import type {
   ApplicationRuntime,
   OpeningChatInput,
   RuntimeRequestContext,
-  SettingLayerInput,
+  LoreInput,
 } from '@loom-studio/application-runtime'
 import { isCardBundleArtifact, isPromptActivation, parseCardExtensionAdoptions } from '@loom-studio/application-runtime'
 import type { JsonValue } from '@loom-studio/shared'
@@ -33,8 +33,7 @@ export async function handleCardsRpc(
         description: readOptionalString(params, 'description'),
         preset: readOptionalPreset(params, 'preset'),
         opening: readOptionalOpening(params, 'opening'),
-        setting: readOptionalObject(params, 'setting'),
-        settingLayer: readOptionalSettingLayer(params, 'settingLayer'),
+        lore: readOptionalLore(params, 'lore'),
         media: readOptionalCardMedia(params, 'media'),
         macros: readOptionalStringRecord(params, 'macros'),
         macroOptions: readOptionalObject(params, 'macroOptions') as import('@loom-studio/shared').MacroOptions | undefined,
@@ -84,7 +83,7 @@ export async function handleCardsRpc(
         description: readOptionalString(params, 'description'),
         preset: readOptionalPreset(params, 'preset'),
         opening: readOptionalOpening(params, 'opening'),
-        settingLayer: readOptionalSettingLayer(params, 'settingLayer'),
+        lore: readOptionalLore(params, 'lore'),
         media: readOptionalCardMedia(params, 'media'),
         stateTemplates: readOptionalStateTemplates(params, 'stateTemplates'),
         stateDefinitionIds: readOptionalStringArray(params, 'stateDefinitionIds'),
@@ -189,16 +188,16 @@ function readOptionalOpening(params: JsonValue | undefined, key: string): Openin
   }
 }
 
-function readOptionalSettingLayer(params: JsonValue | undefined, key: string): SettingLayerInput | undefined {
+function readOptionalLore(params: JsonValue | undefined, key: string): LoreInput | undefined {
   if (!isRecord(params) || params[key] === undefined) return undefined
   const value = params[key]
-  if (!isRecord(value)) throw new Error(`Expected settingLayer param: ${key}`)
+  if (!isRecord(value)) throw new Error(`Expected lore param: ${key}`)
   const entries = Array.isArray(value.entries) ? value.entries : []
 
   return {
     entries: entries.map(entry => {
       if (!isRecord(entry) || typeof entry.content !== 'string') {
-        throw new Error(`Expected setting entry content: ${key}`)
+        throw new Error(`Expected lore entry content: ${key}`)
       }
 
       return {

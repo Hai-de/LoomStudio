@@ -2,7 +2,7 @@ import type { StudioApi } from '../../../shared/api/studio-api.js'
 import { downloadBase64, downloadBlob, encodeBase64 } from '../../../shared/browser/download.js'
 import type { Translator } from '../../../shared/i18n/index.js'
 import { sanitizeFileName } from '../../../shared/lib/text.js'
-import type { PresetToolMount, PresetToolMountInput, PromptResource, PromptResourceArtifact, SettingMount, SettingMountSource } from '../../../entities/index.js'
+import type { PresetToolMount, PresetToolMountInput, PromptResource, PromptResourceArtifact, LoreMount, LoreMountSource } from '../../../entities/index.js'
 
 type UsePromptResourceCommandsInput = {
   api: StudioApi
@@ -15,13 +15,13 @@ type UsePromptResourceCommandsInput = {
   }): void
   promptResources: PromptResource[]
   setPromptResources: (update: (current: PromptResource[]) => PromptResource[]) => void
-  setSettingMounts: (update: (current: SettingMount[]) => SettingMount[]) => void
+  setLoreMounts: (update: (current: LoreMount[]) => LoreMount[]) => void
   setPresetToolMounts: (update: (current: PresetToolMount[]) => PresetToolMount[]) => void
   invalidatePromptResourceState(areas: {
     bindings?: boolean
     presetToolMounts?: boolean
     resources?: boolean
-    settingMounts?: boolean
+    loreMounts?: boolean
   }): Promise<void>
   refreshAgentPresets: () => Promise<unknown>
   refreshCards: () => Promise<unknown>
@@ -31,7 +31,7 @@ type UsePromptResourceCommandsInput = {
 
 export function usePromptResourceCommands(input: UsePromptResourceCommandsInput) {
   const {
-    api, t, runMutation, recordEdit, promptResources, setPromptResources, setSettingMounts, setPresetToolMounts,
+    api, t, runMutation, recordEdit, promptResources, setPromptResources, setLoreMounts, setPresetToolMounts,
     invalidatePromptResourceState,
     refreshAgentPresets, refreshCards, refreshCardTimelines, selectedCardId,
   } = input
@@ -69,7 +69,7 @@ export function usePromptResourceCommands(input: UsePromptResourceCommandsInput)
     await runMutation(async () => {
       const result = await api.promptResources.create({
         resourceKind,
-        name: resourceKind === 'preset' ? 'New Preset' : resourceKind === 'setting' ? 'New Setting Layer' : 'New Prompt Resource',
+        name: resourceKind === 'preset' ? 'New Preset' : resourceKind === 'lore' ? 'New Lore' : 'New Prompt Resource',
       })
       resourceId = result.resource.id
       setPromptResources(current => [...current, result.resource])
@@ -102,7 +102,7 @@ export function usePromptResourceCommands(input: UsePromptResourceCommandsInput)
       })
       await invalidatePromptResourceState({
         resources: true,
-        settingMounts: result.resource.resourceKind === 'preset',
+        loreMounts: result.resource.resourceKind === 'preset',
         presetToolMounts: result.resource.resourceKind === 'preset',
       })
       if (result.resource.resourceKind === 'preset') await refreshAgentPresets()
@@ -118,7 +118,7 @@ export function usePromptResourceCommands(input: UsePromptResourceCommandsInput)
       await api.promptResources.delete(resourceId)
       deleted = true
       setPromptResources(current => current.filter(resource => resource.id !== resourceId))
-      await invalidatePromptResourceState({ resources: true, settingMounts: true, presetToolMounts: true })
+      await invalidatePromptResourceState({ resources: true, loreMounts: true, presetToolMounts: true })
       await Promise.all([
         refreshCards(),
         refreshAgentPresets(),
@@ -129,18 +129,18 @@ export function usePromptResourceCommands(input: UsePromptResourceCommandsInput)
     })
   }
 
-  async function replaceSettingMounts(
-    source: SettingMountSource,
-    selections: string[] | Array<{ id: string } | { settingResourceId: string }>,
+  async function replaceLoreMounts(
+    source: LoreMountSource,
+    selections: string[] | Array<{ id: string } | { loreResourceId: string }>,
     mode: 'resourceIds' | 'mounts' = 'resourceIds',
   ): Promise<void> {
     await runMutation(async () => {
-      const result = await api.promptResources.replaceSettingMounts(
+      const result = await api.promptResources.replaceLoreMounts(
         mode === 'mounts'
-          ? { source, mounts: selections as Array<{ id: string } | { settingResourceId: string }> }
-          : { source, settingResourceIds: selections as string[] },
+          ? { source, mounts: selections as Array<{ id: string } | { loreResourceId: string }> }
+          : { source, loreResourceIds: selections as string[] },
       )
-      setSettingMounts(current => [
+      setLoreMounts(current => [
         ...current.filter(mount => mount.source.kind !== source.kind || (source.kind === 'preset' ? mount.source.id !== source.id : mount.source.id !== (source.id ?? 'global'))),
         ...result.mounts,
       ])
@@ -230,7 +230,7 @@ export function usePromptResourceCommands(input: UsePromptResourceCommandsInput)
     exportPromptResource,
     importPromptResourceZip,
     exportPromptResourceZip,
-    replaceSettingMounts,
+    replaceLoreMounts,
     replacePresetToolMounts,
   }
 }

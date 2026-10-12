@@ -46,7 +46,7 @@ Concept Stack 不再作为主要正式术语使用。
 后续正式方向改为 Studio AIRP Layer。
 ```
 
-原因：Loom Studio 需要提供完整默认 AIRP 体验，而不是把 Card、Chat、Setting Layer、Composition、Trace、主界面 UI 全部留给一个可安装 / 可卸载的 ordinary extension 去注册。
+原因：Loom Studio 需要提供完整默认 AIRP 体验，而不是把 Card、Chat、Lore、Composition、Trace、主界面 UI 全部留给一个可安装 / 可卸载的 ordinary extension 去注册。
 
 新的边界是：
 
@@ -54,14 +54,14 @@ Concept Stack 不再作为主要正式术语使用。
 Studio AIRP Layer:
   Studio 第一方内建 product/package layer。
   提供默认完整 AIRP 体验。
-  知道 Card / Session / Chat / Opening / Setting Layer / Composition Skeleton。
+  知道 Card / Session / Chat / Opening / Lore / Composition Skeleton。
   使用 Kernel 的 Document Store / RPC / Event / Trace / Diagnostics。
   不进入 Kernel。
   不作为 ordinary extension。
 
 Studio Kernel:
   仍只提供平台能力。
-  不知道 Card / Chat / Setting Layer / Opening / Composition Skeleton。
+  不知道 Card / Chat / Lore / Opening / Composition Skeleton。
   只看到 Document / RPC / Event / Trace / Diagnostics。
 
 Extensions:
@@ -73,17 +73,17 @@ Extensions:
 术语约定：
 
 ```text
-Setting Layer:
+Lore:
   AIRP 作品设定层。
 
 Preferences:
   应用设置 / 用户偏好。
 
-Settings:
-  不作为主要 UI 术语使用，避免和 Setting Layer 混淆。
+Lore:
+  不作为主要 UI 术语使用，避免和 Lore 混淆。
 ```
 
-另有一个开放议题尚未系统处理：Config / Settings / Preferences / Setting Layer 的层级、边界和持久化规则。该议题应后续单独形成 ADR。
+另有一个开放议题尚未系统处理：Config / Lore / Preferences / Lore 的层级、边界和持久化规则。该议题应后续单独形成 ADR。
 
 ---
 
@@ -115,7 +115,7 @@ Settings:
 |---|---|
 | [`../08-concept-stack/composition-skeleton-v0.md`](../../archive/discussion/application/composition-skeleton-v0.md) | 原 ADR-005 Preset / Composition Skeleton 方向与 CS-2 |
 
-### 1.5 Unified Setting Layer / Global / State
+### 1.5 Unified Lore / Global / State
 
 | 文件 | 内容 |
 |---|---|
@@ -146,7 +146,7 @@ Settings:
 5. ST `Example Dialogues` 暂不继承为一等概念。
 6. 不复刻 ST Group Chat 产品概念。
 7. 不建立 `Actor` / `Participant` / `Speaker` / `CharacterProfile` 等过早硬编码类层级。
-8. `Setting Layer` 是设定与可变状态的统一地基。
+8. `Lore` 是设定与可变状态的统一地基。
 9. `Book` 概念弱化为 collection / folder / namespace，不作为核心语义。
 10. `Preset` 属于 AIRP composition layer，但 backend canonical 倾向 `Composition Skeleton`。
 11. `Author's Note` / 临时注入提示不作为独立 canonical concept。
@@ -159,7 +159,7 @@ Settings:
 以下内容只记录 2026-05 当时建议的下一步，不再构成当前路线：
 
 ```text
-Unified Setting Layer
+Unified Lore
 ```
 
 入口文档：
@@ -170,7 +170,7 @@ docs/archive/discussion/application/setting-layer-v0.md
 
 原因：
 
-- Setting Layer 是 Card、Opening、Skeleton、State、Global Scope 的共同地基；
+- Lore 是 Card、Opening、Skeleton、State、Global Scope 的共同地基；
 - 如果设定层没有定清楚，后续 Chat / Opening / Composition Skeleton 都会被迫补洞；
 - 当前最重要的未决点包括嵌套结构、id / path 索引、KV 挂载、session 回滚、AI / 插件修改 API，以及如何避免过早硬编码类体系。
 
@@ -186,7 +186,7 @@ Before implementation, at minimum the project should accept or revise:
 
 1. Studio AIRP Layer high-level boundary;
 2. Card model M0;
-3. Unified Setting Layer M0;
+3. Unified Lore M0;
 4. Chat / Opening model M0;
 5. Composition Skeleton model M0;
 6. Composition pipeline M0;

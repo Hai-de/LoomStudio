@@ -33,7 +33,7 @@ function elements(value: unknown): Element[] {
 }
 
 describe('Preset text use draft', () => {
-  it('keeps rule and role Settings drafts across tabs and a pending CAS failure, then saves both fields', async () => {
+  it('keeps rule and role Lore drafts across tabs and a pending CAS failure, then saves both fields', async () => {
     const preset: PromptResource = { id: 'preset', version: 3, resourceKind: 'preset', createdAt: '', updatedAt: '',
       rootNode: { id: 'root', kind: 'module', label: 'Writer' }, textUses: [] }
     const api = {
@@ -43,11 +43,11 @@ describe('Preset text use draft', () => {
     let rejectSave!: (error: Error) => void
     const onSave = vi.fn()
       .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectSave = reject }))
-      .mockResolvedValueOnce({ ...preset, version: 4, useCardSettings: false,
+      .mockResolvedValueOnce({ ...preset, version: 4, useCardLore: false,
         textUses: [{ id: 'public-rule', kind: 'rule', enabled: false }] })
     const onOpen = vi.fn()
-    const settingsContent = vi.fn(() => null)
-    const render = () => { hooks.cursor = 0; return elements(PresetTextUses({ preset, api, onSave, onOpen, settingsContent })) }
+    const loreContent = vi.fn(() => null)
+    const render = () => { hooks.cursor = 0; return elements(PresetTextUses({ preset, api, onSave, onOpen, loreContent })) }
     render()
     for (const effect of hooks.effects.splice(0)) effect()
     const control = (label: string) => render().find(element => element.props['aria-label'] === label)!
@@ -56,7 +56,7 @@ describe('Preset text use draft', () => {
       ;(tabs.props.onChange as (id: string) => void)(id)
       expect(render().filter(element => element.props.role === 'tabpanel' && !element.props.hidden)
         .map(element => element.props['aria-label'])).toEqual([
-          id === 'settings' ? 'Settings' : id === 'text' ? '正则 / 提取器' : '工具',
+          id === 'lore' ? 'Lore' : id === 'text' ? '正则 / 提取器' : '工具',
         ])
     }
     await vi.waitFor(() => expect(control('启用规则：Public')).toBeDefined())
@@ -70,16 +70,16 @@ describe('Preset text use draft', () => {
     ;(search.props.onChange as (event: { target: { value: string } }) => void)({ target: { value: 'example.memory' } })
     expect((directory().props.nodes as FileTreeNode[]).map(node => node.label)).toEqual(['扩展 · example.memory'])
     ;(search.props.onClear as () => void)()
-    const settingsPanel = render().find(element => element.props.role === 'tabpanel'
-      && element.props['aria-label'] === 'Settings')!
-    expect(elements(settingsPanel).some(element => element.props['aria-label'] === '使用角色世界书')).toBe(true)
+    const lorePanel = render().find(element => element.props.role === 'tabpanel'
+      && element.props['aria-label'] === 'Lore')!
+    expect(elements(lorePanel).some(element => element.props['aria-label'] === '使用角色世界书')).toBe(true)
     ;(control('使用角色世界书').props.onClick as () => void)()
     switchTab('text')
     ;(control('启用规则：Public').props.onClick as () => void)()
     switchTab('tools')
-    switchTab('settings')
+    switchTab('lore')
     expect(control('使用角色世界书').props['aria-pressed']).toBe(false)
-    expect(settingsContent).toHaveBeenLastCalledWith(false)
+    expect(loreContent).toHaveBeenLastCalledWith(false)
     switchTab('text')
     expect(control('启用规则：Public').props['aria-pressed']).toBe(false)
     const save = () => {
@@ -88,7 +88,7 @@ describe('Preset text use draft', () => {
     }
     save()
     await vi.waitFor(() => expect(onSave).toHaveBeenCalledExactlyOnceWith({
-      agentPresetId: 'preset', expectedVersion: 3, useCardSettings: false,
+      agentPresetId: 'preset', expectedVersion: 3, useCardLore: false,
       textUses: [{ id: 'public-rule', kind: 'rule', enabled: false }],
     }))
     switchTab('tools')
@@ -96,7 +96,7 @@ describe('Preset text use draft', () => {
     rejectSave(new Error('version conflict'))
     await vi.waitFor(() => expect(render().some(element => element.props.role === 'alert'
       && element.props.children === 'version conflict')).toBe(true))
-    switchTab('settings')
+    switchTab('lore')
     expect(render().some(element => element.props.role === 'alert' && element.props.children === 'version conflict')).toBe(true)
     expect(control('使用角色世界书').props['aria-pressed']).toBe(false)
     switchTab('text')

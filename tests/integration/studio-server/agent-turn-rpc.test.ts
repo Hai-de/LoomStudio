@@ -44,12 +44,12 @@ describe('studio server Agent Turn RPC', () => {
       expect(JSON.stringify(profile)).not.toContain('secret:')
       const preset = await createPreset(port, 'Guide', 'Guide the user.')
       const setting = await callRpc<{ resource: { id: string } }>(port, 'application.createPromptResource', {
-        resourceKind: 'setting',
+        resourceKind: 'lore',
         name: 'Guide Knowledge',
       })
-      const updatedPreset = await callRpc<{ mounts: Array<{ settingResourceId: string }> }>(port, 'application.replaceSettingMounts', {
+      const updatedPreset = await callRpc<{ mounts: Array<{ loreResourceId: string }> }>(port, 'application.replaceLoreMounts', {
         source: { kind: 'preset', id: preset.id },
-        settingResourceIds: [setting.resource.id],
+        loreResourceIds: [setting.resource.id],
       })
       const agentPreset = await callRpc<{ agentPreset: { id: string; version: number } }>(port, 'application.updateAgentPreset', {
         name: 'Local Guide',
@@ -69,7 +69,7 @@ describe('studio server Agent Turn RPC', () => {
       const presets = await callRpc<{ resources: Array<{ id: string }> }>(port, 'application.listPromptResources', { resourceKind: 'preset' })
       const profiles = await callRpc<{ agentPresets: Array<{ id: string }> }>(port, 'application.listAgentPresets', {})
 
-      expect(updatedPreset.mounts.map(mount => mount.settingResourceId)).toEqual([setting.resource.id])
+      expect(updatedPreset.mounts.map(mount => mount.loreResourceId)).toEqual([setting.resource.id])
       expect(updatedProfile.agentPreset.rootNode.label).toBe('Updated Local Guide')
       expect(presets.resources.map(item => item.id)).toContain(preset.id)
       expect(profiles.agentPresets.map(item => item.id)).toContain(agentPreset.agentPreset.id)
@@ -100,8 +100,8 @@ describe('studio server Agent Turn RPC', () => {
       await expect(callRpc(port, 'application.getAgentPreset', { agentPresetId: agentPreset.agentPreset.id })).rejects.toThrow('Prompt resource not found')
       await expect(callRpc(port, 'application.getCard', { cardId: card.card.id })).resolves.toEqual(cardBefore)
       await expect(callRpc(port, 'application.getNarrativeTimeline', { timelineId: timeline.timeline.id })).resolves.toEqual(timelineBefore)
-      const remainingSettingMounts = await callRpc<{ mounts: Array<{ source: { kind: string; id: string } }> }>(port, 'application.listSettingMounts', {})
-      expect(remainingSettingMounts.mounts.filter(mount => mount.source.kind === 'preset' && mount.source.id === preset.id)).toEqual([])
+      const remainingLoreMounts = await callRpc<{ mounts: Array<{ source: { kind: string; id: string } }> }>(port, 'application.listLoreMounts', {})
+      expect(remainingLoreMounts.mounts.filter(mount => mount.source.kind === 'preset' && mount.source.id === preset.id)).toEqual([])
       await expect(callRpc(port, 'application.listPresetToolMounts', { presetId: preset.id })).resolves.toEqual({ mounts: [] })
       await expect(callRpc(port, 'application.listTextTransformRules', {})).resolves.toEqual({ rules: [] })
       await expect(callRpc(port, 'application.getPromptResource', { resourceId: setting.resource.id })).resolves.toMatchObject({ resource: { id: setting.resource.id } })

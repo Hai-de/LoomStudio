@@ -20,7 +20,7 @@ it('connects archive import, live directory media, in-place Apply and copied-fol
       artifact: {
         schemaVersion: 4, artifactId: 'directory-http', displayName: 'HTTP card',
         card: { name: 'HTTP card', description: 'Original description' },
-        contextAssets: [{ id: 'book', kind: 'module', category: 'setting', label: 'World', children: [
+        contextAssets: [{ id: 'book', kind: 'module', category: 'lore', label: 'World', children: [
           { id: 'entry', kind: 'entry', label: 'Town', body: 'Original town' },
         ] }],
       },

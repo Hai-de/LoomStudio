@@ -7,7 +7,7 @@ import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/in
 describe('Prompt Resource command outcomes', () => {
   it.each(['create', 'duplicate', 'import', 'importZip', 'delete'] as const)('%s distinguishes rejection from committed mutation with failed refresh', async operation => {
     const resource = {
-      id: 'created', version: 1, resourceKind: 'setting',
+      id: 'created', version: 1, resourceKind: 'lore',
       rootNode: { id: 'root', kind: 'folder', label: 'Created' },
     } as PromptResource
     const failure = new Error('Unavailable')
@@ -25,13 +25,13 @@ describe('Prompt Resource command outcomes', () => {
       },
       recordEdit: vi.fn(), promptResources: resources,
       setPromptResources: update => { resources = update(resources) },
-      setSettingMounts: vi.fn(), setPresetToolMounts: vi.fn(),
+      setLoreMounts: vi.fn(), setPresetToolMounts: vi.fn(),
       invalidatePromptResourceState: refresh,
       refreshAgentPresets: vi.fn(), refreshCards: vi.fn(), refreshCardTimelines: vi.fn(),
     })
     const invoke = () => {
       switch (operation) {
-        case 'create': return commands.createPromptResource('setting')
+        case 'create': return commands.createPromptResource('lore')
         case 'duplicate': return commands.duplicatePromptResource('original')
         case 'import': return commands.importPromptResource(new File(['{}'], 'resource.json'))
         case 'importZip': return commands.importPromptResourceZip(new File(['zip'], 'resource.zip'))
@@ -51,16 +51,16 @@ describe('Prompt Resource command outcomes', () => {
     const setMounts = vi.fn()
     const commands = usePromptResourceCommands({
       api: { promptResources: {
-        replaceSettingMounts: async () => { throw failure },
+        replaceLoreMounts: async () => { throw failure },
         replacePresetToolMounts: async () => { throw failure },
       } } as unknown as StudioApi,
       t: createTranslator('en-US'), runMutation: action => action(),
       recordEdit: vi.fn(), promptResources: [],
-      setPromptResources: vi.fn(), setSettingMounts: setMounts, setPresetToolMounts: setMounts,
+      setPromptResources: vi.fn(), setLoreMounts: setMounts, setPresetToolMounts: setMounts,
       invalidatePromptResourceState: vi.fn(),
       refreshAgentPresets: vi.fn(), refreshCards: vi.fn(), refreshCardTimelines: vi.fn(),
     })
-    await expect(commands.replaceSettingMounts({ kind: 'manual', id: 'global' }, ['setting'])).rejects.toBe(failure)
+    await expect(commands.replaceLoreMounts({ kind: 'manual', id: 'global' }, ['lore'])).rejects.toBe(failure)
     await expect(commands.replacePresetToolMounts('preset', [])).rejects.toBe(failure)
     expect(setMounts).not.toHaveBeenCalled()
   })

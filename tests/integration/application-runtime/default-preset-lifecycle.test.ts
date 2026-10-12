@@ -118,15 +118,15 @@ async function simulateLifecycle() {
     })
     const settings = []
     for (const name of ['World', 'MemoryAndTail']) {
-      settings.push((await runtime.createPromptResource({ resourceKind: 'setting', name })).resource)
+      settings.push((await runtime.createPromptResource({ resourceKind: 'lore', name })).resource)
     }
     const sources = [
-      { body: 'STABLE_A', anchor: '@setting.stable', depth: 20, source: 0 },
-      { body: 'STABLE_B', anchor: '@setting.stable', depth: 10, source: 1 },
+      { body: 'STABLE_A', anchor: '@lore.stable', depth: 20, source: 0 },
+      { body: 'STABLE_B', anchor: '@lore.stable', depth: 10, source: 1 },
       { body: '<history>', anchor: '@narrative.before', source: 1 },
       { body: '</history>', anchor: '@narrative.after', source: 1 },
       { body: 'MEMO:WORK_FACTS', anchor: '@memory.session', source: 1 },
-      { body: 'CONDITIONAL:RUN_ONE', anchor: '@setting.lower', source: 0, keyword: 'INPUT_ONE' },
+      { body: 'CONDITIONAL:RUN_ONE', anchor: '@lore.lower', source: 0, keyword: 'INPUT_ONE' },
       { body: 'TAIL:ORDINARY', anchor: '@prompt.tail', source: 1 },
       { body: 'WORKSPACE:PIN', anchor: '@runtime.workspace', source: 1 },
       { body: 'NOTICE:CHECK_FACTS', anchor: '@runtime.notices', source: 1 },
@@ -144,8 +144,8 @@ async function simulateLifecycle() {
         },
       })
     }
-    await runtime.replaceSettingMounts({
-      source: { kind: 'preset', id: preset.id }, settingResourceIds: settings.map(resource => resource.id),
+    await runtime.replaceLoreMounts({
+      source: { kind: 'preset', id: preset.id }, loreResourceIds: settings.map(resource => resource.id),
     })
     const { card } = await runtime.createCard({ name: 'Branching Story', opening: 'RAW:N001' })
     const created = await runtime.createNarrativeTimeline({ cardId: card.id })

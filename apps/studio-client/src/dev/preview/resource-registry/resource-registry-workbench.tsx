@@ -12,7 +12,7 @@ import styles from './resource-registry-workbench.module.scss'
 
 const categories = [
   { id: 'agents', label: 'Agent 预设', Icon: Bot },
-  { id: 'settings', label: 'Settings / 文本', Icon: BookOpen },
+  { id: 'lore', label: 'Lore / 文本', Icon: BookOpen },
   { id: 'transforms', label: '正则 / 提取规则', Icon: Regex },
   { id: 'macros', label: '宏配置', Icon: Braces },
   { id: 'scripts', label: '脚本', Icon: Code },
@@ -45,7 +45,7 @@ export function ResourceRegistryWorkbench(props: {
   initialResourceId?: string
 }) {
   const [category, setCategory] = useState<typeof categories[number]['id']>(
-    props.resources.find(resource => resource.id === props.initialResourceId)?.category === 'agents' ? 'agents' : 'settings',
+    props.resources.find(resource => resource.id === props.initialResourceId)?.category === 'agents' ? 'agents' : 'lore',
   )
   const [view, setView] = useState<'type' | 'packages' | 'extensions'>('type')
   const [scope, setScope] = useState('current')
@@ -151,7 +151,7 @@ export function ResourceRegistryWorkbench(props: {
   const selectedPreset = selectedRoot?.category === 'agents' ? agentPresets[selectedRoot.id] : undefined
   const selectedPrompt = selectedPreset?.prompts.find(prompt => prompt.id === selected?.id)
   const referenced = selectedRoot ? referenceIds.includes(selectedRoot.id) : false
-  const canReference = selectedRoot?.category === 'settings' && selectedRoot.owner !== props.currentOwner
+  const canReference = selectedRoot?.category === 'lore' && selectedRoot.owner !== props.currentOwner
   const activeCategory = categories.find(item => item.id === category)!
   const title = view === 'packages' ? '角色 / 资源包' : view === 'extensions' ? '扩展' : activeCategory.label
   const orderScope = view === 'type' ? category : view
@@ -538,7 +538,7 @@ export function ResourceRegistryWorkbench(props: {
                 </div>
               </section>}
               <section className={styles.body}>
-                {selectedPreset && selectedPrompt ? selectedPrompt.kind === 'anchor' ? <pre>{selectedPrompt.body}</pre> : <SettingDocument
+                {selectedPreset && selectedPrompt ? selectedPrompt.kind === 'anchor' ? <pre>{selectedPrompt.body}</pre> : <LoreDocument
                   key={selected.id}
                   label="提示词正文"
                   value={selectedPrompt.body}
@@ -558,12 +558,12 @@ export function ResourceRegistryWorkbench(props: {
                     setExpandedIds(previous => [...new Set([...previous, selectedRoot!.id, `${selectedRoot!.id}:prompt`])])
                     setMobilePane('detail')
                   }}
-                /> : selected.category === 'attachments' || (selected.readOnly && selected.category === 'settings') ? <>
-                  <div className={styles.documentHeader}><h2>{selected.category === 'settings' ? 'Setting 正文' : '文档'}</h2><span><LockKeyhole size={14} aria-hidden="true" />{selected.readOnly ? '其他作品 · 只读预览' : '随包发布 · 只读'}</span></div>
+                /> : selected.category === 'attachments' || (selected.readOnly && selected.category === 'lore') ? <>
+                  <div className={styles.documentHeader}><h2>{selected.category === 'lore' ? 'Lore 正文' : '文档'}</h2><span><LockKeyhole size={14} aria-hidden="true" />{selected.readOnly ? '其他作品 · 只读预览' : '随包发布 · 只读'}</span></div>
                   <MarkdownContent value={selected.body} codeBlockLabels={{
                     copy: '复制代码', copied: '已复制代码', copyFailed: '复制失败', enableWrap: '开启换行', disableWrap: '关闭换行',
                   }} />
-                </> : selected.category === 'settings' ? <SettingDocument
+                </> : selected.category === 'lore' ? <LoreDocument
                   key={selected.id}
                   value={drafts[selected.id] ?? selected.body}
                   onChange={value => setDrafts(previous => ({ ...previous, [selected.id]: value }))}
@@ -587,10 +587,10 @@ function collectTreeGroups(nodes: FileTreeNode[], id = 'root'): Array<{ id: stri
   return [{ id, children: nodes }, ...nodes.flatMap(node => node.children ? collectTreeGroups(node.children, node.id) : [])]
 }
 
-function SettingDocument(props: { value: string; label?: string; readOnly?: boolean; onChange(value: string): void }) {
+function LoreDocument(props: { value: string; label?: string; readOnly?: boolean; onChange(value: string): void }) {
   const [mode, setMode] = useState<'source' | 'preview'>('preview')
   return <LongTextEditor
-    label={props.label ?? 'Setting 正文'}
+    label={props.label ?? 'Lore 正文'}
     disabled={props.readOnly}
     value={props.value}
     mode={mode}

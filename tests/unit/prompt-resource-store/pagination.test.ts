@@ -16,7 +16,7 @@ describe('Prompt Resource keyset pagination', () => {
   it('keeps stable identity traversal while exposing only new IDs after its boundary', async () => {
     const { engine, store } = fixture()
     const create = (id: string) => store.createResource({
-      actor, id, resourceKind: 'setting',
+      actor, id, resourceKind: 'lore',
       rootNode: { id: `${id}-root`, kind: 'module', label: id },
     })
     try {
@@ -38,17 +38,17 @@ describe('Prompt Resource keyset pagination', () => {
     const { engine, store } = fixture()
     try {
       for (const id of ['a', 'b', 'c']) {
-        await store.createResource({ id, resourceKind: 'setting', actor, rootNode: { id: `${id}-root`, label: id, kind: 'module' } })
+        await store.createResource({ id, resourceKind: 'lore', actor, rootNode: { id: `${id}-root`, label: id, kind: 'module' } })
       }
-      const first = await store.listResources({ limit: 2, resourceKind: 'setting' })
+      const first = await store.listResources({ limit: 2, resourceKind: 'lore' })
       expect(first.resources.map(item => item.id)).toEqual(['c', 'b'])
       await store.deleteResource({ actor, resourceId: 'b', expectedVersion: 1 })
       await store.mutateResource({ actor, resourceId: 'c', expectedVersion: 1, mutations: [{ kind: 'resource.update', patch: { label: 'Updated' } }] })
-      const second = await store.listResources({ limit: 2, resourceKind: 'setting', cursor: first.nextCursor })
+      const second = await store.listResources({ limit: 2, resourceKind: 'lore', cursor: first.nextCursor })
       expect(second.resources.map(item => item.id)).toEqual(['a'])
       expect(second.nextCursor).toBeUndefined()
       for (const changed of [{ resourceKind: 'preset' as const }, { order: 'id' as const }, { includeTombstone: true }]) {
-        await expect(store.listResources({ resourceKind: 'setting', ...changed, cursor: first.nextCursor }))
+        await expect(store.listResources({ resourceKind: 'lore', ...changed, cursor: first.nextCursor }))
           .rejects.toMatchObject({ code: 'prompt_resource.cursor_invalid' })
       }
       for (const cursor of ['', '2', '{}', 'null']) {
@@ -66,7 +66,7 @@ describe('Prompt Resource keyset pagination', () => {
         const writer = store.transaction(tx)
         for (let index = 0; index < 501; index++) {
           const id = `resource-${String(index).padStart(3, '0')}`
-          writer.createResource({ id, resourceKind: 'setting', rootNode: { id: `${id}-root`, label: id, kind: 'module', category: 'setting' } })
+          writer.createResource({ id, resourceKind: 'lore', rootNode: { id: `${id}-root`, label: id, kind: 'module', category: 'lore' } })
         }
       })
       let pages = 0
@@ -82,7 +82,7 @@ describe('Prompt Resource keyset pagination', () => {
           }
           return page
         },
-      }, 'setting')
+      }, 'lore')
       expect(pages).toBe(2)
       expect(resources).toHaveLength(501)
       expect(new Set(resources.map(item => item.id)).size).toBe(501)

@@ -23,7 +23,7 @@ describe('prompt resource ZIP codec', () => {
   })
 
   it('rejects an artifact whose kind differs from the manifest', () => {
-    const manifest = { schema: 'loom.promptResource.zip.v1', resourceKind: 'setting', artifactPath: 'resource.json' }
+    const manifest = { schema: 'loom.promptResource.zip.v1', resourceKind: 'lore', artifactPath: 'resource.json' }
     expect(() => decodePromptResourceZip(zipSync({
       'manifest.json': new TextEncoder().encode(JSON.stringify(manifest)),
       'resource.json': new TextEncoder().encode(JSON.stringify(artifact)),

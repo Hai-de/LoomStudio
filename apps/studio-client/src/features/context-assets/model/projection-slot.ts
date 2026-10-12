@@ -1,5 +1,5 @@
-export function isSettingLayerSlot(slotKey: string): boolean {
-  return slotKey.startsWith('setting-layer:')
+export function isLoreSlot(slotKey: string): boolean {
+  return slotKey.startsWith('lore:')
 }
 
 export function readSlotDisplayName(slotKey: string): string {

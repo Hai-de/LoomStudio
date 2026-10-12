@@ -331,13 +331,13 @@ describe('Loom Card ZIP', () => {
           macroOptions: { tone: [{ id: 'quiet', label: 'Quiet', value: 'soft' }, { id: 'loud', label: 'Loud', value: 'bold' }] },
         },
         opening: { entries: [{ role: 'assistant', content: 'Opening text' }] },
-        settingLayer: { entries: [{ id: 'legacy', content: 'Legacy text', enabled: true }] },
+        lore: { entries: [{ id: 'legacy', content: 'Legacy text', enabled: true }] },
       },
       contextAssets: [{
-        id: 'world-book', kind: 'module', label: '世界书', category: 'setting',
+        id: 'world-book', kind: 'module', label: '世界书', category: 'lore',
         children: [{
           id: 'alice', kind: 'entry', label: '爱丽丝', body: 'Alice greets {{user}}.\r\n',
-          capabilities: { activation: { kind: 'always' }, targetAnchorId: '@setting.stable' },
+          capabilities: { activation: { kind: 'always' }, targetAnchorId: '@lore.stable' },
         }],
       }],
       state: {
@@ -382,7 +382,7 @@ describe('Loom Card ZIP', () => {
     expect(result.artifact.card.macros).toEqual({ difficulty: 'easy' })
     expect(result.artifact.card.preset).toEqual(artifact.card.preset)
     expect(result.artifact.card.opening).toEqual(artifact.card.opening)
-    expect(result.artifact.card.settingLayer).toEqual(artifact.card.settingLayer)
+    expect(result.artifact.card.lore).toEqual(artifact.card.lore)
     expect(result.artifact.state).toEqual(artifact.state)
     const materialized = materializeStateContribution(result.artifact.state!.contribution)
     expect(materialized.components).toHaveLength(60)
@@ -413,7 +413,7 @@ describe('Loom Card ZIP', () => {
       schemaVersion: 4, artifactId: 'dedup', displayName: 'Dedup',
       card: {
         name: 'Dedup',
-        settingLayer: { entries: [
+        lore: { entries: [
           { id: 'alice', title: 'Alice', content: 'One shared source.' },
           { id: 'other', title: 'Other', content: 'Independent inline content.' },
         ] },
@@ -429,9 +429,9 @@ describe('Loom Card ZIP', () => {
     expect(Object.keys(files).some(path => path.includes('/legacy/'))).toBe(false)
     expect(Object.keys(files).filter(path => path.endsWith('.md'))).toHaveLength(2)
     const card = JSON.parse(Buffer.from(files['card.json']!).toString())
-    expect(card.settingLayer.entries[0].content).toBe('prompts/0-Book/0-Alice.md')
+    expect(card.lore.entries[0].content).toBe('prompts/0-Book/0-Alice.md')
     const restored = await decodeCardBundleZip(archive)
-    expect(restored.artifact.card.settingLayer).toEqual(artifact.card.settingLayer)
+    expect(restored.artifact.card.lore).toEqual(artifact.card.lore)
     expect(restored.artifact.contextAssets).toEqual(artifact.contextAssets)
   })
 

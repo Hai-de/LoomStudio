@@ -69,7 +69,7 @@ export const messages = {
   'renderer.updateResourcesConfirm': '将“{{name}}”的全局资源从 {{from}} 替换为 {{to}}。\n\n包内提示词、工具定义、正则与提取规则会采用新版，已移除的贡献将删除，你的直接编辑会被覆盖。本地模型绑定、State 和历史保留。\n\n此操作只更新已发现包的资源，不下载或更新模块代码。继续更新并覆盖？',
   'renderer.resourcesImported': '扩展资源已导入',
   'renderer.removeResources': '移除资源',
-  'renderer.removeResourcesConfirm': '移除这个扩展导入的全部 Preset、Setting、Agent Tool 与关联挂载？此操作会包含用户修改后的内容。',
+  'renderer.removeResourcesConfirm': '移除这个扩展导入的全部 Preset、设定、Agent Tool 与关联挂载？此操作会包含用户修改后的内容。',
   'renderer.uninstall': '卸载 Package',
   'renderer.uninstallConfirm': '卸载这个 Package？已导入资源与扩展产生的数据会保留，但模块授权会被清除。',
   'renderer.uninstalled': 'Package 已卸载',

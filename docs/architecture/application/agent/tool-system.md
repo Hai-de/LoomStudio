@@ -82,7 +82,7 @@ Content Tool Description 作为外部 Runtime Source 进入 PromptBuild。Anchor
   extension:other-tools (slot)
 ```
 
-官方 Tool 不拥有整个孔位。Extension、角色、Setting 或其他外部来源可以贡献自己的 Slot；卸载一个来源只移除自己的 Slot。
+官方 Tool 不拥有整个孔位。Extension、角色、Lore 或其他外部来源可以贡献自己的 Slot；卸载一个来源只移除自己的 Slot。
 
 ## 8. CodeAct 双入口
 
@@ -136,7 +136,7 @@ VFS 的权威来源与投影视图分开：
 
 | 根目录 | 来源与读取行为 |
 | --- | --- |
-| `/resources/` | 本次挂载的 Preset/Setting 真实资源树，每次操作读取当前 SQL 数据；正文保留宏源码，宿主绑定 resourceId、nodeId 和 resource version |
+| `/resources/` | 本次挂载的 Preset/Lore 真实资源树，每次操作读取当前 SQL 数据；正文保留宏源码，宿主绑定 resourceId、nodeId 和 resource version |
 | `/context/` | 本次 Prompt 准备时已供给的文本投影；不能将其行号和内容直接写回作者源节点 |
 | `/state/current.yaml` | 当前授权目标的完整快照，保留兼容入口 |
 | `/state/data/` | 沿实际 State 属性树发现目录；每个属性目录的 `@value.yaml` 是对应子树，数组作为完整值读取；宿主绑定目标、JSON Pointer、Revision |

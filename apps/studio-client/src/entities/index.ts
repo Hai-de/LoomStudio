@@ -16,7 +16,7 @@ export type {
   TextTransformRule,
   TextTransformRuleDraft,
 } from './text-transform.js'
-export type { Card, CardMedia, CardPresetInput, CardSummary, CreateCardResult, DeleteCardResult, DeleteCardsResult, GetCardResult, ListCardsResult, OpeningChatInput, PreviewCardDeletionResult, SettingLayerInput, UpdateCardResult } from './card.js'
+export type { Card, CardMedia, CardPresetInput, CardSummary, CreateCardResult, DeleteCardResult, DeleteCardsResult, GetCardResult, ListCardsResult, OpeningChatInput, PreviewCardDeletionResult, LoreInput, UpdateCardResult } from './card.js'
 export type {
   ContextAssetNode,
   ProjectionSlotRank,
@@ -70,7 +70,7 @@ export type {
   ImportCardBundleResult,
   ListPromptResourcesResult,
   ListPresetToolMountsResult,
-  ListSettingMountsResult,
+  ListLoreMountsResult,
   PromptResource,
   PromptResourceArtifact,
   PortableExtensionPayloadDraft,
@@ -81,10 +81,10 @@ export type {
   PresetToolMountInput,
   CardBundleArtifact,
   UpdatePromptResourceResult,
-  ReplaceSettingMountsResult,
+  ReplaceLoreMountsResult,
   ReplacePresetToolMountsResult,
-  SettingMount,
-  SettingMountSource,
+  LoreMount,
+  LoreMountSource,
 } from './workspace.js'
 export type {
   ProviderAccount,

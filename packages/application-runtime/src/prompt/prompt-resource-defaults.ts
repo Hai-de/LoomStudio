@@ -1,6 +1,6 @@
 export const officialPromptResourceIds = {
   assistantPreset: 'prompt-resource.official.loom-assistant',
-  knowledgeSetting: 'prompt-resource.official.loom-knowledge',
+  knowledgeLore: 'prompt-resource.official.loom-knowledge',
 } as const
 
 export const obsoleteBuiltinAgentToolIds = new Set([

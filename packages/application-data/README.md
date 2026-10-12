@@ -18,9 +18,9 @@
    - 维护 `StateScope` 与包含 JSON snapshot、operations 的 `StateRevision`，提供全局状态 Head 的版本校验；
    - 记录每次状态变更的操作者（Actor）与因果提交事实。
 4. **Prompt Resource 存储 (`src/prompt-resource/`)**：
-   - 持久化树形层级的提示词资源（Preset、Setting、Logic、Runtime 节点）；
-   - 管理独立的 Setting Mount Registry 与 Agent Preset Tool Mount，以及资源 Header/Node 的版本修订；嵌套资源树是消费投影，不是整份 Document 权威存储。Agent Preset 复用 `resourceKind: preset`，不是独立 Profile 存储实体。
-   - Setting Mount 同时支持全局来源与预设消费来源，保留失效引用身份及 nullable 解析结果；预设的 `useCardSettings` / `textUses` 存在 Resource metadata，不增加预设包所有权或独立运行作用域。
+   - 持久化树形层级的提示词资源（Preset、Lore、Logic、Runtime 节点）；
+   - 管理独立的 Lore Mount Registry 与 Agent Preset Tool Mount，以及资源 Header/Node 的版本修订；嵌套资源树是消费投影，不是整份 Document 权威存储。Agent Preset 复用 `resourceKind: preset`，不是独立 Profile 存储实体。
+   - Lore Mount 同时支持全局来源与预设消费来源，保留失效引用身份及 nullable 解析结果；预设的 `useCardLore` / `textUses` 存在 Resource metadata，不增加预设包所有权或独立运行作用域。
 
 ---
 

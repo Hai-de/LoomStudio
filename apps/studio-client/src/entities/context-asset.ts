@@ -1,6 +1,6 @@
 export type ContextAssetNode = {
   body?: string
-  category?: 'preset' | 'setting' | 'logic' | 'runtime' | 'history' | (string & {})
+  category?: 'preset' | 'lore' | 'logic' | 'runtime' | 'history' | (string & {})
   children?: ContextAssetNode[]
   configRows?: Array<{ label: string; value: string }>
   enabled?: boolean
@@ -19,7 +19,7 @@ export type ContextAssetNode = {
       displayName: string
       band: 'stable-prefix' | 'narrative' | 'lower-context' | 'current-turn' | 'fresh-tail'
       orderIndex: number
-      accepts?: Array<'preset' | 'settingLayer' | 'narrativeChat' | 'narrativeHistory' | 'sessionHistory' | 'runtime'>
+      accepts?: Array<'preset' | 'lore' | 'narrativeChat' | 'narrativeHistory' | 'sessionHistory' | 'runtime'>
       renderHint?: {
         providerRoleHint?: 'system' | 'developer' | 'assistant' | 'user'
         wrapper?: 'section' | 'message'
@@ -81,7 +81,7 @@ export type PromptCompositionZone = PromptCompositionItemBase & {
   kind: 'zone'
   parentId: string | null
   band: 'stable-prefix' | 'narrative' | 'lower-context' | 'current-turn' | 'fresh-tail'
-  accepts?: Array<'preset' | 'settingLayer' | 'narrativeChat' | 'narrativeHistory' | 'sessionHistory' | 'runtime'>
+  accepts?: Array<'preset' | 'lore' | 'narrativeChat' | 'narrativeHistory' | 'sessionHistory' | 'runtime'>
 }
 
 type PromptCompositionSlot = PromptCompositionItemBase & {

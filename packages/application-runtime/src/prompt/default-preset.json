@@ -67,9 +67,9 @@
         "label": "常驻上下文",
         "capabilities": { "roleHint": "system" },
         "children": [
-          { "id": "default.stable.before", "kind": "entry", "label": "资料开始", "body": "以下是本次创作采用的常驻资料：\n<setting>" },
-          { "id": "default.stable", "kind": "virtual", "label": "常驻设定", "capabilities": { "targetAnchorId": "@setting.stable" } },
-          { "id": "default.stable.after", "kind": "entry", "label": "资料结束", "body": "</setting>" }
+          { "id": "default.stable.before", "kind": "entry", "label": "资料开始", "body": "以下是本次创作采用的常驻资料：\n<lore>" },
+          { "id": "default.stable", "kind": "virtual", "label": "常驻设定", "capabilities": { "targetAnchorId": "@lore.stable" } },
+          { "id": "default.stable.after", "kind": "entry", "label": "资料结束", "body": "</lore>" }
         ]
       },
       {
@@ -105,7 +105,7 @@
         "label": "本次动态上下文",
         "capabilities": { "roleHint": "system" },
         "children": [
-          { "id": "default.lower", "kind": "virtual", "label": "条件设定", "capabilities": { "targetAnchorId": "@setting.lower" } },
+          { "id": "default.lower", "kind": "virtual", "label": "条件设定", "capabilities": { "targetAnchorId": "@lore.lower" } },
           { "id": "default.state", "kind": "virtual", "label": "状态视图", "capabilities": { "targetAnchorId": "@runtime.state" } },
           { "id": "default.recalled", "kind": "virtual", "label": "本次记忆召回", "capabilities": { "targetAnchorId": "@memory.recalled" } },
           { "id": "default.session.post", "kind": "virtual", "label": "交互前补充", "capabilities": { "targetAnchorId": "@chat.session.post" } },

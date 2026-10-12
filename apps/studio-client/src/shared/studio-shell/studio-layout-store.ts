@@ -10,7 +10,7 @@ export const STUDIO_PANEL_IDS = ['model', 'agent', 'user', 'play', 'recent', 'se
 export type StudioPanelId = (typeof STUDIO_PANEL_IDS)[number]
 export type AssetLayoutId = 'preset' | 'resources'
 type AssetViewMode = 'master-detail' | 'drilldown'
-type ContextCategory = 'setting' | 'logic' | 'runtime' | 'history'
+type ContextCategory = 'lore' | 'logic' | 'runtime' | 'history'
 type PanelWindowMode = 'reference' | 'immersive'
 export type PresetView = 'assets' | 'tools'
 
@@ -130,7 +130,7 @@ export function createDefaultStudioLayout(): StudioLayoutData {
       resources: { explorerWidth: DEFAULT_EXPLORER_WIDTH, views: {} },
     },
     assetPanes: { preset: {}, resources: {} },
-    contextCategory: 'setting',
+    contextCategory: 'lore',
     dockOpen: false,
     dockPinned: true,
     composerPinned: true,
@@ -347,7 +347,7 @@ function legacyPanelId(panel: StudioPanelId): string {
 }
 
 function isContextCategory(value: unknown): value is ContextCategory {
-  return value === 'setting' || value === 'logic' || value === 'runtime' || value === 'history'
+  return value === 'lore' || value === 'logic' || value === 'runtime' || value === 'history'
 }
 
 function isAssetViewMode(value: unknown): value is AssetViewMode {

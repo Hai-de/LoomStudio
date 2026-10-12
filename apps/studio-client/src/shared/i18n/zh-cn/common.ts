@@ -34,6 +34,7 @@ export const messages = {
   'rail.recent': '最近',
   'rail.sessions': '历史',
   'rail.resource': '资源',
+  'rail.lore': '设定',
   'rail.inspector': '调试',
   'rail.logs': '日志',
   'rail.state': '状态变量',

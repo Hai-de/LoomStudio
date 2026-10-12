@@ -4,7 +4,7 @@
 > **更新**：2026-09-21
 > **目标**：整理分散的剧情交互并保持事实连续，以业务节奏触发总结，而不只追求 Token 压缩。
 
-> **提供者补充（2026-09-24）**：官方记忆插件默认自带、允许替换；上下文接收端按该基础能力存在设计，不以无插件初始化策略阻塞实施。自由文档式记忆可经 Setting 注入记忆锚点，Agent 自行更新 Raw 范围属于后续兜底，当前不实现。
+> **提供者补充（2026-09-24）**：官方记忆插件默认自带、允许替换；上下文接收端按该基础能力存在设计，不以无插件初始化策略阻塞实施。自由文档式记忆可经 Lore 注入记忆锚点，Agent 自行更新 Raw 范围属于后续兜底，当前不实现。
 > **接收接线**：Runtime / SDK 已提供默认剧情来源与显式 Session 交接入口，见[正式合同](../../architecture/application/extension/narrative-context.md)。此交付不包含本 Plan 的摘要算法、自动调度、官方插件安装或自动生成交接文本。
 > **授权范围**：本轮建立独立 Plan、同步职责和索引；不因此启动记忆系统代码实施。
 > **配套计划**：[Agent 上下文骨架与 Session 生命周期](./agent-context-skeleton-and-memory-projection-plan.md)。
@@ -23,7 +23,7 @@
 统一整理包含两个时点：
 
 - **准备点**：例如 1～32 楼完成后，记忆插件开始总结 1～32 楼，Agent 可以开始准备 Scratchpad 和工作交接；此时 Prompt、Timeline 原始 Head、Narrative 默认有效 Head 都不改变。
-- **采用点**：例如 40 楼当前工作流结束后，若摘要、Setting 变更、Scratchpad 和当前任务都准备完成，Memory 才推进默认有效 Head；下一次 PromptBuild 才注入新的 Memory 与 33～40 楼 Raw，并隐藏旧工作段的 Tool 历史投影。
+- **采用点**：例如 40 楼当前工作流结束后，若摘要、Lore 变更、Scratchpad 和当前任务都准备完成，Memory 才推进默认有效 Head；下一次 PromptBuild 才注入新的 Memory 与 33～40 楼 Raw，并隐藏旧工作段的 Tool 历史投影。
 
 如果 Narrative Summary 准备失败或仍在运行，不推进默认有效 Head。Session Summary 仍可以独立完成；完成后旧 Tool 历史可以从下一次 Prompt 隐藏，新写入暂时不会进入默认 Narrative 区。由此产生的短期剧情遗忘是已知代价，不伪造未完成的摘要，也不阻塞 Session Summary。
 
@@ -31,7 +31,7 @@
 
 工作交接必须在刷新前补齐，不能只假设 Agent 平时已写好记事板。无需建立多级 Session 记忆，但不能因为 Session 较短就跳过这一步。独立的会话清理分支怎样携带尚未总结正文，仍由生命周期合同明确，不套用“剧情已经有摘要”的前提。
 
-第 40 楼发生的 Setting 修改与 Agent Session Summary 属于同一工作交接边界：Setting 写入成功后，下一次 Prompt 直接使用更新后的 Setting；Session Summary 同时记录这次修改及其原因。无需等待 Narrative Summary，也不需要把 Setting 修改暂存在 Tool 历史中。
+第 40 楼发生的 Lore 修改与 Agent Session Summary 属于同一工作交接边界：Lore 写入成功后，下一次 Prompt 直接使用更新后的 Lore；Session Summary 同时记录这次修改及其原因。无需等待 Narrative Summary，也不需要把 Lore 修改暂存在 Tool 历史中。
 
 纯 `@runtime.state` 的动态数值可以在下一 Provider Step 或下一次交互以 State / Notice 形式进入，不自动触发剧情总结。
 
@@ -43,7 +43,7 @@
 - 是否允许用户在运行中取消；
 - 取消按钮必须始终可见。
 
-取消或失败只影响正在运行的总结任务；已持久化的 Narrative、Setting 和 Session 原始记录不回滚。未完成的 Narrative Summary 不推进有效 Head。
+取消或失败只影响正在运行的总结任务；已持久化的 Narrative、Lore 和 Session 原始记录不回滚。未完成的 Narrative Summary 不推进有效 Head。
 
 剧情记忆与工作事实仍然是不同内容，统一触发不表示混成一份文本。Narrative 原节点和原始 Transcript 不因清理而删除。
 
@@ -94,7 +94,7 @@ Session 的默认记忆采用 Agent 可维护的记事板（Scratchpad），保�
 - [Extensions Runtime](../../../packages/application-runtime/src/runtime/extensions-runtime.ts) 已提供 Extension Config 的读取和带版本写入；不能由此推断已有记忆配置继承解析器。
 - [Narrative Store](../../../packages/application-data/src/narrative/store.ts) 提供节点、分支和分页；总结进度不能只存一个无分支归属的楼层数字。
 - [当前 Prompt 输入准备](../../../packages/application-runtime/src/runtime/agents-runtime.ts) 与 [多轮仿真](../../../tests/integration/application-runtime/default-preset-lifecycle.test.ts) 是投影接线与生命周期验收入口，不是记忆系统已经实现的证据。
-- 旧讨论 [Summarization v0](../../archive/discussion/application/summarization-v0.md)、[Memory Summary v0](../../archive/discussion/application/memory-summary-v0.md) 仅作背景。其独立触发器、必须使用子 Agent、总结绑定修改稳定 Setting 等历史候选，不自动继承为本 Plan 的实施要求。
+- 旧讨论 [Summarization v0](../../archive/discussion/application/summarization-v0.md)、[Memory Summary v0](../../archive/discussion/application/memory-summary-v0.md) 仅作背景。其独立触发器、必须使用子 Agent、总结绑定修改稳定 Lore 等历史候选，不自动继承为本 Plan 的实施要求。
 
 ## 4. 后续最小工作包
 

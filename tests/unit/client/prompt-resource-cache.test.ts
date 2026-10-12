@@ -4,7 +4,7 @@ import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { usePromptResourceState } from '../../../apps/studio-client/src/features/prompt-resources/model/use-prompt-resource-state.js'
 import type { StudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
-import type { PromptResource, SettingMount, PresetToolMount } from '../../../apps/studio-client/src/entities/index.js'
+import type { PromptResource, LoreMount, PresetToolMount } from '../../../apps/studio-client/src/entities/index.js'
 
 let activeClient: QueryClient | undefined
 afterEach(() => { activeClient?.clear() })
@@ -14,7 +14,7 @@ describe('Prompt Resource mutation cache publication', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     activeClient = client
     const resource = (id: string, version: number): PromptResource => ({
-      id, version, resourceKind: 'setting', rootNode: { id: `${id}-root`, kind: 'module', label: id },
+      id, version, resourceKind: 'lore', rootNode: { id: `${id}-root`, kind: 'module', label: id },
       createdAt: '', updatedAt: '',
     })
     const old = resource('target', 1)
@@ -46,7 +46,7 @@ describe('Prompt Resource mutation cache publication', () => {
     expect(client.getQueryData(otherKey)).toEqual([old])
   })
 
-  it.each(['resources', 'setting-mounts', 'preset-tool-mounts'] as const)(
+  it.each(['resources', 'lore-mounts', 'preset-tool-mounts'] as const)(
     'does not allow an older %s response to overwrite committed cache changes',
     async area => {
       const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -55,7 +55,7 @@ describe('Prompt Resource mutation cache publication', () => {
       const oldResponse = new Promise(resolve => { resolveOld = resolve })
       const list = vi.fn(() => oldResponse)
       const api = { promptResources: {
-        list, listSettingMounts: list, listPresetToolMounts: list,
+        list, listLoreMounts: list, listPresetToolMounts: list,
       } } as unknown as StudioApi
       const key = ['prompt-resources', '/rpc-a', area]
       const otherKey = ['prompt-resources', '/rpc-b', area]
@@ -75,7 +75,7 @@ describe('Prompt Resource mutation cache publication', () => {
       } }).catch(error => error)
       const publish = (records: typeof saved) => {
         if (area === 'resources') state.setPromptResources(() => records as PromptResource[])
-        else if (area === 'setting-mounts') state.setSettingMounts(() => records as unknown as SettingMount[])
+        else if (area === 'lore-mounts') state.setLoreMounts(() => records as unknown as LoreMount[])
         else state.setPresetToolMounts(() => records as unknown as PresetToolMount[])
       }
       publish(saved)

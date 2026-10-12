@@ -1,5 +1,5 @@
 import type { ContextAssetNode, ProjectionSlotRank } from '../../../entities/index.js'
-import { isSettingLayerSlot, readSlotDisplayName } from './projection-slot.js'
+import { isLoreSlot, readSlotDisplayName } from './projection-slot.js'
 
 export type ProjectionOrderEntry = {
   entryOrder: number
@@ -96,11 +96,11 @@ export function readProjectionOrderIds(entries: ProjectionOrderEntry[], orderNod
 
 function buildProjectionRows(entries: ProjectionOrderEntry[]): ProjectionOrderRow[] {
   const rows: ProjectionOrderRow[] = []
-  const settingLayerEntries = new Map<string, ProjectionOrderEntry[]>()
+  const loreEntries = new Map<string, ProjectionOrderEntry[]>()
 
   for (const entry of entries) {
-    if (isSettingLayerSlot(entry.slotKey)) {
-      settingLayerEntries.set(entry.slotKey, [...(settingLayerEntries.get(entry.slotKey) ?? []), entry])
+    if (isLoreSlot(entry.slotKey)) {
+      loreEntries.set(entry.slotKey, [...(loreEntries.get(entry.slotKey) ?? []), entry])
     } else {
       rows.push({
         entries: [entry],
@@ -113,7 +113,7 @@ function buildProjectionRows(entries: ProjectionOrderEntry[]): ProjectionOrderRo
     }
   }
 
-  for (const slotEntries of settingLayerEntries.values()) {
+  for (const slotEntries of loreEntries.values()) {
     const sorted = [...slotEntries].sort((left, right) => left.entryOrder - right.entryOrder || left.node.id.localeCompare(right.node.id))
     const primary = sorted[0]
     if (!primary) continue
@@ -228,9 +228,9 @@ function makeRankKey(index: number): string {
 
 function readZoneOrder(zone: string): number {
   if (zone === 'preset.system') return 100
-  if (zone === 'setting.stable') return 200
+  if (zone === 'lore.stable') return 200
   if (zone === 'chat.history') return 300
-  if (zone === 'setting.lower') return 400
+  if (zone === 'lore.lower') return 400
   if (zone === 'chat.before') return 500
   if (zone === 'chat.inside') return 600
   if (zone === 'chat.after') return 700

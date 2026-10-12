@@ -67,18 +67,14 @@ import {
   toggleSelectAllSessions,
   toggleSelectAllTimelines,
 } from './sessions-panel-model.js'
+import { useHistoryPreviews } from '../../features/sessions/model/use-history-previews.js'
+import { deleteHistoryItems } from '../../features/sessions/model/delete-history-items.js'
 import styles from './sessions-panel.module.scss'
 
 type SessionFilter = 'all' | 'timelines' | 'sessions'
 type SelectedHistoryItem =
   | { kind: 'timeline'; id: string }
   | { kind: 'session'; id: string }
-
-type HistoryPreview<T> = { key: string } & (
-  | { status: 'loading' }
-  | { status: 'ready'; data: T[] }
-  | { status: 'error'; error: string }
-)
 
 type SessionsPanelProps = {
   activeBranch?: NarrativeBranch
@@ -133,15 +129,6 @@ export function SessionsPanel(props: SessionsPanelProps) {
   const [selectedItem, setSelectedItem] = useState<SelectedHistoryItem | undefined>(
     initialSelectedId ? { kind: 'timeline', id: initialSelectedId } : undefined,
   )
-
-  const [previews, setPreviews] = useState<{
-    api?: StudioApi
-    timelineNodes: Record<string, HistoryPreview<NarrativeNode> | undefined>
-    sessionTranscripts: Record<string, HistoryPreview<AgentTranscriptEntry> | undefined>
-  }>({ api: props.api, timelineNodes: {}, sessionTranscripts: {} })
-  const [previewRetry, setPreviewRetry] = useState(0)
-  const timelineNodesMap = previews.api === props.api ? previews.timelineNodes : undefined
-  const sessionTranscriptMap = previews.api === props.api ? previews.sessionTranscripts : undefined
 
   // 区分绑定会话与独立会话并应用排序
   const { sessionsByTimelineId, standaloneSessions } = useMemo(() => {
@@ -279,23 +266,13 @@ export function SessionsPanel(props: SessionsPanelProps) {
     if (!pendingDelete || deleteBusy) return
     setDeleteBusy(true)
     try {
-      const { timelineIds } = pendingDelete
-      const cascadedSessions = props.allAgentSessions.filter(session => session.timelineId && timelineIds.includes(session.timelineId))
-      const sessionIds = pendingDelete.sessionIds.filter(id => !cascadedSessions.some(session => session.id === id))
-      const results = await Promise.all([
-        Promise.allSettled(timelineIds.map(id => props.onDeleteTimeline?.(id))),
-        Promise.allSettled(sessionIds.map(id => props.onDeleteAgentSession?.(id))),
-      ])
-      const [timelineResults, sessionResults] = results
-      const deletedTimelineIds = new Set(
-        timelineIds.filter((_, index) => timelineResults[index]?.status === 'fulfilled' && timelineResults[index]?.value === true),
-      )
-      const deletedSessionIds = new Set(
-        sessionIds.filter((_, index) => sessionResults[index]?.status === 'fulfilled' && sessionResults[index]?.value === true),
-      )
-      for (const session of cascadedSessions) {
-        if (deletedTimelineIds.has(session.timelineId!)) deletedSessionIds.add(session.id)
-      }
+      const { deletedTimelineIds, deletedSessionIds, complete } = await deleteHistoryItems({
+        timelineIds: pendingDelete.timelineIds,
+        sessionIds: pendingDelete.sessionIds,
+        sessions: props.allAgentSessions,
+        onDeleteTimeline: props.onDeleteTimeline,
+        onDeleteAgentSession: props.onDeleteAgentSession,
+      })
 
       setSelectedTimelineIds(prev => {
         const next = new Set(prev)
@@ -317,7 +294,7 @@ export function SessionsPanel(props: SessionsPanelProps) {
       }
 
       // Remove only confirmed deletions so a partial batch failure leaves failed items visible for retry.
-      if (pendingDelete.batch && deletedTimelineIds.size === timelineIds.length && sessionIds.every(id => deletedSessionIds.has(id))) {
+      if (pendingDelete.batch && complete) {
         setIsSelectionMode(false)
       }
     } finally {
@@ -337,89 +314,9 @@ export function SessionsPanel(props: SessionsPanelProps) {
     return props.allAgentSessions.find(s => s.id === selectedItem.id)
   }, [props.allAgentSessions, selectedItem])
 
-  const previewBranch = props.branches.find(branch => branch.id === selectedTimeline?.activeBranchId)
-  const timelinePreviewKey = JSON.stringify([selectedTimeline?.activeBranchId, selectedTimeline?.updatedAt, previewBranch?.updatedAt, previewBranch?.headNodeId])
-  const sessionPreviewKey = JSON.stringify([selectedSession?.updatedAt, selectedSession?.entryCount])
-  const timelinePreview = selectedTimeline && timelineNodesMap?.[selectedTimeline.id]?.key === timelinePreviewKey
-    ? timelineNodesMap[selectedTimeline.id] : undefined
-  const sessionPreview = selectedSession && sessionTranscriptMap?.[selectedSession.id]?.key === sessionPreviewKey
-    ? sessionTranscriptMap[selectedSession.id] : undefined
-
-  // 按需拉取选中时间线的演变节点日志
-  useEffect(() => {
-    const api = props.api
-    if (!selectedTimeline || !api?.narratives?.getPage) return
-    const timelineId = selectedTimeline.id
-    if (timelineNodesMap?.[timelineId]?.key === timelinePreviewKey && timelineNodesMap[timelineId]?.status === 'ready') return
-
-    let active = true
-    setPreviews(prev => ({
-      api,
-      timelineNodes: { ...(prev.api === api ? prev.timelineNodes : {}), [timelineId]: { key: timelinePreviewKey, status: 'loading' } },
-      sessionTranscripts: prev.api === api ? prev.sessionTranscripts : {},
-    }))
-    void api.narratives
-      .getPage({ timelineId, branchId: selectedTimeline.activeBranchId, limit: 20 })
-      .then(page => {
-        if (active && page?.nodes) {
-          setPreviews(prev => ({
-            api,
-            timelineNodes: { ...(prev.api === api ? prev.timelineNodes : {}), [timelineId]: { key: timelinePreviewKey, status: 'ready', data: page.nodes } },
-            sessionTranscripts: prev.api === api ? prev.sessionTranscripts : {},
-          }))
-        }
-      })
-      .catch(cause => {
-        if (active) setPreviews(prev => ({
-          api,
-          timelineNodes: { ...(prev.api === api ? prev.timelineNodes : {}), [timelineId]: {
-            key: timelinePreviewKey, status: 'error', error: cause instanceof Error ? cause.message : String(cause),
-          } },
-          sessionTranscripts: prev.api === api ? prev.sessionTranscripts : {},
-        }))
-      })
-    return () => {
-      active = false
-    }
-  }, [selectedTimeline?.id, timelinePreviewKey, props.api, previewRetry])
-
-  // 按需拉取选中会话的转录缩略预览
-  useEffect(() => {
-    const api = props.api
-    if (!selectedSession || !api?.agentSessions?.getTranscript) return
-    const sessionId = selectedSession.id
-    if (sessionTranscriptMap?.[sessionId]?.key === sessionPreviewKey && sessionTranscriptMap[sessionId]?.status === 'ready') return
-
-    let active = true
-    setPreviews(prev => ({
-      api,
-      timelineNodes: prev.api === api ? prev.timelineNodes : {},
-      sessionTranscripts: { ...(prev.api === api ? prev.sessionTranscripts : {}), [sessionId]: { key: sessionPreviewKey, status: 'loading' } },
-    }))
-    void api.agentSessions
-      .getTranscript({ agentSessionId: sessionId, limit: 12 })
-      .then(page => {
-        if (active && page?.entries) {
-          setPreviews(prev => ({
-            api,
-            timelineNodes: prev.api === api ? prev.timelineNodes : {},
-            sessionTranscripts: { ...(prev.api === api ? prev.sessionTranscripts : {}), [sessionId]: { key: sessionPreviewKey, status: 'ready', data: page.entries } },
-          }))
-        }
-      })
-      .catch(cause => {
-        if (active) setPreviews(prev => ({
-          api,
-          timelineNodes: prev.api === api ? prev.timelineNodes : {},
-          sessionTranscripts: { ...(prev.api === api ? prev.sessionTranscripts : {}), [sessionId]: {
-            key: sessionPreviewKey, status: 'error', error: cause instanceof Error ? cause.message : String(cause),
-          } },
-        }))
-      })
-    return () => {
-      active = false
-    }
-  }, [selectedSession?.id, sessionPreviewKey, props.api, previewRetry])
+  const { timelinePreview, sessionPreview, retryPreview } = useHistoryPreviews({
+    api: props.api, branches: props.branches, selectedTimeline, selectedSession,
+  })
 
   // 当选中时间线时，若该时间线存在关联会话，自动展开子树
   useEffect(() => {
@@ -1091,7 +988,7 @@ export function SessionsPanel(props: SessionsPanelProps) {
               nodes={timelinePreview?.status === 'ready' ? timelinePreview.data : []}
               previewLoading={Boolean(props.api) && (!timelinePreview || timelinePreview.status === 'loading')}
               previewError={timelinePreview?.status === 'error' ? timelinePreview.error : undefined}
-              onRetryPreview={() => setPreviewRetry(value => value + 1)}
+              onRetryPreview={retryPreview}
               api={props.api}
               profiles={props.agentPresets}
               t={props.t}
@@ -1107,7 +1004,7 @@ export function SessionsPanel(props: SessionsPanelProps) {
               entries={sessionPreview?.status === 'ready' ? sessionPreview.data : []}
               previewLoading={Boolean(props.api) && (!sessionPreview || sessionPreview.status === 'loading')}
               previewError={sessionPreview?.status === 'error' ? sessionPreview.error : undefined}
-              onRetryPreview={() => setPreviewRetry(value => value + 1)}
+              onRetryPreview={retryPreview}
               profiles={props.agentPresets}
               session={selectedSession}
               isPrimary={props.narrativeAgentSession?.id === selectedSession.id}

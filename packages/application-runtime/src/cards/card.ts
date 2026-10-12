@@ -15,8 +15,8 @@ import type {
   OpeningChatContent,
   OpeningChatEntryContent,
   OpeningChatInput,
-  SettingLayerContent,
-  SettingLayerInput,
+  LoreContent,
+  LoreInput,
 } from '../types.js'
 
 export function toCardSource(card: DocumentRecord<CardSourceContent>): CardSourceContent & { id: string; version: number } {
@@ -47,8 +47,8 @@ export function toCardSummary(card: DocumentRecord<CardSourceContent>): CardSumm
 export function normalizeCardContent(content: CardSourceContent): CardSourceContent {
   const legacyContent = content as Partial<CardSourceContent> & {
     opening?: OpeningChatInput | string
-    setting?: JsonObject
-    settingLayer?: SettingLayerInput
+
+    lore?: LoreInput
   }
 
   return {
@@ -85,7 +85,7 @@ export function normalizeCardContent(content: CardSourceContent): CardSourceCont
     media: normalizeCardMedia(legacyContent.media),
     preset: normalizePreset(legacyContent.preset),
     opening: normalizeOpening(legacyContent.opening),
-    settingLayer: normalizeSettingLayer(legacyContent.settingLayer, legacyContent.setting),
+    lore: normalizeLore(legacyContent.lore),
     ...(legacyContent.macros !== undefined ? { macros: normalizeMacros(legacyContent.macros, 'Card') } : {}),
     ...(legacyContent.macroOptions !== undefined ? { macroOptions: normalizeMacroOptions(legacyContent.macroOptions) } : {}),
     createdAt: typeof legacyContent.createdAt === 'string' ? legacyContent.createdAt : nowIso(),
@@ -175,13 +175,13 @@ export function normalizeOpening(input: OpeningChatInput | string | undefined): 
   }
 }
 
-export function normalizeSettingLayer(input: SettingLayerInput | undefined, legacySetting: JsonObject | undefined): SettingLayerContent {
+export function normalizeLore(input: LoreInput | undefined): LoreContent {
   if (isObject(input) && Array.isArray(input.entries)) {
     return {
       entries: input.entries
         .filter(entry => isObject(entry) && typeof entry.content === 'string' && entry.content.trim().length > 0)
         .map(entry => ({
-          id: typeof entry.id === 'string' ? entry.id : createId('setting'),
+          id: typeof entry.id === 'string' ? entry.id : createId('lore'),
           path: typeof entry.path === 'string' ? entry.path : undefined,
           title: typeof entry.title === 'string' ? entry.title : undefined,
           content: entry.content,
@@ -189,22 +189,6 @@ export function normalizeSettingLayer(input: SettingLayerInput | undefined, lega
           activation: isPromptActivation(entry.activation) ? entry.activation : { kind: 'always' },
           tags: Array.isArray(entry.tags) && entry.tags.every(tag => typeof tag === 'string') ? entry.tags : [],
         })),
-    }
-  }
-
-  if (legacySetting && Object.keys(legacySetting).length > 0) {
-    return {
-      entries: [
-        {
-          id: 'legacy.setting',
-          path: 'legacy.setting',
-          title: 'Imported Setting',
-          content: JSON.stringify(legacySetting),
-          enabled: true,
-          activation: { kind: 'always' },
-          tags: ['legacy'],
-        },
-      ],
     }
   }
 

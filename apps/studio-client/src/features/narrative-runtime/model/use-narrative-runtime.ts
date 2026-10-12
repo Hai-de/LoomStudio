@@ -10,36 +10,18 @@ import type {
   NarrativeTimeline,
   PreviewAgentTurnResult,
 } from '../../../entities/index.js'
-import type { AgentMutationApproval, StudioApi } from '../../../shared/api/studio-api.js'
+import type { StudioApi } from '../../../shared/api/studio-api.js'
 import { subscribeDataCommits } from '../../../shared/api/data-commit-events.js'
+import {
+  inspectSessionRunStatus, loadTranscript, releasePrimaryRun, runAgentTurn,
+  type ActiveAgentRun, type ObservedRun, type RunRecovery,
+} from './agent-run-observer.js'
+export { inspectSessionRunStatus, releasePrimaryRun, mergeAgentRunEntries } from './agent-run-observer.js'
+export type { ActiveAgentRun, RunRecovery } from './agent-run-observer.js'
+import { useNarrativeCollections } from './use-narrative-collections.js'
 import { safeLocalStorage } from '../../../shared/browser/safe-local-storage.js'
 import type { LatestOperationContext } from '../../../shared/hooks/use-async-operations.js'
 import { openingChoiceRequest, type OpeningChoice } from '../../cards/model/opening-choice.js'
-
-type AgentRunStatus = 'running' | 'suspended' | 'completed' | 'cancelled' | 'failed'
-export type ActiveAgentRun = { runId: string; status: AgentRunStatus; approval?: AgentMutationApproval }
-export type RunRecovery = {
-  target: 'narrative' | 'agent'
-  status: 'disconnected' | 'failed' | 'cancelled' | 'refresh-failed'
-  error?: string
-  refreshFailed?: boolean
-  input?: string
-}
-
-type ObservedRun = {
-  api: StudioApi
-  selection: number
-  runId: string
-  sessionId: string
-  target: RunRecovery['target']
-  input?: string
-  narrativeTarget?: { timelineId: string; branchId: string }
-  optimisticEntryId?: string
-  streamingId: string
-  cursor: number
-  status: AgentRunStatus
-  observing: boolean
-}
 
 type NarrativeSubmission = {
   api: StudioApi
@@ -50,36 +32,6 @@ type NarrativeSubmission = {
   content: string
   committed: boolean
   delivered: boolean
-}
-
-export function inspectSessionRunStatus(entries: AgentTranscriptEntry[]): { runId?: string; status: 'idle' | 'running' | 'suspended' } {
-  if (!entries.length) return { status: 'idle' }
-  const lastRunState = entries.slice().reverse().find(e => e.entry.kind === 'run-state')
-  if (lastRunState && lastRunState.entry.kind === 'run-state') {
-    if (lastRunState.entry.state === 'suspended' || lastRunState.entry.state === 'running') {
-      return { runId: lastRunState.runId, status: 'suspended' }
-    }
-    if (lastRunState.entry.state === 'completed' || lastRunState.entry.state === 'failed' || lastRunState.entry.state === 'aborted' || lastRunState.entry.state === 'discarded') {
-      return { status: 'idle' }
-    }
-  }
-
-  const lastUser = entries.slice().reverse().find(e => e.entry.kind === 'message' && e.entry.role === 'user')
-  if (lastUser) {
-    const userIdx = entries.indexOf(lastUser)
-    const laterEntries = entries.slice(userIdx + 1)
-    const hasCompletedAssistant = laterEntries.some(
-      e => e.entry.kind === 'message' && e.entry.role === 'assistant' && e.entry.state !== 'partial' && typeof e.entry.content === 'string' && Boolean(e.entry.content.trim())
-    )
-    const hasCompletedRun = laterEntries.some(
-      e => e.entry.kind === 'run-state' && e.entry.state === 'completed'
-    )
-    if (!hasCompletedAssistant || !hasCompletedRun) {
-      return { runId: lastUser.runId, status: 'suspended' }
-    }
-  }
-
-  return { status: 'idle' }
 }
 
 type JsonObject = { [key: string]: ClientJsonValue }
@@ -102,14 +54,10 @@ type UseNarrativeRuntimeInput = {
 }
 
 export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
-  type CollectionSource = {
-    api: StudioApi; timelineRead: number; sessionRead: number; timelineWrite: number; sessionWrite: number; disposed?: boolean
-  }
-  const collectionSourceRef = useRef<CollectionSource>({ api: input.api, timelineRead: 0, sessionRead: 0, timelineWrite: 0, sessionWrite: 0 })
-  if (collectionSourceRef.current.api !== input.api) {
-    collectionSourceRef.current = { api: input.api, timelineRead: 0, sessionRead: 0, timelineWrite: 0, sessionWrite: 0 }
-  }
-  const collectionSource = collectionSourceRef.current
+  const {
+    allTimelines, allAgentSessions, setAllTimelines, setAllAgentSessions,
+    refreshAllTimelines, refreshAllAgentSessions, ownsCollectionSource, sessionWriteRevision,
+  } = useNarrativeCollections(input.api)
   type CardSource = { api: StudioApi; cardId?: string; request?: Promise<NarrativeTimeline[]>; disposed?: boolean }
   const cardSourceRef = useRef<CardSource>({ api: input.api, cardId: input.selectedCardId })
   if (cardSourceRef.current.api !== input.api || cardSourceRef.current.cardId !== input.selectedCardId) {
@@ -137,13 +85,9 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
   const olderWindowRef = useRef(false)
   const [cardTimelinePage, setCardTimelinePage] = useState<{ source: CardSource; timelines: NarrativeTimeline[] }>()
   const cardTimelines = cardTimelinePage?.source === cardSourceRef.current ? cardTimelinePage.timelines : []
-  const [timelineCollection, setTimelineCollection] = useState<{ source: CollectionSource; items: NarrativeTimeline[] }>()
-  const allTimelines = timelineCollection?.source === collectionSource ? timelineCollection.items : []
   const [agentSession, setAgentSession] = useState<AgentSession>()
   const [primarySession, setPrimarySession] = useState<AgentSession>()
   const [agentSessions, setAgentSessions] = useState<AgentSession[]>([])
-  const [sessionCollection, setSessionCollection] = useState<{ source: CollectionSource; items: AgentSession[] }>()
-  const allAgentSessions = sessionCollection?.source === collectionSource ? sessionCollection.items : []
   const [agentSessionReady, setAgentSessionReady] = useState(true)
   const [agentSessionLoading, setAgentSessionLoading] = useState(false)
   const [agentMessages, setAgentTranscriptEntries] = useState<AgentTranscriptEntry[]>([])
@@ -169,15 +113,6 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
   const agentSelectionRef = useRef(0)
   const agentSessionReadyRef = useRef(true)
   const optimisticEntryIdRef = useRef(0)
-
-  useEffect(() => {
-    collectionSource.disposed = false
-    return () => {
-      collectionSource.disposed = true
-      collectionSource.timelineRead++
-      collectionSource.sessionRead++
-    }
-  }, [collectionSource])
 
   useEffect(() => {
     if (!timeline || !branch || typeof EventSource === 'undefined') return
@@ -219,12 +154,12 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
     let disposed = false
     const refresh = () => {
       const request = ++sequence
-      const revision = collectionSource.sessionWrite
+      const revision = sessionWriteRevision()
       void input.runAction(async () => {
         const sessions = await listAgentSessions(timelineId)
         if (disposed || request !== sequence || !ownsCollectionSource()
           || displayedNarrativeRef.current.timelineId !== timelineId) return
-        if (revision !== collectionSource.sessionWrite) {
+        if (revision !== sessionWriteRevision()) {
           refresh()
           return
         }
@@ -369,24 +304,6 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
       resetToDraftTimeline()
       return null
     }
-  }
-
-  async function refreshAllTimelines(): Promise<NarrativeTimeline[]> {
-    if (!ownsCollectionSource()) return []
-    const request = ++collectionSource.timelineRead
-    const revision = collectionSource.timelineWrite
-    const timelines: NarrativeTimeline[] = []
-    let cursor: string | undefined
-    do {
-      const page = await input.api.narratives.list({ cursor, limit: 100 })
-      timelines.push(...page.timelines)
-      cursor = page.nextCursor
-    } while (cursor)
-    if (ownsCollectionSource() && request === collectionSource.timelineRead) {
-      if (revision !== collectionSource.timelineWrite) return refreshAllTimelines()
-      setTimelineCollection({ source: collectionSource, items: timelines })
-    }
-    return timelines
   }
 
   useEffect(() => {
@@ -1163,28 +1080,6 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.id.localeCompare(a.id)))
   }
 
-  function ownsCollectionSource() {
-    return collectionSourceRef.current === collectionSource && !collectionSource.disposed
-  }
-
-  function setAllTimelines(update: (current: NarrativeTimeline[]) => NarrativeTimeline[]) {
-    if (!ownsCollectionSource()) return
-    collectionSource.timelineWrite++
-    setTimelineCollection(current => ({
-      source: collectionSource,
-      items: update(current?.source === collectionSource ? current.items : []),
-    }))
-  }
-
-  function setAllAgentSessions(update: (current: AgentSession[]) => AgentSession[]) {
-    if (!ownsCollectionSource()) return
-    collectionSource.sessionWrite++
-    setSessionCollection(current => ({
-      source: collectionSource,
-      items: update(current?.source === collectionSource ? current.items : []),
-    }))
-  }
-
   function markAgentSessionReady(ready: boolean) {
     agentSessionReadyRef.current = ready
     setAgentSessionReady(ready)
@@ -1244,17 +1139,6 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
     return sessions
   }
 
-  async function listAllAgentSessions() {
-    const sessions: AgentSession[] = []
-    let cursor: string | undefined
-    do {
-      const page = await input.api.agentSessions.list({ cursor, limit: 100 })
-      sessions.push(...page.sessions)
-      cursor = page.nextCursor
-    } while (cursor)
-    return sessions
-  }
-
   async function restoreAgentSession(timelineId: string | undefined, selection: number, selectedId?: string) {
     const sessions = await listAgentSessions(timelineId)
     if (selection !== agentSelectionRef.current || input.api !== cardSourceRef.current.api) return
@@ -1288,18 +1172,6 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
         if (selection === agentSelectionRef.current) setAgentSessionLoading(false)
       }
     })
-  }
-
-  async function refreshAllAgentSessions(): Promise<AgentSession[]> {
-    if (!ownsCollectionSource()) return []
-    const request = ++collectionSource.sessionRead
-    const revision = collectionSource.sessionWrite
-    const sessions = await listAllAgentSessions()
-    if (ownsCollectionSource() && request === collectionSource.sessionRead) {
-      if (revision !== collectionSource.sessionWrite) return refreshAllAgentSessions()
-      setSessionCollection({ source: collectionSource, items: sessions })
-    }
-    return sessions
   }
 
   async function activateAgentSession(sessionOrId: AgentSession | string, canActivate?: () => boolean) {
@@ -1513,31 +1385,6 @@ export function reconcileNarrativeNodes(current: NarrativeNode[], page: Narrativ
   return [...prefix, ...merged]
 }
 
-async function loadTranscript(api: StudioApi, agentSessionId: string) {
-  const entries: AgentTranscriptEntry[] = []
-  let cursor: string | undefined
-  let session: AgentSession | undefined
-  do {
-    const page = await api.agentSessions.getTranscript({ agentSessionId, cursor, limit: 100 })
-    session = page.session
-    entries.unshift(...page.entries)
-    cursor = page.nextCursor
-  } while (cursor)
-  if (!session) throw new Error(`Agent session not found: ${agentSessionId}`)
-  return { entries, session }
-}
-
-export async function releasePrimaryRun(api: StudioApi, sessionId: string): Promise<void> {
-  const transcript = await loadTranscript(api, sessionId)
-  const inspected = inspectSessionRunStatus(transcript.entries)
-  if (!inspected.runId) return
-  const run = await api.agentSessions.runState(inspected.runId)
-  if (run.state === 'running') throw new Error('生成期间不能切换主写作对话')
-  if (run.state !== 'suspended') return
-  const abandoned = await api.agentSessions.abandonRun(run.runId)
-  if (!abandoned.accepted) throw new Error('旧任务放弃失败，主写作对话未切换')
-}
-
 export function resolveNarrativeBranch(branches: NarrativeBranch[], activeBranchId: string, requestedBranchId?: string): NarrativeBranch | undefined {
   return branches.find(branch => branch.id === (requestedBranchId ?? activeBranchId))
 }
@@ -1549,165 +1396,4 @@ export function readComposerDraftKey(
 ): string {
   if (timeline) return `${timeline.id}:${branch?.id ?? 'unbound'}`
   return `card:${selectedCardId ?? 'unbound'}`
-}
-
-async function runAgentTurn(
-  run: ObservedRun,
-  isCurrent: () => boolean,
-  updateMessages: (update: (entries: AgentTranscriptEntry[]) => AgentTranscriptEntry[]) => void,
-  updateRun: (run: ActiveAgentRun | undefined) => void,
-  onConnected: () => void,
-): Promise<InvokeAgentTurnResult | undefined> {
-  const { api, runId, streamingId } = run
-  while (isCurrent()) {
-    let batch = await subscribeAgentRunWithRetry(api, runId, run.cursor, run.sessionId)
-    if (!isCurrent()) return undefined
-    const replayExpired = batch.replayExpired
-    const pendingApprovals = replayExpired ? batch.pendingApprovals ?? [] : []
-    if (batch.replayExpired) {
-      const snapshot = batch
-      const transcript = await loadTranscript(api, run.sessionId)
-      if (!isCurrent()) return undefined
-      if (!snapshot.done) {
-        batch = await subscribeAgentRunWithRetry(api, runId, snapshot.nextCursor, run.sessionId)
-        if (!isCurrent()) return undefined
-        if (batch.replayExpired) {
-          run.cursor = snapshot.nextCursor
-          continue
-        }
-      }
-      const committedDuringRead = batch !== snapshot && batch.events.some(event =>
-        event.type === 'transcript-appended' && Array.isArray(event.entries)
-        && (event.entries as unknown as AgentTranscriptEntry[]).some(entry =>
-          entry.runId === runId && (entry.entry.kind === 'tool-invocation'
-            || entry.entry.kind === 'message' && entry.entry.role === 'assistant')))
-      updateMessages(current => {
-        const committed = transcript.entries.filter(entry => entry.runId === runId)
-        const committedIds = new Set(committed.map(entry => entry.id))
-        const placeholder = current.find(entry => entry.id === streamingId)
-        const entries = [
-          ...current.filter(entry => entry.runId !== runId && entry.id !== streamingId
-            && entry.id !== run.optimisticEntryId && !committedIds.has(entry.id)),
-          ...committed,
-        ].sort((a, b) => a.sequence - b.sequence)
-        if (placeholder) entries.push({
-          ...placeholder, sequence: (entries.at(-1)?.sequence ?? 0) + 1,
-          entry: { kind: 'message', role: 'assistant', content: committedDuringRead ? '' : snapshot.partialText ?? '' },
-        })
-        return entries
-      })
-      updateRun({ runId, status: batch.state })
-    }
-    onConnected()
-    run.cursor = batch.nextCursor
-    for (const event of [...pendingApprovals, ...batch.events]) {
-      if (event.type === 'transcript-appended' && Array.isArray(event.entries)) {
-        const appended = event.entries as unknown as AgentTranscriptEntry[]
-        updateMessages(current => mergeAgentRunEntries(current, appended, run))
-      }
-      if (event.type === 'text-delta' && typeof event.delta === 'string' && streamingId) {
-        updateMessages(entries => entries.map(entry => entry.id === streamingId
-          ? { ...entry, entry: { ...entry.entry, content: `${entry.entry.content ?? ''}${event.delta}` } }
-          : entry))
-      }
-      if (event.type === 'mutation-approval-requested'
-        && typeof event.requestId === 'string'
-        && event.preview
-        && typeof event.preview === 'object') {
-        updateRun({
-          runId,
-          status: 'running',
-          approval: {
-            requestId: event.requestId,
-            preview: event.preview as NonNullable<AgentMutationApproval['preview']>,
-          },
-        })
-      }
-      if (event.type === 'history-read-approval-requested'
-        && typeof event.requestId === 'string' && event.action && typeof event.action === 'object') {
-        updateRun({
-          runId, status: 'running',
-          approval: {
-            requestId: event.requestId,
-            action: event.action as NonNullable<AgentMutationApproval['action']>,
-          },
-        })
-      }
-      if (event.type === 'completed' && event.result && typeof event.result === 'object') {
-        run.status = 'completed'
-        updateRun({ runId, status: 'completed' })
-        return event.result as unknown as InvokeAgentTurnResult
-      }
-      if (event.type === 'failed') {
-        run.status = 'failed'
-        updateRun({ runId, status: 'failed' })
-        throw new Error(typeof event.error === 'object' && event.error && 'message' in event.error
-          ? String(event.error.message)
-          : 'Agent turn failed')
-      }
-      if (event.type === 'cancelled') {
-        run.status = 'cancelled'
-        updateRun({ runId, status: 'cancelled' })
-        return undefined
-      }
-      if (event.type === 'suspended') {
-        run.status = 'suspended'
-        updateRun({ runId, status: 'suspended' })
-        return undefined
-      }
-    }
-    if (batch.done) {
-      run.status = batch.state
-      updateRun({ runId, status: batch.state })
-      if (batch.state === 'cancelled' || batch.state === 'suspended') return undefined
-      if (replayExpired && batch.state === 'completed') return undefined
-      throw new Error(`Agent run ended without a completed result: ${runId}`)
-    }
-    await new Promise(resolve => setTimeout(resolve, 100))
-  }
-}
-
-export function mergeAgentRunEntries(
-  current: AgentTranscriptEntry[],
-  appended: AgentTranscriptEntry[],
-  run: Pick<ObservedRun, 'optimisticEntryId' | 'streamingId'>,
-): AgentTranscriptEntry[] {
-  const receivedIds = new Set(appended.map(entry => entry.id))
-  const hasUser = appended.some(entry => entry.entry.kind === 'message' && entry.entry.role === 'user')
-  const committedStep = appended.some(entry => entry.entry.kind === 'message' && entry.entry.role === 'assistant'
-    || entry.entry.kind === 'tool-invocation')
-  const placeholder = current.find(entry => entry.id === run.streamingId)
-  const entries = [
-    ...current.filter(entry => entry.id !== run.streamingId && !receivedIds.has(entry.id)
-      && (!hasUser || entry.id !== run.optimisticEntryId)),
-    ...appended,
-  ].sort((a, b) => a.sequence - b.sequence)
-  if (placeholder) {
-    entries.push({
-      ...placeholder,
-      sequence: (entries.at(-1)?.sequence ?? 0) + 1,
-      entry: committedStep ? { kind: 'message', role: 'assistant', content: '' } : placeholder.entry,
-    })
-  }
-  return entries
-}
-
-async function subscribeAgentRunWithRetry(
-  api: StudioApi,
-  runId: string,
-  cursor: number,
-  agentSessionId: string,
-) {
-  let lastError: unknown
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      return await api.agentSessions.subscribeRun(runId, cursor, agentSessionId)
-    } catch (error) {
-      lastError = error
-      if (attempt < 2) {
-        await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)))
-      }
-    }
-  }
-  throw lastError
 }

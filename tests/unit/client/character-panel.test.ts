@@ -10,7 +10,7 @@ describe('CharacterPanel MasterDetail', () => {
       userName: 'Alice',
       description: '奇境漫游者',
       media: { avatarAssetId: 'avatar-1' },
-      settingLayer: { entries: [] },
+      lore: { entries: [] },
       opening: { entries: [{ role: 'assistant' as const, content: '你好，我是爱丽丝。' }] },
     },
     {
@@ -53,14 +53,14 @@ describe('CharacterPanel MasterDetail', () => {
         version: 1,
         createdAt: '',
         updatedAt: '',
-        resourceKind: 'setting' as const,
+        resourceKind: 'lore' as const,
         rootNode: {
           id: 'node-root-1',
           kind: 'module',
           label: '奇境世界书',
           category: 'module' as const,
           children: [
-            { id: 'node-1', kind: 'entry', label: '疯帽子茶会', category: 'setting' as const },
+            { id: 'node-1', kind: 'entry', label: '疯帽子茶会', category: 'lore' as const },
           ],
         },
       },

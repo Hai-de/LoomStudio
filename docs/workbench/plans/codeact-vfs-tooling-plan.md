@@ -46,7 +46,7 @@
 
 游玩剧情分支首版采用新建空白 Agent Session、不继承废弃剧情工作记忆的方向；分支与 Session 编排、会话膨胀归 [Session 生命周期章节](./agent-runtime-session-and-workspace-plan.md#游玩分支与-session-生命周期)。CodeAct 只消费当前明确的目标与授权，不负责复制、回滚或清理会话。
 
-分支资源隔离归 Timeline 与静态资源模块，包括 Narrative 版本归属、Setting 的分支覆盖及共享资源修改语义；不作为本计划的设计或实施工作包。CodeAct 依赖这些模块提供明确的目标与隔离合同，不通过 VFS 另建隔离层，也不假定现有存储已满足隔离要求。
+分支资源隔离归 Timeline 与静态资源模块，包括 Narrative 版本归属、Lore 的分支覆盖及共享资源修改语义；不作为本计划的设计或实施工作包。CodeAct 依赖这些模块提供明确的目标与隔离合同，不通过 VFS 另建隔离层，也不假定现有存储已满足隔离要求。
 
 ## 2. 已确认方向
 
@@ -75,7 +75,7 @@
 
 - 默认完整资源优先，领域范围其次，行范围兜底。普通人物设定、规则、Skill 读取完整条目；Narrative 以节点及必要相邻节点为单位；State 以组件为单位。搜索命中片段不足以代替完整条件和例外。
 - 不把整条 Timeline 拼成巨型文件后用全局行号定位；先按分支和节点范围采样，再按需读取节点局部内容。
-- 长 Narrative 正文与历史正文是按行读取的重点场景：节点/分支定位后按行范围读相关段落并保留上下文。其他用途包括超长文件续读、已有完整理解后的局部核对、YAML/脚本错误定位和日志调查；不强迫普通 Setting 按行拆读。
+- 长 Narrative 正文与历史正文是按行读取的重点场景：节点/分支定位后按行范围读相关段落并保留上下文。其他用途包括超长文件续读、已有完整理解后的局部核对、YAML/脚本错误定位和日志调查；不强迫普通 Lore 按行拆读。
 - 行号可以用于定位，不要求默认显示，更不要求按行号修改。局部读取必须标明实际范围与完整性；受预算截断时提供真实续读位置，不静默伪装成完整结果。
 - 行号和读取基线对应实际返回的原文或物化文本，不能用物化后的行号直接编辑作者源数据。只有局部读取不能作为已经完整阅读的证据，不能把截断结果直接全量写回。
 - LS 优先保留作者维护的资源树顺序，不按创建时间或文件名字母顺序代替领域顺序，也不按注入状态重排。
@@ -128,7 +128,7 @@
 
 #### Copy 范围澄清（待确认）
 
-- 用户指出复制对象可能是单个 Setting 条目、整个文件夹，或整份世界书/预设，不能默认缩窄为同资源节点子树复制。
+- 用户指出复制对象可能是单个 Lore 条目、整个文件夹，或整份世界书/预设，不能默认缩窄为同资源节点子树复制。
 - 对象粒度与目标作用域分开：条目/文件夹与整份 Prompt Resource 是不同领域操作；同资源、跨资源或跨角色卡是另一维度，不把复制自动等同于迁移或解除原挂载。
 - 整份资源已有 `duplicatePromptResource` 领域入口；后续接线须复用并核对其配置、挂载与引用处理，不另造复制真值。
 - 已撤下未定案的同资源 `ctx.copy` 实现。统一路径式入口还是分方法属于待定 API 设计，不因底层操作不同就预先要求 Agent 使用多套工具。
@@ -154,7 +154,7 @@ await ctx.copy(sourcePath, destinationPath, {
 **三种实际操作**
 
 1. **节点或文件夹复制**：复制源节点及其完整子树到目标资源目录。复制正文、作者 Metadata、启用状态、类别、能力声明、作者扩展字段和相对顺序；为所有新节点生成新内部 ID。源节点不改变，不复制运行态 Pin、读取观察、审批状态、执行授权或 Agent 工作记忆。
-2. **整份 Prompt Resource 复制**：源路径指向资源根时调用现有 `duplicatePromptResource`。复制资源级名称、类型、Metadata 和节点树；Preset 复制它声明的 Setting/Tool 挂载配置，但继续引用原有 Setting/Tool，不递归复制被挂载资源，也不复制指向该资源的外部挂载、Card、Agent Profile 或 Timeline 关系。
+2. **整份 Prompt Resource 复制**：源路径指向资源根时调用现有 `duplicatePromptResource`。复制资源级名称、类型、Metadata 和节点树；Preset 复制它声明的 Lore/Tool 挂载配置，但继续引用原有 Lore/Tool，不递归复制被挂载资源，也不复制指向该资源的外部挂载、Card、Agent Profile 或 Timeline 关系。
 3. **跨资源节点复制**：源节点和目标目录属于不同 Prompt Resource 时，仍使用同一个入口，但必须额外通过作用域授权。复制规则与节点复制相同；不自动把目标资源变成源资源的挂载，也不自动迁移跨资源关系。
 
 **引用和失败规则**
@@ -388,7 +388,7 @@ print(text);
 交付与投影规则：
 
 - 默认教程复用既有 Prompt Resource/Entry、Markdown 正文及官方内容交付方式；统一的是编写模板，不新增必须填写的 description KV、教程数据库或模板引擎。不从 JSON Schema 机械生成所有行为限制。
-- 公共说明只出现一次，各方法正文各一次。以稳定来源身份去重，不靠比较正文字符串；Content 协议说明和方法教程各自负责自己的内容，不能在 guidance、Setting 和 Provider description 中重复塞入整本教程。
+- 公共说明只出现一次，各方法正文各一次。以稳定来源身份去重，不靠比较正文字符串；Content 协议说明和方法教程各自负责自己的内容，不能在 guidance、Lore 和 Provider description 中重复塞入整本教程。
 - 基础方法说明默认投影到 `@chat.tools`；作者可以重排或指定其他位置。按条件出现的能力说明可使用 `@tools.dynamic` 或普通资源激活规则；Skills 仍归 `@runtime.skills`，不混为一张大工具清单。
 - CodeAct 即使通过 JSON 入口调用，公共与方法教程仍由独立 Contribution 进入相同锚点；Provider `tools[]` 只保留执行入口的必要说明及 schema。不要因当前组装函数只筛选 Content Tools，就让 JSON 模式丢失教程。
 - 教程选择与实际方法暴露使用同一能力清单：未实现/不可提供的方法不宣称可调用；需要审批的方法可以说明审批限制，不能把“说明可见”当作已授权。具体资源路径、State 值和本次通知不塞进稳定方法说明。
@@ -405,7 +405,7 @@ P3 负责入口与教程 Contribution 的接线，P5 负责默认教程内容和
 | 工作包 | 状态 | 实际交付/剩余 |
 | --- | --- | --- |
 | P0 | 已验证 | QuickJS 0.32.0 + Worker；异步、隔离、死循环、挂起 Promise、内存/输出上限、取消与已接受宿主操作收尾 |
-| P1 | 领域读取基座与引用已接入，部分资源待对接 | 实时 Preset/Setting 源树、State 属性/组件子树、预设脚本 Document/Blob、路径身份/版本观察及 `loom-resource` 引用已接通；Narrative 采样、通用资产及跨角色挂载管理仍未接入 |
+| P1 | 领域读取基座与引用已接入，部分资源待对接 | 实时 Preset/Lore 源树、State 属性/组件子树、预设脚本 Document/Blob、路径身份/版本观察及 `loom-resource` 引用已接通；Narrative 采样、通用资产及跨角色挂载管理仍未接入 |
 | P2 | 已完成首期只读执行器 | 两种入口共用隔离执行、桥接、指导性错误及取消；编译后 Worker/WASM 加载已验证 |
 | P3 | 已完成当前 Run 接入 | Content/freeform 与 JSON，稳定教程、Preview/实际请求、结果回传、截断拒绝、正文转换改写代码时拒绝；跨 Run 完整协议回放仍归 Session 模块 |
 | P4 | replace、patch、基础结构操作与首期 Copy 已接入并验证 | Prompt Resource 正文和 State 属性支持先读后 replace，Prompt Resource 支持基于唯一上下文的 unified diff patch，节点支持 Metadata、create、move、delete、同资源 copy，资源根支持整份 Prompt Resource copy；版本冲突、局部读取范围、审批、即时 Changeset 和后续失败保留已验证；跨资源节点 copy、Narrative、Pin、撤回及完整授权 UI 仍未完成 |
@@ -426,7 +426,7 @@ P3 负责入口与教程 Contribution 的接线，P5 负责默认教程内容和
 - **交接合同**：在 `vfs/types.ts` 固定宿主提供的挂载、访问检查、读取/版本观察；P2 只依赖这些函数，不依赖 Store。只保留一种原文值与展示信息的协议，模型展示头不得进入可写回的正文。
 - **验收**：两个同名条目/挂载不串读；重命名不把旧路径误绑到另一对象；路径越界、隐藏资源、锁定内容、搜索片段都经过同一访问边界；YAML 组件和长文本截断有可验证范围。
 - **主要验证**：新增 `tests/unit/application-runtime/vfs-read.test.ts`；Scope 提取另外运行受影响的 `official-agent-tools.test.ts`。只测真实能力，不返回假的 Pin 成功或全部历史。
-- **依赖**：Narrative 必须使用上下文计划提供的共用采样合同。合同缺失只阻塞 Narrative 适配，不阻塞 Setting/State；不得把当前固定最近 100 节点当成已确认的有效区间。
+- **依赖**：Narrative 必须使用上下文计划提供的共用采样合同。合同缺失只阻塞 Narrative 适配，不阻塞 Lore/State；不得把当前固定最近 100 节点当成已确认的有效区间。
 
 ### P2：生产执行器与 ctx 桥
 
@@ -478,7 +478,7 @@ P3 负责入口与教程 Contribution 的接线，P5 负责默认教程内容和
 | 具体资源授权、危险动作与审批等待合同 | Runtime 权限边界；沿用已确认的作用域 + 动作双维度 | 相应跨范围访问及 P4 写入；不允许静默默认全权限 |
 | Narrative 当前范围、有限历史追溯与加工 | 上下文计划的共用采样能力 | Narrative LS/Search/Read；不允许另造一个采样器 |
 | Pin 保存范围、采用时点与 Notice 生命周期 | 上下文计划 | Pin/Notice 接线；不以 JS 内存替代持久化 |
-| Narrative 版本、Setting 分支覆盖及可撤回范围 | Timeline 与静态资源模块 | 对应写入、撤回与 Diff 基准；不扩大 CodeAct 范围 |
+| Narrative 版本、Lore 分支覆盖及可撤回范围 | Timeline 与静态资源模块 | 对应写入、撤回与 Diff 基准；不扩大 CodeAct 范围 |
 | 非 User 输入节点的领域标识及事件发布覆盖 | Narrative 与事件模块；当前 Node 类型不能仅靠创建者推定该语义 | 自动消费验收；不增加 Agent Finish/Commit |
 | 元数据字段、复制默认值、相对排序与工具最终签名 | P4 按现有领域 Schema 列出最小操作合同 | 仅对应工具；涉及产品行为的缺口定向提问 |
 

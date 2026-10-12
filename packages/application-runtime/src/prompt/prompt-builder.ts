@@ -2,7 +2,7 @@ import type { PromptActivation } from './prompt-activation.js'
 import type { ChatMessage, JsonObject } from '@loom-studio/shared'
 
 export type PromptProviderRole = 'system' | 'developer' | 'assistant' | 'user'
-export type PromptSourceKind = 'preset' | 'settingLayer' | 'narrativeChat' | 'narrativeHistory' | 'sessionHistory' | 'runtime'
+export type PromptSourceKind = 'preset' | 'lore' | 'narrativeChat' | 'narrativeHistory' | 'sessionHistory' | 'runtime'
 
 export type PromptCompositionCapabilities = {
   processorId?: string

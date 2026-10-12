@@ -9,7 +9,7 @@ AgentSession.agentPresetId
   -> PromptResource（resourceKind: preset）
      -> rootNode / macros / historyPolicy
      -> model / delivery
-     -> useCardSettings / textUses / Setting Mount
+     -> useCardLore / textUses / Lore Mount
      -> Preset Tool Mount
 ```
 

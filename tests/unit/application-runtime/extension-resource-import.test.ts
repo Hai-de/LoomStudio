@@ -50,13 +50,13 @@ describe('Extension prompt resource import', () => {
     const { engine, runtime, input, promptResources } = f
     try {
       input.promptResources.push({
-        contribution: { id: 'local-setting', resourceKind: 'setting', source: 'setting.json' },
+        contribution: { id: 'local-setting', resourceKind: 'lore', source: 'setting.json' },
         artifact: {
-          format: 'loom.promptResource', schemaVersion: 2, resourceKind: 'setting',
-          rootNode: { id: 'example.writer.local-setting-root', kind: 'module', label: 'Local' },
+          format: 'loom.promptResource', schemaVersion: 2, resourceKind: 'lore',
+          rootNode: { id: 'example.writer.local-lore-root', kind: 'module', label: 'Local' },
         },
       })
-      input.promptResources[0]!.contribution.settingMounts = [
+      input.promptResources[0]!.contribution.loreMounts = [
         { resourceId: 'local-setting' },
         { reference: { kind: 'external', resourceId: 'missing-elsewhere' } },
       ]
@@ -64,18 +64,18 @@ describe('Extension prompt resource import', () => {
       const presetId = installed.promptResources[0]!.resourceId
       const localId = installed.promptResources[1]!.resourceId
       const source = { kind: 'preset' as const, id: presetId }
-      const mounts = (await runtime.listSettingMounts({ source })).mounts
+      const mounts = (await runtime.listLoreMounts({ source })).mounts
       expect(mounts).toMatchObject([
-        { settingResourceId: localId, resolvedSettingResourceId: localId, reference: { kind: 'package', contributionId: 'local-setting' } },
-        { settingResourceId: 'missing-elsewhere', resolvedSettingResourceId: null, reference: { kind: 'external', resourceId: 'missing-elsewhere' } },
+        { loreResourceId: localId, resolvedLoreResourceId: localId, reference: { kind: 'package', contributionId: 'local-setting' } },
+        { loreResourceId: 'missing-elsewhere', resolvedLoreResourceId: null, reference: { kind: 'external', resourceId: 'missing-elsewhere' } },
       ])
       expect(await promptResources.getResource('missing-elsewhere')).toBeNull()
       expect(await engine.read(database => database.prepare('PRAGMA foreign_key_check').all())).toEqual([])
-      const extra = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Extra' })
-      await runtime.replaceSettingMounts({
-        source, mounts: [{ id: mounts[0]!.id }, { id: mounts[1]!.id }, { settingResourceId: extra.resource.id }],
+      const extra = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Extra' })
+      await runtime.replaceLoreMounts({
+        source, mounts: [{ id: mounts[0]!.id }, { id: mounts[1]!.id }, { loreResourceId: extra.resource.id }],
       })
-      expect((await runtime.listSettingMounts({ source })).mounts.map(mount => mount.resolvedSettingResourceId ?? mount.settingResourceId))
+      expect((await runtime.listLoreMounts({ source })).mounts.map(mount => mount.resolvedLoreResourceId ?? mount.loreResourceId))
         .toEqual([localId, 'missing-elsewhere', extra.resource.id])
       const { providerProfile } = await runtime.createProviderProfile({
         providerExtensionId: 'official.fake', displayName: 'Fake', config: {}, enabledModelIds: [officialFakeModelId],
@@ -88,26 +88,26 @@ describe('Extension prompt resource import', () => {
       const { session } = await runtime.createAgentSession({ agentPresetId: presetId })
       const preview = await runtime.previewAgentTurn({ agentSessionId: session.id, input: 'Hi' })
       expect(preview.promptBuildTrace.diagnostics).toContainEqual(expect.objectContaining({
-        code: 'prompt.setting_reference_unresolved', message: expect.stringContaining('missing-elsewhere'),
+        code: 'prompt.lore_reference_unresolved', message: expect.stringContaining('missing-elsewhere'),
       }))
       const exported = await runtime.exportPromptResource({ resourceId: presetId })
-      expect(exported.artifact.settingMounts).toEqual([
+      expect(exported.artifact.loreMounts).toEqual([
         { kind: 'package', contributionId: 'local-setting' },
         { kind: 'external', resourceId: 'missing-elsewhere' },
         { kind: 'external', resourceId: extra.resource.id },
       ])
       const copied = await runtime.importPromptResource({ artifact: exported.artifact })
-      expect((await runtime.listSettingMounts({ source: { kind: 'preset', id: copied.resource.id } })).mounts)
+      expect((await runtime.listLoreMounts({ source: { kind: 'preset', id: copied.resource.id } })).mounts)
         .toMatchObject([
-          { settingResourceId: 'local-setting', resolvedSettingResourceId: null },
-          { settingResourceId: 'missing-elsewhere', resolvedSettingResourceId: null },
-          { settingResourceId: extra.resource.id, resolvedSettingResourceId: null },
+          { loreResourceId: 'local-setting', resolvedLoreResourceId: null },
+          { loreResourceId: 'missing-elsewhere', resolvedLoreResourceId: null },
+          { loreResourceId: extra.resource.id, resolvedLoreResourceId: null },
         ])
       await runtime.deletePromptResource({ resourceId: extra.resource.id })
-      const beforeEdit = (await runtime.listSettingMounts({ source })).mounts
-      await runtime.replaceSettingMounts({ source, mounts: beforeEdit.map(mount => ({ id: mount.id })) })
-      expect((await runtime.listSettingMounts({ source })).mounts[2]).toMatchObject({
-        settingResourceId: extra.resource.id, resolvedSettingResourceId: null,
+      const beforeEdit = (await runtime.listLoreMounts({ source })).mounts
+      await runtime.replaceLoreMounts({ source, mounts: beforeEdit.map(mount => ({ id: mount.id })) })
+      expect((await runtime.listLoreMounts({ source })).mounts[2]).toMatchObject({
+        loreResourceId: extra.resource.id, resolvedLoreResourceId: null,
         reference: { kind: 'external', resourceId: extra.resource.id },
       })
     } finally { await engine.close() }
@@ -207,9 +207,9 @@ describe('Extension prompt resource import', () => {
     const { engine, runtime, input, promptResources } = fixture()
     try {
       input.promptResources.push({
-        contribution: { id: 'example.writer.old', resourceKind: 'setting', source: 'old.json' },
+        contribution: { id: 'example.writer.old', resourceKind: 'lore', source: 'old.json' },
         artifact: {
-          format: 'loom.promptResource', schemaVersion: 2, resourceKind: 'setting',
+          format: 'loom.promptResource', schemaVersion: 2, resourceKind: 'lore',
           rootNode: { id: 'example.writer.old.root', kind: 'module', label: 'Old setting' },
         },
       })
@@ -318,10 +318,10 @@ describe('Extension prompt resource import', () => {
       const ids: string[] = []
       for (const card of [a, b]) {
         input.promptResources = [{
-          contribution: { id: 'example.writer.setting', resourceKind: 'setting', source: 'setting.json' },
+          contribution: { id: 'example.writer.setting', resourceKind: 'lore', source: 'setting.json' },
           artifact: {
-            format: 'loom.promptResource', schemaVersion: 2, resourceKind: 'setting',
-            rootNode: { id: 'example.writer.setting.root', kind: 'module', category: 'setting', label: 'Private', children: [{
+            format: 'loom.promptResource', schemaVersion: 2, resourceKind: 'lore',
+            rootNode: { id: 'example.writer.setting.root', kind: 'module', category: 'lore', label: 'Private', children: [{
               id: 'example.writer.setting.body', kind: 'entry', label: card.name,
               body: `PRIVATE_${card.name}`, capabilities: { targetAnchorId: '@chat.system' },
             }] },
@@ -332,12 +332,12 @@ describe('Extension prompt resource import', () => {
         })
         ids.push(installed.promptResources[0]!.resourceId)
       }
-      await runtime.replaceSettingMounts({ source: { kind: 'manual', id: 'global' }, settingResourceIds: ids })
+      await runtime.replaceLoreMounts({ source: { kind: 'manual', id: 'global' }, loreResourceIds: ids })
       await runtime.updateCardPromptResources({ cardId: a.id, promptResourceIds: [ids[0]!] })
-      await runtime.replaceSettingMounts({ source: { kind: 'preset', id: preset.id }, settingResourceIds: [ids[0]!] })
+      await runtime.replaceLoreMounts({ source: { kind: 'preset', id: preset.id }, loreResourceIds: [ids[0]!] })
       const bindings = await runtime.getPromptResourceBindings({ resourceId: ids[0]! })
       expect(bindings.cards).toEqual([{ id: a.id, name: 'A' }])
-      expect(bindings.settingMounts.map(mount => mount.source)).toEqual(expect.arrayContaining([
+      expect(bindings.loreMounts.map(mount => mount.source)).toEqual(expect.arrayContaining([
         { kind: 'manual', id: 'global' }, { kind: 'preset', id: preset.id },
       ]))
       expect((await runtime.getPromptResourceBindings({ resourceId: ids[1]! })).cards).toEqual([])
@@ -416,12 +416,12 @@ describe('Extension prompt resource import', () => {
   it('filters private resources from tool search and rejects exact-ID reads outside their installation', async () => {
     const { engine, runtime, input, promptResources } = fixture()
     try {
-      const { resource: publicResource } = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Public' })
+      const { resource: publicResource } = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Public' })
       const { card } = await runtime.createCard({ name: 'Private' })
       input.promptResources = [{
-        contribution: { id: 'example.writer.setting', resourceKind: 'setting', source: 'setting.json' },
+        contribution: { id: 'example.writer.setting', resourceKind: 'lore', source: 'setting.json' },
         artifact: {
-          format: 'loom.promptResource', schemaVersion: 2, resourceKind: 'setting',
+          format: 'loom.promptResource', schemaVersion: 2, resourceKind: 'lore',
           rootNode: { id: 'example.writer.private.root', kind: 'module', label: 'Private', children: [
             { id: 'example.writer.private.body', kind: 'entry', label: 'Secret', body: 'PRIVATE_CONTENT' },
           ] },
@@ -439,7 +439,7 @@ describe('Extension prompt resource import', () => {
       }
       const search = await registry.execute({
         id: 'search', toolId: officialSearchPromptResourcesTool.id,
-        arguments: { resourceKind: 'setting', limit: 1 }, transport: 'native-function',
+        arguments: { resourceKind: 'lore', limit: 1 }, transport: 'native-function',
       }, signal, scope)
       expect(search).toMatchObject({
         status: 'completed', content: [{ type: 'json', value: { resources: [{ id: publicResource.id }] } }],
@@ -577,13 +577,13 @@ describe('Extension prompt resource import', () => {
         },
       }
       input.promptResources.push({
-        contribution: { id: 'example.writer.setting', resourceKind: 'setting', source: 'setting.json' },
+        contribution: { id: 'example.writer.setting', resourceKind: 'lore', source: 'setting.json' },
         artifact: {
-          format: 'loom.promptResource', schemaVersion: 2, resourceKind: 'setting',
+          format: 'loom.promptResource', schemaVersion: 2, resourceKind: 'lore',
           rootNode: { id: 'example.writer.setting.root', kind: 'module', label: 'Setting' },
         },
       })
-      input.promptResources[0]!.contribution.settingMounts = [{ resourceId: 'example.writer.setting' }]
+      input.promptResources[0]!.contribution.loreMounts = [{ resourceId: 'example.writer.setting' }]
       input.promptResources[0]!.contribution.toolMounts = [{ toolId: 'example.writer/read' }]
       input.agentTools = [{
         contribution: { id: 'example.writer/read', source: 'read.json' },
@@ -629,8 +629,8 @@ describe('Extension prompt resource import', () => {
         expect(agentPreset.origin).toMatchObject({ installationId: installation.installationId, contributionId: 'example.writer.preset' })
         expect(agentPreset.rootNode.orderList).toEqual([agentPreset.rootNode.children![0]!.id])
         expect(agentPreset.rootNode.children![0]!.body).toBe('Keep example.writer.body as text')
-        expect((await runtime.listSettingMounts({ source: { kind: 'preset', id } })).mounts)
-          .toMatchObject([{ settingResourceId: installation.promptResources[1]!.resourceId }])
+        expect((await runtime.listLoreMounts({ source: { kind: 'preset', id } })).mounts)
+          .toMatchObject([{ loreResourceId: installation.promptResources[1]!.resourceId }])
         expect((await runtime.listPresetToolMounts({ presetId: id })).mounts)
           .toMatchObject([{ toolId: installation.agentTools[0]!.toolId }])
         snapshots.push(agentPreset)
@@ -661,8 +661,8 @@ describe('Extension prompt resource import', () => {
       const presetId = restored.promptResources[0]!.resourceId
       expect((await runtime.getAgentPreset({ agentPresetId: presetId })).agentPreset.rootNode)
         .toEqual(snapshots[1]!.rootNode)
-      expect((await runtime.listSettingMounts({ source: { kind: 'preset', id: presetId } })).mounts)
-        .toMatchObject([{ settingResourceId: restored.promptResources[1]!.resourceId }])
+      expect((await runtime.listLoreMounts({ source: { kind: 'preset', id: presetId } })).mounts)
+        .toMatchObject([{ loreResourceId: restored.promptResources[1]!.resourceId }])
       expect((await runtime.listPresetToolMounts({ presetId })).mounts)
         .toMatchObject([{ toolId: restored.agentTools[0]!.toolId }])
       expect((await runtime.importExtensionPackageResources({ ...input, target: targetA })).mutation).toBeUndefined()

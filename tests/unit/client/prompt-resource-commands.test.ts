@@ -21,7 +21,7 @@ describe('prompt resource commands', () => {
     expect(duplicate).toHaveBeenCalledWith({ resourceId: 'preset-source' })
     expect(invalidate).toHaveBeenCalledWith({
       resources: true,
-      settingMounts: true,
+      loreMounts: true,
       presetToolMounts: true,
     })
   })
@@ -50,7 +50,7 @@ describe('prompt resource commands', () => {
 
 function commandInput(overrides: {
   api: StudioApi
-  invalidate: (areas: { presetToolMounts?: boolean; resources?: boolean; settingMounts?: boolean }) => Promise<void>
+  invalidate: (areas: { presetToolMounts?: boolean; resources?: boolean; loreMounts?: boolean }) => Promise<void>
   refreshAgentPresets?: () => Promise<unknown>
   refreshCards?: () => Promise<unknown>
   refreshCardTimelines?: (cardId: string) => Promise<unknown>
@@ -63,7 +63,7 @@ function commandInput(overrides: {
     recordEdit: () => undefined,
     promptResources: [],
     setPromptResources: () => undefined,
-    setSettingMounts: () => undefined,
+    setLoreMounts: () => undefined,
     setPresetToolMounts: () => undefined,
     invalidatePromptResourceState: overrides.invalidate,
     refreshAgentPresets: overrides.refreshAgentPresets ?? (async () => undefined),

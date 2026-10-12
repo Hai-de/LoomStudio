@@ -9,29 +9,17 @@ import { PanelTabs } from '../../shared/ui/panel-tabs/index.js'
 import type { PromptResource } from '../../entities/index.js'
 import { renderTemplateMacros, type MacroRenderContext } from '../../features/state-variables/model/macro-renderer.js'
 import styles from './character-panel.module.scss'
-import type { CardDirectoryCatalog } from '@loom-studio/shared'
 import { DirectoryDiscoveryNotice, type CardDirectoryApi } from './card-resource-overview.js'
 import { CardResourceDirectory } from './card-resource-directory.js'
 import { cardMediaUrl, useCardMediaRevision } from '../../shared/lib/card-media.js'
 import { normalizeSearchText } from '../../shared/lib/text.js'
-import { readBoundedResponseBlob } from '../../shared/browser/download.js'
 import { useQuery } from '@tanstack/react-query'
 import { OpeningPicker } from '../../features/cards/ui/opening-picker.js'
 import { openingChoiceText, type OpeningChoice } from '../../features/cards/model/opening-choice.js'
-
-type CharacterCardSummary = {
-  id: string
-  artifactId?: string
-  derivedFrom?: { artifactId: string }
-  version: number
-  name: string
-  userName?: string
-  description?: string
-  media?: { avatarAssetId?: string; coverAssetId?: string }
-  promptResourceIds?: string[]
-  settingLayer?: { entries: unknown[] }
-  opening?: import('../../entities/card.js').Card['opening']
-}
+import type { CharacterCardSummary } from '../../features/cards/model/character-card-summary.js'
+import { useCharacterProfileEditor } from '../../features/cards/model/use-character-profile-editor.js'
+import { useCardDirectoryDiscovery } from '../../features/cards/model/use-card-directory-discovery.js'
+import { useRemoteCardImport } from '../../features/cards/model/use-remote-card-import.js'
 
 type NarrativeTimelineView = { id: string; title?: string; createdAt: string; updatedAt: string }
 type GalleryMode = 'grid' | 'list'
@@ -50,7 +38,7 @@ type CharacterPanelProps = {
   endpoint: string
   onChangeResourceNode(id: string, partial: Partial<import('../../entities/index.js').ContextAssetNode>): void
   onCommitResourceNode(id: string, partial: Partial<import('../../entities/index.js').ContextAssetNode>): void
-  onOpenSetting?(resource: PromptResource, nodeId: string): void
+  onOpenLore?(resource: PromptResource, nodeId: string): void
   resourceDirectorySelectedId?: string
   resourceDirectoryExpandedIds?: string[]
   onResourceDirectoryStateChange?(selectedId: string | undefined, expandedIds: string[]): void
@@ -75,7 +63,6 @@ type CharacterPanelProps = {
 
 const GALLERY_PAGE_SIZE = 30
 const MAX_MEDIA_BYTES = 10 * 1024 * 1024
-const MAX_REMOTE_CARD_BYTES = 128 * 1024 * 1024
 const PAGE_TRANSITION_MS = 180
 
 export function CharacterPanel(props: CharacterPanelProps) {
@@ -97,31 +84,9 @@ export function CharacterPanel(props: CharacterPanelProps) {
   const [includePlayData, setIncludePlayData] = useState(true)
   const [includePromptResources, setIncludePromptResources] = useState(true)
   const [exportCard, setExportCard] = useState<CharacterCardSummary>()
-  const [remoteImportOpen, setRemoteImportOpen] = useState(false)
-  const [discovered, setDiscovered] = useState<CardDirectoryCatalog>()
-  const [refreshing, setRefreshing] = useState(false)
-  const [refreshError, setRefreshError] = useState('')
   const [profileTab, setProfileTab] = useState<'profile' | 'attachments'>(() => props.resourceDirectoryOpen ? 'attachments' : 'profile')
-
-  async function refreshGallery() {
-    setRefreshing(true)
-    setRefreshError('')
-    try {
-      await props.onRefreshCards?.()
-      const catalog = await props.directoryApi!.scan()
-      if (catalog.error) throw new Error(catalog.error)
-      setDiscovered(catalog.entries.some(entry => !entry.registeredCardId) ? catalog : undefined)
-    } catch (cause) { setRefreshError(cause instanceof Error ? cause.message : String(cause)) }
-    finally { setRefreshing(false) }
-  }
-  const [remoteImportUrl, setRemoteImportUrl] = useState('')
-  const [remoteImportError, setRemoteImportError] = useState('')
-  const [remoteImportBusy, setRemoteImportBusy] = useState(false)
-  const remoteImportAbortRef = useRef<AbortController | null>(null)
-  useEffect(() => () => {
-    remoteImportAbortRef.current?.abort()
-    remoteImportAbortRef.current = null
-  }, [])
+  const { discovered, closeDiscovery, refreshing, refreshError, refreshGallery } = useCardDirectoryDiscovery(props.directoryApi, props.onRefreshCards)
+  const { remoteImportOpen, setRemoteImportOpen, remoteImportUrl, changeRemoteImportUrl, remoteImportError, remoteImportBusy, closeRemoteImport, importRemoteCard } = useRemoteCardImport(props.onImportCards, props.t)
   const characterPanelRef = useRef<HTMLDivElement>(null)
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const backgroundInputRef = useRef<HTMLInputElement>(null)
@@ -165,111 +130,11 @@ export function CharacterPanel(props: CharacterPanelProps) {
   const selected = targetCardId
     ? detail.data?.card ?? galleryCards.find(card => card.id === targetCardId)
     : undefined
-  const [nameDraft, setNameDraft] = useState('')
-  const [authorDraft, setAuthorDraft] = useState('')
-  const [descDraft, setDescDraft] = useState('')
-  const [activeOpeningIndex, setActiveOpeningIndex] = useState(0)
-  const [openingDraft, setOpeningDraft] = useState('')
-
-  const totalOpenings = 1 + (selected?.opening?.alternatives?.length ?? 0)
-
-  useEffect(() => {
-    if (selected) {
-      setNameDraft(selected.name ?? '')
-      setAuthorDraft(selected.userName ?? '')
-      setDescDraft(selected.description ?? '')
-      setActiveOpeningIndex(prev => (prev < totalOpenings ? prev : 0))
-    }
-  }, [selected?.id, selected?.version])
-
-  useEffect(() => {
-    if (!selected?.opening) {
-      setOpeningDraft('')
-      return
-    }
-    if (activeOpeningIndex === 0) {
-      setOpeningDraft(selected.opening.entries?.[0]?.content ?? '')
-    } else {
-      setOpeningDraft(selected.opening.alternatives?.[activeOpeningIndex - 1]?.entries?.[0]?.content ?? '')
-    }
-  }, [selected?.id, activeOpeningIndex, selected?.opening])
-
-  async function saveCardField(patch: Partial<{ name: string; userName: string; description: string; opening: CharacterCardSummary['opening'] }>) {
-    if (!selected) return
-    try {
-      await props.onUpdateCardProfile({
-        cardId: selected.id,
-        expectedVersion: selected.version,
-        name: patch.name ?? selected.name,
-        userName: patch.userName ?? (selected.userName ?? ''),
-        description: patch.description ?? (selected.description ?? ''),
-        opening: patch.opening !== undefined ? patch.opening : selected.opening,
-      })
-      await detail.refetch()
-      await props.onRefreshCards?.()
-    } catch (err) {
-      console.error('Failed to update card profile', err)
-    }
-  }
-
-  async function handleOpeningBlur() {
-    if (!selected) return
-    const currentContent = activeOpeningIndex === 0
-      ? (selected.opening?.entries?.[0]?.content ?? '')
-      : (selected.opening?.alternatives?.[activeOpeningIndex - 1]?.entries?.[0]?.content ?? '')
-    if (openingDraft === currentContent) return
-
-    let updatedOpening: CharacterCardSummary['opening']
-    if (activeOpeningIndex === 0) {
-      const existingEntries = selected.opening?.entries ?? []
-      const newEntries = existingEntries.length > 0
-        ? existingEntries.map((entry, idx) => idx === 0 ? { ...entry, content: openingDraft } : entry)
-        : [{ role: 'assistant' as const, content: openingDraft }]
-      updatedOpening = {
-        ...selected.opening,
-        entries: newEntries,
-        alternatives: selected.opening?.alternatives ?? [],
-      }
-    } else {
-      const altIdx = activeOpeningIndex - 1
-      const currentAlts = selected.opening?.alternatives ?? []
-      const targetAlt = currentAlts[altIdx]
-      const newAltEntries = targetAlt?.entries?.length
-        ? targetAlt.entries.map((entry, idx) => idx === 0 ? { ...entry, content: openingDraft } : entry)
-        : [{ role: 'assistant' as const, content: openingDraft }]
-      const newAlts = currentAlts.map((alt, idx) => idx === altIdx ? { ...alt, entries: newAltEntries } : alt)
-      updatedOpening = {
-        entries: selected.opening?.entries ?? [{ role: 'assistant' as const, content: '' }],
-        alternatives: newAlts,
-      }
-    }
-    await saveCardField({ opening: updatedOpening })
-  }
-
-  async function handleAddAlternative() {
-    if (!selected) return
-    const currentAlts = selected.opening?.alternatives ?? []
-    const newAlts = [...currentAlts, { entries: [{ role: 'assistant' as const, content: '' }] }]
-    const updatedOpening = {
-      entries: selected.opening?.entries ?? [{ role: 'assistant' as const, content: '' }],
-      alternatives: newAlts,
-    }
-    await saveCardField({ opening: updatedOpening })
-    setActiveOpeningIndex(newAlts.length)
-  }
-
-  async function handleDeleteAlternative() {
-    if (!selected || activeOpeningIndex === 0) return
-    const altIdx = activeOpeningIndex - 1
-    const currentAlts = selected.opening?.alternatives ?? []
-    const newAlts = currentAlts.filter((_, idx) => idx !== altIdx)
-    const updatedOpening = {
-      entries: selected.opening?.entries ?? [{ role: 'assistant', content: '' }],
-      alternatives: newAlts,
-    }
-    setActiveOpeningIndex(prev => Math.max(0, prev - 1))
-    await saveCardField({ opening: updatedOpening })
-  }
+  const {
+    nameDraft, setNameDraft, authorDraft, setAuthorDraft, descDraft, setDescDraft,
+    activeOpeningIndex, setActiveOpeningIndex, openingDraft, setOpeningDraft, totalOpenings,
+    saveCardField, handleOpeningBlur, handleAddAlternative, handleDeleteAlternative
+  } = useCharacterProfileEditor({ selected, onUpdateCardProfile: props.onUpdateCardProfile, refreshDetail: detail.refetch, onRefreshCards: props.onRefreshCards })
 
   const [timelineSortOrder, setTimelineSortOrder] = useState<'desc' | 'asc'>('desc')
 
@@ -456,7 +321,7 @@ export function CharacterPanel(props: CharacterPanelProps) {
 
   const overlays = (
     <>
-      {discovered && props.directoryApi ? <DirectoryDiscoveryNotice catalog={discovered} api={props.directoryApi} onRefresh={props.onRefreshCards} t={props.t} onClose={() => setDiscovered(undefined)} /> : null}
+      {discovered && props.directoryApi ? <DirectoryDiscoveryNotice catalog={discovered} api={props.directoryApi} onRefresh={props.onRefreshCards} t={props.t} onClose={closeDiscovery} /> : null}
       {organization.groupsOpen ? (
         <CharacterGroupDialog
           activeGroupId={organization.activeGroupId}
@@ -524,8 +389,8 @@ export function CharacterPanel(props: CharacterPanelProps) {
         title={props.t('character.importRemote')}
         onClose={closeRemoteImport}
       >
-        <form className={styles.remoteImportForm} id="remote-card-import-form" onSubmit={event => void importRemoteCard(event)}>
-          <label><span>{props.t('character.importRemoteUrl')}</span><input autoFocus disabled={remoteImportBusy} inputMode="url" placeholder="https://cdn.example.com/card.png" type="url" value={remoteImportUrl} onChange={event => { setRemoteImportUrl(event.target.value); setRemoteImportError('') }} /></label>
+        <form className={styles.remoteImportForm} id="remote-card-import-form" onSubmit={event => { event.preventDefault(); void importRemoteCard() }}>
+          <label><span>{props.t('character.importRemoteUrl')}</span><input autoFocus disabled={remoteImportBusy} inputMode="url" placeholder="https://cdn.example.com/card.png" type="url" value={remoteImportUrl} onChange={event => changeRemoteImportUrl(event.target.value)} /></label>
           <p>{props.t('character.importRemoteWarning')}</p>
           {remoteImportError ? <p aria-live="polite" className={styles.remoteImportError}>{remoteImportError}</p> : null}
         </form>
@@ -772,7 +637,7 @@ export function CharacterPanel(props: CharacterPanelProps) {
                 }}
               />
             </div>
-            {profileTab === 'attachments' ? <div role="tabpanel" id="card-attachments-panel" aria-labelledby="card-attachments-tab"><CardResourceDirectory key={selected.id} api={props.resourceApi} endpoint={props.endpoint} directoryApi={props.directoryApi} cardId={selected.id} resources={props.resources ?? []} onChangeNode={props.onChangeResourceNode} onCommitNode={props.onCommitResourceNode} onRefreshCards={props.onRefreshCards} onOpenSetting={props.onOpenSetting} selectedTreeId={props.resourceDirectorySelectedId} expandedTreeIds={props.resourceDirectoryExpandedIds} onTreeStateChange={props.onResourceDirectoryStateChange} t={props.t} /></div> : <div role="tabpanel" id="card-profile-panel" aria-labelledby="card-profile-tab">
+            {profileTab === 'attachments' ? <div role="tabpanel" id="card-attachments-panel" aria-labelledby="card-attachments-tab"><CardResourceDirectory key={selected.id} api={props.resourceApi} endpoint={props.endpoint} directoryApi={props.directoryApi} cardId={selected.id} resources={props.resources ?? []} onChangeNode={props.onChangeResourceNode} onCommitNode={props.onCommitResourceNode} onRefreshCards={props.onRefreshCards} onOpenLore={props.onOpenLore} selectedTreeId={props.resourceDirectorySelectedId} expandedTreeIds={props.resourceDirectoryExpandedIds} onTreeStateChange={props.onResourceDirectoryStateChange} t={props.t} /></div> : <div role="tabpanel" id="card-profile-panel" aria-labelledby="card-profile-tab">
               {selected.artifactId ? <p className={styles.workIdentity}>{props.t('character.artifactId')}: <code>{selected.artifactId}</code>
                 {selected.derivedFrom ? <><br />{props.t('character.derivedFrom')}: <code>{selected.derivedFrom.artifactId}</code></> : null}
               </p> : null}
@@ -920,42 +785,7 @@ export function CharacterPanel(props: CharacterPanelProps) {
     void props.onExportCard(card, format).catch(() => undefined)
   }
 
-  function closeRemoteImport() {
-    if (remoteImportBusy) return
-    setRemoteImportOpen(false)
-    setRemoteImportUrl('')
-    setRemoteImportError('')
-  }
 
-  async function importRemoteCard(event: FormEvent) {
-    event.preventDefault()
-    if (remoteImportAbortRef.current) return
-    const controller = new AbortController()
-    remoteImportAbortRef.current = controller
-    setRemoteImportError('')
-    setRemoteImportBusy(true)
-    try {
-      const url = new URL(remoteImportUrl.trim())
-      if (url.protocol !== 'https:') throw new Error(props.t('character.importRemoteHttpsOnly'))
-      const response = await fetch(url, { credentials: 'omit', referrerPolicy: 'no-referrer', signal: controller.signal })
-      if (!response.ok) throw new Error(props.t('character.importRemoteDownloadFailed', { status: response.status }))
-      const blob = await readBoundedResponseBlob(response, MAX_REMOTE_CARD_BYTES, props.t('character.importRemoteTooLarge'))
-      controller.signal.throwIfAborted()
-      const fileName = remoteCardFileName(url, blob.type)
-      await props.onImportCards([new File([blob], fileName, { type: blob.type })])
-      if (controller.signal.aborted) return
-      setRemoteImportOpen(false)
-      setRemoteImportUrl('')
-    } catch (error) {
-      if (!controller.signal.aborted) setRemoteImportError(error instanceof Error ? error.message : String(error))
-    } finally {
-      controller.abort()
-      if (remoteImportAbortRef.current === controller) {
-        remoteImportAbortRef.current = null
-        setRemoteImportBusy(false)
-      }
-    }
-  }
 }
 
 function ExportOption(props: { description: string; icon: React.ReactNode; label: string; onClick(): void }) {
@@ -1193,10 +1023,4 @@ function formatTimelineDate(value: string): string {
 
 function shortId(id: string): string {
   return id.slice(0, 13)
-}
-
-function remoteCardFileName(url: URL, contentType: string): string {
-  const candidate = url.pathname.split('/').pop() || ''
-  if (/\.(?:loomcard|zip|png)$/i.test(candidate)) return candidate
-  return contentType === 'application/vnd.loom.card+zip' || contentType === 'application/zip' ? 'remote-card.loomcard.zip' : 'remote-card.png'
 }

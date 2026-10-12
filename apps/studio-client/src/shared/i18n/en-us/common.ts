@@ -36,6 +36,7 @@ export const messages = {
   'rail.recent': 'Recent',
   'rail.sessions': 'History',
   'rail.resource': 'Resources',
+  'rail.lore': 'Lore',
   'rail.inspector': 'Debug',
   'rail.logs': 'Logs',
   'rail.state': 'State Variables',

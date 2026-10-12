@@ -6,7 +6,7 @@
 
 | 当前数据 | 提供的能力 | 权威边界 |
 |---|---|---|
-| Preset / Setting 文本条目 | 保存正文、树结构、来源与 Capability，参与 PromptBuild | PromptResourceStore |
+| Preset / Lore 文本条目 | 保存正文、树结构、来源与 Capability，参与 PromptBuild | PromptResourceStore |
 | State | 保存可校验、可结构化修改的运行数据，供 Agent、Prompt 与 UI 读取 | StateStore；Timeline Head 由 Narrative Branch 持有 |
 | VariableSnapshot / 宏 | 将本次构建中的值投影为文本，记录读取与诊断 | 构建时快照，不是另一套持久化存储 |
 | Narrative Node / Agent Transcript | 保存已提交的正文或 Agent 执行记录 | NarrativeStore / AgentStore，二者不互相拥有 |
@@ -14,9 +14,9 @@
 
 这些数据可以被不同消费者组合，但一个消费者需要某份数据，不意味着它拥有该数据。Extension 私有配置不因为由插件生成就进入 State；Preset 读取 State 也不产生一个 Preset State Scope。详细边界见 [State 与变量](state-and-variables.md) 和 [Extension Data](extension/data-and-portable-payload.md)。
 
-## Preset 与 Setting 共用文本能力
+## Preset 与 Lore 共用文本能力
 
-Preset Entry 和 Setting Entry 使用同一 Prompt Resource 节点基础。Source Preparation 读取正文、保留来源、合并祖先与自身的启用状态和 Activation，再生成 Prompt Contribution。Preset 同时拥有有序树和 Anchor 排版职责，这不把其 Entry 变成另一种文本存储。
+Preset Entry 和 Lore Entry 使用同一 Prompt Resource 节点基础。Source Preparation 读取正文、保留来源、合并祖先与自身的启用状态和 Activation，再生成 Prompt Contribution。Preset 同时拥有有序树和 Anchor 排版职责，这不把其 Entry 变成另一种文本存储。
 
 两类 Entry 都可以携带 Activation。当前关键词匹配使用本轮 `userInput`；条件表达式读取独立传入的 `activationFacts`。Activation 在构建时求值，不修改作者持久化的 `enabled` 或原始正文。
 
@@ -67,7 +67,7 @@ Changeset 是提交事实，不是能够恢复任意领域对象的完整快照�
 以下机制在当前系统中不同，不能用“绑定后生命周期一致”概括：
 
 - Card 模板在创建 Timeline 时物化为初始 State；Schema 等运行依赖写入 Timeline Runtime Context。后续 Card 模板修改不重写既有 Timeline State。
-- Timeline 创建时保存的 Prompt Resource ID 列表仍可作为历史记录；后续 Agent Turn 以关联 Card 的当前 Prompt Resource IDs 加全局 Mount 读取 Settings，不再由创建时清单决定当前注入。移除挂载或删除资源后不回退旧清单；主 Preset 缺失仍明确失败，可选 Setting 缺失保留诊断。
+- Timeline 创建时保存的 Prompt Resource ID 列表仍可作为历史记录；后续 Agent Turn 以关联 Card 的当前 Prompt Resource IDs 加全局 Mount 读取 Lore，不再由创建时清单决定当前注入。移除挂载或删除资源后不回退旧清单；主 Preset 缺失仍明确失败，可选 Lore 缺失保留诊断。
 - Card 作者宏、规则/提取器与脚本 Mount 同样读取当前定义，不再从 Timeline Runtime Context 的旧动态资源快照恢复。State 约束与既有 Revision 保持原生命周期，不因更新作者资源自动重置。
 - Opening 在创建时渲染并保存成 Narrative Node；Branch Fork 保留既有 Node，而不是重新渲染来源 Card 的 Opening。
 - Extension Record 的绑定目标不等于其存储 Scope，也不意味着绑定对象的所有行为自动传播给 Record。

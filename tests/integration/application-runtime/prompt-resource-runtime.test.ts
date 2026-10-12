@@ -24,8 +24,8 @@ describe('Prompt Resource Store application runtime', () => {
       const promptResources = createPromptResourceStore({ engine, createId })
       const runtime = createApplicationRuntime({ dataEngine: engine, documents: createSqliteDocumentStore({ engine }), promptResources })
       const { resource: source } = await runtime.createPromptResource({ resourceKind: 'preset', name: 'Source' })
-      const { resource: setting } = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Setting' })
-      await runtime.replaceSettingMounts({ source: { kind: 'preset', id: source.id }, settingResourceIds: [setting.id] })
+      const { resource: setting } = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Setting' })
+      await runtime.replaceLoreMounts({ source: { kind: 'preset', id: source.id }, loreResourceIds: [setting.id] })
       const updated = await promptResources.mutateResource({
         resourceId: source.id, expectedVersion: source.version, actor: { kind: 'system', id: 'test' },
         mutations: [{ kind: 'resource.update', patch: { metadata: { custom: { retained: true }, macros: { old: 'value' } } } }],
@@ -35,8 +35,8 @@ describe('Prompt Resource Store application runtime', () => {
       expect(reads).toHaveBeenCalledTimes(1)
       expect(copy.resource.rootNode.id).not.toBe(source.rootNode.id)
       expect(copy.resource.macros).toEqual({ old: 'value' })
-      expect(await promptResources.listSettingMounts({ source: { kind: 'preset', id: copy.resource.id } }))
-        .toEqual([expect.objectContaining({ settingResourceId: setting.id })])
+      expect(await promptResources.listLoreMounts({ source: { kind: 'preset', id: copy.resource.id } }))
+        .toEqual([expect.objectContaining({ loreResourceId: setting.id })])
       reads.mockClear()
       await runtime.updatePromptResourceMacros({ resourceId: source.id, expectedVersion: updated.resource.version, macros: { next: 'value' } })
       expect(reads).toHaveBeenCalledTimes(1)
@@ -51,7 +51,7 @@ describe('Prompt Resource Store application runtime', () => {
     try {
       const promptResources = createPromptResourceStore({ engine, createId })
       const created = await promptResources.createResource({
-        actor: { kind: 'system', id: 'test' }, resourceKind: 'setting',
+        actor: { kind: 'system', id: 'test' }, resourceKind: 'lore',
         rootNode: { id: 'root', kind: 'module', label: 'Root', children: [
           { id: 'left', kind: 'folder', label: 'Left', children: [
             { id: 'a', kind: 'entry', label: 'A' }, { id: 'b', kind: 'entry', label: 'B' }, { id: 'c', kind: 'entry', label: 'C' },
@@ -91,7 +91,7 @@ describe('Prompt Resource Store application runtime', () => {
       const promptResources = createPromptResourceStore({ engine, createId })
       const legacy = { zoneId: '@chat.system', entryOrder: 10 }
       const created = await promptResources.createResource({
-        actor: { kind: 'system', id: 'test' }, resourceKind: 'setting',
+        actor: { kind: 'system', id: 'test' }, resourceKind: 'lore',
         rootNode: { id: 'root', kind: 'module', label: 'Root', children: [
           { id: 'entry', kind: 'entry', label: 'Entry', extra: { projection: legacy, custom: 'retained', orderList: ['a'] } },
         ] },
@@ -124,8 +124,8 @@ describe('Prompt Resource Store application runtime', () => {
       const documents = createSqliteDocumentStore({ engine })
       const promptResources = createPromptResourceStore({ engine, createId })
       const runtime = createApplicationRuntime({ dataEngine: engine, documents, promptResources })
-      const { resource } = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Target' })
-      const { resource: unrelated } = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Unrelated' })
+      const { resource } = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Target' })
+      const { resource: unrelated } = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Unrelated' })
       const { card } = await runtime.createCard({ name: 'Bound' })
       await runtime.updateCardPromptResources({ cardId: card.id, promptResourceIds: [resource.id] })
       const { card: deleted } = await runtime.createCard({ name: 'Deleted' })
@@ -134,8 +134,8 @@ describe('Prompt Resource Store application runtime', () => {
       for (let index = 0; index < 110; index++) {
         await runtime.createCard({ name: `Unrelated ${index}`, description: 'Unrelated body'.repeat(100) })
       }
-      await runtime.replaceSettingMounts({ source: { kind: 'manual', id: 'global' }, settingResourceIds: [resource.id, unrelated.id] })
-      const mounts = vi.spyOn(promptResources, 'listSettingMounts')
+      await runtime.replaceLoreMounts({ source: { kind: 'manual', id: 'global' }, loreResourceIds: [resource.id, unrelated.id] })
+      const mounts = vi.spyOn(promptResources, 'listLoreMounts')
       const reads = [
         vi.spyOn(promptResources, 'getResource').mockRejectedValue(new Error('Full resource read forbidden')),
         vi.spyOn(documents, 'list').mockRejectedValue(new Error('Full document list forbidden')),
@@ -143,9 +143,9 @@ describe('Prompt Resource Store application runtime', () => {
       try {
         const bindings = await runtime.getPromptResourceBindings({ resourceId: resource.id })
         expect(bindings.cards).toEqual([{ id: card.id, name: 'Bound' }])
-        expect(bindings.settingMounts).toHaveLength(1)
-        expect(bindings.settingMounts[0]?.settingResourceId).toBe(resource.id)
-        expect(mounts).toHaveBeenCalledWith({ settingResourceId: resource.id })
+        expect(bindings.loreMounts).toHaveLength(1)
+        expect(bindings.loreMounts[0]?.loreResourceId).toBe(resource.id)
+        expect(mounts).toHaveBeenCalledWith({ loreResourceId: resource.id })
         for (const read of reads) expect(read).not.toHaveBeenCalled()
       } finally {
         for (const read of reads) read.mockRestore()
@@ -166,7 +166,7 @@ describe('Prompt Resource Store application runtime', () => {
       const runtime = createApplicationRuntime({
         dataEngine: engine, documents: createSqliteDocumentStore({ engine }), promptResources,
       })
-      for (const resourceKind of ['preset', 'setting'] as const) {
+      for (const resourceKind of ['preset', 'lore'] as const) {
         const { resource } = await runtime.createPromptResource({ resourceKind, name: resourceKind })
         const first = resource.rootNode.children?.[0]
           ?? (await runtime.createPromptResourceAsset({
@@ -276,7 +276,7 @@ describe('Prompt Resource Store application runtime', () => {
       })
       const settings = []
       for (const label of ['OLD_SETTING', 'NEW_SETTING']) {
-        const { resource } = await runtime.createPromptResource({ resourceKind: 'setting', name: label })
+        const { resource } = await runtime.createPromptResource({ resourceKind: 'lore', name: label })
         await runtime.createPromptResourceAsset({
           resourceId: resource.id, targetAssetId: resource.rootNode.id, position: 'inside',
           asset: { id: `${resource.id}.body`, kind: 'entry', label, body: label, capabilities: { targetAnchorId: '@chat.system' } },
@@ -363,9 +363,9 @@ describe('Prompt Resource Store application runtime', () => {
       const promptResources = createPromptResourceStore({ engine, createId, now })
       const runtime = createApplicationRuntime({ dataEngine: engine, documents, promptResources })
       const { resource: preset } = await runtime.createPromptResource({ resourceKind: 'preset', name: 'Preset' })
-      const { resource: setting } = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Setting' })
-      await runtime.replaceSettingMounts({ source: { kind: 'preset', id: preset.id }, settingResourceIds: [setting.id] })
-      const mounts = await promptResources.listSettingMounts()
+      const { resource: setting } = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Setting' })
+      await runtime.replaceLoreMounts({ source: { kind: 'preset', id: preset.id }, loreResourceIds: [setting.id] })
+      const mounts = await promptResources.listLoreMounts()
       await runtime.deletePromptResource({ resourceId: setting.id })
       expect(await promptResources.getResource(setting.id)).toBeNull()
       const input = { promptResources, preset, contextResourceIds: [], agentMessages: [], userInput: 'Hi' }
@@ -375,7 +375,7 @@ describe('Prompt Resource Store application runtime', () => {
         severity: 'warning', code: 'prompt.resource_missing', resourceId: setting.id,
       }))
       expect(result.toolExecutionScope.vfsResourceIds).not.toContain(setting.id)
-      expect(await promptResources.listSettingMounts()).toEqual(mounts)
+      expect(await promptResources.listLoreMounts()).toEqual(mounts)
       await runtime.deletePromptResource({ resourceId: preset.id })
       await expect(composeAgentTurnPrompt(input)).rejects.toThrow(`Prompt resource not found: ${preset.id}`)
       vi.spyOn(promptResources, 'getResource').mockRejectedValue(new Error('storage unavailable'))
@@ -496,7 +496,7 @@ describe('Prompt Resource Store application runtime', () => {
     const firstDocuments = createSqliteDocumentStore({ engine: firstEngine })
     const firstStore = createPromptResourceStore({ engine: firstEngine, createId, now })
     const firstRuntime = createApplicationRuntime({ dataEngine: firstEngine, documents: firstDocuments, promptResources: firstStore })
-    const setting = await firstRuntime.createPromptResource({ resourceKind: 'setting', name: 'Persisted Setting' })
+    const setting = await firstRuntime.createPromptResource({ resourceKind: 'lore', name: 'Persisted Setting' })
     await firstRuntime.createPromptResourceAsset({
       resourceId: setting.resource.id,
       targetAssetId: setting.resource.rootNode.id,
@@ -504,7 +504,7 @@ describe('Prompt Resource Store application runtime', () => {
       asset: { id: 'persisted-entry', kind: 'entry', label: 'Entry', body: 'Persisted body' },
     })
     const preset = await firstRuntime.createPromptResource({ resourceKind: 'preset', name: 'Persisted Preset' })
-    await firstRuntime.replaceSettingMounts({ source: { kind: 'preset', id: preset.resource.id }, settingResourceIds: [setting.resource.id] })
+    await firstRuntime.replaceLoreMounts({ source: { kind: 'preset', id: preset.resource.id }, loreResourceIds: [setting.resource.id] })
     firstEngine.close()
 
     const secondEngine = createSqliteDataEngine({ filename, createId, now })
@@ -512,7 +512,7 @@ describe('Prompt Resource Store application runtime', () => {
     const secondStore = createPromptResourceStore({ engine: secondEngine, createId, now })
     const secondRuntime = createApplicationRuntime({ dataEngine: secondEngine, documents: secondDocuments, promptResources: secondStore })
     const readPreset = await secondRuntime.getPromptResource({ resourceId: preset.resource.id })
-    await expect(secondRuntime.listSettingMounts({ source: { kind: 'preset', id: preset.resource.id } })).resolves.toMatchObject({ mounts: [{ settingResourceId: setting.resource.id, source: { kind: 'preset', id: preset.resource.id } }] })
+    await expect(secondRuntime.listLoreMounts({ source: { kind: 'preset', id: preset.resource.id } })).resolves.toMatchObject({ mounts: [{ loreResourceId: setting.resource.id, source: { kind: 'preset', id: preset.resource.id } }] })
     expect(readPreset.resource.rootNode).toEqual(preset.resource.rootNode)
     expect((await secondRuntime.getPromptResource({ resourceId: setting.resource.id })).resource.rootNode.children?.[0]?.body).toBe('Persisted body')
     secondEngine.close()
@@ -526,8 +526,8 @@ describe('Prompt Resource Store application runtime', () => {
     const documents = createSqliteDocumentStore({ engine })
     const promptResources = createPromptResourceStore({ engine, createId, now })
     const runtime = createApplicationRuntime({ dataEngine: engine, documents, promptResources })
-    const settingA = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Setting A' })
-    const settingB = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Setting B' })
+    const settingA = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Setting A' })
+    const settingB = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Setting B' })
     for (const [resource, body] of [[settingA, 'A only'], [settingB, 'B only']] as const) {
       await runtime.createPromptResourceAsset({
         resourceId: resource.resource.id,
@@ -538,8 +538,8 @@ describe('Prompt Resource Store application runtime', () => {
     }
     const presetA = await runtime.createPromptResource({ resourceKind: 'preset', name: 'Preset A' })
     const presetB = await runtime.createPromptResource({ resourceKind: 'preset', name: 'Preset B' })
-    await runtime.replaceSettingMounts({ source: { kind: 'manual', id: 'global' }, settingResourceIds: [settingA.resource.id] })
-    await runtime.replaceSettingMounts({ source: { kind: 'preset', id: presetB.resource.id }, settingResourceIds: [settingB.resource.id] })
+    await runtime.replaceLoreMounts({ source: { kind: 'manual', id: 'global' }, loreResourceIds: [settingA.resource.id] })
+    await runtime.replaceLoreMounts({ source: { kind: 'preset', id: presetB.resource.id }, loreResourceIds: [settingB.resource.id] })
     const promptA = await composeAgentTurnPrompt({ promptResources, contextResourceIds: [], preset: (await runtime.getPromptResource({ resourceId: presetA.resource.id })).resource, agentMessages: [], userInput: 'Hi' })
     const promptB = await composeAgentTurnPrompt({ promptResources, contextResourceIds: [], preset: (await runtime.getPromptResource({ resourceId: presetB.resource.id })).resource, agentMessages: [], userInput: 'Hi' })
     expect(promptA.messages.some(message => typeof message.content === 'string' && message.content.includes('A only'))).toBe(false)
@@ -562,26 +562,26 @@ describe('Prompt Resource Store application runtime', () => {
         narratives: createNarrativeStore({ engine, createId, now }),
       })
       const preset = await runtime.createPromptResource({ resourceKind: 'preset', name: 'Preset' })
-      const setting = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Setting' })
-      const cardSetting = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Card Setting' })
+      const setting = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Setting' })
+      const cardLore = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Card Setting' })
       await runtime.createPromptResourceAsset({
-        resourceId: cardSetting.resource.id, targetAssetId: cardSetting.resource.rootNode.id, position: 'inside',
+        resourceId: cardLore.resource.id, targetAssetId: cardLore.resource.rootNode.id, position: 'inside',
         asset: { id: 'card-setting-entry', kind: 'entry', label: 'Card Setting', body: 'CARD_DEFAULT_MARKER', capabilities: { targetAnchorId: '@chat.system' } },
       })
       const { card } = await runtime.createCard({ name: 'Role' })
-      await runtime.updateCardPromptResources({ cardId: card.id, promptResourceIds: [cardSetting.resource.id] })
+      await runtime.updateCardPromptResources({ cardId: card.id, promptResourceIds: [cardLore.resource.id] })
       const { timeline } = await runtime.createNarrativeTimeline({ cardId: card.id })
       const { providerProfile } = await runtime.createProviderProfile({
         providerExtensionId: 'official.fake', displayName: 'Test', config: {}, enabledModelIds: [officialFakeModelId],
       })
-      await runtime.replaceSettingMounts({ source: { kind: 'preset', id: preset.resource.id }, settingResourceIds: [setting.resource.id] })
+      await runtime.replaceLoreMounts({ source: { kind: 'preset', id: preset.resource.id }, loreResourceIds: [setting.resource.id] })
       const current = (await runtime.getAgentPreset({ agentPresetId: preset.resource.id })).agentPreset
       await runtime.updateAgentPreset({
-        agentPresetId: current.id, expectedVersion: current.version, useCardSettings: false,
+        agentPresetId: current.id, expectedVersion: current.version, useCardLore: false,
         model: { providerProfileId: providerProfile.id, modelId: officialFakeModelId },
       })
-      expect((await runtime.getAgentPreset({ agentPresetId: current.id })).agentPreset.useCardSettings).toBe(false)
-      expect((await promptResources.listSettingMounts({ source: { kind: 'preset', id: current.id } })).map(mount => mount.settingResourceId)).toEqual([setting.resource.id])
+      expect((await runtime.getAgentPreset({ agentPresetId: current.id })).agentPreset.useCardLore).toBe(false)
+      expect((await promptResources.listLoreMounts({ source: { kind: 'preset', id: current.id } })).map(mount => mount.loreResourceId)).toEqual([setting.resource.id])
       const { session } = await runtime.createAgentSession({ agentPresetId: current.id, timelineId: timeline.id })
       expect(JSON.stringify((await runtime.previewAgentTurn({ agentSessionId: session.id, input: 'Hi' })).messages))
         .not.toContain('CARD_DEFAULT_MARKER')
@@ -611,7 +611,7 @@ describe('Prompt Resource Store application runtime', () => {
     expect(promptImport.resource.rootNode.label).toBe(promptExport.artifact.rootNode.label)
     expect(promptImport.resource.rootNode.children?.map(node => node.label)).toEqual(promptExport.artifact.rootNode.children?.map(node => node.label))
 
-    const legacy = await runtime.createPromptResource({ resourceKind: 'setting', name: 'Legacy Extra' })
+    const legacy = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Legacy Extra' })
     await runtime.createPromptResourceAsset({
       resourceId: legacy.resource.id,
       targetAssetId: legacy.resource.rootNode.id,

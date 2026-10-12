@@ -624,14 +624,14 @@ export type ExtensionRuntimeContributions = {
   agentToolHandlers?: Array<{ toolId: string }>
 }
 
-export type ExtensionPromptResourceKind = 'preset' | 'setting' | 'logic' | 'runtime' | 'history' | 'prompt'
+export type ExtensionPromptResourceKind = 'preset' | 'lore' | 'logic' | 'runtime' | 'history' | 'prompt'
 
 export type ExtensionPromptResourceContribution = {
   id: string
   resourceKind: ExtensionPromptResourceKind
   source: string
   scriptMounts?: Array<{ scriptId: string; orderIndex?: number }>
-  settingMounts?: Array<{
+  loreMounts?: Array<{
     resourceId?: string
     reference?: { kind: 'package'; contributionId: string } | {
       kind: 'external'
@@ -676,7 +676,7 @@ export type { ExtensionStateInitializationContext, ExtensionStateInitializer } f
 export type { ExtensionStateContentHandler } from './state-content.js'
 
 export type ExtensionPromptAddition = {
-  settingResourceIds?: string[]
+  loreResourceIds?: string[]
   content?: Array<{
     targetAnchorId: string
     content: string
