@@ -74,6 +74,7 @@ import { readString } from './rpc/rpc-params.js'
 import { resolveLoomStudioLocalPaths, type LoomStudioLocalPaths } from './platform/local-paths.js'
 
 const defaultPort = 18010
+const defaultClientOrigin = process.env.STUDIO_CLIENT_URL ?? 'http://127.0.0.1:18011'
 const installationRoot = fileURLToPath(new URL('../../../', import.meta.url))
 
 export type StudioServer = {
@@ -658,7 +659,7 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
   }
   const server = createStudioHttpServer({
     auth: createApplicationSessionAuth({
-      allowedOrigins: options.applicationSessionOrigins ?? (options.runtimeMode === 'production' ? [] : ['http://127.0.0.1:18011']),
+      allowedOrigins: options.applicationSessionOrigins ?? (options.runtimeMode === 'production' ? [] : [defaultClientOrigin]),
     }),
     clientDirectory: options.clientDirectory,
     assets,
@@ -946,7 +947,7 @@ function printStudioServerBanner(port: number, development: boolean): void {
     const time = new Date().toLocaleTimeString('zh-CN', { hour12: false })
     const nodeVer = process.version
     const serverUrl = `http://127.0.0.1:${port}`
-    const clientUrl = development ? 'http://127.0.0.1:18011' : serverUrl
+    const clientUrl = development ? defaultClientOrigin : serverUrl
 
     // OSC 8 原生终端可点击超链接 (VSCode/iTerm2/Ghostty 支持直接按住点击打开)
     const serverLink = `\x1b]8;;${serverUrl}\x1b\\${serverUrl}\x1b]8;;\x1b\\`
