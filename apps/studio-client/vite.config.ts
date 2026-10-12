@@ -7,7 +7,7 @@ import { defineConfig, type PluginOption } from 'vite'
 
 const resolvePath = (relative: string) => fileURLToPath(new URL(relative, import.meta.url))
 const packageVersion = JSON.parse(readFileSync(resolvePath('../../package.json'), 'utf8')).version as string
-const studioServerUrl = process.env.STUDIO_SERVER_URL ?? 'http://127.0.0.1:4173'
+const studioServerUrl = process.env.STUDIO_SERVER_URL ?? 'http://127.0.0.1:18010'
 const analyzeBundle = process.env.LOOM_ANALYZE_BUNDLE === '1'
 
 export default defineConfig({
@@ -64,7 +64,7 @@ export default defineConfig({
   },
   server: {
     host: '127.0.0.1',
-    port: 5173,
+    port: 18011,
     proxy: {
       '/auth': studioServerUrl,
       '/assets': studioServerUrl,

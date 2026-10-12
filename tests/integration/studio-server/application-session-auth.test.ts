@@ -19,7 +19,7 @@ describe('Studio Server application session auth', () => {
       expect((await fetch(url, { method: 'POST' })).status).toBe(403)
       expect((await fetch(url, {
         method: 'POST',
-        headers: { origin: 'http://localhost:5173' },
+        headers: { origin: 'http://localhost:18011' },
       })).status).toBe(403)
       expect((await fetch(url, {
         method: 'POST',
@@ -48,7 +48,7 @@ describe('Studio Server application session auth', () => {
     await withStudioServer(async port => {
       const response = await fetch(`http://127.0.0.1:${port}/auth/session`, {
         method: 'POST',
-        headers: { origin: 'http://127.0.0.1:5173' },
+        headers: { origin: 'http://127.0.0.1:18011' },
       })
       expect(response.status).toBe(204)
       expect(response.headers.get('set-cookie')).toContain('HttpOnly')

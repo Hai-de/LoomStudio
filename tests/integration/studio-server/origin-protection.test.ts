@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApplicationSessionAuth } from '../../../apps/studio-server/src/http/application-session-auth.js'
 import { createStudioHttpServer } from '../../../apps/studio-server/src/http/http-server.js'
 
-const viteOrigin = 'http://127.0.0.1:5173'
+const viteOrigin = 'http://127.0.0.1:18011'
 const configuredOrigin = 'https://localhost:5443'
 const rpcBody = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'test.mutate', params: { value: 'control' } })
 
@@ -69,12 +69,12 @@ describe('protected HTTP Origin boundary', () => {
     'null',
     '',
     'http://127.0.0.1:5999',
-    'http://localhost:5173',
-    'http://127.0.0.1:5173.evil.example',
+    'http://localhost:18011',
+    'http://127.0.0.1:18011.evil.example',
     `${viteOrigin}/path`,
     `${viteOrigin}/`,
     `${viteOrigin}?query=1`,
-    'http://user@127.0.0.1:5173',
+    'http://user@127.0.0.1:18011',
     `${viteOrigin}, http://127.0.0.1:5999`,
   ])('rejects non-allowlisted or non-Origin header %j even with JSON', async deniedOrigin => {
     const response = await fetch(`${origin}/rpc`, {

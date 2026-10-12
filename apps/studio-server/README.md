@@ -16,7 +16,7 @@ Studio Server 是本地 Node.js 进程的 Composition Root 与 Transport Adapter
 pnpm dev:server
 ```
 
-该命令会先构建内部 Packages，持续监听 Packages，再通过 `tsx watch` 启动 Server。独立扩展在根目录 `extensions/` 开发，自行构建并通过扩展中心重载，不由主程序代为构建。默认监听 `127.0.0.1:4173`，可通过 `PORT` 覆盖；持久数据默认写入仓库 `data/`，缓存和日志默认在 `.loomstudio-dev/`。`LOOM_STUDIO_DATA_ROOT` 可覆盖持久数据根；已有旧目录的迁移及显式 `LOOM_STUDIO_HOME` 行为见 [Getting Started](../../docs/guide/getting-started.md)。
+该命令会先构建内部 Packages，持续监听 Packages，再通过 `tsx watch` 启动 Server。独立扩展在根目录 `extensions/` 开发，自行构建并通过扩展中心重载，不由主程序代为构建。默认监听 `127.0.0.1:18010`，可通过 `PORT` 覆盖；持久数据默认写入仓库 `data/`，缓存和日志默认在 `.loomstudio-dev/`。`LOOM_STUDIO_DATA_ROOT` 可覆盖持久数据根；已有旧目录的迁移及显式 `LOOM_STUDIO_HOME` 行为见 [Getting Started](../../docs/guide/getting-started.md)。
 
 监听排除 `.tsbuildinfo`，避免 TypeScript 构建元数据更新引起无效重启和重复启动 banner；运行文件发生变化仍会正常重启并打印新的启动信息。修改监听参数后需重新启动 `pnpm dev:server`。
 

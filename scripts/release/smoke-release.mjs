@@ -111,7 +111,7 @@ try {
   assert.equal((await request('/app-assets/missing.js')).status, 404)
   assert.equal((await request('/rpc', { method: 'POST' })).status, 401)
   assert.equal((await request('/extensions/events')).status, 401)
-  assert.equal((await request('/auth/session', { method: 'POST', headers: { origin: 'http://127.0.0.1:5173' } })).status, 403)
+  assert.equal((await request('/auth/session', { method: 'POST', headers: { origin: 'http://127.0.0.1:18011' } })).status, 403)
   async function session() {
     const response = await request('/auth/session', { method: 'POST', headers: { origin } })
     assert.equal(response.status, 204)

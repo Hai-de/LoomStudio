@@ -37,7 +37,7 @@ pnpm dev:server
 pnpm dev:client
 ```
 
-`dev:client` 会先构建并监听内部 Packages，再启动 `127.0.0.1:5173`。Vite 将 `/auth`、`/assets`、`/cards`、`/extensions` 和 `/rpc` 代理到 `STUDIO_SERVER_URL`，默认是 `http://127.0.0.1:4173`。
+`dev:client` 会先构建并监听内部 Packages，再启动 `127.0.0.1:18011`。Vite 将 `/auth`、`/assets`、`/cards`、`/extensions` 和 `/rpc` 代理到 `STUDIO_SERVER_URL`，默认是 `http://127.0.0.1:18010`。
 
 若 Server 通过 `PORT` 改用其他端口，启动 Client 时也需设置对应的 `STUDIO_SERVER_URL`。RPC 使用 HTTP `POST /rpc`；Extension Catalog 变化使用 `/extensions/events` SSE。
 
