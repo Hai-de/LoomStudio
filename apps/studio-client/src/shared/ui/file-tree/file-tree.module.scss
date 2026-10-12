@@ -1,7 +1,21 @@
 .tree {
+  --loom-sliding-hover-inset-x: 6px;
+  position: relative;
   min-height: 0;
   overflow: auto;
   padding: 6px 0 14px;
+}
+
+.hoverIndicator {
+  position: absolute;
+  top: 0;
+  left: 6px;
+  right: 6px;
+  border-radius: var(--loom-radius-surface);
+  background: color-mix(in srgb, var(--loom-color-surface-raised) 80%, transparent);
+  pointer-events: none;
+  z-index: 0;
+  will-change: transform, opacity;
 }
 
 .virtualTree {
@@ -56,6 +70,7 @@
   --loom-tree-icon-stroke: 1.25;
 
   position: relative;
+  z-index: 1;
   width: calc(100% - 12px);
   min-height: 30px;
   display: flex;
@@ -159,10 +174,28 @@
   cursor: pointer;
 }
 
-.row:hover,
-.selected {
+.row:hover:not(.selected) {
   color: var(--loom-color-text);
-  background: color-mix(in srgb, var(--loom-color-surface) 54%, transparent);
+  background: transparent;
+
+  .icon {
+    color: var(--loom-color-text);
+  }
+}
+
+.selected {
+  color: var(--loom-color-accent-strong);
+  background: color-mix(in srgb, var(--loom-color-accent-strong) 14%, var(--loom-color-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--loom-color-accent-strong) 25%, transparent);
+
+  .icon {
+    color: var(--loom-color-accent-strong);
+  }
+
+  .label {
+    color: var(--loom-color-accent-strong);
+    font-weight: var(--loom-font-weight-5);
+  }
 }
 
 .dragging {
@@ -394,8 +427,37 @@
 }
 
 .expandedRow {
+  --loom-tree-base-x: 23px;
+  --loom-tree-guide-x: var(--loom-tree-base-x);
+  --loom-tree-indent-step: 8px;
+
+  &.noDrag {
+    --loom-tree-base-x: 9px;
+  }
+
   position: relative;
-  padding: 6px 14px 10px calc(var(--loom-tree-guide-x) + (var(--loom-tree-level) * var(--loom-tree-indent-step)) + 16px);
-  background: color-mix(in srgb, var(--loom-color-surface) 25%, transparent);
-  border-bottom: 1px solid var(--loom-color-divider, rgba(255, 255, 255, 0.05));
+  z-index: 1;
+  margin-inline: 6px;
+  line-height: 1.5;
+
+  .guideColumns {
+    position: absolute;
+    z-index: 0;
+    top: 0;
+    bottom: 0;
+    left: var(--loom-tree-guide-x);
+    display: flex;
+    pointer-events: none;
+  }
+
+  .guideColumn {
+    width: var(--loom-tree-indent-step);
+    border-left: 1px solid var(--loom-color-border);
+  }
+}
+
+.expandedRowContent {
+  position: relative;
+  z-index: 1;
+  padding: 4px 14px 8px calc(var(--loom-tree-guide-x) + ((var(--loom-tree-level) - 1) * var(--loom-tree-indent-step)) + 24px);
 }

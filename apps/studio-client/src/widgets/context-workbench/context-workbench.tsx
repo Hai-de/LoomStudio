@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Trash2, X } from 'lucide-react'
 import { DEFAULT_ASSET_VIEW_STATE, useStudioLayoutStore } from '../../shared/studio-shell/studio-layout-store.js'
 import { AssetWorkbenchLayout } from '../../shared/ui/asset-workbench-layout/asset-workbench-layout.js'
 import { PanelTabs } from '../../shared/ui/panel-tabs/index.js'
@@ -15,7 +15,7 @@ import { ContextAssetEditor, ContextAssetExplorer } from '../../features/context
 import { findContextAssetPath, findContextAssetByVirtualPath } from '../../features/context-assets/model/context-asset-tree.js'
 import { PromptResourceToolbar } from '../../features/context-assets/ui/prompt-resource-toolbar/prompt-resource-toolbar.js'
 import { useResourceTokenSnapshot } from '../../features/context-assets/model/use-resource-token-snapshot.js'
-import { Dialog } from '@loom-studio/ui'
+import { Dialog, SearchField } from '@loom-studio/ui'
 import type { Card, ContextAssetNode, PromptResource, SettingMount, SettingMountSource } from '../../entities/index.js'
 import type { Translator } from '../../shared/i18n/index.js'
 import styles from './context-workbench.module.scss'
@@ -134,7 +134,8 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
           ? (installation?.packageId ?? origin.packageId)
           : props.t('agent.sources.workspace')
 
-      const isGlobal = globalMountIds.has(resource.id)
+      const isGlobalInstallation = isExtension && installation?.target.kind === 'global'
+      const isGlobal = globalMountIds.has(resource.id) || isGlobalInstallation || isBuiltin
       const isCurrent = cardResourceIds.has(resource.id)
       const scopeBadge = isGlobal && isCurrent ? props.t('context.scope.globalAndCurrent') : isGlobal ? props.t('context.scope.globalDefault') : isCurrent ? props.t('context.scope.currentCard') : undefined
       const meta = [scopeBadge, originLabel].filter(Boolean).join(' · ')
@@ -160,7 +161,26 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
   const hasDetailSelection = Boolean(selectedNode || selectedSettingResource)
 
   const bindingResources = props.resources
-  const boundIds = scopeFilter === 'global' ? [...globalMountIds] : props.card?.promptResourceIds ?? []
+  const readonlyGlobalIds = useMemo(() => {
+    if (scopeFilter === 'current') return new Set<string>()
+    const ids = new Set<string>()
+    for (const res of settingResources) {
+      const origin = res.origin
+      const isExtension = origin?.kind === 'extension-package'
+      const installation = origin?.kind === 'extension-package'
+        ? props.extensionInstallations?.find(inst => inst.id === origin.installationId && inst.packageId === origin.packageId)
+        : undefined
+      if ((isExtension && installation?.target.kind === 'global') || origin?.kind === 'builtin') {
+        ids.add(res.id)
+      }
+    }
+    return ids
+  }, [scopeFilter, settingResources, props.extensionInstallations])
+
+  const boundIds = useMemo(() => {
+    if (scopeFilter === 'current') return props.card?.promptResourceIds ?? []
+    return [...new Set([...globalMountIds, ...readonlyGlobalIds])]
+  }, [scopeFilter, globalMountIds, readonlyGlobalIds, props.card?.promptResourceIds])
 
   useEffect(() => {
     if (!props.routeAssetId || target.temporary) return
@@ -320,19 +340,20 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
               else setSelectedId('resources', props.workspaceId, undefined)
             }}
             onToggleEnabled={(id, enabled) => {
-              props.onChangeNode(id, { enabled })
               props.onCommitNode(id, { enabled })
             }}
           />
           <ResourceBindingDialog
             boundIds={boundIds}
+            readonlyIds={readonlyGlobalIds}
+            extensionInstallations={props.extensionInstallations}
             description={props.t(scopeFilter === 'global' ? 'context.globalBindings.description' : 'context.cardBindings.description')}
             open={bindingOpen}
             resources={bindingResources}
             t={props.t}
             title={props.t(scopeFilter === 'global' ? 'context.globalBindings.title' : 'context.cardBindings.title')}
             onChange={resourceIds => scopeFilter === 'global'
-              ? props.onReplaceSettingMounts({ kind: 'manual', id: 'global' }, resourceIds)
+              ? props.onReplaceSettingMounts({ kind: 'manual', id: 'global' }, resourceIds.filter(id => !readonlyGlobalIds.has(id)))
               : props.onReplaceCardResources(props.card!.id, resourceIds)}
             onClose={() => setBindingOpen(false)}
           />
@@ -369,6 +390,8 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
 
 function ResourceBindingDialog(props: {
   boundIds: string[]
+  readonlyIds?: ReadonlySet<string>
+  extensionInstallations?: import('../../entities/index.js').ListExtensionInstallationsResult['installations']
   description: string
   open: boolean
   resources: PromptResource[]
@@ -405,32 +428,93 @@ function ResourceBindingDialog(props: {
       <div className={styles.bindingEditor}>
         {error ? <p role="alert">{error}</p> : null}
         <div className={styles.globalSettingOptions}>
-          {bound.map(({ id, resource }) => (
-            <button aria-label={props.t('context.bindings.remove', { id })} disabled={pending} key={id} type="button" onClick={() => void change(props.boundIds.filter(candidate => candidate !== id))}>
-              <span>{resource?.rootNode.label ?? props.t('context.bindings.unavailable', { id })}</span>
-              <span aria-hidden="true">×</span>
-            </button>
-          ))}
+          {bound.map(({ id, resource }) => {
+            const isReadonly = Boolean(props.readonlyIds?.has(id))
+            const origin = resource?.origin
+            const isBuiltin = origin?.kind === 'builtin'
+            const isExtension = origin?.kind === 'extension-package'
+            const installation = origin?.kind === 'extension-package'
+              ? props.extensionInstallations?.find(inst => inst.id === origin.installationId && inst.packageId === origin.packageId)
+              : undefined
+            const originLabel = isBuiltin
+              ? props.t('promptResource.official')
+              : isExtension
+                ? (installation?.packageId ?? origin.packageId ?? props.t('directory.extensionContribution'))
+                : undefined
+
+            if (isReadonly) {
+              return (
+                <span key={id} className={styles.globalSettingPillReadonly} title={originLabel}>
+                  <span>{resource?.rootNode.label ?? props.t('context.bindings.unavailable', { id })}</span>
+                  {originLabel ? <small className={styles.pillBadge}>{originLabel}</small> : null}
+                </span>
+              )
+            }
+
+            return (
+              <button
+                aria-label={props.t('context.bindings.remove', { id })}
+                className={styles.globalSettingPill}
+                disabled={pending}
+                key={id}
+                type="button"
+                onClick={() => void change(props.boundIds.filter(candidate => candidate !== id))}
+              >
+                <span>{resource?.rootNode.label ?? props.t('context.bindings.unavailable', { id })}</span>
+                <X aria-hidden="true" size={12} />
+              </button>
+            )
+          })}
         </div>
-        {bound.some(item => !item.resource) ? <button disabled={pending} type="button" onClick={() => void change(bound.filter(item => item.resource).map(item => item.id))}>
-          <Trash2 aria-hidden="true" size={14} />{props.t('context.bindings.removeUnavailable')}
-        </button> : null}
-        <input
+        {bound.some(item => !item.resource && !props.readonlyIds?.has(item.id)) ? (
+          <button
+            className={styles.removeUnavailableButton}
+            disabled={pending}
+            type="button"
+            onClick={() => void change(bound.filter(item => item.resource || props.readonlyIds?.has(item.id)).map(item => item.id))}
+          >
+            <Trash2 aria-hidden="true" size={14} />
+            {props.t('context.bindings.removeUnavailable')}
+          </button>
+        ) : null}
+        <SearchField
           autoFocus
           aria-label={props.t('context.bindings.search')}
+          clearLabel={props.t('context.search.clear')}
           disabled={pending}
           placeholder={props.t('context.bindings.searchPlaceholder')}
-          type="search"
           value={query}
           onChange={event => setQuery(event.target.value)}
+          onClear={() => setQuery('')}
         />
         <div className={styles.bindingResults}>
-          {available.length === 0 ? <span>{props.t('context.bindings.noResults')}</span> : available.map(resource => (
-              <button disabled={pending} key={resource.id} type="button" onClick={() => void change([...props.boundIds, resource.id])}>
-                <strong>{resource.rootNode.label}</strong>
-                <small>{resource.resourceKind}</small>
-              </button>
-            ))}
+          {available.length === 0 ? (
+            <span className={styles.bindingEmpty}>{props.t('context.bindings.noResults')}</span>
+          ) : (
+            available.map(resource => {
+              const origin = resource.origin
+              const isBuiltin = origin?.kind === 'builtin'
+              const isExtension = origin?.kind === 'extension-package'
+              const badgeLabel = isBuiltin
+                ? props.t('promptResource.official')
+                : isExtension
+                  ? origin.packageId
+                  : resource.resourceKind
+
+              return (
+                <button
+                  className={styles.bindingItem}
+                  disabled={pending}
+                  key={resource.id}
+                  type="button"
+                  onClick={() => void change([...props.boundIds, resource.id])}
+                >
+                  <strong className={styles.bindingItemLabel}>{resource.rootNode.label}</strong>
+                  <small className={styles.bindingItemBadge}>{badgeLabel}</small>
+                </button>
+              )
+            })
+          )}
         </div>
       </div>
     </Dialog>

@@ -25,7 +25,8 @@ export function NotificationToaster(props: { label: string }) {
         closeButton
         containerAriaLabel={props.label}
         duration={8000}
-        gap={8}
+        expand={false}
+        gap={10}
         mobileOffset={{ top: 12, right: 12, left: 12 }}
         offset={{ top: 16 }}
         position="top-center"

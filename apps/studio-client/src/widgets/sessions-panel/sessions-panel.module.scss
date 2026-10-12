@@ -1,33 +1,42 @@
 .panel {
   min-height: 0;
   height: 100%;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   background: var(--loom-color-surface);
 }
 
-.filterNav {
+.masterContainer {
+  height: 100%;
+  min-height: 0;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+}
+
+.filterNav {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 12px 0;
-  border-bottom: 1px solid var(--loom-color-divider);
+  padding: 10px 14px 0 14px;
+  min-width: 0;
 }
 
 .batchToggleBtn {
+  min-height: 32px;
+  padding: 6px 4px 10px !important;
+  margin: 0 !important;
+  font-size: var(--loom-font-size-3);
+  line-height: 1;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--loom-color-text-subtle);
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 6px;
-  border: 0;
-  background: transparent;
-  color: var(--loom-color-text-subtle);
-  font-size: 12px;
-  font-weight: 500;
   cursor: pointer;
-  margin-bottom: 6px;
   flex-shrink: 0;
   transition: color 0.12s ease;
 

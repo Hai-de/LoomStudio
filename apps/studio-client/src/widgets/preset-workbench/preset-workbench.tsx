@@ -1,7 +1,7 @@
 import type { ClientJsonValue } from '@loom-studio/client-bridge'
 import { BookOpen, Braces, Copy, Download, Folder, FolderOpen, Package, Regex, Star, ToggleLeft, ToggleRight, Trash2, Wrench } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
-import { Button, IconButton, SearchField } from '@loom-studio/ui'
+import { Button, IconButton, SearchField, Textarea } from '@loom-studio/ui'
 import { DEFAULT_ASSET_VIEW_STATE, useStudioLayoutStore } from '../../shared/studio-shell/studio-layout-store.js'
 import { AssetWorkbenchLayout } from '../../shared/ui/asset-workbench-layout/asset-workbench-layout.js'
 import { PanelTabs } from '../../shared/ui/panel-tabs/index.js'
@@ -1240,7 +1240,7 @@ function ToolMountEditor(props: {
       {props.mount ? (
         <form className={`${styles.toolForm} loom-underlined-fields`} onSubmit={submit}>
           <label className={styles.toolCheckbox}><input checked={draft.defaultEnabled} type="checkbox" onChange={event => setDraft(current => ({ ...current, defaultEnabled: event.target.checked }))} /><span>{props.t('preset.tools.enabledByDefault')}</span></label>
-          <label><span>{props.t('preset.tools.activationJson')}</span><textarea className={styles.jsonEditor} spellCheck={false} value={draft.activation} onChange={event => setDraft(current => ({ ...current, activation: event.target.value }))} /></label>
+          <label><span>{props.t('preset.tools.activationJson')}</span><Textarea className={styles.jsonEditor} spellCheck={false} value={draft.activation} onChange={event => setDraft(current => ({ ...current, activation: event.target.value }))} /></label>
           <fieldset>
             <legend>{props.t('preset.tools.providerSurface')}</legend>
             <label><span>{props.t('preset.tools.providerOrder')}</span><input inputMode="numeric" value={draft.providerOrder} onChange={event => setDraft(current => ({ ...current, providerOrder: event.target.value }))} /></label>
@@ -1313,10 +1313,10 @@ function ToolEntryEditor(props: {
       </header>
       <form className={`${styles.toolForm} loom-underlined-fields`} onSubmit={submit}>
         <label><span>{props.t('preset.tools.name')}</span><input value={draft.name} onChange={event => setDraft(current => ({ ...current, name: event.target.value }))} /></label>
-        <label><span>{props.t('preset.tools.description')}</span><textarea value={draft.description} onChange={event => setDraft(current => ({ ...current, description: event.target.value }))} /></label>
-        <label><span>{props.t('preset.tools.guidance')}</span><textarea value={draft.guidance} onChange={event => setDraft(current => ({ ...current, guidance: event.target.value }))} /></label>
-        <label><span>{props.t('preset.tools.inputDefinitionJson')}</span><textarea className={styles.jsonEditor} spellCheck={false} value={draft.input} onChange={event => setDraft(current => ({ ...current, input: event.target.value }))} /></label>
-        <label><span>{props.t('preset.tools.parameterDescriptionsJson')}</span><textarea className={styles.jsonEditor} spellCheck={false} value={draft.parameterDescriptions} onChange={event => setDraft(current => ({ ...current, parameterDescriptions: event.target.value }))} /></label>
+        <label><span>{props.t('preset.tools.description')}</span><Textarea className={styles.descriptionEditor} value={draft.description} onChange={event => setDraft(current => ({ ...current, description: event.target.value }))} /></label>
+        <label><span>{props.t('preset.tools.guidance')}</span><Textarea className={styles.guidanceEditor} value={draft.guidance} onChange={event => setDraft(current => ({ ...current, guidance: event.target.value }))} /></label>
+        <label><span>{props.t('preset.tools.inputDefinitionJson')}</span><Textarea className={styles.jsonEditor} spellCheck={false} value={draft.input} onChange={event => setDraft(current => ({ ...current, input: event.target.value }))} /></label>
+        <label><span>{props.t('preset.tools.parameterDescriptionsJson')}</span><Textarea className={styles.jsonEditor} spellCheck={false} value={draft.parameterDescriptions} onChange={event => setDraft(current => ({ ...current, parameterDescriptions: event.target.value }))} /></label>
         {error ? <p className={styles.toolError}>{error}</p> : null}
         <button disabled={pending || !draft.name.trim()} type="submit">{props.t('preset.tools.saveEntry')}</button>
       </form>

@@ -1,6 +1,8 @@
 export const messages = {
   'textTransform.title': 'History 文本管线',
   'textTransform.inspectorTitle': 'History 文本管线检查器',
+  'textTransform.tabRules': '规则',
+  'textTransform.tabInspector': '检查器',
   'textTransform.runtimeDescription': '检查当前上下文的有效规则、匹配、诊断与试运行快照。',
   'textTransform.ownerDescription': '编辑 {{owner}} 声明的规则与提取器。',
   'textTransform.refresh': '刷新',

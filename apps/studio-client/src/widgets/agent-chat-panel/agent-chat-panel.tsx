@@ -287,24 +287,26 @@ export function AgentChatPanel(props: AgentChatPanelProps) {
           disabled={props.busy}
           sessionReady={props.sessionReady} primarySessionId={props.primarySessionId} timelineId={props.timelineId}
           onSelect={props.onSelectSession} onRename={props.onRenameSession} onSetPrimary={props.onSetPrimary} />
-        <button className={styles.sessionAction} type="button" disabled={props.busy || (!props.onCreateSession && !props.onNewSession)}
-          title={props.t('agent.sessionNew')} aria-label={props.t('agent.sessionNew')}
-          onClick={() => props.onCreateSession ? setCreateOpen(true) : props.onNewSession?.()}>
-          <Plus aria-hidden="true" />
-        </button>
-        <button className={styles.sessionAction} type="button"
-          disabled={props.busy || !props.session || !props.onDeleteSession || props.sessionReady === false
-            || props.activeRun?.status === 'running' || props.activeRun?.status === 'suspended'}
-          title={props.t('sessions.delete')} aria-label={props.t('sessions.delete')}
-          onClick={() => {
-            if (props.session && window.confirm(props.t('sessions.confirmDeleteSession', {
-              title: props.session.title ?? props.t('sessions.untitledAgentSession'),
-            }))) {
-              props.onDeleteSession?.(props.session.id)
-            }
-          }}>
-          <Trash2 aria-hidden="true" />
-        </button>
+        <div className={styles.sessionActions}>
+          <button className={styles.sessionAction} type="button" disabled={props.busy || (!props.onCreateSession && !props.onNewSession)}
+            title={props.t('agent.sessionNew')} aria-label={props.t('agent.sessionNew')}
+            onClick={() => props.onCreateSession ? setCreateOpen(true) : props.onNewSession?.()}>
+            <Plus aria-hidden="true" />
+          </button>
+          <button className={styles.sessionAction} type="button"
+            disabled={props.busy || !props.session || !props.onDeleteSession || props.sessionReady === false
+              || props.activeRun?.status === 'running' || props.activeRun?.status === 'suspended'}
+            title={props.t('sessions.delete')} aria-label={props.t('sessions.delete')}
+            onClick={() => {
+              if (props.session && window.confirm(props.t('sessions.confirmDeleteSession', {
+                title: props.session.title ?? props.t('sessions.untitledAgentSession'),
+              }))) {
+                props.onDeleteSession?.(props.session.id)
+              }
+            }}>
+            <Trash2 aria-hidden="true" />
+          </button>
+        </div>
       </header>
       {createOpen && props.onCreateSession ? <AgentSessionCreateDialog
         t={props.t}

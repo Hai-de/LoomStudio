@@ -1,6 +1,6 @@
 import type { ClientJsonValue } from '@loom-studio/client-bridge'
 import type { ClientActionPlacement, ClientCommandDeclaration, ExtensionInstallationTarget, RendererContributionDefinition } from '@loom-studio/extension-sdk'
-import { ArrowDown, ArrowLeft, ArrowUp, Braces, Component, ExternalLink, Folder, Package, PackageMinus, PackagePlus, Power, RefreshCw, TerminalSquare, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, Braces, Component, ExternalLink, Folder, Package, PackageMinus, PackagePlus, Power, RefreshCw, TerminalSquare, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { buildStudioLogPath } from '../../../shared/studio-shell/studio-route.js'
@@ -226,16 +226,7 @@ export function RendererWorkspacePanel(props: {
 
   return (
     <section className={`${styles.panel} ${styles.management}`} data-runtime-error={Boolean(props.runtimeError)} data-loom-component="renderer-workspace-panel">
-      <header className={styles.intro}>
-        <div><h2>{props.t('renderer.workspaceTitle')}</h2>
-          <small>{props.packages.length} · {instances.length} {props.t('renderer.activeInstances')}</small></div>
-        <Button onClick={() => setInstallOpen(true)}><PackagePlus size={16} aria-hidden="true" />{props.t('renderer.install')}</Button>
-      </header>
       {runtimeAlert}
-      <PanelTabs className={styles.managementTabs} activeId={view} onChange={setView} ariaLabel={props.t('renderer.workspaceTitle')} items={[
-        { id: 'packages', label: props.t('renderer.packages') },
-        { id: 'participation', label: props.t('participation.title') },
-      ]} />
       {installOpen ? <RemoteExtensionInstall api={props.extensionApi} t={props.t}
         onClose={() => setInstallOpen(false)} onInstalled={props.onRefreshExtensions} /> : null}
       {removal ? <Dialog open title={props.t('renderer.uninstall')} dismissible={!busyKey} onClose={() => setRemoval(undefined)}
@@ -246,27 +237,74 @@ export function RendererWorkspacePanel(props: {
         <p>{removal.packageId} · {removal.version}</p>
         <label><input type="checkbox" checked={deleteData} disabled={!!busyKey} onChange={event => setDeleteData(event.target.checked)} /> {props.t('renderer.remote.deleteData')}</label>
       </Dialog> : null}
-      {view === 'participation' ? <TimelineExtensionPanel
-        key={JSON.stringify([props.timelineParticipation.timeline?.id, props.timelineParticipation.timeline?.branchId, props.timelineParticipation.card?.id])}
-        {...props.timelineParticipation} installations={props.installations} t={props.t}
-      /> : <MasterDetailWorkbench
+      <MasterDetailWorkbench
         masterWidth="minmax(210px, 0.24fr)"
         mobilePane={mobilePane}
         onMobilePaneChange={setMobilePane}
         master={(
-          <nav aria-label={props.t('renderer.packages')} className={styles.packageTree}>
-            <span className={styles.treeGroupLabel}>{props.t('renderer.packages')}</span>
-            {props.packages.length === 0 ? <p className={styles.empty}>{props.t('renderer.workspaceEmpty')}</p> : props.packages.map(extensionPackage => (
-              <section className={styles.treePackage} key={extensionPackage.packageId}>
+          <nav aria-label={props.t('renderer.workspaceTitle')} className={styles.packageTree}>
+            <div className={styles.packageTreeHeader}>
+              <PanelTabs
+                activeId={view}
+                onChange={nextView => {
+                  setView(nextView)
+                  setMobilePane('detail')
+                }}
+                ariaLabel={props.t('renderer.workspaceTitle')}
+                items={[
+                  { id: 'packages', label: props.t('renderer.packages') },
+                  { id: 'participation', label: props.t('participation.title') },
+                ]}
+              />
+              {view === 'packages' ? (
                 <button
-                  aria-current={selectedItem?.kind === 'package' && extensionPackage.packageId === selected?.packageId ? 'page' : undefined}
-                  className={styles.packageItem}
                   type="button"
-                  onClick={() => select({ kind: 'package', packageId: extensionPackage.packageId })}
+                  className={styles.installPackageBtn}
+                  onClick={() => setInstallOpen(true)}
+                  title={props.t('renderer.install')}
+                  aria-label={props.t('renderer.install')}
                 >
-                  {extensionIconUrl(extensionPackage) ? <img className={styles.packageIcon} src={extensionIconUrl(extensionPackage)} alt="" aria-hidden="true" /> : <Package aria-hidden="true" />}
-                  <span><strong>{extensionPackage.displayName}</strong><small>{extensionPackage.packageId} · {extensionPackage.version}</small></span>
+                  <PackagePlus size={14} aria-hidden="true" />
+                  <span>{props.t('renderer.install')}</span>
                 </button>
+              ) : null}
+            </div>
+            <div className={styles.packageTreeBody}>
+              {view === 'participation' ? (
+                <div className={styles.participationSidebarNotice}>
+                  <p>{props.t('participation.title')}</p>
+                </div>
+              ) : props.packages.length === 0 ? <p className={styles.empty}>{props.t('renderer.workspaceEmpty')}</p> : props.packages.map(extensionPackage => {
+              const isEnabled = extensionPackage.modules.length > 0 && extensionPackage.modules.every(module => module.desired.enabled)
+              return (
+              <section className={styles.treePackage} key={extensionPackage.packageId}>
+                <div className={styles.packageItemRow}>
+                  <button
+                    aria-current={selectedItem?.kind === 'package' && extensionPackage.packageId === selected?.packageId ? 'page' : undefined}
+                    className={styles.packageItem}
+                    type="button"
+                    onClick={() => select({ kind: 'package', packageId: extensionPackage.packageId })}
+                  >
+                    {extensionIconUrl(extensionPackage) ? <img className={styles.packageIcon} src={extensionIconUrl(extensionPackage)} alt="" aria-hidden="true" /> : <Package aria-hidden="true" />}
+                    <span><strong>{extensionPackage.displayName}</strong><small>{extensionPackage.packageId} · {extensionPackage.version}</small></span>
+                  </button>
+                  {extensionPackage.modules.length > 0 ? (
+                    <button
+                      type="button"
+                      className={styles.packageToggle}
+                      title={props.t(isEnabled ? 'renderer.disablePackage' : 'renderer.enablePackage')}
+                      aria-label={props.t(isEnabled ? 'renderer.disablePackage' : 'renderer.enablePackage')}
+                      aria-pressed={isEnabled}
+                      disabled={Boolean(busyKey) || !extensionPackage.available}
+                      onClick={event => {
+                        event.stopPropagation()
+                        void togglePackage(extensionPackage)
+                      }}
+                    >
+                      {isEnabled ? <ToggleRight aria-hidden="true" /> : <ToggleLeft aria-hidden="true" />}
+                    </button>
+                  ) : null}
+                </div>
                 {extensionPackage.packageId === selected?.packageId ? (
                   <div className={styles.treeChildren}>
                     {props.promptResources.filter(resource => {
@@ -281,7 +319,7 @@ export function RendererWorkspacePanel(props: {
                   </div>
                 ) : null}
               </section>
-            ))}
+            )})}
             {props.embeddedPackageCard ? (
               <details className={styles.embeddedPackages} key={props.embeddedPackageCard.id}>
                 <summary>{props.t('renderer.embeddedPackages', { name: props.embeddedPackageCard.name })}</summary>
@@ -380,10 +418,19 @@ export function RendererWorkspacePanel(props: {
                 })}
               </details>
             ) : null}
+            </div>
           </nav>
         )}
       >
-        <div className={styles.detail}>
+        {view === 'participation' ? (
+          <TimelineExtensionPanel
+            key={JSON.stringify([props.timelineParticipation.timeline?.id, props.timelineParticipation.timeline?.branchId, props.timelineParticipation.card?.id])}
+            {...props.timelineParticipation}
+            installations={props.installations}
+            t={props.t}
+          />
+        ) : (
+          <div className={styles.detail}>
           {cardSelection ? (
             cardPackage && cardModule ? <ModuleDetail busyKey={busyKey} clientSummaries={clientSummaries}
               extensionPackage={cardPackage} module={cardModule} t={props.t} /> : <p className={styles.empty}>{props.t('renderer.moduleUnavailable')}</p>
@@ -400,70 +447,104 @@ export function RendererWorkspacePanel(props: {
           ) : <>
           {selected && selectedItem?.kind === 'package' ? (
             <>
-              <header className={styles.packageHeader}>
-                <div><h3>{selected.displayName}</h3><code>{selected.packageId}@{selected.version}</code></div>
-                <div className={styles.actions}>
-                  <button type="button" onClick={() => navigate(buildStudioLogPath({ packageId: selected.packageId }))}><TerminalSquare aria-hidden="true" /><span>{props.t('logs.viewExtension')}</span></button>
-                  {props.settingScopeContext.cardId ? (
-                    <button
-                      disabled={Boolean(busyKey) || !selected.available}
-                      type="button"
-                      onClick={() => {
-                        const cardId = props.settingScopeContext.cardId
-                        if (!cardId || !window.confirm(props.t('renderer.attachPackageConfirm', { name: selected.displayName }))) return
-                        void run(`${selected.packageId}/attach`, async () => {
-                          await props.onAttachPackage(cardId, selected.packageId, selected.version)
-                          toast.success(props.t('renderer.packageAttached'))
-                        })
-                      }}
-                    >
-                      <PackagePlus aria-hidden="true" />
-                      <span>{props.t('renderer.attachPackage')}</span>
-                    </button>
-                  ) : null}
-                  {installation ? (
-                    <button
-                      disabled={Boolean(busyKey) || !selected.available}
-                      type="button"
-                      onClick={() => {
-                        if (!window.confirm(props.t('renderer.updateResourcesConfirm', {
-                          name: selected.displayName, from: installation.packageVersion, to: selected.version,
-                        }))) return
-                        void run(`${selected.packageId}/resources`, async () => {
-                          await props.onUpdateResources({
-                            packageId: selected.packageId,
-                            packageVersion: selected.version,
-                            expectedInstallationVersion: installation.version,
-                          })
-                          toast.success(props.t('renderer.resourcesUpdated'))
-                        })
-                      }}
-                    >
-                      <RefreshCw aria-hidden="true" />
-                      <span>{props.t('renderer.updateResources')}</span>
-                    </button>
-                  ) : null}
-                  {packageResourceCount(selected) > 0 ? (
-                    <>
-                      <button disabled={busyKey === `${selected.packageId}/resources`} type="button" onClick={() => void run(`${selected.packageId}/resources`, () => importResources(selected.packageId))}>
-                        <PackagePlus aria-hidden="true" />
-                        <span>{props.t('renderer.importResources')}</span>
+              {(() => {
+                const packageEnabled = selected.modules.length > 0 && selected.modules.every(module => module.desired.enabled)
+                return (
+                  <header className={styles.packageHeader}>
+                    <div className={styles.packageTitleRow}>
+                      {selected.modules.length > 0 ? (
+                        <button
+                          type="button"
+                          className={`${styles.powerBtn} ${packageEnabled ? styles.powerBtnActive : styles.powerBtnInactive}`}
+                          title={props.t(packageEnabled ? 'renderer.disablePackage' : 'renderer.enablePackage')}
+                          aria-label={props.t(packageEnabled ? 'renderer.disablePackage' : 'renderer.enablePackage')}
+                          aria-pressed={packageEnabled}
+                          disabled={Boolean(busyKey) || !selected.available}
+                          onClick={() => void togglePackage(selected)}
+                        >
+                          <Power size={18} aria-hidden="true" />
+                        </button>
+                      ) : null}
+                      <div className={styles.packageTitleInfo}>
+                        <div className={styles.packageTitleHeading}>
+                          <h3>{selected.displayName}</h3>
+                          <span className={selected.available ? styles.statusBadgeAvailable : styles.statusBadgeUnavailable}>
+                            {selected.available ? props.t('renderer.available') : props.t('renderer.unavailable')}
+                          </span>
+                        </div>
+                        <code>{selected.packageId}@{selected.version}</code>
+                      </div>
+                    </div>
+                    <div className={styles.packageToolbarRow}>
+                      <button type="button" className={styles.actionBtn} onClick={() => navigate(buildStudioLogPath({ packageId: selected.packageId }))} title={props.t('logs.viewExtension')}>
+                        <TerminalSquare aria-hidden="true" />
+                        <span>{props.t('logs.viewExtension')}</span>
                       </button>
-                      <button disabled={busyKey === `${selected.packageId}/resources`} type="button" onClick={() => void run(`${selected.packageId}/resources`, () => removeResources(selected.packageId))}>
-                        <Trash2 aria-hidden="true" />
-                        <span>{props.t('renderer.removeResources')}</span>
-                      </button>
-                    </>
-                  ) : null}
-                  {selected.sourceKinds.length === 1 && (selected.sourceKinds[0] === 'installed' || selected.sourceKinds[0] === 'dev-link') ? (
-                    <button disabled={busyKey === `${selected.packageId}/uninstall`} type="button" onClick={() => void run(`${selected.packageId}/uninstall`, () => uninstallPackage(selected.packageId, selected.version))}>
-                      <Trash2 aria-hidden="true" />
-                      <span>{props.t('renderer.uninstall')}</span>
-                    </button>
-                  ) : null}
-                  <span>{selected.available ? props.t('renderer.available') : props.t('renderer.unavailable')}</span>
-                </div>
-              </header>
+                      {props.settingScopeContext.cardId ? (
+                        <button
+                          className={styles.actionBtn}
+                          disabled={Boolean(busyKey) || !selected.available}
+                          type="button"
+                          onClick={() => {
+                            const cardId = props.settingScopeContext.cardId
+                            if (!cardId || !window.confirm(props.t('renderer.attachPackageConfirm', { name: selected.displayName }))) return
+                            void run(`${selected.packageId}/attach`, async () => {
+                              await props.onAttachPackage(cardId, selected.packageId, selected.version)
+                              toast.success(props.t('renderer.packageAttached'))
+                            })
+                          }}
+                          title={props.t('renderer.attachPackage')}
+                        >
+                          <PackagePlus aria-hidden="true" />
+                          <span>{props.t('renderer.attachPackage')}</span>
+                        </button>
+                      ) : null}
+                      {installation ? (
+                        <button
+                          className={styles.actionBtn}
+                          disabled={Boolean(busyKey) || !selected.available}
+                          type="button"
+                          onClick={() => {
+                            if (!window.confirm(props.t('renderer.updateResourcesConfirm', {
+                              name: selected.displayName, from: installation.packageVersion, to: selected.version,
+                            }))) return
+                            void run(`${selected.packageId}/resources`, async () => {
+                              await props.onUpdateResources({
+                                packageId: selected.packageId,
+                                packageVersion: selected.version,
+                                expectedInstallationVersion: installation.version,
+                              })
+                              toast.success(props.t('renderer.resourcesUpdated'))
+                            })
+                          }}
+                          title={props.t('renderer.updateResources')}
+                        >
+                          <RefreshCw aria-hidden="true" />
+                          <span>{props.t('renderer.updateResources')}</span>
+                        </button>
+                      ) : null}
+                      {packageResourceCount(selected) > 0 ? (
+                        <>
+                          <button className={styles.actionBtn} disabled={busyKey === `${selected.packageId}/resources`} type="button" onClick={() => void run(`${selected.packageId}/resources`, () => importResources(selected.packageId))}>
+                            <PackagePlus aria-hidden="true" />
+                            <span>{props.t('renderer.importResources')}</span>
+                          </button>
+                          <button className={`${styles.actionBtn} ${styles.actionBtnDanger}`} disabled={busyKey === `${selected.packageId}/resources`} type="button" onClick={() => void run(`${selected.packageId}/resources`, () => removeResources(selected.packageId))}>
+                            <Trash2 aria-hidden="true" />
+                            <span>{props.t('renderer.removeResources')}</span>
+                          </button>
+                        </>
+                      ) : null}
+                      {selected.sourceKinds.length === 1 && (selected.sourceKinds[0] === 'installed' || selected.sourceKinds[0] === 'dev-link') ? (
+                        <button className={`${styles.actionBtn} ${styles.actionBtnDanger}`} disabled={busyKey === `${selected.packageId}/uninstall`} type="button" onClick={() => void run(`${selected.packageId}/uninstall`, () => uninstallPackage(selected.packageId, selected.version))}>
+                          <Trash2 aria-hidden="true" />
+                          <span>{props.t('renderer.uninstall')}</span>
+                        </button>
+                      ) : null}
+                    </div>
+                  </header>
+                )
+              })()}
               <ExtensionRemoteControls key={selected.packageId} api={props.extensionApi} t={props.t}
                 selected={selected} onInstalled={props.onRefreshExtensions} />
               {props.serverDiagnostics.length > 0 ? (
@@ -529,7 +610,8 @@ export function RendererWorkspacePanel(props: {
           {!selected ? <p className={styles.empty}>{props.t('renderer.workspaceEmpty')}</p> : null}
           </>}
         </div>
-      </MasterDetailWorkbench>}
+      )}
+      </MasterDetailWorkbench>
     </section>
   )
 }
@@ -653,12 +735,24 @@ function PackageControls(props: {
       <header>
         <div><h3>{props.t('renderer.packageRuntime')}</h3>
           <small>{props.t('renderer.packageState', { enabled, total: modules.length, running })}</small></div>
-        <div className={styles.actions}><button type="button" disabled={props.busy || !extensionPackage.available}
-          onClick={() => void props.onToggle(extensionPackage)}><Power aria-hidden="true" />
-          <span>{props.t(enabled === modules.length ? 'renderer.disablePackage' : 'renderer.enablePackage')}</span></button></div>
       </header>
-      <ul>{modules.map(module => <li key={module.moduleId}>{module.moduleId}: {props.t(module.desired.enabled ? 'renderer.enabled' : 'renderer.disabled')}
-        {' · '}{props.t(isRunning(module) ? 'renderer.moduleRunning' : 'renderer.moduleNotRunning')}</li>)}</ul>
+      <div className={styles.runtimeModuleList}>
+        {modules.map(module => {
+          const isModuleRunning = isRunning(module)
+          return (
+            <div key={module.moduleId} className={styles.runtimeModuleRow}>
+              <strong>{module.moduleId}</strong>
+              <span className={module.desired.enabled ? styles.runtimeEnabledText : styles.runtimeDisabledText}>
+                {props.t(module.desired.enabled ? 'renderer.enabled' : 'renderer.disabled')}
+              </span>
+              <span className={styles.runtimeSeparator}>·</span>
+              <span className={isModuleRunning ? styles.runtimeStateRunning : styles.runtimeStateIdle}>
+                {props.t(isModuleRunning ? 'renderer.moduleRunning' : 'renderer.moduleNotRunning')}
+              </span>
+            </div>
+          )
+        })}
+      </div>
       {modules.map(module => <div key={`${module.moduleId}:grants`}>
         {module.desired.enabled && module.runtimeKind === 'client' && module.requestedUiCapabilities?.includes('ui.notify') ? <label>
           <input type="checkbox" disabled={props.busy} checked={module.desired.grants?.ui?.includes('ui.notify') ?? false}

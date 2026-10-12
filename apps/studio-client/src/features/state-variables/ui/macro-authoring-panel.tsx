@@ -1,7 +1,7 @@
 import { Bot, Braces, Boxes, Component, Plus, Trash2, BookOpen } from 'lucide-react'
 import type { MacroOption, MacroOptions } from '@loom-studio/shared'
 import { SearchField, TextInput } from '@loom-studio/ui'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import type { Translator } from '../../../shared/i18n/index.js'
 import { normalizeSearchText } from '../../../shared/lib/text.js'
@@ -197,7 +197,7 @@ export function useMacroAuthoring(sources: MacroAuthoringSource[], t: Translator
   }
 }
 
-export function MacroAuthoringExplorer(props: { controller: MacroAuthoringController; onSelect?(id: string): void; onAdd?(): void }) {
+export function MacroAuthoringExplorer(props: { controller: MacroAuthoringController; header?: ReactNode; onSelect?(id: string): void; onAdd?(): void }) {
   const { controller } = props
   const t = controller.t
   const [query, setQuery] = useState('')
@@ -230,9 +230,15 @@ export function MacroAuthoringExplorer(props: { controller: MacroAuthoringContro
 
   return (
     <nav className={styles.macroAuthoringExplorer} aria-label={t('macroAuthoring.title')}>
-      <div className={styles.stateAuthoringSectionHeader}>
-        <span>{t('macroAuthoring.title')}</span>
-      </div>
+      {props.header ? (
+        <header className={styles.masterHeader}>
+          {props.header}
+        </header>
+      ) : (
+        <div className={styles.stateAuthoringSectionHeader}>
+          <span>{t('macroAuthoring.title')}</span>
+        </div>
+      )}
       <SearchField
         containerClassName={styles.macroInspectorSearch}
         aria-label={t('macroAuthoring.search')}
@@ -303,6 +309,7 @@ export function MacroAuthoringExplorer(props: { controller: MacroAuthoringContro
 export function MacroAuthoringWorkbench(props: {
   sources: MacroAuthoringSource[]
   t: Translator
+  header?: ReactNode
 }) {
   const [mobilePane, setMobilePane] = useState<'master' | 'detail'>('master')
   const controller = useMacroAuthoring(props.sources, props.t)
@@ -319,6 +326,7 @@ export function MacroAuthoringWorkbench(props: {
       master={
         <MacroAuthoringExplorer
           controller={controller}
+          header={props.header}
           onSelect={() => setMobilePane('detail')}
           onAdd={() => setMobilePane('detail')}
         />

@@ -138,6 +138,25 @@ describe('message HTML classification', () => {
       expect(renderToStaticMarkup(createElement(MessageContent, { value, role: 'assistant', codeBlockLabels: labels }))).not.toContain('<iframe')
     }
   })
+
+  it('unwraps HTML code blocks enclosed by custom tags without leaking wrapper markers', () => {
+    const wrapped = '<opening>\n```html\n<div>UI</div>\n```\n</opening>'
+    const parts = parseMessageSegments(wrapped)
+    expect(parts.filter(part => part.kind === 'document')).toHaveLength(1)
+    expect(parts.find(part => part.kind === 'document')?.value).toBe('<div>UI</div>')
+    expect(parts.some(part => part.value.includes('<opening>'))).toBe(false)
+
+    const inlineWrapped = '<opening> ```html\n<div>Inline UI</div>\n``` </opening>'
+    const inlineParts = parseMessageSegments(inlineWrapped)
+    expect(inlineParts.find(part => part.kind === 'document')?.value).toBe('<div>Inline UI</div>')
+
+    const withProse = '<opening>\n前置说明\n```html\n<div>UI</div>\n```\n后置说明\n</opening>'
+    const proseParts = parseMessageSegments(withProse)
+    expect(proseParts.find(part => part.kind === 'document')?.value).toBe('<div>UI</div>')
+    expect(proseParts.find(part => part.value.includes('前置说明'))).toBeTruthy()
+    expect(proseParts.find(part => part.value.includes('后置说明'))).toBeTruthy()
+    expect(proseParts.some(part => part.value.includes('<opening>') || part.value.includes('</opening>'))).toBe(false)
+  })
 })
 
 describe('safe in-message fragments', () => {
@@ -163,6 +182,7 @@ describe('isolated HTML document', () => {
     expect(value.indexOf('Content-Security-Policy')).toBeLessThan(value.indexOf('window.example'))
     expect(value).toContain('window.example="{{raw}}";')
     expect(value).toContain('onclick="this.textContent=2"')
+    expect(value).toContain('background:transparent !important')
     expect(HTML_PREVIEW_CSP).toContain("connect-src 'none'")
     expect(HTML_PREVIEW_CSP).toContain("frame-src 'none'")
   })

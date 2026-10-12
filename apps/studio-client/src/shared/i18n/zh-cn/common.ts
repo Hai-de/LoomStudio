@@ -36,7 +36,7 @@ export const messages = {
   'rail.resource': '资源',
   'rail.inspector': '调试',
   'rail.logs': '日志',
-  'rail.state': 'State',
+  'rail.state': '状态变量',
   'rail.macro': '宏',
   'rail.textTransform': '正则',
   'rail.extensions': '扩展',

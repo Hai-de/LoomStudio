@@ -23,6 +23,7 @@ describe('Settings scope', () => {
     const settings = [
       setting('card'), setting('manual-global'), setting('user-only'),
       setting('global-extension', 'global-install'), setting('card-extension', 'card-install'),
+      { id: 'builtin-setting', resourceKind: 'setting', origin: { kind: 'builtin' } } as PromptResource,
     ]
     const installations = [
       { id: 'global-install', target: { kind: 'global' } },
@@ -31,7 +32,7 @@ describe('Settings scope', () => {
     expect(resolveSettingScope(settings, new Set(['manual-global']), new Set(['card', 'card-extension']), installations, 'current')
       .map(item => item.id)).toEqual(['card', 'card-extension'])
     expect(resolveSettingScope(settings, new Set(['manual-global']), new Set(['card', 'card-extension']), installations, 'global')
-      .map(item => item.id)).toEqual(['manual-global', 'global-extension'])
+      .map(item => item.id)).toEqual(['manual-global', 'global-extension', 'builtin-setting'])
     expect(resolveSettingScope(settings, new Set(), new Set(), installations, 'current')).toEqual([])
   })
 })

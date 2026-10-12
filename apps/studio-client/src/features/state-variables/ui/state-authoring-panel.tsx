@@ -13,6 +13,7 @@ import styles from './state-variables-panel.module.scss'
 export type StateAuthoringPanelProps = {
   card?: Card
   t: Translator
+  header?: ReactNode
   onSaveCard(input: {
     cardId: string
     expectedVersion: number
@@ -59,7 +60,29 @@ function StateAuthoringEditor(props: StateAuthoringPanelProps) {
   const previewNodes = useMemo(() => stateSnapshotToTreeNodes(preview.snapshot, props.t), [preview.snapshot, props.t])
   const dirty = sourceText !== baselineRef.current
 
-  if (!props.card) return <section className={styles.panel}><div className={styles.emptyState}>{props.t('stateAuthoring.noCard')}</div></section>
+  if (!props.card) {
+    return (
+      <section className={styles.panel}>
+        <MasterDetailWorkbench
+          backLabel={props.t('stateAuthoring.backToList')}
+          resizeLabel={props.t('stateVariables.resizeSidebar')}
+          dataComponent="state-authoring-workbench"
+          defaultMasterWidth={280}
+          detailMinWidth={320}
+          mobilePane="master"
+          master={(
+            <div className={styles.masterPane}>
+              <header className={styles.masterHeader}>
+                {props.header}
+              </header>
+            </div>
+          )}
+        >
+          <div className={styles.emptyState}>{props.t('stateAuthoring.noCard')}</div>
+        </MasterDetailWorkbench>
+      </section>
+    )
+  }
 
   function commit(next: DraftConfig) {
     if (savingRef.current) return
@@ -122,24 +145,37 @@ function StateAuthoringEditor(props: StateAuthoringPanelProps) {
 
   return (
     <section className={styles.panel} data-loom-component="state-authoring-panel">
-      <header className={styles.intro}>
-        <div><h2>{props.t('stateAuthoring.title')}</h2><p>{props.card.name} · v{versionRef.current ?? props.card.version}</p></div>
-        <Button size="small" variant="ghost" type="button" disabled={!dirty || saving || Boolean(sourceError)} onClick={() => void save()}>
-          <Save aria-hidden="true" size={14} /><span>{props.t('stateAuthoring.saveCard')}</span>
-        </Button>
-      </header>
       {error ? <div className={styles.errorBanner} role="alert">{error}</div> : null}
       <fieldset className={styles.stateAuthoringBody} disabled={saving} aria-busy={saving} aria-label={props.t('stateAuthoring.title')}>
         <MasterDetailWorkbench
           backLabel={props.t('stateAuthoring.backToList')}
           resizeLabel={props.t('stateVariables.resizeSidebar')}
           dataComponent="state-authoring-workbench"
-          defaultMasterWidth={250}
+          defaultMasterWidth={280}
           detailMinWidth={320}
           mobilePane={mobilePane}
           onBack={() => setMobilePane('master')}
           onMobilePaneChange={setMobilePane}
-          master={<AuthoringMaster config={config} selection={selection} select={select} commit={commit} t={props.t} />}
+          master={(
+            <div className={styles.masterPane}>
+              <header className={styles.masterHeader}>
+                {props.header}
+              </header>
+              <div className={styles.masterToolbar}>
+                <button
+                  aria-label={props.t('stateAuthoring.saveCard')}
+                  className={styles.toolbarIconBtn}
+                  disabled={!dirty || saving || Boolean(sourceError)}
+                  title={props.t('stateAuthoring.saveCard')}
+                  type="button"
+                  onClick={() => void save()}
+                >
+                  <Save aria-hidden="true" size={14} />
+                </button>
+              </div>
+              <AuthoringMaster config={config} selection={selection} select={select} commit={commit} t={props.t} />
+            </div>
+          )}
         >
           <div className={styles.stateAuthoringDetailLayout}>
             <div className={styles.stateAuthoringEditorScroll}>

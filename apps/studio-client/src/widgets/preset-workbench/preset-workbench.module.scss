@@ -319,14 +319,37 @@
   font-size: var(--loom-font-size-2);
 }
 
-.toolForm textarea {
-  min-height: 84px;
+.toolForm textarea,
+.toolForm [data-loom-ui-textarea] {
+  background: var(--loom-color-surface-subtle);
+  border: 1px solid var(--loom-color-border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: var(--loom-radius-control);
+  padding: 10px 12px;
+  min-height: 100px;
+  font-size: var(--loom-font-size-2);
+  line-height: 1.5;
   resize: vertical;
+  box-sizing: border-box;
+
+  &:focus {
+    border-color: var(--loom-color-accent);
+    outline: none;
+  }
+}
+
+.descriptionEditor {
+  min-height: 140px !important;
+}
+
+.guidanceEditor {
+  min-height: 100px !important;
 }
 
 .toolForm .jsonEditor {
-  min-height: 132px;
+  min-height: 132px !important;
   font-family: var(--loom-font-family-mono);
+  font-size: var(--loom-font-size-1, 12px);
+  tab-size: 2;
 }
 
 .toolForm fieldset {

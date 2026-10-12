@@ -1,9 +1,70 @@
 .overview { padding: 20px 24px; min-width: 0; }
 .directory { padding: 16px 24px; min-width: 0; }
-.breadcrumbs { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; margin-bottom: 12px; }
+.directoryToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+  min-width: 0;
+}
+
+.breadcrumbs { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; margin-bottom: 0; }
 .breadcrumbs button { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; color: inherit; cursor: pointer; font: inherit; white-space: nowrap; }
 .breadcrumbs button:disabled { opacity: .4; cursor: default; }
 .breadcrumbs span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tokenBar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  color: var(--loom-color-text-subtle);
+  font-size: var(--loom-font-size-1, 12px);
+
+  button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--loom-color-border-subtle, var(--loom-color-divider));
+    border-radius: var(--loom-radius-control);
+    background: var(--loom-color-surface-subtle);
+    color: var(--loom-color-text-muted);
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+
+    &:hover:not(:disabled) {
+      background: var(--loom-color-surface-raised);
+      color: var(--loom-color-text);
+      border-color: var(--loom-color-border);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+}
+
+.tokenSummaryText {
+  display: inline-flex;
+  align-items: center;
+}
+
+:global(html[data-loom-glass-panels='true']) {
+  .tokenBar button {
+    background: color-mix(in srgb, var(--loom-color-surface) 35%, transparent);
+    border-color: color-mix(in srgb, var(--loom-color-border) 40%, transparent);
+
+    &:hover:not(:disabled) {
+      background: color-mix(in srgb, var(--loom-color-surface) 65%, transparent);
+    }
+  }
+}
 .directoryList { max-height: 58dvh; overflow: auto; }
 .directoryDetail { min-width: 0; }
 .readOnlyOrigin { color: var(--loom-color-text-muted); font-size: 12px; overflow-wrap: anywhere; }

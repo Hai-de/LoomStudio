@@ -1,7 +1,8 @@
 import { useId, useState, type CSSProperties, type ReactNode } from 'react'
-import { Check, Eye, ImageOff, X } from 'lucide-react'
-import { Button, Dialog, IconButton, SearchField } from '@loom-studio/ui'
+import { Check, Eye, ImageOff, Sparkles, SunMedium, X } from 'lucide-react'
+import { Button, Dialog, IconButton, RadioGroup, SearchField, Slider } from '@loom-studio/ui'
 import type { Translator } from '../../shared/i18n/index.js'
+import { PanelTabs } from '../../shared/ui/panel-tabs/index.js'
 import styles from './background-materials-view.module.scss'
 
 export type BackgroundOption = {
@@ -50,31 +51,13 @@ export function BackgroundMaterialsView(props: {
 
   return (
     <section className={styles.view} data-loom-component="background-materials-view">
-      <div className={styles.tabs} role="tablist" aria-label={props.t('settings.appearance')}>
-        {pages.map((item, index) => (
-          <button
-            aria-controls={`${tabId}-panel`}
-            aria-selected={page === item.id}
-            id={`${tabId}-${item.id}`}
-            key={item.id}
-            role="tab"
-            tabIndex={page === item.id ? 0 : -1}
-            type="button"
-            onClick={() => setPage(item.id)}
-            onKeyDown={event => {
-              let next: number
-              if (event.key === 'ArrowRight') next = (index + 1) % pages.length
-              else if (event.key === 'ArrowLeft') next = (index + pages.length - 1) % pages.length
-              else if (event.key === 'Home') next = 0
-              else if (event.key === 'End') next = pages.length - 1
-              else return
-              event.preventDefault()
-              setPage(pages[next].id)
-              const buttons = event.currentTarget.parentElement!.querySelectorAll<HTMLButtonElement>('[role="tab"]')
-              buttons[next].focus()
-            }}
-          >{item.label}</button>
-        ))}
+      <div className={styles.tabsWrapper}>
+        <PanelTabs<AppearancePage>
+          activeId={page}
+          ariaLabel={props.t('settings.appearance')}
+          items={pages}
+          onChange={setPage}
+        />
       </div>
       <div aria-labelledby={`${tabId}-${page}`} id={`${tabId}-panel`} role="tabpanel">
         {page === 'general' ? props.general : (
@@ -123,12 +106,16 @@ export function BackgroundMaterialsView(props: {
                 <>
                   <fieldset className={styles.modeChoices}>
                     <legend>{props.t('appearance.surfaceMode')}</legend>
-                    {(['solid', 'translucent', 'glass'] as const).map(mode => (
-                      <label key={mode}>
-                        <input name={`${tabId}-mode`} type="radio" checked={props.material.mode === mode} onChange={() => props.onMaterialChange({ ...props.material, mode })} />
-                        {modes[mode]}
-                      </label>
-                    ))}
+                    <RadioGroup
+                      name={`${tabId}-mode`}
+                      options={([
+                        { value: 'solid', label: modes.solid },
+                        { value: 'translucent', label: modes.translucent },
+                        { value: 'glass', label: modes.glass },
+                      ] as const)}
+                      value={props.material.mode}
+                      onChange={mode => props.onMaterialChange({ ...props.material, mode })}
+                    />
                   </fieldset>
                   <label className={styles.switchRow}>
                     <span>{props.t('appearance.glassPanels')}</span>
@@ -140,14 +127,30 @@ export function BackgroundMaterialsView(props: {
                       onChange={event => props.onMaterialChange({ ...props.material, glassPanels: event.target.checked })}
                     />
                   </label>
-                  <label className={styles.range}>
-                    <span>{props.t('appearance.blur')} <output>{props.material.blur}px</output></span>
-                    <input aria-label={props.t('appearance.blur')} disabled={props.material.mode !== 'glass'} max={32} min={0} type="range" value={props.material.blur} onChange={event => props.onMaterialChange({ ...props.material, blur: Number(event.target.value) })} />
-                  </label>
-                  <label className={styles.range}>
-                    <span>{props.t('appearance.opacity')} <output>{props.material.opacity}%</output></span>
-                    <input aria-label={props.t('appearance.opacity')} disabled={props.material.mode === 'solid'} max={100} min={0} type="range" value={props.material.opacity} onChange={event => props.onMaterialChange({ ...props.material, opacity: Number(event.target.value) })} />
-                  </label>
+                  <div className={styles.sliderGroup}>
+                    <Slider
+                      icon={<Sparkles size={14} />}
+                      label={props.t('appearance.blur')}
+                      disabled={props.material.mode !== 'glass'}
+                      min={0}
+                      max={32}
+                      step={1}
+                      value={props.material.blur}
+                      formatValue={v => `${v}px`}
+                      onValueChange={blur => props.onMaterialChange({ ...props.material, blur })}
+                    />
+                    <Slider
+                      icon={<SunMedium size={14} />}
+                      label={props.t('appearance.opacity')}
+                      disabled={props.material.mode === 'solid'}
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={props.material.opacity}
+                      formatValue={v => `${v}%`}
+                      onValueChange={opacity => props.onMaterialChange({ ...props.material, opacity })}
+                    />
+                  </div>
                   <Button disabled={!current} onClick={() => { setPreviewId(current!.id); setPreviewMode('material') }}>
                     <Eye aria-hidden="true" size={16} />{props.t('appearance.previewMaterial')}
                   </Button>

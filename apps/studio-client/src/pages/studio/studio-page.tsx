@@ -266,9 +266,12 @@ export function StudioPage(props: StudioPageProps) {
   const setAssetPane = useStudioLayoutStore(state => state.setAssetPane)
   const canGoBackAsset = activeAssetLayoutId !== null && activeAssetViewMode === 'drilldown' && activeAssetPane === 'detail'
   const assetForwardRef = useRef<{ layoutId: AssetLayoutId; workspaceId: string; selectedId?: string } | undefined>(undefined)
-
   const handleHistoryNavigation = (direction: 'back' | 'forward') => {
+    const nav = useStudioLayoutStore.getState().workbenchNavigation
     if (direction === 'back') {
+      if (nav?.canGoBack() && nav.goBack()) {
+        return
+      }
       if (canGoBackAsset && activeAssetLayoutId) {
         assetForwardRef.current = {
           layoutId: activeAssetLayoutId,
@@ -282,6 +285,9 @@ export function StudioPage(props: StudioPageProps) {
       requestedHistoryDirection.current = 'back'
       void props.navigation.goBack()
     } else {
+      if (nav?.canGoForward?.() && nav.goForward?.()) {
+        return
+      }
       const forward = assetForwardRef.current
       if (activeAssetLayoutId && activeAssetViewMode === 'drilldown' && activeAssetPane === 'explorer'
         && forward?.layoutId === activeAssetLayoutId && forward.workspaceId === props.assetWorkspaceId
@@ -392,8 +398,14 @@ export function StudioPage(props: StudioPageProps) {
   const dockWindowSize = activePanel !== null && windowResize.preview?.panel === activePanel
     ? windowResize.preview.size
     : displayedPanelWindowSize
+  const targetPanelWidth = dockWindowSize && !isDisplayedImmersive
+    ? `${dockWindowSize.width}px`
+    : isDisplayedImmersive
+      ? 'calc(100vw - 12px)'
+      : 'clamp(42rem, 52vw, 72rem)'
   const dockStyle = {
     '--loom-shell-rail-preferred-width': `${railPresentation.preferredWidth}px`,
+    '--loom-shell-panel-target-width': targetPanelWidth,
     ...(dockWindowSize && !isDisplayedImmersive ? { width: `${dockWindowSize.width}px` } : {}),
   } as CSSProperties
   const dockSidebar = (
@@ -447,17 +459,20 @@ export function StudioPage(props: StudioPageProps) {
         actionsTargetRef={setHeaderActionsTarget}
         activePanel={displayedPanel}
         assetWorkspaceId={props.assetWorkspaceId}
-        leading={railHidden ? (
-          <button
-            aria-label="展开导航栏"
-            className={styles.dockCollapseButton}
-            title="展开导航栏"
-            type="button"
-            onClick={() => setRailHidden(false)}
-          >
-            <PanelLeft aria-hidden="true" className={styles.dockCollapseButtonIcon} />
-          </button>
-        ) : null}
+        leading={(
+          <div className={styles.dockExpandLeading} data-visible={railHidden ? 'true' : 'false'}>
+            <button
+              aria-label="展开导航栏"
+              className={styles.dockCollapseButton}
+              title="展开导航栏"
+              tabIndex={railHidden ? 0 : -1}
+              type="button"
+              onClick={() => setRailHidden(false)}
+            >
+              <PanelLeft aria-hidden="true" className={styles.dockCollapseButtonIcon} />
+            </button>
+          </div>
+        )}
         main={props.panelHeaderMain?.[displayedPanel]}
         t={props.t}
         onPanelHistory={direction => {

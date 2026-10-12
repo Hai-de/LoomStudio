@@ -113,6 +113,7 @@ const loomEditorTheme = EditorView.theme({
     fontFamily: 'var(--loom-long-text-editor-font-family, var(--loom-font-family-mono))',
     fontSize: 'var(--loom-font-size-body)',
     lineHeight: 'var(--loom-long-text-editor-line-height, 1.72)',
+    overflowWrap: 'anywhere',
   },
   '.cm-line': { padding: '0 4px' },
   '.cm-gutters': {

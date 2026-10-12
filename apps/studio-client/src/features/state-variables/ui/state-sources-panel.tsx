@@ -17,6 +17,7 @@ type Props = {
   timelineTarget?: Extract<StateTarget, { scope: 'timeline' }>
   refreshToken?: string
   t: Translator
+  header?: ReactNode
 }
 type ExtensionSource = StateSourcesInspection['extensions'][number]
 type Outcome = { api: Props['api']; key: string } & ({ data: StateSourcesInspection } | { error: string })
@@ -62,34 +63,39 @@ export function StateSourcesPanel(props: Props) {
     ? selectedId : data?.timeline ? 'timeline' : 'card'
 
   return <section className={styles.panel} aria-busy={!current} data-loom-component="state-sources-panel">
-    <header className={styles.header}>
-      <h2>{t('stateSources.title')}</h2>
-      <button type="button" className={styles.iconButton} disabled={!current}
-        aria-label={t('stateVariables.refresh')} title={t('stateVariables.refresh')} onClick={() => setRefresh(value => value + 1)}>
-        <RefreshCw size={16} aria-hidden="true" />
-      </button>
-    </header>
-    {!current ? <p className={styles.message} role="status">{t('participation.loading')}</p>
-      : error ? <p className={styles.error} role="alert">{error}</p>
-        : data ? <MasterDetailWorkbench
-          dataComponent="state-sources-workbench" defaultMasterWidth={270} detailMinWidth={280}
-          mobilePane={mobilePane} onMobilePaneChange={setMobilePane}
-          backLabel={t('stateAuthoring.backToList')} resizeLabel={t('stateVariables.resizeSidebar')}
-          master={<div className={styles.master}><FileTree
-            ariaLabel={t('stateSources.title')} nodes={nodes} selectedId={selection}
-            expandedIds={expandedIds} onExpandedIdsChange={setExpandedIds}
-            getDisclosureLabel={(node, expanded) => `${t(expanded ? 'stateVariables.collapse' : 'stateVariables.expand')}: ${node.label}`}
-            getDragLabel={node => node.label} moreActionsLabel={t('stateVariables.actions')}
-            renderIcon={node => node.kind === 'folder' ? <Folder size={16} /> : node.id === 'card' ? <BookOpen size={16} />
-              : node.id.startsWith('extension-installation:') ? <Package size={16} /> : <Database size={16} />}
-            onSelect={node => {
-              if (node.kind === 'folder') return
-              setSelectedId(node.id)
-              setMobilePane('detail')
-            }}
-          /></div>}
-        >
-          <div className={styles.detail}>
+    <MasterDetailWorkbench
+      dataComponent="state-sources-workbench" defaultMasterWidth={280} detailMinWidth={280}
+      mobilePane={mobilePane} onMobilePaneChange={setMobilePane}
+      backLabel={t('stateAuthoring.backToList')} resizeLabel={t('stateVariables.resizeSidebar')}
+      master={<div className={styles.masterPane}>
+        <header className={styles.masterHeader}>
+          {props.header}
+        </header>
+        <div className={styles.masterToolbar}>
+          <button type="button" className={styles.toolbarIconBtn} disabled={!current}
+            aria-label={t('stateVariables.refresh')} title={t('stateVariables.refresh')} onClick={() => setRefresh(value => value + 1)}>
+            <RefreshCw size={14} aria-hidden="true" />
+          </button>
+        </div>
+        <div className={styles.masterBody}><FileTree
+          ariaLabel={t('stateSources.title')} nodes={nodes} selectedId={selection}
+          expandedIds={expandedIds} onExpandedIdsChange={setExpandedIds}
+          getDisclosureLabel={(node, expanded) => `${t(expanded ? 'stateVariables.collapse' : 'stateVariables.expand')}: ${node.label}`}
+          getDragLabel={node => node.label} moreActionsLabel={t('stateVariables.actions')}
+          renderIcon={node => node.kind === 'folder' ? <Folder size={16} /> : node.id === 'card' ? <BookOpen size={16} />
+            : node.id.startsWith('extension-installation:') ? <Package size={16} /> : <Database size={16} />}
+          onSelect={node => {
+            if (node.kind === 'folder') return
+            setSelectedId(node.id)
+            setMobilePane('detail')
+          }}
+        /></div>
+      </div>}
+    >
+      {!current ? <p className={styles.message} role="status">{t('participation.loading')}</p>
+        : error ? <p className={styles.error} role="alert">{error}</p>
+          : !data ? null
+          : <div className={styles.detail}>
             {selectedExtension ? <ExtensionDetail source={selectedExtension} timeline={data.timeline} t={t} />
               : selectedDefinition ? <>
                 <h3>{selectedDefinition.label || selectedDefinition.id}</h3>
@@ -107,9 +113,9 @@ export function StateSourcesPanel(props: Props) {
                 </dl>
                 <PathList paths={data.timeline.paths} t={t} />
                 {data.timeline.context ? <details><summary>{t('stateSources.acceptedContext')}</summary><SourceCode value={data.timeline.context} /></details> : null}
-              </> : <CardDetail data={data} t={t} />}
-          </div>
-        </MasterDetailWorkbench> : null}
+              </> : data ? <CardDetail data={data} t={t} /> : null}
+          </div>}
+    </MasterDetailWorkbench>
   </section>
 }
 

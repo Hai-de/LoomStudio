@@ -38,7 +38,7 @@ export const messages = {
   'rail.resource': 'Resources',
   'rail.inspector': 'Debug',
   'rail.logs': 'Logs',
-  'rail.state': 'State',
+  'rail.state': 'State Variables',
   'rail.macro': 'Macros',
   'rail.textTransform': 'Text Pipeline',
   'rail.extensions': 'Extensions',

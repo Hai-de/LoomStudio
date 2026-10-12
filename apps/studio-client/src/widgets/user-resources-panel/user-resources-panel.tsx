@@ -61,7 +61,6 @@ export function UserResourcesPanel(props: {
   )
 
   return <section aria-label={props.t('rail.user')} className={styles.panel}>
-    <header><h2>{props.t('rail.user')}</h2></header>
     {rules.isError ? <p role="alert">{rules.error.message}</p> : null}
     <FileTree
       ariaLabel={props.t('rail.user')}

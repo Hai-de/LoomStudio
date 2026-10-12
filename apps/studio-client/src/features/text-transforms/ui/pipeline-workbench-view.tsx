@@ -40,6 +40,7 @@ export type PipelineWorkbenchViewProps = {
   detail: ReactNode
   filters?: ReactNode
   preview?: ReactNode
+  header?: ReactNode
   onSearchChange(value: string): void
   onSelect(id: string): void
   onMobilePaneChange(pane: 'master' | 'detail'): void
@@ -93,6 +94,11 @@ export function PipelineWorkbenchView(props: PipelineWorkbenchViewProps) {
       onMobilePaneChange={props.onMobilePaneChange}
       master={(
         <div className={styles.master}>
+          {props.header ? (
+            <header className={styles.masterHeader}>
+              {props.header}
+            </header>
+          ) : null}
           <SearchField
             aria-label={props.searchPlaceholder}
             clearLabel={props.searchClearLabel}

@@ -47,7 +47,16 @@ type StudioLayoutData = {
   uiScale: number
 }
 
+export type WorkbenchNavigation = {
+  canGoBack: () => boolean
+  goBack: () => boolean
+  canGoForward?: () => boolean
+  goForward?: () => boolean
+}
+
 type StudioLayoutStore = StudioLayoutData & {
+  workbenchNavigation: WorkbenchNavigation | null
+  setWorkbenchNavigation(navigation: WorkbenchNavigation | null): void
   closeDock(): void
   openAssetDetail(layoutId: AssetLayoutId, workspaceId: string, selectedId: string): void
   setAssetMetadataOpen(open: boolean): void
@@ -199,6 +208,8 @@ export const useStudioLayoutStore = create<StudioLayoutStore>()(
           },
         }
       }),
+      workbenchNavigation: null,
+      setWorkbenchNavigation: workbenchNavigation => set({ workbenchNavigation }),
       setAssetMetadataOpen: assetMetadataOpen => set({ assetMetadataOpen }),
       setAssetExpandedIds: (layoutId, workspaceId, expandedIds) => set(state => updateAssetView(
         state,

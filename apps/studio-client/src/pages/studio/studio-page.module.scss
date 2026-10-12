@@ -248,6 +248,30 @@
   stroke-width: var(--loom-page-header-icon-stroke, 1.85);
 }
 
+.dockExpandLeading {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  width: 28px;
+  margin-right: 4px;
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    width var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing),
+    margin-right var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing),
+    opacity var(--loom-motion-duration-fast) ease,
+    transform var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing);
+
+  &[data-visible='false'] {
+    width: 0;
+    margin-right: 0;
+    opacity: 0;
+    transform: translateX(-12px);
+    pointer-events: none;
+    transition-duration: var(--loom-shell-motion-duration-exit);
+  }
+}
+
 .dockBrandIconButton {
   width: var(--loom-page-header-control-size);
   height: var(--loom-page-header-control-size);
@@ -710,6 +734,8 @@
   overflow: hidden;
   background: var(--loom-color-surface);
   clip-path: inset(0 0 0 0);
+  transform: translateX(0);
+  opacity: 1;
   transition:
     clip-path var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing),
     transform var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing),
@@ -723,32 +749,50 @@
 
 .workspaceShellLayout[data-rail-hidden='true'] {
   .workspaceRail {
-    transform: translateX(-100%);
+    transform: translateX(calc(-1 * var(--loom-rail-collapsed-width)));
     opacity: 0;
     pointer-events: none;
+    transition:
+      transform var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing),
+      opacity var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing);
   }
 
   .workspacePanel {
-    inset: 0 0 0 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    min-width: var(--loom-shell-panel-target-width, clamp(42rem, 52vw, 72rem));
+    transition:
+      left var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing),
+      width var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing),
+      opacity var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing);
   }
 
   .workspaceBody {
-    border-left: none;
+    border-left-color: transparent;
     border-top-left-radius: 0;
+    transition:
+      border-top-left-radius var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing),
+      border-left-color var(--loom-shell-motion-duration-exit) var(--loom-shell-motion-easing);
   }
 }
 
 .workspacePanel {
   position: absolute;
   z-index: 1;
-  inset: 0 0 0 var(--loom-rail-collapsed-width);
-  min-width: 0;
+  top: 0;
+  bottom: 0;
+  left: var(--loom-rail-collapsed-width);
+  right: 0;
+  min-width: calc(var(--loom-shell-panel-target-width, clamp(42rem, 52vw, 72rem)) - var(--loom-rail-collapsed-width));
+  width: calc(100% - var(--loom-rail-collapsed-width));
   min-height: 0;
   overflow: hidden;
   opacity: 1;
   outline: none;
   transition:
-    inset var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing),
+    left var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing),
+    width var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing),
     opacity var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing);
 }
 
@@ -946,7 +990,8 @@
   border-left: 1px solid color-mix(in srgb, var(--loom-color-border) 60%, transparent);
   border-top-left-radius: var(--loom-radius-window, 18px);
   transition:
-    border-top-left-radius var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing);
+    border-top-left-radius var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing),
+    border-left-color var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing);
 }
 
 .dockPanelHost::-webkit-scrollbar,
@@ -1638,6 +1683,19 @@
     height: calc(100% - max(6px, env(safe-area-inset-top, 0px)) - 38px) !important;
   }
 
+  .workspaceShellLayout .workspacePanel {
+    min-width: 0 !important;
+    left: var(--loom-rail-collapsed-width) !important;
+    right: 0 !important;
+    width: calc(100% - var(--loom-rail-collapsed-width)) !important;
+  }
+
+  .workspaceShellLayout[data-rail-hidden='true'] .workspacePanel {
+    min-width: 0 !important;
+    inset: 0 0 0 0 !important;
+    width: 100% !important;
+  }
+
   .windowResizeRight {
     display: none !important;
   }
@@ -1655,11 +1713,13 @@
   }
 
   .workspaceRail,
+  .workspacePanel,
   .workspaceMotionClip,
   .dockBrandTextButton,
   .railLabel,
   .railGroupLabel,
-  .dockWorkspaceToggle {
+  .dockWorkspaceToggle,
+  .dockExpandLeading {
     transition: none;
   }
 

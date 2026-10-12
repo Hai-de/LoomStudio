@@ -1,7 +1,7 @@
 .selector {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex: 1;
   min-width: 0;
 }
@@ -9,29 +9,97 @@
 .nameEditor {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
 }
 
 .nameInput.nameInput {
   flex: 1;
   min-width: 0;
   width: 100%;
-  height: 28px;
-  padding: 2px 6px;
-  border-color: transparent;
+  height: var(--loom-page-header-control-size, 32px);
+  min-height: 32px;
+  padding: 0 6px;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
   background: transparent;
-  font-size: var(--loom-font-size-2);
+  color: var(--loom-color-text);
+  font-family: inherit;
+  font-size: var(--loom-font-size-3);
+  font-weight: var(--loom-font-weight-5);
+  line-height: var(--loom-line-height-ui);
   text-overflow: ellipsis;
+  outline: none;
+  box-shadow: none;
+  transition: border-bottom-color var(--loom-motion-duration-fast, 120ms) ease;
 
-  &:hover:not(:disabled),
+  &:hover:not(:disabled) {
+    border-color: transparent;
+    border-bottom-color: var(--loom-color-divider);
+    background: transparent;
+  }
+
   &:focus {
-    border-color: var(--loom-color-border);
-    background: var(--loom-color-surface);
+    border-color: transparent;
+    border-bottom-color: var(--loom-color-accent);
+    background: transparent;
+    box-shadow: none;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: default;
+    border-bottom-color: transparent;
+  }
+}
+
+.pickerTrigger.pickerTrigger {
+  flex: 0 0 var(--loom-page-header-control-size, 32px);
+  width: var(--loom-page-header-control-size, 32px);
+  height: var(--loom-page-header-control-size, 32px);
+  min-width: var(--loom-page-header-control-size, 32px);
+  min-height: var(--loom-page-header-control-size, 32px);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--loom-radius-control);
+  color: var(--loom-color-text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: color var(--loom-motion-duration-fast, 120ms) ease;
+
+  svg {
+    width: var(--loom-page-header-icon-size, 16px);
+    height: var(--loom-page-header-icon-size, 16px);
+    stroke-width: var(--loom-page-header-icon-stroke, 1.85);
+  }
+
+  &:hover:not(:disabled) {
+    color: var(--loom-color-accent-strong);
+    background: transparent;
+  }
+
+  &:focus-visible {
+    color: var(--loom-color-accent-strong);
+    outline: 1px solid var(--loom-color-accent);
+    outline-offset: -2px;
+    box-shadow: none;
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
   }
 }
 
 .primaryIcon {
   flex-shrink: 0;
   color: var(--loom-color-accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .dialog.dialog {
@@ -50,6 +118,7 @@
 }
 
 .pickerList {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -57,7 +126,14 @@
   overflow: auto;
 }
 
+.hoverIndicator {
+  border-radius: 4px;
+  background: var(--loom-color-surface-raised);
+}
+
 .sessionRow {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -65,10 +141,6 @@
   min-height: 58px;
   padding: 4px 6px;
   border-radius: 4px;
-
-  &:hover {
-    background: var(--loom-color-surface-raised);
-  }
 
   &[data-selected='true'] {
     background: var(--loom-color-surface);

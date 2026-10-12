@@ -404,7 +404,7 @@ export function useStudioState(transportLogger: Logger) {
     contextAssets: contextAssetState.nodes,
     promptResourceDrafts: contextAssetState.resources,
     extensionInstallations: promptResourceState.extensionInstallations,
-    draftResourceIds: contextAssetState.draftResourceIds,
+    draftResourceIds: contextAssetState.failedDraftResourceIds,
     discardContextAssetDraft: contextAssetState.discardDraft,
     retryContextAssetDraft: contextAssetState.retryDraft,
     previewContextAsset: contextAssetState.previewContextAsset,

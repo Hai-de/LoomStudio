@@ -493,44 +493,44 @@ export function SessionsPanel(props: SessionsPanelProps) {
 
   return (
     <div className={styles.panel} data-loom-component="sessions-panel">
-      <div className={styles.filterNav}>
-        <PanelTabs<SessionFilter>
-          activeId={filter}
-          ariaLabel={props.t('sessions.views')}
-          items={[
-            { id: 'all', label: props.t('sessions.filterAll') },
-            { id: 'timelines', label: props.t('sessions.filterTimelines') },
-            { id: 'sessions', label: props.t('sessions.filterSessions') },
-          ]}
-          onChange={nextFilter => {
-            setFilter(nextFilter)
-            setMobilePane('master')
-          }}
-        />
-
-        <button
-          aria-label={isSelectionMode ? props.t('sessions.exitBatchManage') : props.t('sessions.batchManage')}
-          className={styles.batchToggleBtn}
-          data-active={isSelectionMode ? 'true' : 'false'}
-          type="button"
-          onClick={() => {
-            if (isSelectionMode) {
-              handleExitSelectionMode()
-            } else {
-              setIsSelectionMode(true)
-            }
-          }}
-        >
-          <CheckSquare aria-hidden="true" size={13} />
-          <span>{isSelectionMode ? props.t('sessions.exitBatchManage') : props.t('sessions.batchManage')}</span>
-        </button>
-      </div>
-
       <MasterDetailWorkbench
         mobilePane={mobilePane}
         onMobilePaneChange={setMobilePane}
         master={(
-          <nav aria-label={props.t('sessions.views')} className={styles.masterNav}>
+          <div className={styles.masterContainer}>
+            <div className={styles.filterNav}>
+              <PanelTabs<SessionFilter>
+                activeId={filter}
+                ariaLabel={props.t('sessions.views')}
+                items={[
+                  { id: 'all', label: props.t('sessions.filterAll') },
+                  { id: 'timelines', label: props.t('sessions.filterTimelines') },
+                  { id: 'sessions', label: props.t('sessions.filterSessions') },
+                ]}
+                onChange={nextFilter => {
+                  setFilter(nextFilter)
+                  setMobilePane('master')
+                }}
+              />
+
+              <button
+                aria-label={isSelectionMode ? props.t('sessions.exitBatchManage') : props.t('sessions.batchManage')}
+                className={styles.batchToggleBtn}
+                data-active={isSelectionMode ? 'true' : 'false'}
+                type="button"
+                onClick={() => {
+                  if (isSelectionMode) {
+                    handleExitSelectionMode()
+                  } else {
+                    setIsSelectionMode(true)
+                  }
+                }}
+              >
+                <CheckSquare aria-hidden="true" size={13} />
+                <span>{isSelectionMode ? props.t('sessions.exitBatchManage') : props.t('sessions.batchManage')}</span>
+              </button>
+            </div>
+            <nav aria-label={props.t('sessions.views')} className={styles.masterNav}>
             {isSelectionMode ? (
               <div className={styles.batchToolbar}>
                 <div
@@ -1076,6 +1076,7 @@ export function SessionsPanel(props: SessionsPanelProps) {
               ) : null}
             </div>
           </nav>
+          </div>
         )}
       >
         <div className={styles.detailPane}>

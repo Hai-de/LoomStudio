@@ -1,6 +1,6 @@
-import { ArrowDownUp, ArrowLeft, BookOpen, Check, Circle, ChevronRight, CloudDownload, Combine, Download, FileArchive, Folder, GitFork, Grid2X2, ImageDown, List, Pencil, Play, Plus, RefreshCw, Trash2, Upload, X } from 'lucide-react'
+import { ArrowDownUp, ArrowLeft, BookOpen, Check, ChevronLeft, ChevronRight, Circle, CloudDownload, Combine, Download, FileArchive, Folder, GitFork, Grid2X2, ImageDown, List, Pencil, Play, Plus, RefreshCw, Trash2, Upload, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type DragEvent, type FormEvent } from 'react'
-import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Dialog, TextInput, Textarea, Toggle, type MenuAction } from '@loom-studio/ui'
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Dialog, SearchField, Toggle, type MenuAction } from '@loom-studio/ui'
 import { formatDateTime, type Translator } from '../../shared/i18n/index.js'
 import { useCharacterGalleryStore, type CharacterGroupFilter } from './character-gallery-store.js'
 import { useCharacterProfileNavigation } from './use-character-profile-navigation.js'
@@ -78,115 +78,12 @@ const MAX_MEDIA_BYTES = 10 * 1024 * 1024
 const MAX_REMOTE_CARD_BYTES = 128 * 1024 * 1024
 const PAGE_TRANSITION_MS = 180
 
-function CharacterProfileEditor(props: {
-  card: CharacterCardSummary
-  onSave: CharacterPanelProps['onUpdateCardProfile']
-  busy: boolean
-  t: Translator
-  onSaved(): Promise<void>
-}) {
-  const [baseline] = useState(props.card)
-  const [draft, setDraft] = useState({
-    name: baseline.name, userName: baseline.userName ?? '', description: baseline.description ?? '',
-    opening: {
-      entries: baseline.opening?.entries.map(entry => ({ ...entry })) ?? [],
-      alternatives: baseline.opening?.alternatives?.map(alternative => ({
-        entries: alternative.entries.map(entry => ({ ...entry })),
-      })) ?? [],
-    },
-  })
-  const [openingIndex, setOpeningIndex] = useState(0)
-  const activeOpening = openingIndex === 0 ? draft.opening : draft.opening.alternatives[openingIndex - 1]!
-  function updateOpeningEntries(entries: typeof draft.opening.entries) {
-    setDraft({ ...draft, opening: openingIndex === 0 ? { ...draft.opening, entries } : {
-      ...draft.opening,
-      alternatives: draft.opening.alternatives.map((alternative, index) =>
-        index === openingIndex - 1 ? { entries } : alternative),
-    } })
-  }
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  async function save(event: FormEvent) {
-    event.preventDefault()
-    if (saving) return
-    setSaving(true)
-    setError('')
-    try {
-      await props.onSave({ cardId: baseline.id, expectedVersion: baseline.version, ...draft })
-      await props.onSaved()
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
-    } finally {
-      setSaving(false)
-    }
-  }
-  return <form className={`${styles.profileEditor} loom-underlined-fields`} onSubmit={event => void save(event)}>
-    <label><span>{props.t('character.name')}</span><TextInput disabled={props.busy || saving} value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></label>
-    <label><span>{props.t('character.author')}</span><TextInput disabled={props.busy || saving} value={draft.userName} onChange={event => setDraft({ ...draft, userName: event.target.value })} /></label>
-    <label><span>{props.t('character.description')}</span><Textarea disabled={props.busy || saving} value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} /></label>
-    <section className={styles.openingSection}>
-      <header className={styles.openingHeader}>
-        <h3>{props.t('character.opening')}</h3>
-        <select aria-label={props.t('character.chooseOpening')} value={openingIndex} disabled={props.busy || saving}
-          onChange={event => setOpeningIndex(Number(event.target.value))}>
-          <option value="0">{props.t('character.defaultOpening')}</option>
-          {draft.opening.alternatives.map((_, index) => <option value={index + 1} key={index}>
-            {props.t('character.alternativeOpening')} {index + 1}
-          </option>)}
-        </select>
-        <button type="button" disabled={props.busy || saving} title={props.t('character.addOpening')} aria-label={props.t('character.addOpening')}
-          onClick={() => {
-            setDraft({ ...draft, opening: { ...draft.opening, alternatives: [
-              ...draft.opening.alternatives, { entries: [{ role: 'assistant', content: '' }] },
-            ] } })
-            setOpeningIndex(draft.opening.alternatives.length + 1)
-          }}><Plus size={16} aria-hidden="true" /></button>
-        {openingIndex > 0 ? <button type="button" disabled={props.busy || saving}
-          title={props.t('character.deleteOpening')} aria-label={props.t('character.deleteOpening')}
-          onClick={() => {
-            setDraft({ ...draft, opening: { ...draft.opening,
-              alternatives: draft.opening.alternatives.filter((_, index) => index !== openingIndex - 1) } })
-            setOpeningIndex(0)
-          }}><Trash2 size={16} aria-hidden="true" /></button> : null}
-      </header>
-      <header className={styles.openingHeader}>
-        <span>{props.t('character.opening')}</span>
-        <button type="button" disabled={props.busy || saving} title={props.t('character.addOpeningMessage')} aria-label={props.t('character.addOpeningMessage')}
-          onClick={() => updateOpeningEntries([...activeOpening.entries, { role: 'assistant', content: '' }])}>
-          <Plus size={16} aria-hidden="true" />
-        </button>
-      </header>
-      {activeOpening.entries.map((entry, index) => (
-        <div key={index}>
-          <div className={styles.openingHeader}>
-            <select aria-label={props.t('character.openingMessageRole', { index: index + 1 })} value={entry.role} disabled={props.busy || saving}
-              onChange={event => updateOpeningEntries(activeOpening.entries.map((item, i) =>
-                i === index ? { ...item, role: event.target.value as 'user' | 'assistant' } : item))}>
-              <option value="assistant">{props.t('character.assistantRole')}</option><option value="user">{props.t('character.userRole')}</option>
-            </select>
-            <button type="button" disabled={props.busy || saving} title={props.t('character.deleteOpeningMessage')} aria-label={props.t('character.deleteOpeningMessageNamed', { index: index + 1 })}
-              onClick={() => updateOpeningEntries(activeOpening.entries.filter((_, i) => i !== index))}>
-              <Trash2 size={16} aria-hidden="true" />
-            </button>
-          </div>
-          <Textarea aria-label={props.t('character.openingMessageNamed', { index: index + 1 })} disabled={props.busy || saving} value={entry.content}
-            onChange={event => updateOpeningEntries(activeOpening.entries.map((item, i) =>
-              i === index ? { ...item, content: event.target.value } : item))} />
-        </div>
-      ))}
-    </section>
-    {error ? <p role="alert">{error}</p> : null}
-    <div className={styles.editorActions}><button disabled={props.busy || saving || !draft.name.trim()} type="submit">{props.t('character.save')}</button></div>
-  </form>
-}
-
 export function CharacterPanel(props: CharacterPanelProps) {
   const [startingCard, setStartingCard] = useState<CharacterCardSummary>()
   const [startChoice, setStartChoice] = useState<OpeningChoice>({ kind: 'card', index: 0 })
   const mediaRevision = useCardMediaRevision()
   const mediaUrl = (card: CharacterCardSummary, target: MediaTarget) => cardMediaUrl(card.id, target, target === 'avatar' ? card.media?.avatarAssetId : card.media?.coverAssetId, mediaRevision) ?? (target === 'avatar' ? '/images/default-card.png' : undefined)
   const organization = useCharacterGalleryStore()
-  const [profileEditing, setProfileEditing] = useState(false)
   const [galleryMode, setGalleryMode] = useState<GalleryMode>('grid')
   const [query, setQuery] = useState('')
   const [visibleCount, setVisibleCount] = useState(GALLERY_PAGE_SIZE)
@@ -268,11 +165,111 @@ export function CharacterPanel(props: CharacterPanelProps) {
   const selected = targetCardId
     ? detail.data?.card ?? galleryCards.find(card => card.id === targetCardId)
     : undefined
-  const [openingExpanded, setOpeningExpanded] = useState(false)
+  const [nameDraft, setNameDraft] = useState('')
+  const [authorDraft, setAuthorDraft] = useState('')
+  const [descDraft, setDescDraft] = useState('')
+  const [activeOpeningIndex, setActiveOpeningIndex] = useState(0)
+  const [openingDraft, setOpeningDraft] = useState('')
+
+  const totalOpenings = 1 + (selected?.opening?.alternatives?.length ?? 0)
 
   useEffect(() => {
-    setOpeningExpanded(false)
-  }, [selected?.id])
+    if (selected) {
+      setNameDraft(selected.name ?? '')
+      setAuthorDraft(selected.userName ?? '')
+      setDescDraft(selected.description ?? '')
+      setActiveOpeningIndex(prev => (prev < totalOpenings ? prev : 0))
+    }
+  }, [selected?.id, selected?.version])
+
+  useEffect(() => {
+    if (!selected?.opening) {
+      setOpeningDraft('')
+      return
+    }
+    if (activeOpeningIndex === 0) {
+      setOpeningDraft(selected.opening.entries?.[0]?.content ?? '')
+    } else {
+      setOpeningDraft(selected.opening.alternatives?.[activeOpeningIndex - 1]?.entries?.[0]?.content ?? '')
+    }
+  }, [selected?.id, activeOpeningIndex, selected?.opening])
+
+  async function saveCardField(patch: Partial<{ name: string; userName: string; description: string; opening: CharacterCardSummary['opening'] }>) {
+    if (!selected) return
+    try {
+      await props.onUpdateCardProfile({
+        cardId: selected.id,
+        expectedVersion: selected.version,
+        name: patch.name ?? selected.name,
+        userName: patch.userName ?? (selected.userName ?? ''),
+        description: patch.description ?? (selected.description ?? ''),
+        opening: patch.opening !== undefined ? patch.opening : selected.opening,
+      })
+      await detail.refetch()
+      await props.onRefreshCards?.()
+    } catch (err) {
+      console.error('Failed to update card profile', err)
+    }
+  }
+
+  async function handleOpeningBlur() {
+    if (!selected) return
+    const currentContent = activeOpeningIndex === 0
+      ? (selected.opening?.entries?.[0]?.content ?? '')
+      : (selected.opening?.alternatives?.[activeOpeningIndex - 1]?.entries?.[0]?.content ?? '')
+    if (openingDraft === currentContent) return
+
+    let updatedOpening: CharacterCardSummary['opening']
+    if (activeOpeningIndex === 0) {
+      const existingEntries = selected.opening?.entries ?? []
+      const newEntries = existingEntries.length > 0
+        ? existingEntries.map((entry, idx) => idx === 0 ? { ...entry, content: openingDraft } : entry)
+        : [{ role: 'assistant' as const, content: openingDraft }]
+      updatedOpening = {
+        ...selected.opening,
+        entries: newEntries,
+        alternatives: selected.opening?.alternatives ?? [],
+      }
+    } else {
+      const altIdx = activeOpeningIndex - 1
+      const currentAlts = selected.opening?.alternatives ?? []
+      const targetAlt = currentAlts[altIdx]
+      const newAltEntries = targetAlt?.entries?.length
+        ? targetAlt.entries.map((entry, idx) => idx === 0 ? { ...entry, content: openingDraft } : entry)
+        : [{ role: 'assistant' as const, content: openingDraft }]
+      const newAlts = currentAlts.map((alt, idx) => idx === altIdx ? { ...alt, entries: newAltEntries } : alt)
+      updatedOpening = {
+        entries: selected.opening?.entries ?? [{ role: 'assistant' as const, content: '' }],
+        alternatives: newAlts,
+      }
+    }
+    await saveCardField({ opening: updatedOpening })
+  }
+
+  async function handleAddAlternative() {
+    if (!selected) return
+    const currentAlts = selected.opening?.alternatives ?? []
+    const newAlts = [...currentAlts, { entries: [{ role: 'assistant' as const, content: '' }] }]
+    const updatedOpening = {
+      entries: selected.opening?.entries ?? [{ role: 'assistant' as const, content: '' }],
+      alternatives: newAlts,
+    }
+    await saveCardField({ opening: updatedOpening })
+    setActiveOpeningIndex(newAlts.length)
+  }
+
+  async function handleDeleteAlternative() {
+    if (!selected || activeOpeningIndex === 0) return
+    const altIdx = activeOpeningIndex - 1
+    const currentAlts = selected.opening?.alternatives ?? []
+    const newAlts = currentAlts.filter((_, idx) => idx !== altIdx)
+    const updatedOpening = {
+      entries: selected.opening?.entries ?? [{ role: 'assistant', content: '' }],
+      alternatives: newAlts,
+    }
+    setActiveOpeningIndex(prev => Math.max(0, prev - 1))
+    await saveCardField({ opening: updatedOpening })
+  }
 
   const [timelineSortOrder, setTimelineSortOrder] = useState<'desc' | 'asc'>('desc')
 
@@ -337,7 +334,6 @@ export function CharacterPanel(props: CharacterPanelProps) {
   function openProfile(card: CharacterCardSummary) {
     setActiveCardId(card.id)
     props.onSelectCard(card.id)
-    setProfileEditing(false)
     setOpenProfile(card.id)
     setMobilePane('detail')
   }
@@ -591,18 +587,44 @@ export function CharacterPanel(props: CharacterPanelProps) {
               ) : (
                 <>
                   <div className={styles.galleryToolbarMain}>
-                    <div className={styles.galleryModes} role="group" aria-label={props.t('character.gallery')}>
-                      {props.directoryApi ? <button aria-label={props.t('directory.refresh')} className={styles.toolbarButton} disabled={refreshing || props.busy} title={props.t('directory.refresh')} type="button" onClick={() => void refreshGallery()}><RefreshCw aria-hidden="true" /></button> : null}
-                      <button aria-label={props.t('character.grid')} aria-pressed={galleryMode === 'grid'} className={galleryMode === 'grid' ? styles.toolbarButtonActive : styles.toolbarButton} title={props.t('character.grid')} type="button" onClick={() => setGalleryMode('grid')}><Grid2X2 aria-hidden="true" /></button>
-                      <button aria-label={props.t('character.list')} aria-pressed={galleryMode === 'list'} className={galleryMode === 'list' ? styles.toolbarButtonActive : styles.toolbarButton} title={props.t('character.list')} type="button" onClick={() => setGalleryMode('list')}><List aria-hidden="true" /></button>
-                    </div>
                     <div className={styles.galleryActions}>
+                      {props.directoryApi ? <button aria-label={props.t('directory.refresh')} className={styles.toolbarButton} disabled={refreshing || props.busy} title={props.t('directory.refresh')} type="button" onClick={() => void refreshGallery()}><RefreshCw aria-hidden="true" /></button> : null}
                       <button aria-label={props.t('character.import')} className={styles.toolbarButton} disabled={props.busy} title={props.t('character.import')} type="button" onClick={() => cardImportInputRef.current?.click()}><Upload aria-hidden="true" /></button>
                       <button aria-label={props.t('character.importRemote')} className={styles.toolbarButton} disabled={props.busy} title={props.t('character.importRemote')} type="button" onClick={() => setRemoteImportOpen(true)}><CloudDownload aria-hidden="true" /></button>
-                      <button disabled={props.busy} type="button" onClick={() => void props.onCreateCard().catch(() => undefined)}><Plus aria-hidden="true" />{props.t('character.create')}</button>
+                      <button aria-label={props.t('character.create')} className={styles.createButton} disabled={props.busy} title={props.t('character.create')} type="button" onClick={() => void props.onCreateCard().catch(() => undefined)}><Plus aria-hidden="true" /></button>
+                    </div>
+                    <div className={styles.viewSwitcher} role="group" aria-label={props.t('character.gallery')}>
+                      <button
+                        aria-label={props.t('character.grid')}
+                        aria-pressed={galleryMode === 'grid'}
+                        className={`${styles.viewSwitcherBtn} ${galleryMode === 'grid' ? styles.viewSwitcherBtnActive : ''}`}
+                        title={props.t('character.grid')}
+                        type="button"
+                        onClick={() => setGalleryMode('grid')}
+                      >
+                        <Grid2X2 aria-hidden="true" />
+                      </button>
+                      <button
+                        aria-label={props.t('character.list')}
+                        aria-pressed={galleryMode === 'list'}
+                        className={`${styles.viewSwitcherBtn} ${galleryMode === 'list' ? styles.viewSwitcherBtnActive : ''}`}
+                        title={props.t('character.list')}
+                        type="button"
+                        onClick={() => setGalleryMode('list')}
+                      >
+                        <List aria-hidden="true" />
+                      </button>
                     </div>
                   </div>
-                  <input aria-label={props.t('character.searchPlaceholder')} className={styles.gallerySearch} placeholder={props.t('character.searchPlaceholder')} type="search" value={query} onChange={event => setQuery(event.target.value)} />
+                  <SearchField
+                    containerClassName={styles.gallerySearchContainer}
+                    aria-label={props.t('character.searchPlaceholder')}
+                    placeholder={props.t('character.searchPlaceholder')}
+                    clearLabel={props.t('context.search.clear')}
+                    value={query}
+                    onChange={event => setQuery(event.target.value)}
+                    onClear={() => setQuery('')}
+                  />
                 </>
               )}
             </header>
@@ -694,7 +716,6 @@ export function CharacterPanel(props: CharacterPanelProps) {
               <span>{props.t('character.title')}</span>
               <div>
                 {selectionMode && !selectedCardIds.has(selected.id) ? <button aria-label={props.t('character.select')} className={styles.toolbarButton} title={props.t('character.select')} type="button" onClick={() => enterSelectionMode(selected.id)}><Circle aria-hidden="true" /></button> : null}
-                <button aria-label={props.t('character.edit')} aria-pressed={profileEditing} className={profileEditing ? styles.toolbarButtonActive : styles.toolbarButton} title={props.t('character.edit')} type="button" onClick={() => { setProfileTab('profile'); setProfileEditing(value => !value) }}><Pencil aria-hidden="true" /></button>
                 <button aria-label={props.t('character.export')} className={styles.toolbarButton} disabled={props.busy} title={props.t('character.export')} type="button" onClick={() => setExportCard(selected)}><Download aria-hidden="true" /></button>
                 <button aria-label={props.t('character.forkWork')} className={styles.toolbarButton} disabled={props.busy} title={props.t('character.forkWork')} type="button" onClick={() => void props.onForkCard(selected.id, selected.version).catch(() => undefined)}><GitFork aria-hidden="true" /></button>
                 <button aria-label={props.t('character.delete')} className={`${styles.toolbarButton} ${styles.deleteButton}`} disabled={props.busy} title={props.t('character.delete')} type="button" onClick={() => setPendingDeleteIds([selected.id])}><Trash2 aria-hidden="true" /></button>
@@ -702,7 +723,34 @@ export function CharacterPanel(props: CharacterPanelProps) {
             </header>
 
             <section className={styles.profileIdentity}>
-              <div><h2>{selected.name}</h2><p>{selected.userName || props.t('character.authorUnknown')}</p></div>
+              <div>
+                <input
+                  aria-label={props.t('character.name')}
+                  className={styles.inlineNameInput}
+                  disabled={props.busy}
+                  value={nameDraft}
+                  placeholder={props.t('character.name')}
+                  onChange={event => setNameDraft(event.target.value)}
+                  onBlur={() => {
+                    if (nameDraft.trim() && nameDraft !== selected.name) {
+                      void saveCardField({ name: nameDraft.trim() })
+                    }
+                  }}
+                />
+                <input
+                  aria-label={props.t('character.author')}
+                  className={styles.inlineAuthorInput}
+                  disabled={props.busy}
+                  value={authorDraft}
+                  placeholder={props.t('character.author')}
+                  onChange={event => setAuthorDraft(event.target.value)}
+                  onBlur={() => {
+                    if (authorDraft !== (selected.userName ?? '')) {
+                      void saveCardField({ userName: authorDraft })
+                    }
+                  }}
+                />
+              </div>
               <button disabled={props.busy} type="button" onClick={() => {
                 setStartChoice({ kind: 'card', index: 0 })
                 setStartingCard(selected)
@@ -728,16 +776,24 @@ export function CharacterPanel(props: CharacterPanelProps) {
               {selected.artifactId ? <p className={styles.workIdentity}>{props.t('character.artifactId')}: <code>{selected.artifactId}</code>
                 {selected.derivedFrom ? <><br />{props.t('character.derivedFrom')}: <code>{selected.derivedFrom.artifactId}</code></> : null}
               </p> : null}
-            {profileEditing ? (
-              <CharacterProfileEditor key={selected.id} card={selected} onSave={props.onUpdateCardProfile} busy={props.busy}
-                t={props.t} onSaved={async () => {
-                  setProfileEditing(false)
-                  await detail.refetch()
-                  await props.onRefreshCards?.()
-                }} />
-            ) : (
               <section className={styles.profileContent}>
-                <div><h3>{props.t('character.description')}</h3><p>{selected.description || props.t('character.descriptionEmpty')}</p></div>
+                <div>
+                  <h3>{props.t('character.description')}</h3>
+                  <textarea
+                    aria-label={props.t('character.description')}
+                    className={styles.inlineDescriptionInput}
+                    disabled={props.busy}
+                    value={descDraft}
+                    placeholder={props.t('character.descriptionEmpty')}
+                    rows={5}
+                    onChange={event => setDescDraft(event.target.value)}
+                    onBlur={() => {
+                      if (descDraft !== (selected.description ?? '')) {
+                        void saveCardField({ description: descDraft })
+                      }
+                    }}
+                  />
+                </div>
                 <div className={styles.characterResourcesSection}>
                   <header className={styles.sectionHeader}>
                     <h3>{props.t('character.resources')}</h3>
@@ -751,33 +807,68 @@ export function CharacterPanel(props: CharacterPanelProps) {
 
                 <div className={styles.openingSection}>
                   <header className={styles.openingHeader}>
-                    <h3>{props.t('character.opening')}</h3>
-                    <button className={styles.openingToggle} type="button" disabled={props.busy}
-                      title={props.t('character.editOpening')} aria-label={props.t('character.editOpening')} onClick={() => setProfileEditing(true)}>
-                      <Pencil size={16} aria-hidden="true" />
-                    </button>
-                    {selected.opening?.entries?.[0]?.content ? (
+                    <div className={styles.openingHeaderLeft}>
+                      <div className={styles.openingPagination}>
+                        <button
+                          aria-label="Previous opening"
+                          className={styles.pagingBtn}
+                          disabled={props.busy || activeOpeningIndex <= 0}
+                          type="button"
+                          onClick={() => setActiveOpeningIndex(prev => Math.max(0, prev - 1))}
+                        >
+                          <ChevronLeft size={15} aria-hidden="true" />
+                        </button>
+                        <span className={styles.pagingIndicator}>{activeOpeningIndex + 1}/{totalOpenings}</span>
+                        <button
+                          aria-label="Next opening"
+                          className={styles.pagingBtn}
+                          disabled={props.busy || activeOpeningIndex >= totalOpenings - 1}
+                          type="button"
+                          onClick={() => setActiveOpeningIndex(prev => Math.min(totalOpenings - 1, prev + 1))}
+                        >
+                          <ChevronRight size={15} aria-hidden="true" />
+                        </button>
+                      </div>
+                      <h3>
+                        {activeOpeningIndex === 0 ? props.t('character.defaultOpening') : `${props.t('character.alternativeOpening')} ${activeOpeningIndex}`}
+                      </h3>
+                    </div>
+                    <div className={styles.openingActions}>
                       <button
-                        className={styles.openingToggle}
+                        className={styles.pagingActionBtn}
+                        disabled={props.busy}
                         type="button"
-                        onClick={() => setOpeningExpanded(prev => !prev)}
+                        onClick={() => void handleAddAlternative()}
                       >
-                        {openingExpanded ? props.t('character.collapseOpening') : props.t('character.expandOpening')}
+                        <Plus size={14} aria-hidden="true" />
+                        <span>{props.t('character.addOpening')}</span>
                       </button>
-                    ) : null}
+                      {activeOpeningIndex > 0 ? (
+                        <button
+                          aria-label={props.t('character.deleteOpening')}
+                          className={styles.pagingDeleteBtn}
+                          disabled={props.busy}
+                          title={props.t('character.deleteOpening')}
+                          type="button"
+                          onClick={() => void handleDeleteAlternative()}
+                        >
+                          <Trash2 size={14} aria-hidden="true" />
+                        </button>
+                      ) : null}
+                    </div>
                   </header>
-                  {selected.opening?.entries?.[0]?.content ? (
-                    <p className={openingExpanded ? styles.openingContentExpanded : styles.openingContentCollapsed}>
-                      {renderTemplateMacros(selected.opening.entries[0].content, {
-                        ...props.macroContext,
-                        card: selected,
-                        fallbackUserName: selected.userName || props.macroContext?.fallbackUserName,
-                      })}
-                    </p>
-                  ) : null}
+                  <textarea
+                    aria-label={props.t('character.opening')}
+                    className={styles.inlineOpeningTextarea}
+                    disabled={props.busy}
+                    value={openingDraft}
+                    placeholder={props.t('character.defaultOpening')}
+                    rows={8}
+                    onChange={event => setOpeningDraft(event.target.value)}
+                    onBlur={() => void handleOpeningBlur()}
+                  />
                 </div>
               </section>
-            )}
 
             <section className={styles.sessions}>
               <header className={styles.sessionsHeader}>
@@ -1054,7 +1145,7 @@ function pageTransitionDelay(): number {
 
 function TimelineCard(props: { timeline: NarrativeTimelineView; busy: boolean; current: boolean; onOpen(): void; t: Translator }) {
   return (
-    <details className={styles.sessionCard} open={props.current}>
+    <details className={`${styles.sessionCard} ${props.current ? styles.sessionCardCurrent : ''}`} open={props.current}>
       <summary>
         <ChevronRight aria-hidden="true" />
         <div className={styles.sessionCardHeader}>
@@ -1066,6 +1157,19 @@ function TimelineCard(props: { timeline: NarrativeTimelineView; busy: boolean; c
           </div>
           <small>{formatTimelineDate(props.timeline.updatedAt)}</small>
         </div>
+        <button
+          className={styles.cardPlayButton}
+          disabled={props.busy}
+          type="button"
+          title={props.current ? props.t('character.enterCurrentSession') : props.t('character.enterSession')}
+          aria-label={props.current ? props.t('character.enterCurrentSession') : props.t('character.enterSession')}
+          onClick={event => {
+            event.stopPropagation()
+            props.onOpen()
+          }}
+        >
+          <Play aria-hidden="true" />
+        </button>
       </summary>
       <div className={styles.sessionCardBody}>
         <dl>
@@ -1078,15 +1182,6 @@ function TimelineCard(props: { timeline: NarrativeTimelineView; busy: boolean; c
             <dd>{shortId(props.timeline.id)}</dd>
           </div>
         </dl>
-        <button
-          className={styles.openSessionButton}
-          disabled={props.busy}
-          type="button"
-          onClick={props.onOpen}
-        >
-          <Play aria-hidden="true" />
-          <span>{props.current ? props.t('character.enterCurrentSession') : props.t('character.enterSession')}</span>
-        </button>
       </div>
     </details>
   )

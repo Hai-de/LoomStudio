@@ -110,7 +110,9 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
   async function openAgentSession(sessionId: string) {
     const activated = await state.activateAgentSession(sessionId, navigation.isCurrent)
     if (!activated || !navigation.isCurrent()) return
-    void navigation.openNarrative(activated.session.timelineId, activated.branchId)
+    if (activated.session.timelineId) {
+      void navigation.updateNarrativeContext(activated.session.timelineId, activated.branchId ?? '')
+    }
     uiState.setAgentPanelOpen(true)
   }
   function onTextTransformsChanged() {
@@ -141,7 +143,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
     api: state.textTransformsApi,
     endpoint: state.endpoint,
     source: state.narrativeTimeline && state.branch ? { kind: 'narrative', timelineId: state.narrativeTimeline.id, branchId: state.branch.id } : undefined,
-    consumerAgentSessionId: state.agentChatSession?.id,
+    consumerAgentSessionId: state.narrativeAgentSession?.id,
     entries: state.narrativeNodes.map(node => ({ id: node.id, text: node.body.raw })),
     revision: activePresetId,
     refreshToken: uiState.loomScriptRefreshToken,
@@ -270,7 +272,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
         narrative: state.narrativeTimeline && state.branch ? {
           timelineId: state.narrativeTimeline.id,
           branchId: state.branch.id,
-          consumerAgentSessionId: state.agentChatSession?.id,
+          consumerAgentSessionId: state.narrativeAgentSession?.id ?? state.agentChatSession?.id,
         } : undefined,
         agentSessionId: state.agentChatSession?.id,
       }),

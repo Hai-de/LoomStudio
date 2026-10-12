@@ -1,51 +1,61 @@
 .toast {
-  width: min(356px, calc(100vw - 32px));
+  width: min(380px, calc(100vw - 32px));
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 12px 16px;
-  border: 1px solid hsla(0, 0%, 100%, 0.14);
+  gap: 12px;
+  padding: 12px 14px;
   border-radius: var(--loom-radius-popover, 12px);
   color: #fff;
-  background: rgba(30, 30, 38, 0.82);
-  backdrop-filter: blur(14px) saturate(160%);
-  -webkit-backdrop-filter: blur(14px) saturate(160%);
-  box-shadow: 0 10px 32px rgb(0 0 0 / 35%);
-  font-size: var(--loom-font-size-body);
-  line-height: var(--loom-line-height-ui);
+  background: rgba(30, 30, 36, 0.85);
+  backdrop-filter: blur(24px) saturate(190%);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  border: 0;
+  box-shadow: none;
+  font-size: var(--loom-font-size-body, 13px);
+  line-height: var(--loom-line-height-ui, 1.45);
   cursor: copy;
   touch-action: auto;
   user-select: text;
-  animation: toast-slide-in 360ms var(--loom-motion-ease-out, cubic-bezier(0.215, 0.61, 0.355, 1)) both;
-  transition: transform 180ms ease, box-shadow 180ms ease;
-
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 16px 42px rgb(0 0 0 / 45%);
-  }
-
-  &.success {
-    background: linear-gradient(135deg, rgba(46, 125, 50, 0.82) 0%, rgba(46, 125, 50, 0.45) 100%);
-    box-shadow: 0 8px 32px 0 rgba(46, 125, 50, 0.35);
-    border-color: rgba(129, 199, 132, 0.28);
-  }
+  box-sizing: border-box;
 
   &.error {
-    background: linear-gradient(135deg, rgba(220, 20, 60, 0.82) 0%, rgba(220, 20, 60, 0.45) 100%);
-    box-shadow: 0 8px 32px 0 rgba(220, 20, 60, 0.35);
-    border-color: rgba(255, 138, 128, 0.28);
+    background: rgba(220, 38, 38, 0.85);
+    border: 0;
+    box-shadow: none;
+
+    .icon {
+      color: #fff;
+    }
   }
 
   &.warning {
-    background: linear-gradient(135deg, rgba(235, 125, 0, 0.82) 0%, rgba(235, 125, 0, 0.45) 100%);
-    box-shadow: 0 8px 32px 0 rgba(235, 125, 0, 0.35);
-    border-color: rgba(255, 183, 77, 0.28);
+    background: rgba(217, 119, 6, 0.85);
+    border: 0;
+    box-shadow: none;
+
+    .icon {
+      color: #fff;
+    }
+  }
+
+  &.success {
+    background: rgba(22, 163, 74, 0.85);
+    border: 0;
+    box-shadow: none;
+
+    .icon {
+      color: #fff;
+    }
   }
 
   &.info {
-    background: linear-gradient(135deg, rgba(2, 136, 209, 0.82) 0%, rgba(2, 136, 209, 0.45) 100%);
-    box-shadow: 0 8px 32px 0 rgba(2, 136, 209, 0.35);
-    border-color: rgba(129, 212, 250, 0.28);
+    background: rgba(37, 99, 235, 0.85);
+    border: 0;
+    box-shadow: none;
+
+    .icon {
+      color: #fff;
+    }
   }
 }
 
@@ -61,11 +71,15 @@
   overflow-wrap: anywhere;
   font-weight: var(--loom-font-weight-6, 600);
   color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .description {
-  color: rgba(255, 255, 255, 0.88);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .icon {
@@ -75,14 +89,14 @@
   flex: 0 0 var(--loom-icon-size-5);
   display: grid;
   place-items: center;
-  color: #fff;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+  color: rgba(255, 255, 255, 0.75);
+  margin-top: 1px;
 }
 
 .icon svg {
   width: calc(15px * var(--loom-ui-scale));
   height: calc(15px * var(--loom-ui-scale));
-  stroke-width: 1.6;
+  stroke-width: 1.8;
 }
 
 .closeButton,
@@ -101,27 +115,23 @@
 
 .closeButton {
   order: 4;
-  width: 22px;
-  min-width: 22px;
-  min-height: 22px;
+  width: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  height: 20px;
   display: grid;
   place-items: center;
   padding: 0;
   border-radius: 50%;
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.08);
+  margin-top: 1px;
+  transition: color 150ms ease, background-color 150ms ease;
 
   &:hover:not(:disabled) {
     color: #fff;
-    background: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.22);
   }
-}
-
-.closeButton:hover:not(:disabled),
-.actionButton:hover:not(:disabled),
-.cancelButton:hover:not(:disabled) {
-  border-color: transparent;
-  color: #fff;
-  background: rgba(255, 255, 255, 0.15);
 }
 
 .closeButton:focus-visible,
@@ -131,26 +141,4 @@
   outline-offset: 1px;
   border-color: transparent;
   box-shadow: none;
-}
-
-@keyframes toast-slide-in {
-  0% {
-    opacity: 0;
-    transform: translateX(28px) scale(0.96);
-  }
-  100% {
-    opacity: 1;
-    transform: translateX(0) scale(1);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .toast {
-    animation: none;
-    transform: none;
-
-    &:hover {
-      transform: none;
-    }
-  }
 }

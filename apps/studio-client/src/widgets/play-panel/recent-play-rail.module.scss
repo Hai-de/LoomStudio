@@ -1,7 +1,39 @@
-.root { display: grid; gap: 6px; width: 100%; margin: 4px 0 0; padding: 0 4px; box-sizing: border-box; }
+.root {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  max-height: min(220px, 26vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--loom-color-border) 60%, transparent) transparent;
+  margin: 4px 0 0;
+  padding: 0 4px;
+  box-sizing: border-box;
+
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--loom-color-border) 60%, transparent);
+    border-radius: 9999px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+.hoverIndicator {
+  border-radius: 6px;
+  background: var(--loom-color-surface-raised);
+}
+
 .group { display: grid; gap: 2px; }
 .date { padding: 2px 8px; color: var(--loom-color-text-subtle); font-size: 10px; }
 .item {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -23,7 +55,6 @@
   }
 
   &:hover {
-    background: var(--loom-color-surface-raised);
     color: var(--loom-color-text);
 
     .avatar img {

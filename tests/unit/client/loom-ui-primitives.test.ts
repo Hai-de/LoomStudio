@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { Button, Field, IconButton, SearchField, TextInput } from '@loom-studio/ui'
+import { Button, Checkbox, Field, IconButton, Radio, RadioGroup, SearchField, TextInput } from '@loom-studio/ui'
 
 describe('@loom-studio/ui primitives', () => {
   it('keeps native button semantics and accessible icon labels', () => {
@@ -44,5 +44,50 @@ describe('@loom-studio/ui primitives', () => {
 
     expect(html).toContain('type="search"')
     expect(html).toContain('aria-label="Clear search"')
+  })
+
+  it('renders radio and radio group with accessible choices and label wrappers', () => {
+    const standalone = renderToStaticMarkup(createElement(Radio, {
+      name: 'mode',
+      value: 'glass',
+      label: '毛玻璃',
+      checked: true,
+      onChange: vi.fn(),
+    }))
+    expect(standalone).toContain('data-loom-ui-choice-label=""')
+    expect(standalone).toContain('data-loom-ui-radio=""')
+    expect(standalone).toContain('type="radio"')
+    expect(standalone).toContain('checked=""')
+    expect(standalone).toContain('data-loom-ui-choice-text=""')
+    expect(standalone).toContain('毛玻璃')
+
+    const group = renderToStaticMarkup(createElement(RadioGroup, {
+      name: 'surface-mode',
+      value: 'translucent',
+      options: [
+        { value: 'solid', label: '实色' },
+        { value: 'translucent', label: '半透明' },
+      ],
+      onChange: vi.fn(),
+    }))
+    expect(group).toContain('data-loom-ui-radio-group=""')
+    expect(group).toContain('role="radiogroup"')
+    expect(group).toContain('实色')
+    expect(group).toContain('半透明')
+  })
+
+  it('renders checkbox with optional label wrapper', () => {
+    const withLabel = renderToStaticMarkup(createElement(Checkbox, {
+      label: '启用毛玻璃',
+      checked: true,
+      onChange: vi.fn(),
+    }))
+    expect(withLabel).toContain('data-loom-ui-choice-label=""')
+    expect(withLabel).toContain('data-loom-ui-checkbox=""')
+    expect(withLabel).toContain('启用毛玻璃')
+
+    const bare = renderToStaticMarkup(createElement(Checkbox, { checked: false, onChange: vi.fn() }))
+    expect(bare).not.toContain('data-loom-ui-choice-label=""')
+    expect(bare).toContain('data-loom-ui-checkbox=""')
   })
 })

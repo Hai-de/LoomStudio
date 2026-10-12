@@ -356,6 +356,7 @@ export function useContextAssets(input: UseContextAssetsInput) {
     nodes: scope.visible.map(resource => resource.rootNode),
     resources: scope.visible,
     draftResourceIds: [...scope.drafts.keys()],
+    failedDraftResourceIds: [...scope.drafts.entries()].filter(([, draft]) => Boolean(draft.failure)).map(([id]) => id),
     discardDraft,
     retryDraft,
     setResources,

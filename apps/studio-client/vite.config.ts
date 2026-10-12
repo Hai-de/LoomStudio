@@ -34,6 +34,8 @@ export default defineConfig({
     alias: {
       '@': resolvePath('./src'),
       '@loom-studio/logging': resolvePath('../../packages/logging/src/index.ts'),
+      '@loom-studio/ui/styles.css': resolvePath('../../packages/loom-ui/src/styles.css'),
+      '@loom-studio/ui': resolvePath('../../packages/loom-ui/src/index.ts'),
     },
   },
   css: {

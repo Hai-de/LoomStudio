@@ -4,26 +4,8 @@
   color: var(--loom-color-text);
 }
 
-.tabs {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
+.tabsWrapper {
   margin-bottom: 20px;
-  border-bottom: 1px solid var(--loom-color-divider);
-
-  button {
-    padding: 8px 0;
-    border: 0;
-    border-bottom: 2px solid transparent;
-    background: transparent;
-    color: var(--loom-color-text-muted);
-    cursor: pointer;
-
-    &[aria-selected='true'] {
-      border-bottom-color: var(--loom-color-accent);
-      color: var(--loom-color-text);
-    }
-  }
 }
 
 .view :is(button, input, summary):focus-visible {
@@ -40,8 +22,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 0 0 18px;
-  border-bottom: 1px solid var(--loom-color-divider);
+  padding: 4px 0 14px;
 
   input {
     width: 18px;
@@ -52,7 +33,7 @@
 }
 
 .search {
-  margin-top: 18px;
+  margin-top: 14px;
 }
 
 .resourceHeader {
@@ -219,28 +200,33 @@
 }
 
 .modeChoices {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
   margin: 0 0 16px;
   padding: 0;
   border: 0;
 
-  legend { margin-bottom: 12px; font-weight: 600; }
-  label { display: inline-flex; align-items: center; gap: 5px; }
-  input { accent-color: var(--loom-color-accent); }
+  legend {
+    margin-bottom: 12px;
+    font-weight: 600;
+    color: var(--loom-color-text);
+  }
 }
 
 .range {
   display: grid;
   gap: 12px;
-  padding: 18px 0;
-  border-bottom: 1px solid var(--loom-color-divider);
+  padding: 12px 0;
 
   span { display: flex; justify-content: space-between; gap: 12px; }
   output { color: var(--loom-color-text-muted); font-variant-numeric: tabular-nums; }
   input { width: 100%; margin: 0; accent-color: var(--loom-color-accent); }
   input:disabled { opacity: .45; }
+}
+
+.sliderGroup {
+  display: grid;
+  gap: 14px;
+  padding: 12px 0;
+  margin-bottom: 16px;
 }
 
 .scene {

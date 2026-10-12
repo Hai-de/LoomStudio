@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronRight, Folder, FolderOpen, RefreshCw, RotateCcw } from 'lucide-react'
 import { SearchField } from '@loom-studio/ui'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { canonicalMacroName, macroSelectionMatches, type MacroCandidate, type MacroInspection, type MacroSelection, type MacroSelectionMap } from '@loom-studio/shared'
 import { MasterDetailWorkbench } from '../../../shared/ui/master-detail-workbench/master-detail-workbench.js'
 import { normalizeSearchText } from '../../../shared/lib/text.js'
@@ -17,6 +17,8 @@ export type MacroInspectorPanelProps = {
   onSelectSource(name: string, selection: MacroSelection | undefined): void
   onRefresh(): void
   t: Translator
+  header?: ReactNode
+  hideHeader?: boolean
 }
 
 function isMacroSource(candidate: MacroCandidate): boolean {
@@ -59,76 +61,98 @@ export function MacroInspectorPanel(props: MacroInspectorPanelProps) {
 
   return (
     <section className={styles.panel} data-loom-component="macro-inspector-panel">
-      <header className={styles.intro}>
-        <h2>{props.t('macroInspector.title')}</h2>
-        {!props.readOnly ? <button className={styles.iconButton} type="button" onClick={props.onRefresh} disabled={props.loading}>
-          <RefreshCw aria-hidden="true" size={14} />
-          <span>{props.t('macroInspector.refresh')}</span>
-        </button> : null}
-      </header>
-      {props.error ? <div className={styles.errorBanner} role="alert">{props.error}</div> : null}
-      {props.loading && !props.inspection ? <div className={styles.emptyState}>{props.t('macroInspector.loading')}</div> : null}
-      {!props.loading && !props.inspection ? <div className={styles.emptyState}>{props.t('macroInspector.empty')}</div> : null}
-      {props.inspection && displayEntries.length === 0 ? <div className={styles.emptyState}>{props.t('macroInspector.empty')}</div> : null}
-      {props.inspection && displayEntries.length > 0 ? (
-        <div className={styles.macroInspectorBody}>
-          <MasterDetailWorkbench
-            dataComponent="macro-inspector-workbench"
-            detailMinWidth={220}
-            mobilePane={mobilePane}
-            onBack={() => setMobilePane('master')}
-            onMobilePaneChange={setMobilePane}
-            master={(
-              <nav className={styles.macroInspectorMaster} aria-label={props.t('macroInspector.title')}>
-                <SearchField
-                  containerClassName={styles.macroInspectorSearch}
-                  aria-label={props.t('macroInspector.search')}
-                  placeholder={props.t('macroInspector.searchPlaceholder')}
-                  clearLabel={props.t('context.search.clear')}
-                  value={query}
-                  onChange={event => setQuery(event.target.value)}
-                  onClear={() => setQuery('')}
-                />
-                <div className={styles.macroInspectorResults}>
-                  {groups.map(group => (
-                    <section className={styles.macroInspectorGroup} key={group.status}>
-                      <header>
-                        <button
-                          aria-expanded={query ? true : !collapsedGroups.includes(group.status)}
-                          type="button"
-                          onClick={() => setCollapsedGroups(current => current.includes(group.status)
-                            ? current.filter(status => status !== group.status)
-                            : [...current, group.status])}
-                        >
-                          {query || !collapsedGroups.includes(group.status) ? <ChevronDown aria-hidden="true" size={14} /> : <ChevronRight aria-hidden="true" size={14} />}
-                          {query || !collapsedGroups.includes(group.status) ? <FolderOpen aria-hidden="true" size={14} /> : <Folder aria-hidden="true" size={14} />}
-                          <span>{statusLabel(group.status, props.t)}</span>
-                          <small>{group.entries.length}</small>
-                        </button>
-                      </header>
-                      {(query || !collapsedGroups.includes(group.status)) && group.entries.map(entry => (
-                        <button
-                          aria-current={entry.name === selectedName ? 'page' : undefined}
-                          className={styles.macroInspectorListItem}
-                          key={entry.name}
-                          type="button"
-                          onClick={() => { setSelectedName(entry.name); setMobilePane('detail') }}
-                        >
-                          <strong>{entry.name}</strong>
-                          <span>{entry.candidates.find(candidate => candidate.sourceId === entry.selectedSourceId && candidate.optionId === entry.selectedOptionId && isMacroSource(candidate))?.sourceLabel ?? statusLabel(entry.status, props.t)}</span>
-                        </button>
-                      ))}
-                    </section>
-                  ))}
-                  {visibleEntries.length === 0 ? <div className={styles.emptyState}>{props.t('macroInspector.searchEmpty')}</div> : null}
-                </div>
-              </nav>
-            )}
-          >
-            {selectedEntry ? <MacroInspectionEntryDetail entry={selectedEntry} props={props} /> : <div className={styles.emptyState}>{props.t('macroInspector.empty')}</div>}
-          </MasterDetailWorkbench>
-        </div>
+      {!props.hideHeader && !props.header ? (
+        <header className={styles.intro}>
+          <h2>{props.t('macroInspector.title')}</h2>
+          {!props.readOnly ? <button className={styles.iconButton} type="button" onClick={props.onRefresh} disabled={props.loading}>
+            <RefreshCw aria-hidden="true" size={14} />
+            <span>{props.t('macroInspector.refresh')}</span>
+          </button> : null}
+        </header>
       ) : null}
+      {props.error ? <div className={styles.errorBanner} role="alert">{props.error}</div> : null}
+      <div className={styles.macroInspectorBody}>
+        <MasterDetailWorkbench
+          dataComponent="macro-inspector-workbench"
+          detailMinWidth={220}
+          mobilePane={mobilePane}
+          onBack={() => setMobilePane('master')}
+          onMobilePaneChange={setMobilePane}
+          master={(
+            <nav className={styles.macroInspectorMaster} aria-label={props.t('macroInspector.title')}>
+              {props.header ? (
+                <header className={styles.masterHeader}>
+                  {props.header}
+                  {!props.readOnly ? (
+                    <button
+                      aria-label={props.t('macroInspector.refresh')}
+                      title={props.t('macroInspector.refresh')}
+                      className={styles.headerIconBtn}
+                      disabled={props.loading}
+                      type="button"
+                      onClick={props.onRefresh}
+                    >
+                      <RefreshCw aria-hidden="true" size={14} />
+                    </button>
+                  ) : null}
+                </header>
+              ) : null}
+              <SearchField
+                containerClassName={styles.macroInspectorSearch}
+                aria-label={props.t('macroInspector.search')}
+                placeholder={props.t('macroInspector.searchPlaceholder')}
+                clearLabel={props.t('context.search.clear')}
+                value={query}
+                onChange={event => setQuery(event.target.value)}
+                onClear={() => setQuery('')}
+              />
+              <div className={styles.macroInspectorResults}>
+                {groups.map(group => (
+                  <section className={styles.macroInspectorGroup} key={group.status}>
+                    <header>
+                      <button
+                        aria-expanded={query ? true : !collapsedGroups.includes(group.status)}
+                        type="button"
+                        onClick={() => setCollapsedGroups(current => current.includes(group.status)
+                          ? current.filter(status => status !== group.status)
+                          : [...current, group.status])}
+                      >
+                        {query || !collapsedGroups.includes(group.status) ? <ChevronDown aria-hidden="true" size={14} /> : <ChevronRight aria-hidden="true" size={14} />}
+                        {query || !collapsedGroups.includes(group.status) ? <FolderOpen aria-hidden="true" size={14} /> : <Folder aria-hidden="true" size={14} />}
+                        <span>{statusLabel(group.status, props.t)}</span>
+                        <small>{group.entries.length}</small>
+                      </button>
+                    </header>
+                    {(query || !collapsedGroups.includes(group.status)) && group.entries.map(entry => (
+                      <button
+                        aria-current={entry.name === selectedName ? 'page' : undefined}
+                        className={styles.macroInspectorListItem}
+                        key={entry.name}
+                        type="button"
+                        onClick={() => { setSelectedName(entry.name); setMobilePane('detail') }}
+                      >
+                        <strong>{entry.name}</strong>
+                        <span>{entry.candidates.find(candidate => candidate.sourceId === entry.selectedSourceId && candidate.optionId === entry.selectedOptionId && isMacroSource(candidate))?.sourceLabel ?? statusLabel(entry.status, props.t)}</span>
+                      </button>
+                    ))}
+                  </section>
+                ))}
+                {visibleEntries.length === 0 ? <div className={styles.emptyState}>{props.t('macroInspector.searchEmpty')}</div> : null}
+              </div>
+            </nav>
+          )}
+        >
+          {props.loading && !props.inspection ? (
+            <div className={styles.emptyState}>{props.t('macroInspector.loading')}</div>
+          ) : !props.inspection || displayEntries.length === 0 ? (
+            <div className={styles.emptyState}>{props.t('macroInspector.empty')}</div>
+          ) : selectedEntry ? (
+            <MacroInspectionEntryDetail entry={selectedEntry} props={props} />
+          ) : (
+            <div className={styles.emptyState}>{props.t('macroInspector.empty')}</div>
+          )}
+        </MasterDetailWorkbench>
+      </div>
     </section>
   )
 }

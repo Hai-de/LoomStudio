@@ -22,38 +22,40 @@ export type StudioMacroPanelProps = {
 export function StudioMacroPanel(props: StudioMacroPanelProps): ReactNode {
   const [activeTab, setActiveTab] = useState<MacroView>('authoring')
 
+  const tabs = (
+    <PanelTabs<MacroView>
+      activeId={activeTab}
+      ariaLabel={props.t('rail.macro')}
+      items={[
+        { id: 'authoring', label: props.t('context.authoring.macros') },
+        { id: 'preview', label: props.t('macroInspector.preview') },
+      ]}
+      onChange={setActiveTab}
+    />
+  )
+
   return (
     <div className={styles.panel}>
-      <header className={styles.header}>
-        <PanelTabs<MacroView>
-          activeId={activeTab}
-          ariaLabel={props.t('rail.macro')}
-          items={[
-            { id: 'authoring', label: props.t('context.authoring.macros') },
-            { id: 'preview', label: props.t('macroInspector.preview') },
-          ]}
-          onChange={setActiveTab}
+      {activeTab === 'authoring' ? (
+        <MacroAuthoringWorkbench
+          header={tabs}
+          sources={props.sources}
+          t={props.t}
         />
-      </header>
-      <div className={styles.content}>
-        {activeTab === 'authoring' ? (
-          <MacroAuthoringWorkbench
-            sources={props.sources}
-            t={props.t}
-          />
-        ) : (
-          <MacroInspectorPanel
-            key={`${props.macroTargetKey}:${activeTab}`}
-            inspection={props.macroInspection}
-            loading={props.macroInspectionLoading}
-            error={props.macroInspectionError}
-            selections={props.macroSelections}
-            onSelectSource={props.onSelectSource}
-            onRefresh={props.onRefresh}
-            t={props.t}
-          />
-        )}
-      </div>
+      ) : (
+        <MacroInspectorPanel
+          key={`${props.macroTargetKey}:${activeTab}`}
+          header={tabs}
+          inspection={props.macroInspection}
+          loading={props.macroInspectionLoading}
+          error={props.macroInspectionError}
+          selections={props.macroSelections}
+          onSelectSource={props.onSelectSource}
+          onRefresh={props.onRefresh}
+          t={props.t}
+          hideHeader={true}
+        />
+      )}
     </div>
   )
 }

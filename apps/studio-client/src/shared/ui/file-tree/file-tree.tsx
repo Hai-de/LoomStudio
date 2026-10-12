@@ -1,8 +1,9 @@
 import { ChevronDown, ChevronRight, GripVertical, MoreHorizontal } from 'lucide-react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type ElementType } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type ElementType } from 'react'
 import { ContextMenu, ContextMenuCheckboxItem, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, type MenuAction } from '@loom-studio/ui'
 import { useEffectiveMotion } from '../../hooks/use-motion-preference.js'
+import { useSlidingHover } from '../../hooks/use-sliding-hover.js'
 import { readDragTopScrollSpeed, readDropPosition, readFileTreeKeyboardTarget, readVisibleFileTreeNodes, type FileTreeNode } from './file-tree-model.js'
 import styles from './file-tree.module.scss'
 
@@ -48,6 +49,7 @@ export function FileTree(props: FileTreeProps) {
   const dragOverElementRef = useRef<HTMLElement | undefined>(undefined)
   const stopDragScrollRef = useRef<(() => void) | undefined>(undefined)
   const treeRef = useRef<HTMLDivElement>(null)
+  const virtualContentRef = useRef<HTMLDivElement>(null)
   const treeItemRefs = useRef(new Map<string, HTMLDivElement>())
   const virtualRowRefs = useRef(new Map<string, HTMLDivElement>())
   const virtualFirstPositionsRef = useRef(new Map<string, number>())
@@ -55,6 +57,15 @@ export function FileTree(props: FileTreeProps) {
   const virtualOpeningRef = useRef(false)
   const previousVisibleIdsRef = useRef(new Set<string>())
   const effectiveMotion = useEffectiveMotion()
+  const slidingHover = useSlidingHover<HTMLDivElement>({
+    itemSelector: '[data-file-tree-node-id]',
+    insetX: 6,
+    activeId: props.selectedId,
+  })
+  const setTreeContainerRef = useCallback((element: HTMLDivElement | null) => {
+    treeRef.current = element
+    slidingHover.containerRef.current = element
+  }, [slidingHover.containerRef])
   const expandedIds = useMemo(() => new Set(props.expandedIds), [props.expandedIds])
   const visibleNodes = useMemo(() => readVisibleFileTreeNodes(props.nodes, expandedIds), [expandedIds, props.nodes])
   const rovingId = visibleNodes.some(item => item.node.id === focusedId)
@@ -313,13 +324,21 @@ export function FileTree(props: FileTreeProps) {
     )
   }
 
+  const hoverIndicatorElement = (
+    <div
+      className={styles.hoverIndicator}
+      style={slidingHover.indicatorStyle}
+      aria-hidden="true"
+    />
+  )
+
   return (
     <ContextMenu onOpenChange={open => {
       if (!open) setContextActions([])
     }}>
       <ContextMenuTrigger asChild disabled={!props.getActions}>
         <div
-          ref={treeRef}
+          ref={setTreeContainerRef}
           className={[
             styles.tree,
             props.variant === 'flat' ? styles.flatTree : '',
@@ -329,9 +348,16 @@ export function FileTree(props: FileTreeProps) {
           aria-label={props.ariaLabel}
           data-loom-component="file-tree"
           onContextMenu={handleContextMenu}
+          onPointerOver={slidingHover.onPointerOver}
+          onPointerLeave={slidingHover.onPointerLeave}
         >
+          {hoverIndicatorElement}
           {props.virtualized ? (
-            <div className={styles.virtualContent} style={{ height: virtualizer.getTotalSize() }}>
+            <div
+              ref={virtualContentRef}
+              className={styles.virtualContent}
+              style={{ height: virtualizer.getTotalSize() }}
+            >
               {virtualizer.getVirtualItems().map(item => {
                 const visible = visibleNodes[item.index]
                 if (!visible) return null
@@ -655,8 +681,23 @@ function FileTreeRow(props: {
         <>
           {rowElement}
           {expandedRowElement ? (
-            <div className={styles.expandedRow} style={{ '--loom-tree-level': props.level } as CSSProperties}>
-              {expandedRowElement}
+            <div
+              className={`${styles.expandedRow} ${!props.canDrag ? styles.noDrag : ''}`}
+              style={{ '--loom-tree-level': props.level } as CSSProperties}
+            >
+              {props.variant !== 'flat' && props.level > 1 ? (
+                <span className={styles.guideColumns} aria-hidden="true">
+                  {Array.from({ length: props.level - 1 }, (_, index) => (
+                    <span
+                      className={styles.guideColumn}
+                      key={index}
+                    />
+                  ))}
+                </span>
+              ) : null}
+              <div className={styles.expandedRowContent}>
+                {expandedRowElement}
+              </div>
             </div>
           ) : null}
         </>

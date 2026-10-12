@@ -7,6 +7,7 @@ import styles from './play-panel.module.scss'
 import { PanelHeaderActions } from '../../shared/studio-shell/studio-window-header-context.js'
 import { useStudioLayoutStore } from '../../shared/studio-shell/studio-layout-store.js'
 import { PanelTabs } from '../../shared/ui/panel-tabs/index.js'
+import { useSlidingHover } from '../../shared/hooks/use-sliding-hover.js'
 
 type PlayTab = 'character' | 'sessions'
 
@@ -111,12 +112,11 @@ export function RecentPlayPanel(props: RecentPlayPanelProps) {
     return [...props.cards].sort((left, right) =>
       (lastPlayed.get(right.id) ?? right.updatedAt).localeCompare(lastPlayed.get(left.id) ?? left.updatedAt))
   }, [props.cards, props.timelines])
+  const timelinesHover = useSlidingHover<HTMLElement>()
+  const sessionsHover = useSlidingHover<HTMLElement>()
 
   return (
     <section className={styles.panel} aria-label={props.t('rail.recent')}>
-      <div className={styles.header}>
-        <h2 className={styles.recentHeading}>{props.t('rail.recent')}</h2>
-      </div>
       <PanelHeaderActions panel="recent">
         <button
           aria-expanded={calendarOpen}
@@ -167,12 +167,18 @@ export function RecentPlayPanel(props: RecentPlayPanelProps) {
               })}
             </div>
           </section>
-          <section className={styles.sessionList}>
+          <section
+            ref={timelinesHover.containerRef}
+            className={styles.sessionList}
+            onPointerOver={timelinesHover.onPointerOver}
+            onPointerLeave={timelinesHover.onPointerLeave}
+          >
+            <div className={styles.hoverIndicator} style={timelinesHover.indicatorStyle} aria-hidden="true" />
             <h3>{props.t('play.recentTimelines')}</h3>
             {groupedTimelines.map(group => <div className={styles.sessionGroup} key={group.key}>
               {!selectedDate ? <span className={styles.sessionDate}>{formatDay(group.key)}</span> : null}
               {group.items.slice(0, 8).map(item => (
-                <button className={styles.sessionRow} key={item.id} type="button" onClick={item.open}>
+                <button data-hover-item className={styles.sessionRow} key={item.id} type="button" onClick={item.open}>
                   <span className={styles.sessionAvatar}>
                     {item.avatarUrl ? <img src={item.avatarUrl} alt="" /> : item.title.slice(0, 1)}
                   </span>
@@ -187,7 +193,13 @@ export function RecentPlayPanel(props: RecentPlayPanelProps) {
               ))}
             </div>)}
           </section>
-          <section className={styles.sessionList}>
+          <section
+            ref={sessionsHover.containerRef}
+            className={styles.sessionList}
+            onPointerOver={sessionsHover.onPointerOver}
+            onPointerLeave={sessionsHover.onPointerLeave}
+          >
+            <div className={styles.hoverIndicator} style={sessionsHover.indicatorStyle} aria-hidden="true" />
             <div className={styles.sectionTitleRow}>
               <h3>{props.t('play.recentSessions')}</h3>
               <button className={styles.sectionToggle} type="button" aria-expanded={recentSessionsOpen} aria-label={props.t(recentSessionsOpen ? 'play.collapseRecentSessions' : 'play.expandRecentSessions')} onClick={() => setRecentSessionsOpen(!recentSessionsOpen)}>
@@ -197,7 +209,7 @@ export function RecentPlayPanel(props: RecentPlayPanelProps) {
             {recentSessionsOpen ? groupedSessions.map(group => <div className={styles.sessionGroup} key={group.key}>
               {!selectedDate ? <span className={styles.sessionDate}>{formatDay(group.key)}</span> : null}
               {group.items.slice(0, 8).map(item => (
-                <button className={styles.sessionRow} key={item.id} type="button" onClick={item.open}>
+                <button data-hover-item className={styles.sessionRow} key={item.id} type="button" onClick={item.open}>
                   <Bot className={styles.sessionBot} aria-hidden="true" />
                   <span className={styles.sessionContent}>
                     <span className={styles.sessionInfo}>

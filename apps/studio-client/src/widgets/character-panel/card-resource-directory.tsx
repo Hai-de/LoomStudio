@@ -129,17 +129,25 @@ export function CardResourceDirectory(props: {
   }
   const error = [card, rules, scripts, definitions, extensions, catalog, payloads].find(query => query.isError)?.error
   return <section className={styles.directory} aria-label={t('directory.attachments')}>
-    <nav className={styles.breadcrumbs} aria-label={t('directory.attachments')}>
-      <button type="button" onClick={() => navigate({})} disabled={!location.item}><ArrowLeft size={16} aria-hidden="true" />{t('character.back')}</button>
-      <button type="button" onClick={() => navigate({})}>{current?.name ?? t('character.title')}</button>
-      {folder ? <button type="button" onClick={() => navigate({})}>{folder.label}</button> : null}
-      {location.item ? <span>{folder?.entries.find(entry => entry.id === location.item)?.label}</span> : null}
-      {node && node.id !== resource?.rootNode.id ? <span>{node.label}</span> : null}
-    </nav>
-    {current ? <TokenSnapshotControl snapshot={tokens} t={t}
-      incomplete={boundIds.some(id => !props.resources.some(resource => resource.id === id))} /> : null}
-    {current ? <div><TokenSnapshotSummary snapshot={tokens} t={t}
-      incomplete={boundIds.some(id => !props.resources.some(resource => resource.id === id))} /></div> : null}
+    <header className={styles.directoryToolbar}>
+      <nav className={styles.breadcrumbs} aria-label={t('directory.attachments')}>
+        <button type="button" onClick={() => navigate({})} disabled={!location.item}><ArrowLeft size={16} aria-hidden="true" />{t('character.back')}</button>
+        <button type="button" onClick={() => navigate({})}>{current?.name ?? t('character.title')}</button>
+        {folder ? <button type="button" onClick={() => navigate({})}>{folder.label}</button> : null}
+        {location.item ? <span>{folder?.entries.find(entry => entry.id === location.item)?.label}</span> : null}
+        {node && node.id !== resource?.rootNode.id ? <span>{node.label}</span> : null}
+      </nav>
+      {current ? (
+        <div className={styles.tokenBar}>
+          <div className={styles.tokenSummaryText}>
+            <TokenSnapshotSummary snapshot={tokens} t={t}
+              incomplete={boundIds.some(id => !props.resources.some(resource => resource.id === id))} />
+          </div>
+          <TokenSnapshotControl snapshot={tokens} t={t}
+            incomplete={boundIds.some(id => !props.resources.some(resource => resource.id === id))} />
+        </div>
+      ) : null}
+    </header>
     {error ? <p role="alert" className={styles.error}>{error.message}</p> : null}
     {card.isPending ? <p role="status">{t('directory.loading')}</p> : null}
     {!location.item && !card.isPending ? <div ref={scroll.attach} onScroll={scroll.onScroll} className={styles.directoryList}>

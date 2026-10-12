@@ -24,45 +24,49 @@ type StudioStatePanelProps = {
 }
 
 export function StudioStatePanel(props: StudioStatePanelProps): ReactNode {
+  const tabs = (
+    <PanelTabs<VariableView>
+      activeId={props.variableView}
+      ariaLabel={props.t('character.stateVariables')}
+      items={[
+        { id: 'sources', label: props.t('stateSources.tab') },
+        { id: 'authoring', label: props.t('stateAuthoring.tab') },
+        { id: 'state', label: props.t('stateVariables.title') },
+      ]}
+      onChange={props.onViewChange}
+    />
+  )
+
   return (
     <div className={styles.panel}>
-      <header className={styles.header}>
-        <PanelTabs<VariableView>
-          activeId={props.variableView}
-          ariaLabel={props.t('character.stateVariables')}
-          items={[
-            { id: 'sources', label: props.t('stateSources.tab') },
-            { id: 'authoring', label: props.t('stateAuthoring.tab') },
-            { id: 'state', label: props.t('stateVariables.title') },
-          ]}
-          onChange={props.onViewChange}
+      {props.variableView === 'sources' ? (
+        <StateSourcesPanel
+          header={tabs}
+          api={props.statesApi}
+          card={props.card}
+          timelineTarget={props.timelineTarget}
+          refreshToken={`${props.refreshToken ?? ''}:${props.sourceRefreshToken ?? ''}`}
+          t={props.t}
         />
-      </header>
-      <div className={styles.content}>
-        {props.variableView === 'sources' ? (
-          <StateSourcesPanel
-            api={props.statesApi}
-            card={props.card}
-            timelineTarget={props.timelineTarget}
-            refreshToken={`${props.refreshToken ?? ''}:${props.sourceRefreshToken ?? ''}`}
-            t={props.t}
-          />
-        ) : !props.hasTimeline && props.variableView === 'state' ? (
-          <p>{props.t('stateVariables.noTimeline')}</p>
-        ) : props.variableView === 'authoring' ? (
-          <StateAuthoringPanel card={props.card} t={props.t} onSaveCard={props.onSaveCard} />
-        ) : (
-          <StateVariablesPanel
-            api={props.statesApi}
-            t={props.t}
-            canOpenTimelineSource={props.hasTimeline}
-            onOpenSource={props.onOpenSource}
-            refreshToken={props.refreshToken}
-            timelineTarget={props.timelineTarget}
-            onStateMutated={props.onStateMutated}
-          />
-        )}
-      </div>
+      ) : props.variableView === 'authoring' ? (
+        <StateAuthoringPanel
+          header={tabs}
+          card={props.card}
+          t={props.t}
+          onSaveCard={props.onSaveCard}
+        />
+      ) : (
+        <StateVariablesPanel
+          header={tabs}
+          api={props.statesApi}
+          t={props.t}
+          canOpenTimelineSource={props.hasTimeline}
+          onOpenSource={props.onOpenSource}
+          refreshToken={props.refreshToken}
+          timelineTarget={props.timelineTarget}
+          onStateMutated={props.onStateMutated}
+        />
+      )}
     </div>
   )
 }

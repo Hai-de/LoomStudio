@@ -3,6 +3,8 @@ import type { messages as zhCN } from '../zh-cn/textTransforms.js'
 export const messages = {
   'textTransform.title': 'History Text Pipeline',
   'textTransform.inspectorTitle': 'History Text Pipeline Inspector',
+  'textTransform.tabRules': 'Rules',
+  'textTransform.tabInspector': 'Inspector',
   'textTransform.runtimeDescription': 'Inspect effective rules, matches, diagnostics, and the dry-run snapshot for the current context.',
   'textTransform.ownerDescription': 'Edit rules and extractors declared by {{owner}}.',
   'textTransform.refresh': 'Refresh',

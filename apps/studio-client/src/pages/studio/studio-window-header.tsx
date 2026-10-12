@@ -50,6 +50,10 @@ export function StudioWindowHeader(props: {
           title={props.t('navigation.back')}
           type="button"
           onClick={() => {
+            const nav = useStudioLayoutStore.getState().workbenchNavigation
+            if (nav?.canGoBack() && nav.goBack()) {
+              return
+            }
             if (canGoBackAsset && activeAssetLayoutId) {
               assetForwardRef.current = {
                 layoutId: activeAssetLayoutId,
@@ -71,6 +75,10 @@ export function StudioWindowHeader(props: {
           title={props.t('navigation.forward')}
           type="button"
           onClick={() => {
+            const nav = useStudioLayoutStore.getState().workbenchNavigation
+            if (nav?.canGoForward?.() && nav.goForward?.()) {
+              return
+            }
             const forward = assetForwardRef.current
             if (activeAssetLayoutId && activeAssetViewMode === 'drilldown' && activeAssetPane === 'explorer'
               && forward?.layoutId === activeAssetLayoutId && forward.workspaceId === props.assetWorkspaceId

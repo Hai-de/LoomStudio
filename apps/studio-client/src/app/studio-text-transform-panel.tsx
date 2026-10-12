@@ -29,51 +29,54 @@ export function StudioTextTransformPanel(props: StudioTextTransformPanelProps): 
   const hasCard = Boolean(props.cardId)
   const owner = scope === 'current' && hasCard ? { kind: 'card' as const, cardId: props.cardId! } : { kind: 'catalog' as const }
 
+  const tabs = (
+    <PanelTabs<TextTransformView>
+      activeId={view}
+      ariaLabel={props.t('textTransform.title')}
+      items={[
+        { id: 'authoring', label: props.t('textTransform.tabRules') },
+        { id: 'runtime', label: props.t('textTransform.tabInspector') },
+      ]}
+      onChange={setView}
+    />
+  )
+
   return (
     <div className={styles.panel}>
-      <header className={styles.header}>
-        <PanelTabs<TextTransformView>
-          activeId={view}
-          ariaLabel={props.t('textTransform.title')}
-          items={[
-            { id: 'authoring', label: props.t('textTransform.title') },
-            { id: 'runtime', label: props.t('textTransform.inspectorTitle') },
+      {view === 'authoring' ? (
+        <TextTransformPanel
+          header={tabs}
+          initialRuleId={props.initialRuleId}
+          initialExtractorId={props.initialExtractorId}
+          temporaryTarget={props.temporaryTarget}
+          api={props.api}
+          loomScriptsApi={props.loomScriptsApi}
+          onRuntimeChanged={props.onRuntimeChanged}
+          owner={owner}
+          ownerOptions={[
+            ...(hasCard ? [{ owner: { kind: 'card' as const, cardId: props.cardId! }, label: '当前生效', id: 'current' }] : []),
+            { owner: { kind: 'catalog' as const }, label: '全局默认', id: 'global' }
           ]}
-          onChange={setView}
+          onOwnerChange={newOwner => setScope(newOwner.kind === 'catalog' ? 'global' : 'current')}
+          getOwnerName={props.getOwnerName}
+          t={props.t}
+          hideHeader={true}
         />
-      </header>
-      <div className={styles.content}>
-        {view === 'authoring' ? (
-          <TextTransformPanel
-            initialRuleId={props.initialRuleId}
-            initialExtractorId={props.initialExtractorId}
-            temporaryTarget={props.temporaryTarget}
-            api={props.api}
-            loomScriptsApi={props.loomScriptsApi}
-            onRuntimeChanged={props.onRuntimeChanged}
-            owner={owner}
-            ownerOptions={[
-              ...(hasCard ? [{ owner: { kind: 'card' as const, cardId: props.cardId! }, label: '当前生效', id: 'current' }] : []),
-              { owner: { kind: 'catalog' as const }, label: '全局默认', id: 'global' }
-            ]}
-            onOwnerChange={newOwner => setScope(newOwner.kind === 'catalog' ? 'global' : 'current')}
-            getOwnerName={props.getOwnerName}
-            t={props.t}
-          />
-        ) : (
-          <TextTransformPanel
-            api={props.api}
-            loomScriptsApi={props.loomScriptsApi}
-            onRuntimeChanged={props.onRuntimeChanged}
-            rendererHost={props.rendererHost}
-            runtimeScriptContext={props.runtimeScriptContext}
-            owner={{ kind: 'runtime' }}
-            getOwnerName={props.getOwnerName}
-            t={props.t}
-            runtimeContexts={props.runtimeContexts}
-          />
-        )}
-      </div>
+      ) : (
+        <TextTransformPanel
+          header={tabs}
+          api={props.api}
+          loomScriptsApi={props.loomScriptsApi}
+          onRuntimeChanged={props.onRuntimeChanged}
+          rendererHost={props.rendererHost}
+          runtimeScriptContext={props.runtimeScriptContext}
+          owner={{ kind: 'runtime' }}
+          getOwnerName={props.getOwnerName}
+          t={props.t}
+          runtimeContexts={props.runtimeContexts}
+          hideHeader={true}
+        />
+      )}
     </div>
   )
 }

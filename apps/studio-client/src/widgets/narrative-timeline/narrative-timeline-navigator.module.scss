@@ -13,10 +13,6 @@
   align-items: center;
   justify-content: center;
   padding: 0 7px 0 5px;
-  background: var(--loom-color-background);
-}
-
-:global(html[data-loom-material-preview='glass']) .navigator {
   background: transparent;
 }
 

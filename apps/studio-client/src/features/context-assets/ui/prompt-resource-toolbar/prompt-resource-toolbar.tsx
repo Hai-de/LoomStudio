@@ -51,10 +51,6 @@ export function PromptResourceToolbar(props: PromptResourceToolbarProps) {
   const [savingDraft, setSavingDraft] = useState(false)
   const [copiedResourceId, setCopiedResourceId] = useState<string>()
   const selected = props.resources.find(resource => resource.id === props.selectedResourceId)
-  const origin = selected?.origin
-  const installation = origin?.kind === 'extension-package'
-    ? props.extensionInstallations?.find(item => item.id === origin.installationId && item.packageId === origin.packageId)
-    : undefined
 
   const selectResult = async (action: Promise<string | undefined>) => {
     setError(undefined)
@@ -69,17 +65,6 @@ export function PromptResourceToolbar(props: PromptResourceToolbarProps) {
 
   return (
     <div className={styles.toolbar}>
-      {origin?.kind === 'extension-package' ? (
-        <span className={styles.origin} title={origin.contributionId}>
-          {origin.packageId} · {origin.packageVersion} · {
-            installation?.target.kind === 'card'
-              ? props.t('promptResource.cardInstallation', { id: installation.target.cardId })
-              : installation?.target.kind === 'global' || !origin.installationId
-                ? props.t('promptResource.globalInstallation')
-                : props.t('promptResource.unresolvedInstallation')
-          }
-        </span>
-      ) : null}
       {selected && props.resourceBindings && !props.hideSingleResourceActions ? (
         <ResourceBindings
           key={JSON.stringify([props.resourceBindings.endpoint, selected.id])}

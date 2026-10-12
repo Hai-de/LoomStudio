@@ -10,6 +10,16 @@
   background: var(--loom-color-surface);
 }
 
+.masterHeader {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px 0 14px;
+  min-width: 0;
+}
+
 .searchField {
   margin: 10px 12px 8px;
   padding: 7px 0;
@@ -163,8 +173,7 @@
 }
 
 .preview {
-  border-top: 1px solid var(--loom-color-divider);
-  background: var(--loom-color-surface-inset);
+  background: var(--loom-color-surface);
 }
 
 .empty {
@@ -187,5 +196,14 @@
   .detail,
   .preview {
     overflow: visible;
+  }
+}
+
+:global(html[data-loom-glass-panels='true']) {
+  .master,
+  .detailLayout,
+  .detail,
+  .preview {
+    background: transparent;
   }
 }

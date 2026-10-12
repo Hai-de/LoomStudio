@@ -13,6 +13,115 @@
   height: auto;
 }
 
+.masterPane {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.masterHeader {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px 0 14px;
+  min-width: 0;
+}
+
+.masterToolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 4px 12px;
+  min-width: 0;
+  border-bottom: 1px solid var(--loom-color-divider);
+}
+
+.toolbarIconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--loom-radius-control);
+  background: transparent;
+  color: var(--loom-color-text-subtle);
+  cursor: pointer;
+  transition: color 0.12s ease, background-color 0.12s ease;
+
+  &:hover:not(:disabled) {
+    color: var(--loom-color-text);
+    background: var(--loom-color-surface-subtle);
+  }
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+.headerActionBtn {
+  min-height: 32px;
+  padding: 6px 4px 10px !important;
+  margin: 0 !important;
+  font-size: var(--loom-font-size-3);
+  line-height: 1;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--loom-color-text-subtle) !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.12s ease;
+
+  &:hover:not(:disabled) {
+    color: var(--loom-color-text) !important;
+  }
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+}
+
+.headerIconBtn {
+  min-height: 32px;
+  padding: 6px 4px 10px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--loom-color-text-subtle);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color 0.12s ease;
+
+  &:hover:not(:disabled) {
+    color: var(--loom-color-text);
+  }
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+}
+
 .intro {
   position: relative;
   display: flex;
@@ -20,17 +129,6 @@
   justify-content: space-between;
   padding: 12px var(--loom-page-header-padding);
   gap: 12px;
-
-  &::after {
-    content: '';
-    position: absolute;
-    right: var(--loom-divider-inset);
-    bottom: 0;
-    left: var(--loom-divider-inset);
-    height: 1px;
-    background: var(--loom-color-divider);
-    pointer-events: none;
-  }
 
   h2 {
     margin: 0;
@@ -53,16 +151,20 @@
 
 /* 依照项目设计规范，所有按钮默认无实体方框背景容器 */
 .iconButton {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 6px;
-  border: 0;
-  background: transparent;
+  min-height: 32px;
+  padding: 6px 4px 10px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
   color: var(--loom-color-text-subtle);
   font-size: 12px;
   font-weight: 500;
+  line-height: 1;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
   transition: color 0.12s ease, opacity 0.12s ease;
 
   svg {
@@ -124,17 +226,6 @@
   padding: 10px var(--loom-page-header-padding);
   gap: 12px;
   flex-wrap: wrap;
-
-  &::after {
-    content: '';
-    position: absolute;
-    right: var(--loom-divider-inset);
-    bottom: 0;
-    left: var(--loom-divider-inset);
-    height: 1px;
-    background: var(--loom-color-divider);
-    pointer-events: none;
-  }
 
   .headerTitle {
     display: flex;

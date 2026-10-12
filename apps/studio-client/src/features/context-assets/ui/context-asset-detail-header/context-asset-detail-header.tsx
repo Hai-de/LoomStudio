@@ -118,11 +118,13 @@ export function ContextAssetDetailHeader(props: ContextAssetDetailHeaderProps) {
           </button>
         ) : null}
       </div>
-      <span>
-        {anchorId
-          ? `${props.node?.meta ? `${props.node.meta} · ` : ''}${props.t('context.metadata.anchorId')}: ${anchorId}`
-          : props.node?.meta ?? props.t('context.emptyBody')}
-      </span>
+      {anchorId || props.node?.meta ? (
+        <span>
+          {anchorId
+            ? `${props.node?.meta ? `${props.node.meta} · ` : ''}${props.t('context.metadata.anchorId')}: ${anchorId}`
+            : props.node?.meta}
+        </span>
+      ) : null}
     </header>
   )
 }

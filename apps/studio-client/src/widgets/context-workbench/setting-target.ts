@@ -16,7 +16,8 @@ export function resolveSettingScope(
   const globalInstallations = new Set(installations.filter(item => item.target.kind === 'global').map(item => item.id))
   return settings.filter(resource => globalMountIds.has(resource.id)
     || (resource.origin?.kind === 'extension-package' && resource.origin.installationId !== undefined
-      && globalInstallations.has(resource.origin.installationId)))
+      && globalInstallations.has(resource.origin.installationId))
+    || resource.origin?.kind === 'builtin')
 }
 
 export function resolveSettingTarget(

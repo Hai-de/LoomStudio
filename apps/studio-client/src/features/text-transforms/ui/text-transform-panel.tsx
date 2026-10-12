@@ -56,6 +56,8 @@ export type TextTransformProps = {
   mobilePane?: 'master' | 'detail'
   onMobilePaneChange?: (pane: 'master' | 'detail') => void
   getOwnerName?: (owner: TextRuleOwner | OwnerScope) => string | undefined
+  header?: ReactNode
+  hideHeader?: boolean
 }
 type SelectedTarget = { kind: 'empty' } | { kind: 'rule'; id: string } | { kind: 'extractor'; id: string } | { kind: 'script'; id: string } | { kind: 'match'; id: string } | { kind: 'artifact'; id: string } | { kind: 'renderer'; id: string } | { kind: 'inspection' } | { kind: 'renderers' }
 export type TextTransformController = ReturnType<typeof useTextTransformController>
@@ -583,28 +585,30 @@ export function useTextTransformController(props: TextTransformProps) {
 export function TextTransformPanel(props: TextTransformProps) {
   const controller = useTextTransformController(props)
   const heading = props.title ?? (controller.owner.kind === 'runtime' ? props.t('textTransform.inspectorTitle') : props.t('textTransform.title'))
-  if (!controller.authoring) return <RuntimePipelinePanel controller={controller} heading={heading} />
+  if (!controller.authoring) return <RuntimePipelinePanel header={props.header} controller={controller} heading={heading} hideHeader={props.hideHeader} />
   return <section className={styles.panel} data-loom-component="text-transform-panel">
-    <header className={styles.intro}>
-      <div><h2>{heading}</h2><p>{controller.owner.kind === 'runtime' ? props.t('textTransform.runtimeDescription') : props.t('textTransform.ownerDescription', { owner: ownerLabel(controller.owner, props.t, props.getOwnerName) })}</p></div>
-      <div className={styles.headerActions}>
-        {props.ownerOptions && props.ownerOptions.length > 1 && props.onOwnerChange ? (
-          <PanelTabs
-            activeId={props.ownerOptions.find(opt =>
-              (opt.owner.kind === controller.owner.kind) &&
-              (opt.owner.kind === 'card' ? opt.owner.cardId === (controller.owner as any).cardId : true)
-            )?.id ?? props.ownerOptions[0]!.id}
-            ariaLabel={props.t('textTransform.ownerDescription', { owner: '' })}
-            items={props.ownerOptions.map(opt => ({ id: opt.id, label: opt.label }))}
-            onChange={id => {
-              const match = props.ownerOptions?.find(opt => opt.id === id)
-              if (match && props.onOwnerChange) props.onOwnerChange(match.owner)
-            }}
-          />
-        ) : null}
-        <Button size="small" variant="secondary" disabled={controller.busy} type="button" onClick={() => void controller.refresh()}><RefreshCw aria-hidden="true" size={14} /><span>{props.t('textTransform.refresh')}</span></Button>
-      </div>
-    </header>
+    {!props.hideHeader && !props.header ? (
+      <header className={styles.intro}>
+        <div><h2>{heading}</h2><p>{controller.owner.kind === 'runtime' ? props.t('textTransform.runtimeDescription') : props.t('textTransform.ownerDescription', { owner: ownerLabel(controller.owner, props.t, props.getOwnerName) })}</p></div>
+        <div className={styles.headerActions}>
+          {props.ownerOptions && props.ownerOptions.length > 1 && props.onOwnerChange ? (
+            <PanelTabs
+              activeId={props.ownerOptions.find(opt =>
+                (opt.owner.kind === controller.owner.kind) &&
+                (opt.owner.kind === 'card' ? opt.owner.cardId === (controller.owner as any).cardId : true)
+              )?.id ?? props.ownerOptions[0]!.id}
+              ariaLabel={props.t('textTransform.ownerDescription', { owner: '' })}
+              items={props.ownerOptions.map(opt => ({ id: opt.id, label: opt.label }))}
+              onChange={id => {
+                const match = props.ownerOptions?.find(opt => opt.id === id)
+                if (match && props.onOwnerChange) props.onOwnerChange(match.owner)
+              }}
+            />
+          ) : null}
+          <Button size="small" variant="secondary" disabled={controller.busy} type="button" onClick={() => void controller.refresh()}><RefreshCw aria-hidden="true" size={14} /><span>{props.t('textTransform.refresh')}</span></Button>
+        </div>
+      </header>
+    ) : null}
     <MasterDetailWorkbench
       backLabel={props.t('textTransform.backToSettings')}
       resizeLabel={props.t('stateVariables.resizeSidebar')}
@@ -612,7 +616,30 @@ export function TextTransformPanel(props: TextTransformProps) {
       masterWidth="minmax(240px, 300px)"
       mobilePane={controller.mobilePane}
       onMobilePaneChange={controller.setMobilePane}
-      master={<TextTransformExplorer controller={controller} />}
+      master={(
+        <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          {props.header ? (
+            <header className={styles.masterHeader}>
+              {props.header}
+            </header>
+          ) : null}
+          <div className={styles.masterToolbar}>
+            <button
+              className={styles.toolbarIconBtn}
+              type="button"
+              onClick={() => void controller.refresh()}
+              disabled={controller.busy}
+              title={props.t('textTransform.refresh')}
+              aria-label={props.t('textTransform.refresh')}
+            >
+              <RefreshCw aria-hidden="true" size={14} />
+            </button>
+          </div>
+          <div style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto' }}>
+            <TextTransformExplorer controller={controller} />
+          </div>
+        </div>
+      )}
     >
       <TextTransformDetail controller={controller} />
     </MasterDetailWorkbench>
@@ -712,6 +739,23 @@ export function TextTransformExplorer({ controller }: { controller: TextTransfor
   }, [controller.authoring, controller.finalOrder, controller.unsavedNewRule, controller.selectedRuleId, controller.visibleExtractors, controller.visibleScripts, controller.runtimeContexts, controller.renderers.length, controller.loomScriptsApi, t])
 
   return <nav aria-label={t('textTransform.navigation')} className={styles.masterNav}>
+    {controller.authoring && controller.ownerOptions && controller.ownerOptions.length > 1 && controller.onOwnerChange ? (
+      <div className={styles.scopeTabsContainer}>
+        <PanelTabs
+          activeId={controller.ownerOptions.find(opt =>
+            (opt.owner.kind === controller.owner.kind) &&
+            (opt.owner.kind === 'card' ? opt.owner.cardId === (controller.owner as any).cardId : true)
+          )?.id ?? controller.ownerOptions[0]!.id}
+          ariaLabel={t('textTransform.ownerDescription', { owner: '' })}
+          items={controller.ownerOptions.map(opt => ({ id: opt.id, label: opt.label }))}
+          size="compact"
+          onChange={id => {
+            const match = controller.ownerOptions?.find(opt => opt.id === id)
+            if (match && controller.onOwnerChange) controller.onOwnerChange(match.owner)
+          }}
+        />
+      </div>
+    ) : null}
     <FileTree
       ariaLabel={t('textTransform.navigation')}
       nodes={nodes}
@@ -861,7 +905,7 @@ function EditorDetail(props: { controller: TextTransformController; icon: ReactN
   return <><header className={styles.detailHeader}><div className={styles.headerTitle}>{props.icon}<h3>{props.title}</h3><input className={styles.inlineInput} aria-label={t('textTransform.documentId')} value={props.id} readOnly /></div>{!props.readOnly ? <div className={styles.headerActions}><Button size="small" variant="secondary" onClick={props.onFormat}><Wand2 aria-hidden="true" size={13} /><span>{t('textTransform.format')}</span></Button>{props.onDelete ? <Button size="small" variant="danger" onClick={props.onDelete}><Trash2 aria-hidden="true" size={13} /><span>{t('textTransform.delete')}</span></Button> : null}<Button size="small" variant="ghost" disabled={!props.id.trim()} onClick={props.onSave}>{t('textTransform.save')}</Button></div> : null}</header><div className={styles.editorContainer}><textarea aria-label={t('textTransform.jsonEditor', { title: props.title })} className={styles.rawJsonTextarea} readOnly={props.readOnly} spellCheck={false} value={props.text} onChange={event => props.setText(event.target.value)} /></div></>
 }
 
-function RuntimePipelinePanel({ controller, heading }: { controller: TextTransformController; heading: string }) {
+function RuntimePipelinePanel({ controller, heading, hideHeader, header }: { controller: TextTransformController; heading: string; hideHeader?: boolean; header?: ReactNode }) {
   const { t } = controller
   const [ownerFilter, setOwnerFilter] = useState('')
   const [effectFilter, setEffectFilter] = useState('')
@@ -895,26 +939,29 @@ function RuntimePipelinePanel({ controller, heading }: { controller: TextTransfo
   }, [allGroups, effectFilter, ownerFilter, statusFilter])
   const selectedId = controller.selectedTarget.kind === 'empty' || controller.selectedTarget.kind === 'inspection' || controller.selectedTarget.kind === 'renderers' ? undefined : `${controller.selectedTarget.kind}:${controller.selectedTarget.id}`
   return <section className={styles.panel} data-loom-component="text-transform-panel">
-    <header className={styles.intro}>
-      <div><h2>{heading}</h2><p>{t('textTransform.runtimeDescription')}</p></div>
-      <div className={styles.headerActions}>
-        {controller.runtimeContexts.length > 1 ? (
-          <select aria-label={t('textTransform.currentContext')} className={styles.inlineInput} value={controller.selectedRuntimeContextId} onChange={event => controller.selectRuntimeContext(event.target.value)}>
-            {controller.runtimeContexts.map(context => <option key={context.id} value={context.id}>{context.label}</option>)}
-          </select>
-        ) : null}
-        <PanelTabs<TextTransformPhase>
-          activeId={controller.phase}
-          ariaLabel={t('textTransform.navigation')}
-          items={phases.map(value => ({
-            id: value,
-            label: t(`textTransform.phase.${value}`),
-          }))}
-          onChange={controller.setPhase}
-        />
-      </div>
-    </header>
+    {!hideHeader && !header ? (
+      <header className={styles.intro}>
+        <div><h2>{heading}</h2><p>{t('textTransform.runtimeDescription')}</p></div>
+        <div className={styles.headerActions}>
+          {controller.runtimeContexts.length > 1 ? (
+            <select aria-label={t('textTransform.currentContext')} className={styles.inlineInput} value={controller.selectedRuntimeContextId} onChange={event => controller.selectRuntimeContext(event.target.value)}>
+              {controller.runtimeContexts.map(context => <option key={context.id} value={context.id}>{context.label}</option>)}
+            </select>
+          ) : null}
+          <PanelTabs<TextTransformPhase>
+            activeId={controller.phase}
+            ariaLabel={t('textTransform.navigation')}
+            items={phases.map(value => ({
+              id: value,
+              label: t(`textTransform.phase.${value}`),
+            }))}
+            onChange={controller.setPhase}
+          />
+        </div>
+      </header>
+    ) : null}
     <PipelineWorkbenchView
+      header={header}
       t={t}
       ariaLabel={t('textTransform.navigation')}
       backLabel={t('textTransform.backToSettings')}

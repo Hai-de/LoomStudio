@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronUp, Clock, Code2, Copy, FileText, Folder, FolderOpen, Globe, Layers, Maximize2, Minus, Plus, RefreshCw, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import type { ClientJsonValue } from '@loom-studio/client-bridge'
@@ -17,6 +17,7 @@ type Props = {
   timelineTarget?: Extract<StateTarget, { scope: 'timeline' }>
   refreshToken?: string
   t: Translator
+  header?: ReactNode
   canOpenTimelineSource?: boolean
   onOpenSource?(scope: 'global' | 'timeline'): void
   onStateMutated?(): void | Promise<void>
@@ -382,49 +383,60 @@ export function StateVariablesPanel(props: Props) {
 
   return (
     <section className={styles.panel} data-loom-component="state-variables-panel">
-      <header className={styles.intro}>
-        <h2>{props.t('stateVariables.title')}</h2>
-        <button aria-label={props.t('stateVariables.refresh')} className={styles.iconButton} disabled={saving} type="button" onClick={() => void refresh()}>
-          <RefreshCw aria-hidden="true" size={13} />
-          <span>{props.t('stateVariables.refresh')}</span>
-        </button>
-      </header>
       {error ? <div className={styles.errorBanner} role="alert">{error}</div> : null}
       <MasterDetailWorkbench
+        defaultMasterWidth={280}
         backLabel={props.t('stateAuthoring.backToList')}
         resizeLabel={props.t('stateVariables.resizeSidebar')}
         className={styles.panelBody}
         mobilePane={mobilePane}
         onMobilePaneChange={setMobilePane}
         master={(
-          <div className={styles.treeContainer}>
-            <FileTree
-              ariaLabel={props.t('stateVariables.navigation')}
-              expandedIds={runtimeExpandedIds}
-              getDisclosureLabel={(node, expanded) => `${expanded ? props.t('stateVariables.collapse') : props.t('stateVariables.expand')} ${node.label}`}
-              getDragLabel={node => node.label}
-              moreActionsLabel={props.t('stateVariables.actions')}
-              nodes={runtimeScopeNodes}
-              onExpandedIdsChange={setRuntimeExpandedIds}
-              onSelect={node => {
-                if (node.id === 'timeline' && props.timelineTarget) {
-                  setScope('timeline')
-                  setMobilePane('detail')
-                } else if (node.id === 'global') {
-                  setScope('global')
-                  setMobilePane('detail')
-                } else if (node.id === 'runtime-group') {
-                  setRuntimeExpandedIds(prev => prev.includes('runtime-group') ? [] : ['runtime-group'])
-                }
-              }}
-              renderIcon={(node, expanded) => {
-                if (node.id === 'runtime-group') return expanded ? <FolderOpen size={16} /> : <Folder size={16} />
-                if (node.id === 'timeline') return <Clock size={16} />
-                if (node.id === 'global') return <Globe size={16} />
-                return null
-              }}
-              selectedId={scope}
-            />
+          <div className={styles.masterPane}>
+            <header className={styles.masterHeader}>
+              {props.header}
+            </header>
+            <div className={styles.masterToolbar}>
+              <button
+                aria-label={props.t('stateVariables.refresh')}
+                title={props.t('stateVariables.refresh')}
+                className={styles.toolbarIconBtn}
+                disabled={saving}
+                type="button"
+                onClick={() => void refresh()}
+              >
+                <RefreshCw aria-hidden="true" size={14} />
+              </button>
+            </div>
+            <div className={styles.treeContainer}>
+              <FileTree
+                ariaLabel={props.t('stateVariables.navigation')}
+                expandedIds={runtimeExpandedIds}
+                getDisclosureLabel={(node, expanded) => `${expanded ? props.t('stateVariables.collapse') : props.t('stateVariables.expand')} ${node.label}`}
+                getDragLabel={node => node.label}
+                moreActionsLabel={props.t('stateVariables.actions')}
+                nodes={runtimeScopeNodes}
+                onExpandedIdsChange={setRuntimeExpandedIds}
+                onSelect={node => {
+                  if (node.id === 'timeline' && props.timelineTarget) {
+                    setScope('timeline')
+                    setMobilePane('detail')
+                  } else if (node.id === 'global') {
+                    setScope('global')
+                    setMobilePane('detail')
+                  } else if (node.id === 'runtime-group') {
+                    setRuntimeExpandedIds(prev => prev.includes('runtime-group') ? [] : ['runtime-group'])
+                  }
+                }}
+                renderIcon={(node, expanded) => {
+                  if (node.id === 'runtime-group') return expanded ? <FolderOpen size={16} /> : <Folder size={16} />
+                  if (node.id === 'timeline') return <Clock size={16} />
+                  if (node.id === 'global') return <Globe size={16} />
+                  return null
+                }}
+                selectedId={scope}
+              />
+            </div>
           </div>
         )}
       >

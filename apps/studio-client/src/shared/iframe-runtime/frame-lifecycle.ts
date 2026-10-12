@@ -14,6 +14,9 @@ export function mountIsolatedFrame(root: HTMLElement, options: {
 }): IsolatedFrame {
   const frame = document.createElement('iframe')
   frame.title = options.title
+  frame.setAttribute('allowtransparency', 'true')
+  frame.style.backgroundColor = 'transparent'
+  frame.style.colorScheme = 'normal'
   frame.sandbox.add('allow-scripts')
   frame.referrerPolicy = 'no-referrer'
   let disposed = false

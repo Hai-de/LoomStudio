@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { ChevronLeft } from 'lucide-react'
 import { WindowColumnLayout, type WindowColumnDefinition } from '../window-column-layout/window-column-layout.js'
+import { useStudioLayoutStore } from '../../studio-shell/studio-layout-store.js'
 import styles from './master-detail-workbench.module.scss'
 
 const NARROW_BREAKPOINT = 640
@@ -27,7 +28,7 @@ export type MasterDetailWorkbenchProps = {
 
 export function MasterDetailWorkbench(props: MasterDetailWorkbenchProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [containerWidth, setContainerWidth] = useState(0)
+  const [isNarrow, setIsNarrow] = useState(false)
   const [internalMobilePane, setInternalMobilePane] = useState<'master' | 'detail'>('master')
 
   const [internalMasterWidth, setInternalMasterWidth] = useState(
@@ -37,21 +38,66 @@ export function MasterDetailWorkbench(props: MasterDetailWorkbenchProps) {
   // A supplied pane is controlled by the parent; otherwise this workbench owns mobile navigation locally.
   const mobilePane = props.mobilePane ?? internalMobilePane
   const setMobilePane = props.onMobilePaneChange ?? setInternalMobilePane
+  const setWorkbenchNavigation = useStudioLayoutStore(state => state.setWorkbenchNavigation)
 
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    const updateWidth = () => setContainerWidth(el.clientWidth)
-    updateWidth()
+    const updateNarrow = () => {
+      const nextNarrow = el.clientWidth > 0 && el.clientWidth < NARROW_BREAKPOINT
+      setIsNarrow(prev => (prev === nextNarrow ? prev : nextNarrow))
+    }
+    updateNarrow()
     if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(updateWidth)
+    const observer = new ResizeObserver(updateNarrow)
     observer.observe(el)
     return () => observer.disconnect()
   }, [])
 
-  const isNarrow = containerWidth > 0 && containerWidth < NARROW_BREAKPOINT
   const singlePane = isNarrow || props.drilldown === true
   const showDetailOnly = singlePane && mobilePane === 'detail' && props.hasSelection !== false
+
+  const forwardAvailableRef = useRef(false)
+  const showDetailOnlyRef = useRef(showDetailOnly)
+  showDetailOnlyRef.current = showDetailOnly
+
+  const handleGoBack = useCallback(() => {
+    if (showDetailOnlyRef.current) {
+      forwardAvailableRef.current = true
+      setMobilePane('master')
+      props.onBack?.()
+      return true
+    }
+    return false
+  }, [setMobilePane, props.onBack])
+
+  const handleGoForward = useCallback(() => {
+    if (forwardAvailableRef.current) {
+      forwardAvailableRef.current = false
+      setMobilePane('detail')
+      return true
+    }
+    return false
+  }, [setMobilePane])
+
+  useEffect(() => {
+    if (mobilePane === 'detail') {
+      forwardAvailableRef.current = false
+    }
+  }, [mobilePane])
+
+  useEffect(() => {
+    const nav = {
+      canGoBack: () => showDetailOnlyRef.current,
+      goBack: handleGoBack,
+      canGoForward: () => forwardAvailableRef.current,
+      goForward: handleGoForward,
+    }
+    setWorkbenchNavigation(nav)
+    return () => {
+      setWorkbenchNavigation(null)
+    }
+  }, [handleGoBack, handleGoForward, setWorkbenchNavigation])
 
   const currentMasterWidth = typeof props.masterWidth === 'number' ? props.masterWidth : internalMasterWidth
 
@@ -68,7 +114,7 @@ export function MasterDetailWorkbench(props: MasterDetailWorkbenchProps) {
 
   const detailPane = (
     <section className={styles.detailPane} data-loom-slot="detail" inert={singlePane && !showDetailOnly}>
-      {isNarrow && !props.hideBackBar ? (
+      {isNarrow && props.hideBackBar === false ? (
         <div className={styles.narrowBackBar}>
           <button
             className={styles.narrowBackButton}

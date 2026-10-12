@@ -1,6 +1,8 @@
 .editor {
   position: relative;
   min-height: var(--loom-long-text-editor-min-height, 180px);
+  min-width: 0;
+  max-width: 100%;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   border-radius: var(--loom-radius-surface);
@@ -157,6 +159,7 @@
 
 .editorHost {
   min-width: 0;
+  max-width: 100%;
   min-height: var(--loom-long-text-editor-content-min-height, 180px);
 }
 

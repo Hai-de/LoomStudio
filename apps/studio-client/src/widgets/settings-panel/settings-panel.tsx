@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { ExternalLink, Globe, Info, Network, Palette, Save } from 'lucide-react'
-import { Button } from '@loom-studio/ui'
+import { Columns3, ExternalLink, Globe, Info, Layers, Network, Palette, Save, ZoomIn } from 'lucide-react'
+import { Button, Slider } from '@loom-studio/ui'
 import type { NetworkSettings } from '../../shared/api/studio-api.js'
 import type { Locale, Translator } from '../../shared/i18n/index.js'
 import { localeLabels, supportedLocales } from '../../shared/i18n/index.js'
@@ -161,28 +161,40 @@ export function SettingsPanel(props: {
               general={(
                 <div className={styles.generalSettings}>
                   <section className={styles.settingSection}>
-                    <label className={styles.scaleRow}>
-                      <span>{props.t('settings.uiScale')}</span>
-                      <input max="125" min="80" step="5" type="range" value={props.uiScale}
-                        onChange={event => props.onChangeUiScale(Number(event.target.value))} />
-                      <output>{props.uiScale}%</output>
-                    </label>
+                    <Slider
+                      icon={<ZoomIn size={14} />}
+                      label={props.t('settings.uiScale')}
+                      min={80}
+                      max={125}
+                      step={5}
+                      value={props.uiScale}
+                      formatValue={v => `${v}%`}
+                      onValueChange={val => props.onChangeUiScale(val)}
+                    />
                   </section>
                   <section className={styles.settingSection}>
-                    <label className={styles.scaleRow}>
-                      <span>{props.t('settings.canvasWidth')}</span>
-                      <input max="1120" min="540" step="20" type="range" value={previewCanvasWidth}
-                        onChange={event => setPreviewCanvasWidth(Number(event.target.value))} />
-                      <output>{previewCanvasWidth}px</output>
-                    </label>
+                    <Slider
+                      icon={<Columns3 size={14} />}
+                      label={props.t('settings.canvasWidth')}
+                      min={540}
+                      max={1120}
+                      step={20}
+                      value={previewCanvasWidth}
+                      formatValue={v => `${v}px`}
+                      onValueChange={val => setPreviewCanvasWidth(val)}
+                    />
                   </section>
                   <section className={styles.settingSection}>
-                    <label className={styles.scaleRow}>
-                      <span>{props.t('settings.narrativeOverscan')}</span>
-                      <input type="range" min={0} max={50} step={1} value={narrativeOverscan}
-                        onChange={event => setNarrativeOverscan(Number(event.target.value))} />
-                      <output>{narrativeOverscan}</output>
-                    </label>
+                    <Slider
+                      icon={<Layers size={14} />}
+                      label={props.t('settings.narrativeOverscan')}
+                      min={0}
+                      max={50}
+                      step={1}
+                      value={narrativeOverscan}
+                      formatValue={v => `${v}`}
+                      onValueChange={val => setNarrativeOverscan(val)}
+                    />
                   </section>
                   <section className={styles.settingSection}>
                     <label className={styles.settingRow}>

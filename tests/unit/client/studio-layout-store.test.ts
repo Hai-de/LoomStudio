@@ -316,4 +316,18 @@ describe('sanitizeStudioLayout', () => {
     expect(sanitizeStudioLayout({ uiScale: 40 }).uiScale).toBe(80)
     expect(sanitizeStudioLayout({ uiScale: 180 }).uiScale).toBe(125)
   })
+
+  it('manages transient workbenchNavigation without persisting it', () => {
+    expect(useStudioLayoutStore.getState().workbenchNavigation).toBeNull()
+    const nav = {
+      canGoBack: () => true,
+      goBack: () => true,
+      canGoForward: () => false,
+      goForward: () => false,
+    }
+    useStudioLayoutStore.getState().setWorkbenchNavigation(nav)
+    expect(useStudioLayoutStore.getState().workbenchNavigation).toBe(nav)
+    useStudioLayoutStore.getState().setWorkbenchNavigation(null)
+    expect(useStudioLayoutStore.getState().workbenchNavigation).toBeNull()
+  })
 })
