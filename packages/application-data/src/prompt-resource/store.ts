@@ -23,6 +23,8 @@ import {
   migrateVersionFour,
   migrateVersionFive,
   migrateVersionSix,
+  migrateVersionSeven,
+  migrateVersionEight,
   assertPromptResourceSchema,
   migrationNamespace,
 } from './schema.js'
@@ -43,6 +45,7 @@ import {
   readResource,
   readResourceMetadataAtVersion,
 } from './mutations.js'
+import { initializeSearchFunctions, listSearchResources, listSearchNodes, searchNodes } from './search.js'
 
 export function createPromptResourceStore(options: PromptResourceStoreOptions): PromptResourceStore {
   const nextId = options.createId ?? createId
@@ -57,10 +60,13 @@ export function createPromptResourceStore(options: PromptResourceStoreOptions): 
       { version: 4, migrate: migrateVersionFour },
       { version: 5, migrate: migrateVersionFive },
       { version: 6, migrate: migrateVersionSix },
+      { version: 7, migrate: migrateVersionSeven },
+      { version: 8, migrate: migrateVersionEight },
     ],
   })
   const database = engine.database
   assertPromptResourceSchema(database)
+  initializeSearchFunctions(database)
 
   function transaction(tx: SqliteDataTransaction): PromptResourceTransaction {
     return {
@@ -89,6 +95,9 @@ export function createPromptResourceStore(options: PromptResourceStoreOptions): 
     getResource: (id, readOptions) => engine.read(database => readResource(database, id, readOptions?.includeTombstone ?? false)),
     getResourceMetadataAtVersion: (id, version) => engine.read(database => readResourceMetadataAtVersion(database, id, version)),
     listResources: input => engine.read(database => listResources(database, input)),
+    listSearchResources: () => engine.read(database => listSearchResources(database)),
+    searchNodes: input => engine.read(database => searchNodes(database, input)),
+    listSearchNodes: input => engine.read(database => listSearchNodes(database, input)),
     listLoreMounts: input => engine.read(database => listMounts(database, input)),
     listPresetToolMounts: input => engine.read(database => listPresetToolMounts(database, input)),
     createResource: async input => {

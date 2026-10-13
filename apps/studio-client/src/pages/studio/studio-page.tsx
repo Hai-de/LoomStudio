@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { AlignLeft, ArrowLeft, ArrowRight, ChevronDown, ImageOff, PanelLeft, PanelLeftClose, PanelRight, PanelRightClose } from 'lucide-react'
+import { AlignLeft, ArrowLeft, ArrowRight, ChevronDown, ImageOff, PanelLeft, PanelLeftClose, PanelRight, PanelRightClose, Search, X } from 'lucide-react'
 import type { Translator } from '../../shared/i18n/index.js'
 import { StudioPanelRight } from './studio-panel-right.js'
 import { DEFAULT_ASSET_VIEW_STATE, useStudioLayoutStore, type AssetLayoutId, type StudioPanelId } from '../../shared/studio-shell/studio-layout-store.js'
@@ -48,6 +48,9 @@ type StudioPageProps = {
   uiScale: number
   wallpaperUrl?: string
   onRedo(): void
+  onOpenSearch(): void
+  searchQuery?: string
+  onClearSearch(): void
   onToggleAgentPanel?(): void
   onUndo(): void
 }
@@ -519,6 +522,7 @@ export function StudioPage(props: StudioPageProps) {
         </div>
 
         <header className={styles.stageFloatingHeader} data-loom-component="stage-floating-header">
+          <div className={styles.stageHeaderStart}>
           <div className={styles.stageHeaderLeft}>
             <button
               aria-label={isWorkspaceOpen ? props.t('rail.closePanel') : props.t('rail.label')}
@@ -552,6 +556,15 @@ export function StudioPage(props: StudioPageProps) {
             >
               <ArrowRight aria-hidden="true" className={styles.stageHeaderButtonIcon} />
             </button>
+          </div>
+
+            <div className={styles.stageSearchCapsule}>
+              <button type="button" className={styles.stageSearchOpen} onClick={props.onOpenSearch} aria-label={props.t('search.open')} title={`${props.t('search.open')} (⌘K / Ctrl+K)`} aria-haspopup="dialog">
+                <Search size={16} aria-hidden="true" />
+                {props.searchQuery ? <span className={styles.stageSearchQuery} title={props.searchQuery}>{props.searchQuery}</span> : null}
+              </button>
+              {props.searchQuery ? <button type="button" className={styles.stageSearchClear} onClick={props.onClearSearch} aria-label={props.t('search.clearQuery')} title={props.t('search.clearQuery')}><X size={13} aria-hidden="true" /></button> : null}
+            </div>
           </div>
 
           <div className={styles.stageHeaderCenter}>

@@ -1,3 +1,4 @@
+import type { ResourceSearchReveal } from '../../shared/lib/search-match.js'
 import type { ClientJsonValue } from '@loom-studio/client-bridge'
 import { BookOpen, Braces, Copy, Download, Folder, FolderOpen, Package, Regex, Star, ToggleLeft, ToggleRight, Trash2, Wrench } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
@@ -104,6 +105,8 @@ type PresetWorkbenchProps = {
   onSaveMacros: (resourceId: string, input: Parameters<MacroAuthoringSource['onSave']>[0]) => ReturnType<MacroAuthoringSource['onSave']>
   routeAssetId?: string
   routeResourceId?: string
+  globalSearchQuery?: string
+  searchMatch?: ResourceSearchReveal
   searchQuery: string
   onSearchQueryChange(value: string): void
   selectedResourceId?: string
@@ -193,7 +196,7 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
     if (!props.routeAssetId) return
     if (props.routeResourceId) setActivePresetView('assets')
     openAssetDetail('preset', props.workspaceId, props.routeAssetId)
-  }, [openAssetDetail, setActivePresetView, props.routeResourceId, props.routeAssetId, props.workspaceId])
+  }, [openAssetDetail, setActivePresetView, props.routeResourceId, props.routeAssetId, props.searchMatch?.requestId, props.workspaceId])
 
   useEffect(() => {
     if (props.routeResourceId) return
@@ -369,6 +372,7 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
         </div>
       ) : (
         <ContextAssetExplorer
+            highlightQuery={props.globalSearchQuery}
           tokenSnapshot={tokenSnapshot}
           active={props.active}
           highlightMessages
@@ -451,6 +455,8 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
               editorMode={textEditorMode}
               metadataOpen={metadataOpen}
               node={detailNode}
+              revealMatch={props.searchMatch?.resourceId === selectedResource?.id && props.searchMatch?.nodeId === detailNode?.id
+                ? props.searchMatch : undefined}
               tokenNode={detailNode?.kind === 'virtual' && tokenProjection ? findContextNode([tokenProjection.root], detailNode.id) : undefined}
               tokenIncomplete={detailNode?.kind === 'virtual' ? tokenProjection?.incompleteIds.has(detailNode.id) : undefined}
               pathNodes={findContextAssetPath(workbenchNodes, detailNode?.id)}

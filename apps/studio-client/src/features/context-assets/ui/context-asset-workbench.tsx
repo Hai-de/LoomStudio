@@ -1,3 +1,5 @@
+import { SearchHighlight } from '../../../shared/ui/search-highlight.js'
+import type { SearchReveal } from '../../../shared/lib/search-match.js'
 import { useEffect, useRef, useState } from 'react'
 import { ToggleLeft, ToggleRight } from 'lucide-react'
 import type { ContextAssetNode, PromptResource } from '../../../entities/index.js'
@@ -25,6 +27,7 @@ type MovePosition = 'before' | 'inside' | 'after'
 export function ContextAssetExplorer(props: {
   tokenSnapshot?: ResourceTokenSnapshot
   active?: boolean
+  highlightQuery?: string
   highlightMessages?: boolean
   formatMeta?: (node: ContextAssetNode) => string | undefined
   displayNodes: ContextAssetNode[]
@@ -106,6 +109,7 @@ export function ContextAssetExplorer(props: {
         <FileTree
           active={props.active}
           highlightMessages={props.highlightMessages}
+          renderLabel={node => <SearchHighlight text={resolveVirtualDisplayName(node.label, (node as ContextAssetNode).kind)} query={props.highlightQuery ?? ''} />}
           editingId={editingId}
           onEditCommit={handleEditCommit}
           onEditCancel={handleEditCancel}
@@ -182,6 +186,7 @@ export function ContextAssetEditor(props: {
   allowTargetAnchor?: boolean
   compactVirtualNotes?: boolean
   editorMode: LongTextEditorMode
+  revealMatch?: SearchReveal
   metadataOpen: boolean
   node?: ContextAssetNode
   presets?: PromptResource[]
@@ -237,6 +242,7 @@ export function ContextAssetEditor(props: {
           compactVirtualNotes={props.compactVirtualNotes}
           metadataOpen={props.metadataOpen}
           editorMode={props.editorMode}
+          revealMatch={props.revealMatch}
           node={node}
           presets={props.presets}
           onChangeNode={partial => props.onChangeNode(node.id, partial)}

@@ -1,3 +1,4 @@
+import type { ResourceSearchReveal } from '../shared/lib/search-match.js'
 import type { useStudioState } from './use-studio-state.js'
 import type { useStudioUiState } from './use-studio-ui-state.js'
 import type { useStudioNavigation } from '../shared/studio-shell/use-studio-navigation.js'
@@ -13,9 +14,12 @@ export function StudioResourcePanels(props: {
   uiState: StudioUiState
   navigation: StudioNavigation
   assetWorkspaceId: string
+  globalSearchQuery?: string
+  searchMatch?: ResourceSearchReveal
 }) {
   const { state, uiState, navigation, assetWorkspaceId } = props
   const contextAssetEditorProps = {
+    globalSearchQuery: props.globalSearchQuery,
     nodes: state.contextAssets,
     resources: state.promptResourceDrafts,
     extensionInstallations: state.extensionInstallations,
@@ -66,6 +70,7 @@ export function StudioResourcePanels(props: {
         active={active}
         key={state.endpoint}
         {...contextAssetEditorProps}
+        searchMatch={props.searchMatch}
         textTransformsApi={state.textTransformsApi}
         onOpenTextUse={(kind, id) => navigation.openPath(`/studio/text-transforms?${kind === 'rule' ? 'ruleId' : 'extractorId'}=${encodeURIComponent(id)}&temporary=1`)}
         loomScriptsApi={state.api.loomScripts}
@@ -106,6 +111,7 @@ export function StudioResourcePanels(props: {
       <LazyContextWorkbench
         key={state.endpoint}
         {...contextAssetEditorProps}
+        searchMatch={props.searchMatch}
         routeResourceId={navigation.route.panel === 'resource' ? navigation.route.resourceId : undefined}
         onSelectResource={(id, replace) => {
           if (!navigation.isCurrent()) return

@@ -19,6 +19,7 @@ import {
   toAgentToolContent,
 } from './agents-runtime.js'
 import { createPromptRuntimeMethods } from './prompt-runtime.js'
+import { createSearchRuntimeMethods } from './search-runtime.js'
 import { createStateRuntimeMethods } from './state-runtime.js'
 import { createTransformsRuntimeMethods } from './transforms-runtime.js'
 import {
@@ -114,6 +115,7 @@ export function createApplicationRuntime(options: ApplicationRuntimeOptions): Ap
     },
     ...createMacroConfigurationRuntimeMethods(ctx),
     ...createPromptRuntimeMethods(ctx),
+    ...createSearchRuntimeMethods(ctx),
     ...createStateRuntimeMethods(ctx),
     ...createTransformsRuntimeMethods(ctx),
     ...createProvidersRuntimeMethods(ctx),

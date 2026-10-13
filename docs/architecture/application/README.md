@@ -8,6 +8,7 @@ Studio Application 是 Loom Studio 第一方内建的 AIRP 领域层。它定义
 
 | 分类                                                   | 职责                                                                                  | 当前状态                                               |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| [全局资源搜索](global-resource-search.md) | 导航、定义全文索引、范围关系、空关键词浏览与定位高亮 | 已实现；独立于运行时内容搜索 |
 | [`data-capabilities-and-lifecycle.md`](data-capabilities-and-lifecycle.md) | 文本、State、宏、运行记录的能力与共享事务、引用和生命周期边界 | 当前实现边界 |
 | [`card-bundle-files.md`](card-bundle-files.md) | 文件化 Card Bundle、可编辑目录、ZIP 与 PNG 分发 | ZIP v2、PNG Base64 ZIP 与旧格式读取已实现 |
 | [`prompt-build/`](prompt-build/) | Sources、Composition 与 Application DFS 编译；Core 是独立边界 | Agent 主链直接编译，不执行 Core Pass |

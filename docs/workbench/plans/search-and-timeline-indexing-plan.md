@@ -1,8 +1,9 @@
 # Search and Timeline Indexing Plan
 
-> **状态**：Asset Search Implemented in Frontend / Timeline Search Planned
+> **状态**：Local Asset Search Implemented / Independent Timeline Search Deferred
 > **日期**：2026-08-07
 > **边界（2026-09-12）**：资产前端搜索与 Narrative Store 分页已存在；Timeline 搜索、命中窗口与索引仍是延期方向。后续复用 Timeline / Branch / Node 合同，不恢复旧 Session / NarrativeEntry Document 链。
+> **范围更新（2026-10-13）**：Cmd+K 的当前方向见[全局资源搜索正式架构](../../architecture/application/global-resource-search.md)，包含 Lore / Preset 定义文本全文索引。剧情正文、会话内容和变量 / 运行状态不纳入全局搜索；本页 Timeline 章节仅为独立上下文搜索的延期候选，不构成全局搜索的后续扩容目标或实施授权。下文旧阶段限制不约束已落地的全局搜索。
 
 ## 1. 决策摘要
 
@@ -11,7 +12,7 @@
 1. 当前角色卡或 Preset 的 Prompt Resource 使用已加载节点进行前端搜索；不把早期样本约 800 个节点当作正式容量上限；
 2. 长会话可能超过 1000 楼和数百万字，不应为了搜索完整加载到浏览器，后续采用 Timeline 分页、后端搜索与消息窗口加载。
 
-两层可以共享搜索框、结果摘要和跳转语义，但不强求共享执行器。
+这两层记录早期局部搜索与 Timeline 搜索设想。按 2026-10-13 已确认边界，定义资源与运行时正文的搜索入口和范围独立；是否复用底层展示组件不改变产品边界。
 
 ## 2. 当前资产搜索
 
@@ -24,7 +25,7 @@
 
 查询为空时展示原文件树；查询存在时展示扁平结果。搜索不得修改文件树展开状态、选中状态或持久化布局。点击结果沿用现有资产选择流程打开 Detail。
 
-首版不引入 SQL、全文索引、Web Worker、第三方模糊搜索库或查询 DSL。高级筛选以后可基于现有扁平记录逐步增加 `kind`、`enabled` 与 `lifecycle` 条件。
+该已实施的局部搜索首版未引入 SQL、全文索引、Web Worker、第三方模糊搜索库或查询 DSL。它不是新全局搜索的技术限制；新计划已将定义资源全文索引和范围 Token 纳入目标。
 
 ## 3. 当前 Timeline 限制
 
@@ -111,7 +112,7 @@ Fork 后的 Branch Path 可能包含由其他 Branch 创建的祖先 Node，因�
 
 ## 8. 非目标
 
-当前阶段不实施：
+以下仅为本页旧局部 / Timeline 方案的阶段非目标，不约束独立全局资源搜索计划：
 
 - 后端 Timeline 搜索；
 - SQLite FTS Schema；

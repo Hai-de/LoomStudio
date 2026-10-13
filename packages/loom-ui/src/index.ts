@@ -14,6 +14,7 @@ export type { FieldControlProps, FieldProps } from './component/field.js'
 export { SearchField } from './component/search-field.js'
 export type { SearchFieldProps } from './component/search-field.js'
 export { Dialog, isDialogBackdropPoint } from './component/dialog.js'
+export { Command as CommandMenu } from 'cmdk'
 export type { DialogProps } from './component/dialog.js'
 export {
   ContextMenu,

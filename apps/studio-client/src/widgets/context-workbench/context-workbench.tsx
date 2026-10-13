@@ -1,3 +1,4 @@
+import type { ResourceSearchReveal } from '../../shared/lib/search-match.js'
 import { useEffect, useId, useMemo, useState } from 'react'
 import { Trash2, X } from 'lucide-react'
 import { DEFAULT_ASSET_VIEW_STATE, useStudioLayoutStore } from '../../shared/studio-shell/studio-layout-store.js'
@@ -55,6 +56,8 @@ type ContextWorkbenchProps = {
   onSelectResource?: (resourceId: string, replace?: boolean) => void
   routeAssetId?: string
   routeResourceId?: string
+  globalSearchQuery?: string
+  searchMatch?: ResourceSearchReveal
   searchQuery: string
   onSearchQueryChange(value: string): void
   t: Translator
@@ -77,7 +80,9 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
   const searchQuery = props.searchQuery
   const [bindingOpen, setBindingOpen] = useState(false)
   const [internalSelectedResourceId, setInternalSelectedResourceId] = useState<string>()
-  const [temporarySelection, setTemporarySelection] = useState<{ resourceId: string; nodeId: string }>()
+  const [temporarySelection, setTemporarySelection] = useState<{
+    resourceId: string; nodeId: string; routeAssetId?: string; requestId?: number
+  }>()
   const [temporaryExpandedIds, setTemporaryExpandedIds] = useState<string[]>([])
   const mobilePane = useStudioLayoutStore(state => state.assetPanes.resources[props.workspaceId] ?? 'explorer')
 
@@ -111,7 +116,10 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
     : target.target?.origin?.kind === 'builtin' ? props.t('directory.builtinResource')
       : target.target?.sourceArtifactRef ? props.t('directory.cardResource') : props.t('directory.userResource')
   const selectedId = target.temporary
-    ? (temporarySelection?.resourceId === props.routeResourceId ? temporarySelection?.nodeId : props.routeAssetId ?? target.target!.rootNode.id)
+    ? (temporarySelection && temporarySelection.resourceId === props.routeResourceId
+      && temporarySelection.routeAssetId === props.routeAssetId
+      && temporarySelection.requestId === props.searchMatch?.requestId
+      ? temporarySelection.nodeId : props.routeAssetId ?? target.target!.rootNode.id)
     : explorerView.selectedId
   const selectedNodeResource = selectedId ? loreResources.find(r => r.id === selectedId || Boolean(findContextNode([r.rootNode], selectedId))) : undefined
   const selectedResourceId = props.routeResourceId ?? props.selectedResourceId
@@ -186,7 +194,7 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
     if (!props.routeAssetId || target.temporary) return
     if (props.routeResourceId) props.onViewChange?.('lore')
     openAssetDetail('resources', props.workspaceId, props.routeAssetId)
-  }, [openAssetDetail, props.routeResourceId, props.routeAssetId, target.temporary, props.workspaceId, props.onViewChange])
+  }, [openAssetDetail, props.routeResourceId, props.routeAssetId, props.searchMatch?.requestId, target.temporary, props.workspaceId, props.onViewChange])
 
   useEffect(() => {
     const handleNavigate = (event: Event) => {
@@ -237,7 +245,10 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
 
   function handleSelectNode(id: string) {
     setAssetPane('resources', props.workspaceId, 'detail')
-    if (target.temporary) setTemporarySelection({ resourceId: props.routeResourceId!, nodeId: id })
+    if (target.temporary) setTemporarySelection({
+      resourceId: props.routeResourceId!, nodeId: id,
+      routeAssetId: props.routeAssetId, requestId: props.searchMatch?.requestId,
+    })
     else openAssetDetail('resources', props.workspaceId, id)
   }
 
@@ -314,6 +325,7 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
         <div className={styles.resourceExplorer}>
           {unavailableBoundIds.map(id => <p key={id} role="status">{props.t('context.bindings.unavailable', { id })}</p>)}
           <ContextAssetExplorer
+            highlightQuery={props.globalSearchQuery}
             tokenSnapshot={tokenSnapshot}
             formatMeta={readLoreTreeMeta}
             key={target.temporary ? `temporary:${props.routeResourceId}` : 'collection'}
@@ -375,6 +387,8 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
           editorMode={textEditorMode}
           metadataOpen={metadataOpen}
           node={selectedNode}
+          revealMatch={props.searchMatch?.resourceId === selectedNodeResource?.id && props.searchMatch?.nodeId === selectedNode?.id
+            ? props.searchMatch : undefined}
           pathNodes={findContextAssetPath(workbenchNodes, selectedNode?.id)}
           t={props.t}
           onChangeNode={props.onChangeNode}

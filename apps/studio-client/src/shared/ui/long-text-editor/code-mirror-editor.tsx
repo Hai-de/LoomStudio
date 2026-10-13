@@ -1,3 +1,4 @@
+import { buildSearchMatchPattern, searchRevealKey, type SearchReveal } from '../../lib/search-match.js'
 import { defaultKeymap, history, historyKeymap, undo as undoChange, undoDepth } from '@codemirror/commands'
 import { javascript } from '@codemirror/lang-javascript'
 import { markdown } from '@codemirror/lang-markdown'
@@ -5,7 +6,7 @@ import { xml } from '@codemirror/lang-xml'
 import { yaml } from '@codemirror/lang-yaml'
 import { HighlightStyle, LanguageDescription, syntaxHighlighting, syntaxTree } from '@codemirror/language'
 import { Chunk } from '@codemirror/merge'
-import { search, searchKeymap } from '@codemirror/search'
+import { getSearchQuery, search, searchKeymap, searchPanelOpen, SearchQuery, setSearchQuery } from '@codemirror/search'
 import { Annotation, Compartment, EditorState, RangeSet, RangeSetBuilder, StateField, Text, Transaction } from '@codemirror/state'
 import {
   Decoration,
@@ -47,6 +48,7 @@ type CodeMirrorEditorProps = {
   onCommit(value: string): void
   onSubmit?(value: string): void
   placeholder?: string
+  revealMatch?: SearchReveal
   showLineNumbers?: boolean
   spellCheck?: boolean
   value: string
@@ -296,6 +298,22 @@ function buildSelectionBoundaryMarkers(state: EditorState) {
   )))
 }
 
+// CodeMirror's search highlighter only runs while its search panel is open.
+const revealMatchHighlighting = EditorView.decorations.of(view => {
+  const query = getSearchQuery(view.state)
+  if (searchPanelOpen(view.state) || !query.valid) return Decoration.none
+  const ranges = []
+  for (const visible of view.visibleRanges) {
+    const cursor = query.getCursor(view.state, visible.from, visible.to)
+    for (let match = cursor.next(); !match.done; match = cursor.next()) {
+      const { from, to } = match.value
+      const selected = view.state.selection.ranges.some(range => range.from === from && range.to === to)
+      ranges.push(Decoration.mark({ class: selected ? 'cm-searchMatch cm-searchMatch-selected' : 'cm-searchMatch' }).range(from, to))
+    }
+  }
+  return Decoration.set(ranges)
+})
+
 export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEditorProps>(function CodeMirrorEditor(props, ref) {
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView>(null)
@@ -310,6 +328,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
   const readOnlyCompartmentRef = useRef(new Compartment())
   const placeholderCompartmentRef = useRef(new Compartment())
   const attributesCompartmentRef = useRef(new Compartment())
+  const revealMatchCompartmentRef = useRef(new Compartment())
+  const revealedRequestRef = useRef<string | undefined>(undefined)
+  const revealedQueryRef = useRef<SearchQuery | undefined>(undefined)
   callbacksRef.current = {
     onCancel: props.onCancel,
     onChange: props.onChange,
@@ -356,6 +377,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           highlightActiveLine(),
           drawSelection(),
           search(),
+          revealMatchCompartmentRef.current.of([]),
           markdown({ codeLanguages }),
           syntaxHighlighting(loomHighlightStyle),
           yamlScalarHighlighting,
@@ -406,6 +428,37 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       changes: { from: 0, to: view.state.doc.length, insert: props.value },
     })
   }, [props.value])
+
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+    const match = props.revealMatch
+    if (!match) {
+      if (revealedRequestRef.current === undefined) return
+      revealedRequestRef.current = undefined
+      const ownsQuery = revealedQueryRef.current && getSearchQuery(view.state).eq(revealedQueryRef.current)
+      revealedQueryRef.current = undefined
+      view.dispatch({ effects: [revealMatchCompartmentRef.current.reconfigure([]),
+        ...(ownsQuery ? [setSearchQuery.of(new SearchQuery({ search: '' }))] : []),
+      ] })
+      return
+    }
+    const key = searchRevealKey(match)
+    if (props.hidden || revealedRequestRef.current === key) return
+    revealedRequestRef.current = key
+    const query = new SearchQuery({ search: buildSearchMatchPattern(match.query), regexp: true, literal: true })
+    revealedQueryRef.current = query
+    const cursor = query.getCursor(view.state).next()
+    view.dispatch({
+      annotations: Transaction.addToHistory.of(false),
+      effects: [
+        setSearchQuery.of(query),
+        revealMatchCompartmentRef.current.reconfigure(revealMatchHighlighting),
+        ...(!cursor.done && query.valid ? [EditorView.scrollIntoView(cursor.value.from, { y: 'center' })] : []),
+      ],
+      ...(!cursor.done && query.valid ? { selection: { anchor: cursor.value.from, head: cursor.value.to } } : {}),
+    })
+  }, [props.hidden, props.revealMatch?.query, props.revealMatch?.requestId])
 
   useEffect(() => {
     viewRef.current?.dispatch({

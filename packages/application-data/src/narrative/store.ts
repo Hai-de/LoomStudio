@@ -373,6 +373,18 @@ export function createNarrativeStore(options: CreateNarrativeStoreOptions): Narr
     },
     getTimeline: (id, options) => engine.read(database => readTimeline(database, id, options?.includeDeleted)),
     listTimelines: input => engine.read(database => readTimelines(database, input)),
+    listSearchTimelines: () => engine.read(database => {
+      const rows = database.prepare(`
+        SELECT id, title, created_from_card_id, created_from_card_version
+        FROM narrative_timelines WHERE tombstoned = 0 ORDER BY id
+      `).all() as Array<{ id: string; title: string | null; created_from_card_id: string | null; created_from_card_version: number | null }>
+      return rows.map(row => ({
+        id: row.id,
+        title: row.title ?? undefined,
+        createdFrom: row.created_from_card_id !== null && row.created_from_card_version !== null
+          ? { cardId: row.created_from_card_id, cardVersion: row.created_from_card_version } : undefined,
+      }))
+    }),
     getBranch: (id, options) => engine.read(database => readBranch(database, id, options?.includeDeleted)),
     listBranches: timelineId => engine.read(database => readBranches(database, timelineId)),
     getNode: (id, options) => engine.read(database => readNode(database, id, options?.includeDeleted)),

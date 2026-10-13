@@ -1,3 +1,4 @@
+import type { ResourceSearchReveal } from '../shared/lib/search-match.js'
 import { startupAreas } from './use-studio-startup.js'
 import type { Logger, MemoryLogSink } from '@loom-studio/logging'
 import { useStudioState } from './use-studio-state.js'
@@ -39,6 +40,10 @@ import { isTransientAgentEntryId, useDisplayProjection, useOpeningDisplayProject
 import styles from './app.module.scss'
 import '../styles/global.css'
 import { useAppearanceStore } from '../shared/studio-shell/appearance-store.js'
+import { formatEntityReference, type GlobalSearchHit } from '@loom-studio/shared'
+import { useGlobalSearch } from '../features/global-search/model/use-global-search.js'
+import { GlobalSearchDialog } from '../widgets/global-search/global-search-dialog.js'
+import { findNodeById } from '../shared/ui/file-tree/file-tree-model.js'
 import { applyEffectiveMotion, initializeMotionPreference, useEffectiveMotion } from '../shared/hooks/use-motion-preference.js'
 
 function initializeAppearancePreview() {
@@ -108,6 +113,39 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
   const uiState = useStudioUiState()
   const timelineRouteRequestRef = useRef(0)
   const navigation = useStudioNavigation({ endpoint: state.endpoint, api: state.api })
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchMatch, setSearchMatch] = useState<ResourceSearchReveal>()
+  const [recentSearch, setRecentSearch] = useState<{ endpoint: string; items: GlobalSearchHit[] }>({ endpoint: state.endpoint, items: [] })
+  useEffect(() => {
+    function onSearchShortcut(event: KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey || event.code !== 'KeyK' || event.isComposing) return
+      if (!searchOpen && document.querySelector('dialog[open]')) return
+      event.preventDefault()
+      setSearchOpen(value => !value)
+    }
+    window.addEventListener('keydown', onSearchShortcut)
+    return () => window.removeEventListener('keydown', onSearchShortcut)
+  }, [searchOpen])
+  async function openSearchResult(hit: GlobalSearchHit) {
+    setSearchOpen(false)
+    const target = hit.target
+    try {
+      if (target.type === 'card') await navigation.openUri(formatEntityReference({ kind: 'entity', type: 'card', id: target.cardId }))
+      else if (target.type === 'resource') {
+        const resource = await state.refreshPromptResource(target.resourceId)
+        if (!navigation.isCurrent()) return
+        if (!resource || !findNodeById([resource.rootNode], target.nodeId)) throw new Error(state.t('navigation.targetUnavailable'))
+        if (target.resourceKind === 'preset') uiState.setSelectedPresetId(target.resourceId)
+        setSearchMatch(previous => ({ resourceId: target.resourceId, nodeId: target.nodeId, query: globalSearch.query, requestId: (previous?.requestId ?? 0) + 1 }))
+        await navigation.setSearchQuery('')
+        await navigation.openResource(target.resourceKind === 'preset' ? 'preset' : 'resource', target.resourceId, target.nodeId)
+      } else if (target.type === 'timeline') await navigation.openNarrative(target.timelineId)
+      else await openAgentSession(target.sessionId)
+      setRecentSearch(current => ({ endpoint: state.endpoint, items: [hit, ...(current.endpoint === state.endpoint ? current.items : []).filter(item => item.id !== hit.id)].slice(0, 8) }))
+    } catch (error) {
+      notify.error(state.t('navigation.targetUnavailable'), { description: error instanceof Error ? error.message : String(error) })
+    }
+  }
   async function openAgentSession(sessionId: string) {
     const activated = await state.activateAgentSession(sessionId, navigation.isCurrent)
     if (!activated || !navigation.isCurrent()) return
@@ -131,6 +169,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
   const { assetWorkspaceId, cardsBusy, providerBusy, agentPresetBusy, activePresetId,
     narrativeCharacterName, sourceCardId, canOpenTimelineSource, narrativeCharacterAvatarUrl,
     sessionBusy, agentChatBusy, mutationBusy } = derived
+  const globalSearch = useGlobalSearch({ api: state.api, endpoint: state.endpoint, open: searchOpen, t: state.t, currentCardId: appearanceCardId, currentPresetId: activePresetId })
   const contextWorkspaceId = JSON.stringify([state.endpoint, assetWorkspaceId])
   const openingDisplay = useOpeningDisplayProjection({
     api: state.textTransformsApi,
@@ -340,7 +379,10 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
     })
     return () => { timelineRouteRequestRef.current++ }
   }, [narrativeTarget, navigation.route.targetUri, navigationRetry])
-  const resourcePanels = StudioResourcePanels({ state, uiState, navigation, assetWorkspaceId })
+  const resourcePanels = StudioResourcePanels({ state, uiState, navigation, assetWorkspaceId,
+    globalSearchQuery: globalSearch.query,
+    searchMatch: !globalSearch.query.trim() ? undefined : searchMatch?.query === globalSearch.query ? searchMatch
+      : navigation.route.resourceId && navigation.route.assetId ? { resourceId: navigation.route.resourceId, nodeId: navigation.route.assetId, query: globalSearch.query, requestId: 0 } : undefined })
   const panels = createStudioPanels({ state, uiState, navigation, rendererHost, clientExtensions, clientLogs: props.clientLogs, resourcePanels, assetWorkspaceId, cardsBusy, providerBusy, agentPresetBusy, activePresetId, sourceCardId, sessionBusy, openStateSource, openAgentSession, onTextTransformsChanged, uiScale, setUiScale, backgrounds: clientExtensions.host.backgrounds() })
 
   const studio = (
@@ -356,6 +398,13 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
         />
       )}
       headerActions={headerActions}
+      onOpenSearch={() => setSearchOpen(true)}
+      searchQuery={globalSearch.query.trim()}
+      onClearSearch={() => {
+        globalSearch.showResults()
+        globalSearch.setInputValue('')
+        setSearchMatch(undefined)
+      }}
       modelConfigured={state.providerAccountsLoaded ? hasCompleteProviderAccount(state.providerAccounts) : undefined}
       busy={mutationBusy}
       canRedo={state.canRedoEdit}
@@ -577,6 +626,9 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
         navigation.openResource(target.panel, target.resourceId, target.nodeId)
         if (target.panel === 'preset') useStudioLayoutStore.getState().openAssetDetail('preset', contextWorkspaceId, target.nodeId)
       }} />
+      <GlobalSearchDialog open={searchOpen} search={globalSearch} recent={recentSearch.endpoint === state.endpoint ? recentSearch.items : []} t={state.t}
+        onClose={() => setSearchOpen(false)} onOpenPanel={panel => { setSearchOpen(false); void navigation.openPanel(panel) }}
+        onOpenResult={hit => { void openSearchResult(hit) }} />
       <RendererFocusSurface host={rendererHost} scope={{ kind: 'workspace', key: 'workspace' }} />
       <NotificationToaster label={state.t('notification.label')} />
     </>

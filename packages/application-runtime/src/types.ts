@@ -47,6 +47,10 @@ export type {
 import type {
   AssistantChatMessage,
   ChatMessage,
+  SearchResourcesInput,
+  SearchResourcesResult,
+  ListGlobalSearchScopesInput,
+  ListGlobalSearchScopesResult,
   JsonObject,
   JsonValue,
   ListLoreMountsInput,
@@ -63,6 +67,14 @@ import type {
   TimelineStateBinding,
 } from '@loom-studio/shared'
 export type {
+  GlobalSearchHit,
+  GlobalSearchKind,
+  GlobalSearchScope,
+  SearchResourcesInput,
+  SearchResourcesResult,
+  SearchScopeOption,
+  ListGlobalSearchScopesInput,
+  ListGlobalSearchScopesResult,
   ListLoreMountsInput,
   ListLoreMountsResult,
   ReplaceLoreMountsInput,
@@ -168,6 +180,8 @@ export type {
 } from '@loom-studio/shared'
 
 export type ApplicationRuntime = {
+  searchResources(input: SearchResourcesInput): Promise<SearchResourcesResult>
+  listGlobalSearchScopes(input: ListGlobalSearchScopesInput): Promise<ListGlobalSearchScopesResult>
   getTimelinePresetConfig(input: { timelineId: string; presetId: string }): Promise<{ config: import('./prompt/timeline-preset-config.js').TimelinePresetConfig }>
   updateTimelinePresetConfig(input: { timelineId: string; presetId: string; expectedVersion: number; macroSelections: MacroSelectionMap }, context?: RuntimeRequestContext): Promise<{ config: import('./prompt/timeline-preset-config.js').TimelinePresetConfig; mutation: MutationReceipt }>
   sampleNarrative(input: SampleNarrativeInput, signal?: AbortSignal): Promise<NarrativeSampleResult>

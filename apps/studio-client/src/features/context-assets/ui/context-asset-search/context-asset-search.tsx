@@ -1,3 +1,4 @@
+import { SearchHighlight } from '../../../../shared/ui/search-highlight.js'
 import { Book, FileText, Folder } from 'lucide-react'
 import { useDeferredValue, useMemo, type ReactNode } from 'react'
 import { SearchField } from '@loom-studio/ui'
@@ -43,9 +44,9 @@ export function ContextAssetSearch(props: ContextAssetSearchProps) {
                   <button className={styles.result} type="button" onClick={() => props.onSelect(result.node)}>
                     <span className={styles.resultIcon}>{renderResultIcon(result.kind)}</span>
                     <span className={styles.resultText}>
-                      <strong>{highlightText(result.label, deferredQuery)}</strong>
-                      <small>{highlightText(result.path, deferredQuery)}</small>
-                      {result.excerpt ? <span>{highlightText(result.excerpt, deferredQuery)}</span> : null}
+                      <strong><SearchHighlight text={result.label} query={deferredQuery} /></strong>
+                      <small><SearchHighlight text={result.path} query={deferredQuery} /></small>
+                      {result.excerpt ? <span><SearchHighlight text={result.excerpt} query={deferredQuery} /></span> : null}
                     </span>
                   </button>
                 </div>
@@ -65,19 +66,4 @@ function renderResultIcon(kind: ContextAssetNode['kind']) {
   if (kind === 'module') return <Book aria-hidden="true" />
   if (kind === 'folder') return <Folder aria-hidden="true" />
   return <FileText aria-hidden="true" />
-}
-
-function highlightText(value: string, rawQuery: string): ReactNode {
-  const tokens = [...new Set(rawQuery.trim().split(/\s+/).filter(Boolean))]
-  if (tokens.length === 0) return value
-  const matcher = new RegExp(`(${tokens.map(escapeRegExp).join('|')})`, 'giu')
-  return value.split(matcher).map((part, index) => (
-    tokens.some(token => token.toLocaleLowerCase() === part.toLocaleLowerCase())
-      ? <mark key={`${part}-${index}`}>{part}</mark>
-      : part
-  ))
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }

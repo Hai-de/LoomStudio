@@ -13,6 +13,7 @@ type FileTreeProps = {
   active?: boolean
   highlightMessages?: boolean
   ariaLabel: string
+  renderLabel?: (node: FileTreeNode) => ReactNode
   formatLabel?: (node: FileTreeNode) => string
   formatMeta?: (node: FileTreeNode) => string | undefined
   getDisclosureLabel: (node: FileTreeNode, expanded: boolean) => string
@@ -286,6 +287,7 @@ export function FileTree(props: FileTreeProps) {
         expandedIds={expandedIds}
         canDrag={Boolean(props.onMoveNode) && (props.canDrag?.(node) ?? true)}
         canDragNode={props.canDrag}
+        renderLabel={props.renderLabel}
         formatLabel={props.formatLabel}
         formatMeta={props.formatMeta}
         getDisclosureLabel={props.getDisclosureLabel}
@@ -398,6 +400,7 @@ function FileTreeRow(props: {
   expandedIds: Set<string>
   canDrag: boolean
   canDragNode?: (node: FileTreeNode) => boolean
+  renderLabel?: (node: FileTreeNode) => ReactNode
   formatLabel?: (node: FileTreeNode) => string
   formatMeta?: (node: FileTreeNode) => string | undefined
   getDisclosureLabel: (node: FileTreeNode, expanded: boolean) => string
@@ -577,7 +580,7 @@ function FileTreeRow(props: {
               ) : (
                 <span className={styles.labelRow}>
                   <span className={styles.label} id={labelId}>
-                    {props.formatLabel ? props.formatLabel(props.node) : props.node.label}
+                    {props.renderLabel ? props.renderLabel(props.node) : props.formatLabel ? props.formatLabel(props.node) : props.node.label}
                     {hasCount ? <sup className={styles.childCountSup}>{childCount}</sup> : null}
                   </span>
                   {labelSuffixElement}
@@ -629,7 +632,8 @@ function FileTreeRow(props: {
       expandedIds={props.expandedIds}
       canDrag={props.canDragNode?.(child) ?? props.canDrag}
       canDragNode={props.canDragNode}
-      formatLabel={props.formatLabel}
+      renderLabel={props.renderLabel}
+        formatLabel={props.formatLabel}
       formatMeta={props.formatMeta}
       getDisclosureLabel={props.getDisclosureLabel}
       getDragLabel={props.getDragLabel}
@@ -674,7 +678,7 @@ function FileTreeRow(props: {
           onDrop={event => props.onDrop(event, props.node)}
         >
           <div className={styles.sectionDivider} />
-          <span className={styles.sectionLabel}>{props.formatLabel ? props.formatLabel(props.node) : props.node.label}</span>
+          <span className={styles.sectionLabel}>{props.renderLabel ? props.renderLabel(props.node) : props.formatLabel ? props.formatLabel(props.node) : props.node.label}</span>
           <div className={styles.sectionDivider} />
         </div>
       ) : (

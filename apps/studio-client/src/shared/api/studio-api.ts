@@ -101,6 +101,10 @@ export function createStudioApi(trpc: StudioTrpcClient = createStudioTrpcClient(
   }
 
   return {
+    globalSearch: {
+      search: (input: StudioRpcInputs['application']['searchResources'], signal?: AbortSignal) => trpc.application.searchResources.query(input, { signal }),
+      scopes: (input: StudioRpcInputs['application']['listGlobalSearchScopes'], signal?: AbortSignal) => trpc.application.listGlobalSearchScopes.query(input, { signal }),
+    },
     officialContent: {
       list: () => trpc.official.listContent.query(undefined),
       install: (input: { packageId: string; digest: string }) => trpc.official.installContent.mutate(input),

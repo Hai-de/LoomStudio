@@ -1,5 +1,21 @@
 export type { AssistantChatMessage, ChatMessage, ChatToolCall } from './chat.js'
 export {
+  globalSearchKindSchema,
+  globalSearchScopeSchema,
+  searchResourcesInputSchema,
+  listGlobalSearchScopesInputSchema,
+} from './global-search.js'
+export type {
+  GlobalSearchKind,
+  GlobalSearchScope,
+  GlobalSearchHit,
+  SearchResourcesInput,
+  SearchResourcesResult,
+  SearchScopeOption,
+  ListGlobalSearchScopesInput,
+  ListGlobalSearchScopesResult,
+} from './global-search.js'
+export {
   listLoreMountsInputSchema,
   listLoreMountsResultSchema,
   replaceLoreMountsInputSchema,

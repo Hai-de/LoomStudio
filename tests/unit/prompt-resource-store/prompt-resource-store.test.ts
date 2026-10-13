@@ -137,7 +137,7 @@ describe('PromptResourceStore', () => {
     const setting = await store.createResource({ actor, id: 'setting-500', resourceKind: 'lore', rootNode: settingFixture })
     const preset = await store.createResource({ actor, id: 'preset-100', resourceKind: 'preset', rootNode: presetFixture })
 
-    expect(engine.database.prepare('SELECT version FROM schema_migrations WHERE namespace = ?').get('application.prompt-resource')).toEqual({ version: 6 })
+    expect(engine.database.prepare('SELECT version FROM schema_migrations WHERE namespace = ?').get('application.prompt-resource')).toEqual({ version: 8 })
     expect(engine.database.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND (name LIKE 'prompt_resource%' OR name IN ('global_lore_mounts', 'preset_tool_mounts'))`).all()).toEqual(expect.arrayContaining([
       { name: 'prompt_resources' },
       { name: 'prompt_resource_nodes' },

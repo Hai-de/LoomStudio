@@ -1,9 +1,10 @@
-import { useId, useRef, useState, type ReactNode } from 'react'
+import { buildSearchMatchPattern, searchRevealKey, type SearchReveal } from '../../../../shared/lib/search-match.js'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { Anchor, Bot, Braces, ChevronDown, Equal, Info, KeyRound, ListFilter, ListOrdered, RefreshCw, Settings2, Zap } from 'lucide-react'
 import type { ContextAssetNode, PromptResource } from '../../../../entities/index.js'
 import type { Translator } from '../../../../shared/i18n/index.js'
 import { LongTextEditor, type LongTextEditorHandle } from '../../../../shared/ui/long-text-editor/long-text-editor.js'
-import type { LongTextEditorMode } from '../../../../shared/ui/long-text-editor/long-text-editor-model.js'
+import { type LongTextEditorMode } from '../../../../shared/ui/long-text-editor/long-text-editor-model.js'
 import { DEFAULT_PRESET_ANCHOR_IDS } from '../../model/preset-anchor-options.js'
 import {
   buildActivationUpdate,
@@ -23,6 +24,7 @@ type ContextAssetDetailProps = {
   allowTargetAnchor?: boolean
   compactVirtualNotes?: boolean
   editorMode: LongTextEditorMode
+  revealMatch?: SearchReveal
   metadataOpen: boolean
   node: ContextAssetNode
   presets?: PromptResource[]
@@ -35,6 +37,8 @@ type ContextAssetDetailProps = {
 
 export function ContextAssetDetail(props: ContextAssetDetailProps) {
   const editorRef = useRef<LongTextEditorHandle>(null)
+  const compactNotesRef = useRef<HTMLInputElement>(null)
+  const revealedCompactRequestRef = useRef<string | undefined>(undefined)
   const isTextLike = props.node.kind === 'entry' || props.node.kind === 'script'
   const isEntry = props.node.kind === 'entry'
   const allowTargetAnchor = props.allowTargetAnchor ?? true
@@ -45,6 +49,20 @@ export function ContextAssetDetail(props: ContextAssetDetailProps) {
   const [keywordsText, setKeywordsText] = useState(activationDraft.keywords)
   const [anchorPickerOpen, setAnchorPickerOpen] = useState(false)
   const lastNodeIdRef = useRef(props.node.id)
+
+  useEffect(() => {
+    const reveal = props.revealMatch
+    const input = compactNotesRef.current
+    if (!reveal) { revealedCompactRequestRef.current = undefined; return }
+    const key = JSON.stringify([props.node.id, searchRevealKey(reveal)])
+    if (!input || revealedCompactRequestRef.current === key) return
+    revealedCompactRequestRef.current = key
+    const pattern = buildSearchMatchPattern(reveal.query)
+    const match = pattern ? new RegExp(pattern, 'i').exec(body) : null
+    if (!match) return
+    input.setSelectionRange(match.index, match.index + match[0].length)
+    input.scrollIntoView({ block: 'center' })
+  }, [props.revealMatch?.requestId, props.revealMatch?.query, props.node.id, body])
 
   if (lastNodeIdRef.current !== props.node.id) {
     lastNodeIdRef.current = props.node.id
@@ -335,6 +353,7 @@ export function ContextAssetDetail(props: ContextAssetDetailProps) {
           <>
           {props.headerExtra}
           <input className={`${styles.inlineInput} loom-underlined-field`} aria-label={props.t('context.notesLabel')}
+            ref={compactNotesRef}
             value={body} disabled={readOnly} placeholder={props.t('context.notesPlaceholder')}
             onChange={event => props.onChangeNode({ body: event.target.value })}
             onBlur={event => props.onCommitNode({ body: event.target.value })} />
@@ -353,6 +372,7 @@ export function ContextAssetDetail(props: ContextAssetDetailProps) {
           enableCodeWrapLabel={props.t('markdown.code.enableWrap')}
           label={isTextLike ? props.t('context.contentLabel') : props.t('context.notesLabel')}
           mode={props.editorMode}
+          revealMatch={props.revealMatch}
           previewEmptyLabel={props.t('longTextEditor.previewEmpty')}
           previewModeLabel={props.t('longTextEditor.previewMode')}
           restoreInitialLabel={props.t('longTextEditor.restoreInitial')}

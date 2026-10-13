@@ -168,6 +168,8 @@ export type NarrativeTimelinePage = {
   nextCursor?: string
 }
 
+export type NarrativeSearchTimeline = Pick<NarrativeTimeline, 'id' | 'title' | 'createdFrom'>
+
 export type EditNarrativeNodeInput = NarrativeWriteContext & {
   timelineId: string
   nodeId: string
@@ -202,6 +204,7 @@ export type NarrativeStore = {
   editBranchNode(input: EditBranchNodeInput): Promise<EditBranchNodeValue & { commit: DataCommitFact }>
   getTimeline(id: string, options?: { includeDeleted?: boolean }): Promise<NarrativeTimeline | null>
   listTimelines(input?: { createdFromCardId?: string; cursor?: string; limit?: number }): Promise<NarrativeTimelinePage>
+  listSearchTimelines(): Promise<NarrativeSearchTimeline[]>
   getBranch(id: string, options?: { includeDeleted?: boolean }): Promise<NarrativeBranch | null>
   listBranches(timelineId: string): Promise<NarrativeBranch[]>
   getNode(id: string, options?: { includeDeleted?: boolean }): Promise<NarrativeNode | null>

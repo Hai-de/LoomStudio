@@ -233,3 +233,90 @@ export function assertPromptResourceSchema(database: DatabaseSync): void {
 }
 
 export { migrateLorePromptData as migrateVersionSix } from './lore-migration.js'
+
+export function migrateVersionSeven(database: DatabaseSync): void {
+  database.exec(`
+    CREATE VIRTUAL TABLE prompt_resource_node_search USING fts5(
+      label, meta, body, resource_label, tokenize = 'trigram'
+    );
+
+    INSERT INTO prompt_resource_node_search (rowid, label, meta, body, resource_label)
+      SELECT n.rowid, n.label, n.meta, n.body, r.label
+      FROM prompt_resource_nodes n JOIN prompt_resources r ON r.id = n.resource_id
+      WHERE r.resource_kind IN ('lore', 'preset');
+
+    CREATE TRIGGER prompt_resource_search_node_insert AFTER INSERT ON prompt_resource_nodes BEGIN
+      INSERT INTO prompt_resource_node_search (rowid, label, meta, body, resource_label)
+        SELECT new.rowid, new.label, new.meta, new.body, r.label
+        FROM prompt_resources r WHERE r.id = new.resource_id AND r.resource_kind IN ('lore', 'preset');
+    END;
+
+    CREATE TRIGGER prompt_resource_search_node_delete AFTER DELETE ON prompt_resource_nodes BEGIN
+      DELETE FROM prompt_resource_node_search WHERE rowid = old.rowid;
+    END;
+
+    CREATE TRIGGER prompt_resource_search_node_update
+      AFTER UPDATE OF label, meta, body, resource_id ON prompt_resource_nodes BEGIN
+      DELETE FROM prompt_resource_node_search WHERE rowid = old.rowid;
+      INSERT INTO prompt_resource_node_search (rowid, label, meta, body, resource_label)
+        SELECT new.rowid, new.label, new.meta, new.body, r.label
+        FROM prompt_resources r WHERE r.id = new.resource_id AND r.resource_kind IN ('lore', 'preset');
+    END;
+
+    CREATE TRIGGER prompt_resource_search_header_update
+      AFTER UPDATE OF label, resource_kind ON prompt_resources
+      WHEN old.label IS NOT new.label OR old.resource_kind IS NOT new.resource_kind BEGIN
+      DELETE FROM prompt_resource_node_search
+        WHERE rowid IN (SELECT rowid FROM prompt_resource_nodes WHERE resource_id = new.id);
+      INSERT INTO prompt_resource_node_search (rowid, label, meta, body, resource_label)
+        SELECT n.rowid, n.label, n.meta, n.body, new.label FROM prompt_resource_nodes n
+        WHERE n.resource_id = new.id AND new.resource_kind IN ('lore', 'preset');
+    END;
+  `)
+}
+
+export function migrateVersionEight(database: DatabaseSync): void {
+  database.exec(`
+    DROP TRIGGER prompt_resource_search_node_insert;
+    DROP TRIGGER prompt_resource_search_node_delete;
+    DROP TRIGGER prompt_resource_search_node_update;
+    DROP TRIGGER prompt_resource_search_header_update;
+    DROP TABLE prompt_resource_node_search;
+    CREATE VIRTUAL TABLE prompt_resource_node_search USING fts5(
+      label, meta, body, tokenize = 'trigram'
+    );
+
+    INSERT INTO prompt_resource_node_search (rowid, label, meta, body)
+      SELECT n.rowid, n.label, n.meta, n.body
+      FROM prompt_resource_nodes n JOIN prompt_resources r ON r.id = n.resource_id
+      WHERE r.resource_kind IN ('lore', 'preset');
+
+    CREATE TRIGGER prompt_resource_search_node_insert AFTER INSERT ON prompt_resource_nodes BEGIN
+      INSERT INTO prompt_resource_node_search (rowid, label, meta, body)
+        SELECT new.rowid, new.label, new.meta, new.body
+        FROM prompt_resources r WHERE r.id = new.resource_id AND r.resource_kind IN ('lore', 'preset');
+    END;
+
+    CREATE TRIGGER prompt_resource_search_node_delete AFTER DELETE ON prompt_resource_nodes BEGIN
+      DELETE FROM prompt_resource_node_search WHERE rowid = old.rowid;
+    END;
+
+    CREATE TRIGGER prompt_resource_search_node_update
+      AFTER UPDATE OF label, meta, body, resource_id ON prompt_resource_nodes BEGIN
+      DELETE FROM prompt_resource_node_search WHERE rowid = old.rowid;
+      INSERT INTO prompt_resource_node_search (rowid, label, meta, body)
+        SELECT new.rowid, new.label, new.meta, new.body
+        FROM prompt_resources r WHERE r.id = new.resource_id AND r.resource_kind IN ('lore', 'preset');
+    END;
+
+    CREATE TRIGGER prompt_resource_search_header_update
+      AFTER UPDATE OF resource_kind ON prompt_resources
+      WHEN old.resource_kind IS NOT new.resource_kind BEGIN
+      DELETE FROM prompt_resource_node_search
+        WHERE rowid IN (SELECT rowid FROM prompt_resource_nodes WHERE resource_id = new.id);
+      INSERT INTO prompt_resource_node_search (rowid, label, meta, body)
+        SELECT n.rowid, n.label, n.meta, n.body FROM prompt_resource_nodes n
+        WHERE n.resource_id = new.id AND new.resource_kind IN ('lore', 'preset');
+    END;
+  `)
+}

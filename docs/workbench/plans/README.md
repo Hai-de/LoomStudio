@@ -25,7 +25,7 @@
 | [`application-capability-cli-mcp-adapters-plan.md`](./application-capability-cli-mcp-adapters-plan.md) | 待讨论 / 未授权实施 | 承接独立 CLI/MCP；在线连接、权限、首批命令及 Capability 抽取范围待确认 |
 | [持久 Agent Script / Script Mount 历史候选](../../archive/plans/file-backed-resource-agent-script-codeact-plan.md) | 延期 / 未授权实施 | 仅保留远期事项可发现入口；旧综合方案已归档，CodeAct 以独立计划为准 |
 | [`extension-developer-experience.md`](./extension-developer-experience.md)                   | Roadmap / UI 方向已确认 | SDK、工具链，以及扩展页面、声明式设置和组件使用；UI 具体合同待设计 |
-| [`search-and-timeline-indexing-plan.md`](./search-and-timeline-indexing-plan.md)             | Asset Search 已实现 / Timeline Search 延期 | 复用 Narrative Store 分页，后续补搜索、窗口与索引 |
+| [`search-and-timeline-indexing-plan.md`](./search-and-timeline-indexing-plan.md)             | 局部 Asset Search 已实现 / 独立 Timeline Search 延期 | 旧局部搜索背景与 Timeline 搜索候选；不属于全局资源搜索的实施或扩容范围 |
 | [`ui/prompt-resource-diff-mode-v0.md`](./ui/prompt-resource-diff-mode-v0.md)                 | 延期规划     | PromptResource Revision 差异对比与 Tokenizer 合同                       |
 | [`ui/provider-account-health-plan.md`](./ui/provider-account-health-plan.md)                 | 延期规划     | Provider Account 健康检查与连接状态探测                                 |
 | [`ui/provider-model-brand-icons-plan.md`](./ui/provider-model-brand-icons-plan.md)           | 前端 Spike 已完成 | 静态品牌资产已接入；`iconKey` 数据合同待定 |
@@ -34,6 +34,8 @@
 ---
 
 ## 历史已归档计划
+
+2026-10-13：[全局资源搜索与范围 Token](../../archive/plans/global-resource-search-plan.md)已实现并经用户确认归档；当前合同见 [全局资源搜索 Architecture](../../architecture/application/global-resource-search.md)，覆盖范围浏览、全文检索、持久化与定位高亮，保留真实大库性能验证边界。
 
 2026-10-13：[主应用 tRPC 契约迁移](../../archive/plans/trpc-contract-migration-plan.md)已实施并按用户要求归档；205 条 procedure 接管旧网络接口，保留测试失败与未验收边界，见[后续清单](../issues/audit-follow-ups.md#trpc-migration-follow-ups-2026-10-13)。
 

@@ -116,6 +116,41 @@ export type PromptResourcePage = {
   nextCursor?: string
 }
 
+export type PromptResourceSearchKind = 'lore' | 'preset'
+
+export type PromptResourceSearchHeader = {
+  id: string
+  resourceKind: PromptResourceSearchKind
+  label: string
+  rootNodeId: string
+  metadata: JsonObject
+}
+
+export type SearchPromptResourceNodesInput = {
+  query: string
+  resourceIds?: string[]
+  resourceKinds?: PromptResourceSearchKind[]
+  limit?: number
+  cursor?: string
+}
+
+export type PromptResourceSearchHit = {
+  resourceId: string
+  nodeId: string
+  resourceKind: PromptResourceSearchKind
+  resourceLabel: string
+  label: string
+  path: string[]
+  snippet: string
+  matchField: 'label' | 'meta' | 'body'
+  rank: number
+}
+
+export type PromptResourceSearchPage = {
+  hits: PromptResourceSearchHit[]
+  nextCursor?: string
+}
+
 export type AddLoreMountInput = PromptResourceWriteContext & {
   loreResourceId: string | null
   reference?: LoreMount['reference']
@@ -191,6 +226,9 @@ export type PromptResourceStore = {
   getResource(id: string, options?: { includeTombstone?: boolean }): Promise<PromptResource | null>
   getResourceMetadataAtVersion(id: string, version: number): Promise<JsonObject | null>
   listResources(input?: ListPromptResourcesInput): Promise<PromptResourcePage>
+  listSearchResources(): Promise<PromptResourceSearchHeader[]>
+  searchNodes(input: SearchPromptResourceNodesInput): Promise<PromptResourceSearchPage>
+  listSearchNodes(input: { resourceId: string; limit?: number; cursor?: string }): Promise<PromptResourceSearchPage>
   listLoreMounts(input?: ListLoreMountsInput): Promise<LoreMount[]>
   listPresetToolMounts(input?: ListPresetToolMountsInput): Promise<PresetToolMount[]>
   createResource(input: CreatePromptResourceInput): Promise<PromptResourceMutationResult>

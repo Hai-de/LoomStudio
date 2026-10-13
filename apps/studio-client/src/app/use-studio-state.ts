@@ -314,6 +314,7 @@ export function useStudioState(transportLogger: Logger) {
     clientExtensionApi,
     ...extensionResourceCommands,
     refreshResourceConsumers,
+    refreshPromptResource,
     // cards
     cards: cardsState.cards,
     selectedCardId: cardsState.selectedCardId,

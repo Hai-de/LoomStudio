@@ -23,6 +23,7 @@ Studio Client 是 React/Vite Web Client，负责页面组合、交互状态和 t
 | PromptBuild 展示步骤 | [build-prompt-build-steps.ts](src/features/prompt-build/model/build-prompt-build-steps.ts) | [prompt-build-steps.test.ts](../../tests/unit/client/prompt-build-steps.test.ts) |
 | Provider 账号、模型选择、凭据表单 | [use-provider-settings.ts](src/features/provider-settings/model/use-provider-settings.ts) | [provider-settings.test.ts](../../tests/unit/client/provider-settings.test.ts) |
 | typed API、RPC 方法映射 | [studio-api.ts](src/shared/api/studio-api.ts) | [studio-api.test.ts](../../tests/unit/client/studio-api.test.ts) |
+| 全局搜索、Cmd+K、范围 Token | [use-global-search.ts](src/features/global-search/model/use-global-search.ts)、[global-search-dialog.tsx](src/widgets/global-search/global-search-dialog.tsx) | [搜索模型](../../tests/unit/client/global-search.test.ts)、[实际键盘交互](../../tests/unit/client/global-search-dialog.test.ts) |
 | 通用文件树、拖放 | [file-tree-model.ts](src/shared/ui/file-tree/file-tree-model.ts) | [file-tree-model.test.ts](../../tests/unit/client/file-tree-model.test.ts) |
 | Markdown、HTML、正文展示 | [message-content/](src/features/message-content/) | [message-html.test.ts](../../tests/unit/client/message-html.test.ts) |
 | Token 文本计数与 Worker | [use-token-counts.ts](src/shared/tokenizer/use-token-counts.ts) | [token-counting.test.ts](../../tests/unit/client/token-counting.test.ts)、[token-worker.test.ts](../../tests/unit/client/token-worker.test.ts) |
@@ -61,6 +62,8 @@ pnpm exec vitest run tests/unit/client
 开发预览入口 `/dev/preview/:id` 保留，当前可用样例以 [预览注册表](./src/dev/preview/index.tsx) 为准。入口在开发模式下先于认证启动分流，未知 ID 显示未找到。新增样例在该注册表接入，复用生产组件，不动态解析用户提供的模块路径。
 
 `/dev/preview/backgrounds` 复用正式背景选择组件，以内存状态覆盖长名称、不同图片比例、搜索空结果与原图／材质弹窗；不会修改用户背景偏好。
+
+`/dev/preview/global-search` 复用正式搜索弹窗，以内存样例体验范围 / 类型标签、键盘选择、多条结果、加载、空结果和错误状态；不调用业务接口。正式入口位于工作区左上角导航按钮旁，有关键词时显示关键词与清空按钮；清空同时移除详情搜索高亮。也可按 `⌘K` / `Ctrl+K`。条目只匹配自身名称、说明与定义正文，路径仅用于辨认来源；剧情及会话只查名称。最近访问仅记录本次应用会话中从搜索打开的条目，不持久化正文。
 
 消息 HTML 样例已于 2026-09-24 经用户验收后[归档](./src/dev/archive/message-html/README.md)，不再注册 `message-html` 预览。正式 Narrative 与 Agent 消息消费 `features/message-content`：安全片段直接进入消息 DOM，完整 HTML 文档使用隔离 iframe，Agent 流式未闭合 HTML 使用占位。Display 只影响显示，编辑与复制保留原文。外部图床与 ST／酒馆助手 API 桥尚未开放。
 

@@ -45,6 +45,7 @@ export function usePromptResourceState(input: PromptResourceStateInput) {
     const invalidations: Promise<unknown>[] = []
     if (areas.bindings || areas.resources || areas.loreMounts) {
       invalidations.push(queryClient.invalidateQueries({ queryKey: ['prompt-resources', input.endpoint, 'bindings'] }))
+      invalidations.push(queryClient.invalidateQueries({ queryKey: ['global-search', input.endpoint] }))
     }
     if (areas.resources) invalidations.push(
       queryClient.invalidateQueries({ exact: true, queryKey: resourcesKey }),
@@ -70,18 +71,22 @@ export function usePromptResourceState(input: PromptResourceStateInput) {
     refreshPromptResourceLibrary: async () => {
       const [resources, installations] = await Promise.all([resourcesQuery.refetch(), installationsQuery.refetch()])
       readRefetchResult(installations)
-      await queryClient.invalidateQueries({ queryKey: ['prompt-resources', input.endpoint, 'bindings'] })
+      await invalidate({ bindings: true })
       return readRefetchResult(resources)
     },
     refreshPromptResource: async (resourceId: string) => {
       const { resource } = await input.api.promptResources.get(resourceId)
       void queryClient.cancelQueries({ exact: true, queryKey: resourcesKey })
-      queryClient.setQueryData<PromptResource[]>(resourcesKey, current => (current ?? []).map(item =>
-        item.id === resource.id && item.version <= resource.version ? resource : item,
-      ))
+      queryClient.setQueryData<PromptResource[]>(resourcesKey, current => current?.some(item => item.id === resource.id)
+        ? current.map(item => item.id === resource.id && item.version <= resource.version ? resource : item)
+        : [...(current ?? []), resource])
       return queryClient.getQueryData<PromptResource[]>(resourcesKey)?.find(item => item.id === resourceId)
     },
-    refreshLoreMounts: async () => readRefetchResult(await loreMountsQuery.refetch()),
+    refreshLoreMounts: async () => {
+      const mounts = readRefetchResult(await loreMountsQuery.refetch())
+      await queryClient.invalidateQueries({ queryKey: ['global-search', input.endpoint] })
+      return mounts
+    },
     setPresetToolMounts: (update: (current: PresetToolMount[]) => PresetToolMount[]) => {
       void queryClient.cancelQueries({ exact: true, queryKey: presetToolMountsKey })
       queryClient.setQueryData<PresetToolMount[]>(presetToolMountsKey, current => update(current ?? []))
@@ -89,10 +94,12 @@ export function usePromptResourceState(input: PromptResourceStateInput) {
     setPromptResources: (update: (current: PromptResource[]) => PromptResource[]) => {
       void queryClient.cancelQueries({ exact: true, queryKey: resourcesKey })
       queryClient.setQueryData<PromptResource[]>(resourcesKey, current => update(current ?? []))
+      void queryClient.invalidateQueries({ queryKey: ['global-search', input.endpoint] })
     },
     setLoreMounts: (update: (current: LoreMount[]) => LoreMount[]) => {
       void queryClient.cancelQueries({ exact: true, queryKey: loreMountsKey })
       queryClient.setQueryData<LoreMount[]>(loreMountsKey, current => update(current ?? []))
+      void queryClient.invalidateQueries({ queryKey: ['global-search', input.endpoint] })
     },
   }
 }

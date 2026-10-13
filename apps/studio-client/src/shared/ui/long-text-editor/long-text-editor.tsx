@@ -1,3 +1,4 @@
+import { buildSearchMatchPattern, searchRevealKey, type SearchReveal } from '../../lib/search-match.js'
 import { Check, Code2, Copy, Eye, History, RotateCcw, Trash2, Undo2, X } from 'lucide-react'
 import { forwardRef, lazy, Suspense, useEffect, useId, useImperativeHandle, useReducer, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { CodeMirrorEditorHandle } from './code-mirror-editor.js'
@@ -35,6 +36,7 @@ type LongTextEditorBaseProps = {
   onChange(value: string): void
   onCommit(value: string): void
   placeholder?: string
+  revealMatch?: SearchReveal
   spellCheck?: boolean
   restoreInitialLabel: string
   showLineNumbers?: boolean
@@ -65,12 +67,26 @@ export const LongTextEditor = forwardRef<LongTextEditorHandle, LongTextEditorPro
   const labelId = useId()
   const codeEditorRef = useRef<CodeMirrorEditorHandle>(null)
   const initialValueRef = useRef(props.value)
+  const revealedRequestRef = useRef<string | undefined>(undefined)
   const [hasOpenedSource, setHasOpenedSource] = useState(props.mode === 'source')
   const [canUndo, setCanUndo] = useState(false)
   const [state, dispatch] = useReducer(reduceLongTextEditorState, INITIAL_LONG_TEXT_EDITOR_STATE)
   const hasChanges = props.value !== initialValueRef.current
   const { feedback, copy } = useCopyFeedback()
   const copyStatus = feedback?.status ?? 'idle'
+  const onModeChange = props.sourceOnly ? undefined : props.onModeChange
+
+  useEffect(() => {
+    const match = props.revealMatch
+    const key = searchRevealKey(match)
+    if (!match) { revealedRequestRef.current = undefined; return }
+    if (revealedRequestRef.current === key) return
+    revealedRequestRef.current = key
+    const pattern = buildSearchMatchPattern(match.query)
+    if (props.mode === 'preview' && pattern && new RegExp(pattern, 'i').test(props.value)) {
+      onModeChange?.('source')
+    }
+  }, [props.revealMatch?.requestId, props.revealMatch?.query, props.mode, props.value, onModeChange])
 
   useEffect(() => {
     if (props.mode === 'source') setHasOpenedSource(true)
@@ -218,6 +234,7 @@ export const LongTextEditor = forwardRef<LongTextEditorHandle, LongTextEditorPro
             disabled={props.disabled}
             labelledBy={labelId}
             placeholder={props.placeholder}
+            revealMatch={props.revealMatch}
             showLineNumbers={props.showLineNumbers}
             spellCheck={props.spellCheck}
             value={props.value}

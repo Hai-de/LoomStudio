@@ -5,6 +5,7 @@ import { loomScriptsProcedures } from './application/loom-scripts.js'
 import { portablePayloadsProcedures } from './application/portable-payloads.js'
 import { providersProcedures } from './application/providers.js'
 import { statesProcedures } from './application/states.js'
+import { searchProcedures } from './application/search.js'
 import { textTransformsProcedures } from './application/text-transforms.js'
 import { timelineProcedures } from './application/timeline.js'
 import { workspacesProcedures } from './application/workspaces.js'
@@ -24,6 +25,7 @@ export const studioTrpcRouter = t.router({
     ...portablePayloadsProcedures,
     ...providersProcedures,
     ...statesProcedures,
+    ...searchProcedures,
     ...textTransformsProcedures,
     ...timelineProcedures,
     ...workspacesProcedures,

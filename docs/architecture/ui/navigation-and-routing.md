@@ -14,7 +14,7 @@ Loom Studio 将应用内导航、资源身份和外部入口分开：导航负�
 
 浏览器 History State 保存当前位置，包括 Timeline、Branch、Panel、选中资源、显式节点和查看条件。面板切换与资源选择 Push 到同一个 `/studio` URL；返回/前进恢复该位置。关闭面板只清理面板定位，不清空当前 Timeline/Branch。
 
-搜索输入和筛选 Replace 当前位置，不逐字创建历史。编辑正文、Hover、拖动尺寸、手风琴与普通滚动不进入导航历史，编辑撤销仍归编辑器负责。
+面板局部搜索输入和筛选 Replace 当前位置，不逐字创建历史。[全局资源搜索](../application/global-resource-search.md)的关键词、范围和类型由独立的 endpoint 级 Zustand 持久状态保存；打开结果才调用既有导航。编辑正文、Hover、拖动尺寸、手风琴与普通滚动不进入导航历史，编辑撤销仍归编辑器负责。
 
 ### 工作区恢复
 

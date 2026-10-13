@@ -461,3 +461,9 @@
   z-index: 1;
   padding: 4px 14px 8px calc(var(--loom-tree-guide-x) + ((var(--loom-tree-level) - 1) * var(--loom-tree-indent-step)) + 24px);
 }
+
+.label mark, .sectionLabel mark {
+  color: var(--loom-color-text);
+  background: color-mix(in srgb, var(--loom-color-accent) 24%, transparent);
+  border-radius: 2px;
+}
