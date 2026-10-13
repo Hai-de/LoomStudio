@@ -1,3 +1,4 @@
+import type { ExtensionTextTransformRuleContribution, ExtensionTextExtractorContribution, ExtensionPromptResourceContribution, ExtensionAgentToolContribution, ExtensionSettingContribution } from '@loom-studio/extension-sdk'
 import type { DiagnosticsRegistry } from '@loom-studio/diagnostics'
 import type {
   DataCommitSource,
@@ -84,40 +85,96 @@ export type KernelPublicSurface = {
   version: string
 }
 
-export type ManagedExtensionPackage = Record<string, JsonValue> & {
-  packageId: string
-  version: string
-  fileRevision?: string
-}
-
-export type ManagedExtensionModule = Record<string, JsonValue> & {
+export type ManagedExtensionModule = {
   packageId: string
   moduleId: string
+  runtimeKind: 'server' | 'client'
+  entryUrl?: string
+  reloadId?: string
+  requestedCapabilities?: Record<string, JsonValue>
+  requestedEventCapabilities?: import('@loom-studio/extension-sdk').EventCapabilityCategory[]
+  requestedAssetCapabilities?: Array<'assets.read' | 'assets.publish'>
+  requestedUiCapabilities?: Array<'ui.notify'>
+  desired: {
+    enabled: boolean
+    grants?: Record<string, JsonValue> & {
+      ui?: Array<'ui.notify'>
+      'events.subscribe'?: import('@loom-studio/extension-sdk').EventCapabilityCategory[]
+      assets?: Array<'assets.read' | 'assets.publish'>
+    }
+    updatedAt?: string
+  }
+  contributions: NonNullable<import('@loom-studio/extension-sdk').ExtensionModuleManifest['contributes']>
+  runtime?: JsonValue
 }
 
-export type RemovedExtensionPackage = Record<string, JsonValue> & {
+export type ManagedExtensionPackage = {
+  participation?: 'timeline'
+  remote?: { source: import('@loom-studio/extension-sdk').ExtensionDownloadSource; commit?: string; canRollback: boolean }
+  archiveDigest?: string
+  fileRevision?: string
+  target?: import('@loom-studio/extension-sdk').ExtensionInstallationTarget
   packageId: string
   version: string
-  removed: true
+  displayName: string
+  description?: string
+  author?: string
+  iconUrl?: string
+  tags: string[]
+  available: boolean
+  sourceKinds: string[]
+  modules: ManagedExtensionModule[]
+  resources?: {
+    transformRules?: ExtensionTextTransformRuleContribution[]
+    textExtractors?: ExtensionTextExtractorContribution[]
+    promptResources?: ExtensionPromptResourceContribution[]
+    agentTools?: ExtensionAgentToolContribution[]
+    settings?: ExtensionSettingContribution[]
+    loomScripts?: Array<{ id: string; source: string }>
+  }
+  importedResources?: {
+    transformRuleContributionIds: string[]
+    textExtractorContributionIds: string[]
+  }
 }
 
-export type ImportedExtensionPackageResources = Record<string, JsonValue> & {
+export type ExtensionPackageResourceImportResult = {
   packageId: string
   version: string
+  promptResources: Array<{ contributionId: string; resourceId: string; resourceKind: string }>
+  agentTools: Array<{ contributionId: string; toolId: string }>
+  transformRules: Array<{ contributionId: string; ruleId: string }>
+  textExtractors: Array<{ contributionId: string; extractorId: string }>
+  mutation?: { changesetId: string }
 }
 
-export type RemovedExtensionPackageResources = Record<string, JsonValue> & {
+export type ExtensionPackageResourceRemovalResult = {
   packageId: string
+  promptResourceIds: string[]
+  agentToolIds: string[]
+  textTransformRuleIds: string[]
+  textExtractorIds: string[]
+  detachedReferences: {
+    cards: number
+    timelines: number
+    presetToolMounts: number
+  }
+  mutation?: { changesetId: string }
 }
 
+export type RemovedExtensionPackage = { packageId: string; version: string; removed: true }
+export type ImportedExtensionPackageResources = ExtensionPackageResourceImportResult
+export type RemovedExtensionPackageResources = ExtensionPackageResourceRemovalResult
+export type RemoteInstallPreview = { token: string; packages: Array<{ packageId: string; version: string; displayName: string; source?: import('@loom-studio/extension-sdk').ExtensionDownloadSource; commit?: string; replacing: boolean; modules?: Array<{ id: string; runtime: 'server' | 'client'; capabilities: import('@loom-studio/extension-sdk').ExtensionModuleManifest['capabilities'] }> }> }
+export type RemoteInstallResult = { installed: Array<{ packageId: string; version: string }>; failed?: { packageId: string; message: string; stage?: string; codeCommitted?: boolean; recovery?: { recordPath: string; backupDirectory: string; historyDirectory: string } } }
 export type ExtensionManagementService = {
-  previewRemoteInstall?(input: unknown): Promise<JsonValue>
-  previewPackageZip?(source: Uint8Array): Promise<JsonValue>
-  commitRemoteInstall?(token: string): Promise<JsonValue>
-  checkRemoteUpdate?(packageId: string): Promise<JsonValue>
-  previewRemoteChange?(input: unknown): Promise<JsonValue>
-  officialSetup?(): Promise<JsonValue>
-  finishOfficialSetup?(): Promise<JsonValue>
+  previewRemoteInstall?(input: unknown): Promise<RemoteInstallPreview>
+  previewPackageZip?(source: Uint8Array): Promise<RemoteInstallPreview>
+  commitRemoteInstall?(token: string): Promise<RemoteInstallResult>
+  checkRemoteUpdate?(packageId: string): Promise<{ changed: boolean; commit?: string; locked: boolean }>
+  previewRemoteChange?(input: unknown): Promise<RemoteInstallPreview>
+  officialSetup?(): Promise<{ completed: boolean; items: Array<{ id: string; name: string; source: import('@loom-studio/extension-sdk').ExtensionDownloadSource }> }>
+  finishOfficialSetup?(): Promise<{ completed: true }>
   listPackages(target?: ExtensionInstallationTarget): ManagedExtensionPackage[]
   installCardPackage(input: { cardId: string; packageId: string; expectedCardVersion: number }): Promise<ManagedExtensionPackage>
   updateCardPackage(input: { cardId: string; packageId: string; expectedCardVersion: number; packageVersion: string; expectedInstallationVersion: number }): Promise<ManagedExtensionPackage>

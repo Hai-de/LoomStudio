@@ -109,7 +109,7 @@ try {
   }
   const request = (path, options) => fetch(`${origin}${path}`, { ...options, signal: AbortSignal.timeout(10000) })
   assert.equal((await request('/app-assets/missing.js')).status, 404)
-  assert.equal((await request('/rpc', { method: 'POST' })).status, 401)
+  assert.equal((await request('/trpc/system.ping', { method: 'POST' })).status, 401)
   assert.equal((await request('/extensions/events')).status, 401)
   assert.equal((await request('/auth/session', { method: 'POST', headers: { origin: 'http://127.0.0.1:18011' } })).status, 403)
   async function session() {
@@ -119,14 +119,14 @@ try {
   }
   let cookie = await session()
   async function rpc(method, params = {}) {
-    const response = await request('/rpc', {
+    const response = await request(`/trpc/${method}`, {
       method: 'POST', headers: { origin, cookie, 'content-type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+      body: JSON.stringify(params),
     })
     assert.equal(response.status, 200)
     const body = await response.json()
     assert.equal(body.error, undefined, JSON.stringify(body.error))
-    return body.result
+    return body.result.data
   }
   assert.equal((await rpc('system.ping', { echo: 'release-smoke' })).echo, 'release-smoke')
   const content = await rpc('official.listContent')

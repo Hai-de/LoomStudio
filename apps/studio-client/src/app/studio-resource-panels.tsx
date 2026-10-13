@@ -91,6 +91,8 @@ export function StudioResourcePanels(props: {
         card={state.selectedCardDetails}
         loreMounts={state.loreMounts}
         tools={state.agentTools}
+        toolsReady={state.startup.ready('tools')}
+        providersReady={state.startup.ready('providers')}
         toolMounts={state.presetToolMounts}
         onReplaceToolMounts={state.replacePresetToolMounts}
         onReplaceLoreMounts={(source, mounts) => state.replaceLoreMounts(source, mounts, 'mounts')}

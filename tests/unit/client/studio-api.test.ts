@@ -1,7 +1,7 @@
+import { createStudioTrpcClient } from '../../../apps/studio-client/src/shared/api/trpc-client.js'
 import type { ClientBridge, ClientJsonValue } from '@loom-studio/client-bridge'
 import { createMemoryLogSink, createRootLogger } from '@loom-studio/logging'
 import { describe, expect, it } from 'vitest'
-import { withClientBridgeLogging } from '../../../apps/studio-client/src/shared/api/client-bridge-logging.js'
 import { createStudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
 
 describe('studio client typed api', () => {
@@ -42,7 +42,7 @@ describe('studio client typed api', () => {
       systemProxyDetected: true,
     })
     expect(calls).toEqual([
-      { method: 'settings.network.get', params: {} },
+      { method: 'settings.network.get', params: undefined },
       { method: 'settings.network.update', params: { proxyMode: 'manual', proxyUrl: 'http://127.0.0.1:7890' } },
     ])
   })
@@ -129,13 +129,14 @@ describe('studio client typed api', () => {
   it('logs failed rpc calls without params or error messages', async () => {
     const logs = createMemoryLogSink({ capacity: 10 })
     const root = createRootLogger({ service: 'studio-client', instanceId: 'client-test', sinks: [logs] })
-    const privateError = Object.assign(new Error('private server failure text'), { code: 'RPC_FAILED' })
-    const bridge = withClientBridgeLogging(failingBridge(privateError), root.child('transport.rpc'))
-
-    await expect(bridge.call('application.updateCard', {
-      name: 'Private character name',
-      body: 'Private character content',
-    })).rejects.toBe(privateError)
+    const client = createStudioTrpcClient({
+      logger: root.child('transport.rpc'),
+      fetch: async () => new Response(JSON.stringify({ error: {
+        message: 'private server failure text', code: -32603,
+        data: { code: 'INTERNAL_SERVER_ERROR', httpStatus: 500, correlationId: 'corr-test', callId: 'call-test' },
+      } })),
+    })
+    await expect(client.application.updateCard.mutate({ cardId: 'card-1', name: 'Private character name' })).rejects.toThrow('private server failure text')
 
     const records = logs.list()
     expect(records).toHaveLength(1)
@@ -144,10 +145,9 @@ describe('studio client typed api', () => {
       method: 'application.updateCard',
       failureType: 'Error',
       outcome: 'failed',
-      errorCode: 'RPC_FAILED',
     })
     expect(records[0]?.data?.durationMs).toEqual(expect.any(Number))
-    expect(records[0]?.data?.detail).toBe('application.updateCard failed · Operation failed')
+    expect(records[0]).toMatchObject({ correlationId: 'corr-test', callId: 'call-test' })
     expect(JSON.stringify(records)).not.toContain('Private character')
     expect(JSON.stringify(records)).not.toContain('private server failure text')
   })
@@ -331,7 +331,7 @@ describe('studio client typed api', () => {
     await api.aiGateway.invoke({ profileId: 'profile-1', input: { text: 'hello' } })
 
     expect(calls).toEqual([
-      { method: 'ai.providers.list', params: {} },
+      { method: 'ai.providers.list', params: undefined },
       { method: 'application.listAiCapabilityProfiles', params: { providerProfileId: 'provider-1' } },
       {
         method: 'application.createAiCapabilityProfile',
@@ -368,7 +368,6 @@ describe('studio client typed api', () => {
       'application.listLoreMounts': { mounts: [] },
       'application.replaceLoreMounts': { mounts: [{ id: 'mount-1' }], mutation: { changesetId: 'changeset-1' } },
       'application.listPresetToolMounts': { mounts: [] },
-      'application.replacePresetToolMounts': { mounts: [{ id: 'tool-mount-1' }], mutation: { changesetId: 'changeset-2' } },
     }))
 
     await api.promptResources.get('resource-1')
@@ -422,20 +421,11 @@ describe('studio client typed api', () => {
 
 })
 
-function fakeBridge(
-  calls: Array<{ method: string; params?: ClientJsonValue }>,
-  responses: Record<string, unknown>,
-): ClientBridge {
-  return {
-    call: async (method: string, params?: ClientJsonValue) => {
-      calls.push({ method, params })
-      return responses[method] as never
-    },
-  }
-}
-
-function failingBridge(error: Error): ClientBridge {
-  return {
-    call: async () => { throw error },
-  }
+function fakeBridge(calls: Array<{ method: string; params?: ClientJsonValue }>, responses: Record<string, unknown>) {
+  return createStudioTrpcClient({ fetch: async (url, init) => {
+    const method = String(url).split('/').at(-1)!
+    const params = init?.body === undefined ? undefined : JSON.parse(String(init.body))
+    calls.push({ method, params })
+    return new Response(JSON.stringify({ result: { data: responses[method] ?? {} } }))
+  } })
 }

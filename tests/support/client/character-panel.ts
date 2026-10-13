@@ -1,3 +1,4 @@
+import { createStudioTrpcClient } from '../../../apps/studio-client/src/shared/api/trpc-client.js'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createElement, type ComponentProps } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -9,7 +10,7 @@ type Props = ComponentProps<typeof CharacterPanel>
 export function characterPanelProps(overrides: Partial<Props> = {}): Props {
   return {
     active: true, busy: false, cards: [], endpoint: 'test',
-    resourceApi: createStudioApi({ call: async () => { throw new Error('Unexpected RPC in static rendering test') } }),
+    resourceApi: createStudioApi(createStudioTrpcClient({ fetch: async () => { throw new Error('Unexpected RPC in rendering test') } })),
     onCreateCard: async () => {},
     onCreateTimelineFromCard: async () => {},
     onExportCard: async () => {},

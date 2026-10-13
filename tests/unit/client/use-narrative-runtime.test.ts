@@ -1,3 +1,4 @@
+import { createStudioTrpcClient } from '../../../apps/studio-client/src/shared/api/trpc-client.js'
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentTranscriptEntry, NarrativeBranch, NarrativeNode, NarrativeTimeline } from '../../../apps/studio-client/src/entities/index.js'
 import { inspectSessionRunStatus, mergeAgentRunEntries, readComposerDraftKey, reconcileNarrativeNodes, releasePrimaryRun, resolveNarrativeBranch } from '../../../apps/studio-client/src/features/narrative-runtime/model/use-narrative-runtime.js'
@@ -5,7 +6,7 @@ import { createStudioApi } from '../../../apps/studio-client/src/shared/api/stud
 
 describe('releasePrimaryRun', () => {
   it('rejects running and failed cancellation without accepting a switch', async () => {
-    const api = createStudioApi({ call: async () => { throw new Error('unexpected RPC') } })
+    const api = createStudioApi(createStudioTrpcClient({ fetch: async () => { throw new Error('Unexpected RPC in rendering test') } }))
     api.agentSessions.getTranscript = vi.fn<typeof api.agentSessions.getTranscript>(async () => ({
       session: { id: 'primary', agentPresetId: 'preset', entryCount: 1, createdAt: '', updatedAt: '' },
       entries: [{ id: 'input', agentSessionId: 'primary', runId: 'run', sequence: 1,

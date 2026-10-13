@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useCards } from '../../../apps/studio-client/src/features/cards/model/use-cards.js'
-import type { Card } from '../../../apps/studio-client/src/entities/index.js'
+type Card = Awaited<ReturnType<StudioApi['cards']['get']>>['card']
 import type { StudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
 import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/index.js'
 import type { FormEvent } from 'react'
@@ -45,7 +45,7 @@ vi.mock('react', async importOriginal => ({
 
 function card(id: string, name: string, version = 1): Card {
   return {
-    id, name, version, opening: { entries: [] }, lore: { entries: [] },
+    id, name, version, artifactId: 'fixture-artifact', preset: {}, opening: { entries: [] }, lore: { entries: [] },
     createdAt: '2026-09-23', updatedAt: '2026-09-23',
   }
 }

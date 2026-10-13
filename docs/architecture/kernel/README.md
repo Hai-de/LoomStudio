@@ -193,7 +193,9 @@ Kernel 的调用入口是：
 callRpc(method, params, context)
 ```
 
-它不依赖 Node HTTP、WebSocket 或浏览器 Fetch。当前 `apps/studio-server` 使用 HTTP JSON-RPC `/rpc` adapter 将网络请求转入 Kernel；这属于 Server 组合与 Transport 实现，不是 Kernel 永久绑定的协议形态。
+它不依赖 Node HTTP、WebSocket 或浏览器 Fetch。当前 `apps/studio-server` 使用 HTTP tRPC `/trpc` adapter 将平台 procedure 和动态扩展网关转入 Kernel；这属于 Server 组合与 Transport 实现，不是 Kernel 永久绑定的协议形态。
+
+主应用的类型来源、HTTP 合同与动态扩展网关限制见[依赖所有权：RPC 边界](../platform/external-dependency-ownership.md#主应用-rpc-的契约与运行时边界)。
 
 ## 10. 演进约束
 

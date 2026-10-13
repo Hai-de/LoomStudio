@@ -1,9 +1,8 @@
 import * as fs from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
-import type { CardDirectoryAttachment, CardDirectoryCatalog, CardDirectoryEntry, JsonValue, OpenCardDirectoryResult } from '@loom-studio/shared'
+import type { CardDirectoryAttachment, CardDirectoryCatalog, CardDirectoryEntry, OpenCardDirectoryResult } from '@loom-studio/shared'
 import { loadCardBundleFiles } from '../codecs/card-bundle-zip.js'
 import { validateBundlePath } from '../codecs/card-bundle-files.js'
-import { readString } from '../rpc/rpc-params.js'
 import { parseBaseline, readCardDirectoryBinding, readOptional } from './card-directory.js'
 import { directoryFilesToken } from './card-directory-import.js'
 
@@ -156,13 +155,7 @@ export function createCardDirectoryCatalog(options: {
       }
       return { kind: 'image', content: `data:${imageMediaType(path)};base64,${bytes.toString('base64')}` }
     },
-    async call(method: string, params: JsonValue | undefined): Promise<JsonValue> {
-      if (method === 'directories.list') return this.list() as unknown as JsonValue
-      if (method === 'directories.scan') return await this.scan() as unknown as JsonValue
-      if (method === 'directories.open') return await this.open(readString(params, 'directory')) as unknown as JsonValue
-      if (method === 'directories.attachment') return await this.attachment(readString(params, 'directory'), readString(params, 'path')) as unknown as JsonValue
-      throw new Error(`Unknown directory catalog method: ${method}`)
-    },
+
   }
 }
 

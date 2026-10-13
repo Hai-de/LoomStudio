@@ -5,7 +5,7 @@ import type { AgentToolDefinition, PresetToolMount } from '../../../apps/studio-
 const structured = {
   id: 'official/codeact_json',
   input: { kind: 'structured', schema: { type: 'object' } },
-  prompt: { content: { zone: 'tools' } },
+  prompt: { content: { targetAnchorId: '@chat.tools' } },
 } as unknown as AgentToolDefinition
 const freeform = { id: 'official/codeact', input: { kind: 'freeform' } } as AgentToolDefinition
 
@@ -24,8 +24,8 @@ describe('Preset tool mounting', () => {
 
   it('removes invalid Content only from structured mounts in whole-list replacements', () => {
     const mounts = [
-      { toolId: structured.id, orderIndex: 0, defaultEnabled: true, content: { zone: 'old' } },
-      { toolId: freeform.id, orderIndex: 1, defaultEnabled: true, content: { zone: 'tools' } },
+      { toolId: structured.id, orderIndex: 0, defaultEnabled: true, content: { targetAnchorId: '@old' } },
+      { toolId: freeform.id, orderIndex: 1, defaultEnabled: true, content: { targetAnchorId: '@chat.tools' } },
     ]
     expect(validPresetToolMounts(mounts, [structured, freeform])).toEqual([
       { toolId: structured.id, orderIndex: 0, defaultEnabled: true },

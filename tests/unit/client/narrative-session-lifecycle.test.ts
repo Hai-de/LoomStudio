@@ -4,6 +4,21 @@ import type { StudioApi } from '../../../apps/studio-client/src/shared/api/studi
 import type { DataOperation } from '../../../apps/studio-client/src/shared/api/data-commit-events.js'
 
 describe('Narrative primary Session lifecycle', () => {
+  it('keeps failed core Session restoration unavailable and completes Timeline activation after retry', async () => {
+    const f = fixture()
+    const failure = new Error('Session catalog unavailable')
+    f.input.api.narratives.get = vi.fn(async () => ({ timeline: f.result.narrative.timeline, branches: [f.result.narrative.branch] }))
+    f.input.runLatestAction = async action => { try { await action({ isCurrent: () => true }) } catch (error) { f.reportFailure(error) } }
+    f.input.api.agentSessions.list = vi.fn().mockRejectedValueOnce(failure).mockResolvedValue({ sessions: [f.result.agentSession] })
+    f.getTranscript.mockResolvedValue({ session: f.result.agentSession, entries: [] })
+    expect(await f.render().activateTimeline('timeline')).toBeUndefined()
+    expect(f.render().agentSessionReady).toBe(false)
+    expect(f.reportFailure).toHaveBeenCalledWith(failure)
+    expect(await f.render().activateTimeline('timeline')).toBe('branch')
+    expect(f.render().agentSessionReady).toBe(true)
+    expect(f.render().agentSession?.id).toBe('session')
+  })
+
   it.each(['saved', 'missing', 'standalone'])('restores the target primary when opening a %s Session across Timelines', async mode => {
     vi.stubGlobal('localStorage', {
       getItem: (key: string) => mode === 'saved' && key === 'loom.studio.primarySession:test:other-timeline' ? 'other-primary' : null,

@@ -27,7 +27,7 @@ describe('Prompt Resource command outcomes', () => {
       setPromptResources: update => { resources = update(resources) },
       setLoreMounts: vi.fn(), setPresetToolMounts: vi.fn(),
       invalidatePromptResourceState: refresh,
-      refreshAgentPresets: vi.fn(), refreshCards: vi.fn(), refreshCardTimelines: vi.fn(),
+      refreshCards: vi.fn(), refreshCardTimelines: vi.fn(),
     })
     const invoke = () => {
       switch (operation) {
@@ -58,7 +58,7 @@ describe('Prompt Resource command outcomes', () => {
       recordEdit: vi.fn(), promptResources: [],
       setPromptResources: vi.fn(), setLoreMounts: setMounts, setPresetToolMounts: setMounts,
       invalidatePromptResourceState: vi.fn(),
-      refreshAgentPresets: vi.fn(), refreshCards: vi.fn(), refreshCardTimelines: vi.fn(),
+      refreshCards: vi.fn(), refreshCardTimelines: vi.fn(),
     })
     await expect(commands.replaceLoreMounts({ kind: 'manual', id: 'global' }, ['lore'])).rejects.toBe(failure)
     await expect(commands.replacePresetToolMounts('preset', [])).rejects.toBe(failure)

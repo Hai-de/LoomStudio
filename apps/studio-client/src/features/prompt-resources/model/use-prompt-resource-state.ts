@@ -24,6 +24,7 @@ export function usePromptResourceState(input: PromptResourceStateInput) {
   const presetToolMountsKey = ['prompt-resources', input.endpoint, 'preset-tool-mounts'] as const
   const resourcesQuery = useQuery({
     queryKey: resourcesKey,
+    retry: false,
     queryFn: async () => (await input.api.promptResources.list()).resources,
   })
   const loreMountsQuery = useQuery({
@@ -57,6 +58,9 @@ export function usePromptResourceState(input: PromptResourceStateInput) {
   return {
     error: resourcesQuery.error ?? installationsQuery.error ?? loreMountsQuery.error ?? presetToolMountsQuery.error,
     loading: resourcesQuery.isPending || installationsQuery.isPending || loreMountsQuery.isPending || presetToolMountsQuery.isPending,
+    resourcesReady: resourcesQuery.isSuccess,
+    resourcesError: resourcesQuery.error,
+    readResources: () => queryClient.getQueryData<PromptResource[]>(resourcesKey) ?? EMPTY_PROMPT_RESOURCES,
     extensionInstallations: installationsQuery.data ?? EMPTY_INSTALLATIONS,
     presetToolMounts: presetToolMountsQuery.data ?? EMPTY_PRESET_TOOL_MOUNTS,
     promptResources: resourcesQuery.data ?? EMPTY_PROMPT_RESOURCES,

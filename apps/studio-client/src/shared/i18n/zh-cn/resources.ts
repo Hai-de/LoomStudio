@@ -119,6 +119,8 @@ export const messages = {
   'preset.tools.providerOrder': 'Provider 工具顺序',
   'preset.tools.contentOrder': '内容排序权重',
   'preset.tools.contentFallback': '内容回退位置',
+  'preset.tools.targetAnchorId': '目标锚点',
+  'preset.tools.localDepth': '锚点内深度',
   'preset.tools.zone': 'Zone',
   'preset.tools.slot': 'Slot',
   'preset.tools.rankKey': '排序键',

@@ -25,6 +25,8 @@ type UseProviderSettingsInput = {
 }
 
 export function useProviderSettings(input: UseProviderSettingsInput) {
+  const apiRef = useRef(input.api)
+  apiRef.current = input.api
   const [providerAccountDraft, setProviderAccountDraft] = useState(input.initialProviderAccountDraft)
   const [providerAccounts, setProviderAccounts] = useState<ProviderAccount[]>([])
   const [providerAccountsLoaded, setProviderAccountsLoaded] = useState(false)
@@ -40,7 +42,7 @@ export function useProviderSettings(input: UseProviderSettingsInput) {
     const request = ++providerReads.current.request
     const write = providerReads.current.write
     const profiles = await readProviderAccounts()
-    if (request !== providerReads.current.request) return
+    if (apiRef.current !== input.api || request !== providerReads.current.request) return
     if (write !== providerReads.current.write) return refreshProviderAccounts()
     setProviderAccounts(profiles)
     setProviderAccountsLoaded(true)
@@ -68,7 +70,7 @@ export function useProviderSettings(input: UseProviderSettingsInput) {
   async function refreshAiProviders() {
     const request = ++aiProviderRequest.current
     const providers = await input.api.aiGateway.listProviders()
-    if (request !== aiProviderRequest.current) return
+    if (apiRef.current !== input.api || request !== aiProviderRequest.current) return
     setAiProviders(providers)
   }
 
@@ -79,7 +81,7 @@ export function useProviderSettings(input: UseProviderSettingsInput) {
       const result = await input.api.aiCapabilityProfiles.list({ cursor, limit: 100 })
       return { items: result.profiles, nextCursor: result.nextCursor }
     })
-    if (request !== capabilityReads.current.request) return
+    if (apiRef.current !== input.api || request !== capabilityReads.current.request) return
     if (write !== capabilityReads.current.write) return refreshAiCapabilityProfiles()
     setAiCapabilityProfiles(profiles)
   }

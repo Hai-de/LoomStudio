@@ -1,3 +1,4 @@
+import type { ApplicationRuntime } from '@loom-studio/application-runtime'
 import { createAssetStore } from '@loom-studio/asset-store'
 import { createBlobStore } from '@loom-studio/blob-store'
 import { createSqliteDataEngine } from '@loom-studio/data-engine'
@@ -55,7 +56,6 @@ describe('HTTP request lifecycle', () => {
     let emit!: Parameters<Events['subscribe']>[0]
     const dispose = vi.fn()
     const endpoint = await listen({
-      rpcRouter: { call: async () => null },
       extensionEvents: { subscribe: handler => { emit = handler; return { dispose } } },
     })
     const client = await openEventSocket(endpoint)
@@ -99,7 +99,6 @@ describe('HTTP request lifecycle', () => {
     let emit!: Parameters<Events['subscribe']>[0]
     const dispose = vi.fn()
     const endpoint = await listen({
-      rpcRouter: { call: async () => null },
       extensionEvents: { subscribe: handler => { emit = handler; return { dispose } } },
     })
     const client = await openEventSocket(endpoint)
@@ -147,7 +146,6 @@ describe('HTTP request lifecycle', () => {
     let emit!: Parameters<Events['subscribe']>[0]
     const dispose = vi.fn()
     const endpoint = await listen({
-      rpcRouter: { call: async () => null },
       extensionEvents: { subscribe: handler => { emit = handler; return { dispose } } },
     })
     const client = await openEventSocket(endpoint)
@@ -184,7 +182,6 @@ describe('HTTP request lifecycle', () => {
     let emit!: Parameters<Events['subscribe']>[0]
     const dispose = vi.fn()
     const { server, origin, cookie } = await listen({
-      rpcRouter: { call: async () => null },
       extensionEvents: { subscribe: handler => { emit = handler; return { dispose } } },
     })
     try {
@@ -201,19 +198,19 @@ describe('HTTP request lifecycle', () => {
     let finished = false
     let drained = false
     const { server, origin, cookie } = await listen({
-      rpcRouter: {
-        call: async (_method, _params, context) => {
-          started.resolve(context.signal!)
+      applicationRuntime: {
+        createAgentPreset: async (_params: unknown, context?: import('@loom-studio/application-runtime').RuntimeRequestContext) => {
+          started.resolve(context?.abortSignal!)
           await release.promise
           finished = true
           return null
         },
-      },
+      } as unknown as ApplicationRuntime,
     })
     const controller = new AbortController()
-    const request = fetch(`${origin}/rpc`, {
+    const request = fetch(`${origin}/trpc/application.createAgentPreset`, {
       method: 'POST', headers: { cookie, 'content-type': 'application/json' }, signal: controller.signal,
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'test.wait', params: {} }),
+      body: JSON.stringify({ name: 'wait' }),
     }).catch(error => error)
     try {
       const signal = await started.promise
@@ -243,7 +240,6 @@ describe('HTTP request lifecycle', () => {
     const started = Promise.withResolvers<void>()
     const dispose = vi.fn(async () => { started.resolve(); await release.promise })
     const { server, origin, cookie } = await listen({
-      rpcRouter: { call: async () => null },
       extensionEvents: { subscribe: () => ({ dispose }) },
     })
     try {
@@ -283,7 +279,6 @@ describe('HTTP request lifecycle', () => {
     const opening = Promise.withResolvers<void>()
     const release = Promise.withResolvers<void>()
     const { server, origin, cookie } = await listen({
-      rpcRouter: { call: async () => null },
       assets: {
         ...assets,
         openMediaAsset: async () => {

@@ -40,36 +40,37 @@ describe('Application mutation request context', () => {
       async function checked<T>(method: string, params: unknown, reasons = [method], failure = false): Promise<T> {
         const correlationId = `mutation-context-${++sequence}`
         const parentCallId = `parent-${sequence}`
-        const response = await fetch(`http://127.0.0.1:${port}/rpc`, {
+        const response = await fetch(`http://127.0.0.1:${port}/trpc/${method}`, {
           method: 'POST',
-          headers: { cookie, 'content-type': 'application/json' },
-          body: JSON.stringify({ jsonrpc: '2.0', id: sequence, method, params, meta: { correlationId, parentCallId } }),
+          headers: { cookie, 'content-type': 'application/json', 'x-correlation-id': correlationId, 'x-parent-call-id': parentCallId },
+          body: JSON.stringify(params),
         })
         const payload = await response.json() as {
-          result: T
+          result: { data: T }
           error?: { message: string }
           meta: { clientId: string; correlationId: string; callId: string }
         }
+        const metadata = { clientId: response.headers.get('x-client-id'), correlationId: response.headers.get('x-correlation-id'), callId: response.headers.get('x-call-id') }
         if (failure) expect(payload.error?.message).toContain('injected document failure')
         else expect(payload.error).toBeUndefined()
-        expect(payload.meta).toMatchObject({ correlationId, clientId: expect.any(String), callId: expect.any(String) })
+        expect(metadata).toMatchObject({ correlationId, clientId: expect.any(String), callId: expect.any(String) })
         const rows = database!.prepare('SELECT * FROM changesets WHERE correlation_id = ? ORDER BY rowid').all(correlationId)
         expect(rows.map(row => row.reason)).toEqual(reasons)
         for (const row of rows) {
-          expect(JSON.parse(String(row.created_by_json))).toEqual({ kind: 'client', id: payload.meta.clientId })
-          expect(row.call_id).toBe(payload.meta.callId)
+          expect(JSON.parse(String(row.created_by_json))).toEqual({ kind: 'client', id: metadata.clientId })
+          expect(row.call_id).toBe(metadata.callId)
           expect(row.parent_call_id).toBe(parentCallId)
           const event = captured.events.find(item => item.name === 'data.changed' && item.payload && (item.payload as { changesetId: string }).changesetId === row.id)
           expect(event?.meta).toMatchObject({
-            clientId: payload.meta.clientId, correlationId, callId: payload.meta.callId, parentCallId,
+            clientId: metadata.clientId, correlationId, callId: metadata.callId, parentCallId,
           })
           const operations = JSON.parse(String(row.operations_json)) as { store: string; entityId: string }[]
           if (operations.some(operation => operation.store === 'documents')) {
             expect(captured.events.find(item => item.name === 'docs.changed' && (item.payload as { changesetId: string }).changesetId === row.id)?.meta)
-              .toMatchObject({ clientId: payload.meta.clientId, correlationId, callId: payload.meta.callId, parentCallId })
+              .toMatchObject({ clientId: metadata.clientId, correlationId, callId: metadata.callId, parentCallId })
           }
         }
-        return payload.result
+        return payload.result?.data
       }
 
       const provider = await checked<{ providerProfile: { id: string } }>('application.createProviderProfile', {

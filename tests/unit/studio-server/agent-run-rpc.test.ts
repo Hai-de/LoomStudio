@@ -1,6 +1,6 @@
 import type { ApplicationRuntime, RuntimeRequestContext } from '@loom-studio/application-runtime'
 import { describe, expect, it, vi } from 'vitest'
-import { handleAgentsRpc } from '../../../apps/studio-server/src/rpc/handlers/application/agents.js'
+import { callApplicationRpc as handleAgentsRpc } from '../../support/trpc-caller.js'
 
 describe('application Agent Run RPC', () => {
   it('protects undelivered completion across byte and metadata pressure, but expires it', async () => {
@@ -81,7 +81,7 @@ describe('application Agent Run RPC', () => {
     try {
       await handleAgentsRpc(runtime, 'application.agent.run.create', { agentSessionId: 'same', input: 'First' })
       await expect(handleAgentsRpc(runtime, 'application.agent.run.create', { agentSessionId: 'same', input: 'Overlap' }))
-        .rejects.toMatchObject({ code: 'agent.session_busy' })
+        .rejects.toMatchObject({ cause: { code: 'agent.session_busy' } })
       await handleAgentsRpc(runtime, 'application.agent.run.create', { agentSessionId: 'other', input: 'Concurrent' })
       expect(invocations).toBe(2)
     } finally { release() }

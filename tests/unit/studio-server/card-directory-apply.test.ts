@@ -89,6 +89,23 @@ describe('Card directory Runtime integration', () => {
     expect(await f.save()).toMatchObject({ changedFiles: 0 })
   })
 
+  it('applies Card macro options and completes the directory recovery baseline', async () => {
+    const f = await setup()
+    await f.save()
+    const path = join(f.directory, 'card.json')
+    const stored = JSON.parse(await readFile(path, 'utf8'))
+    const macroOptions = { tone: [{ id: 'quiet', label: 'Quiet', value: 'QUIET' }] }
+    stored.config.macroOptions = macroOptions
+    await writeFile(path, JSON.stringify(stored))
+    await f.apply()
+    expect((await f.runtime.getCard({ cardId: f.card.id })).card.macroOptions).toEqual(macroOptions)
+    expect((await f.runtime.exportCardBundle({ cardId: f.card.id })).artifact.card.macroOptions).toEqual(macroOptions)
+    expect(await f.service.recoverApplies()).toEqual([])
+    await expect(readFile(join(f.root, `.loom/card-directories/${f.card.id}/apply.json`))).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(await f.service.previewApply(f.card.id)).toMatchObject({ changes: [], conflicts: [] })
+    expect(await f.save()).toMatchObject({ changedFiles: 0 })
+  })
+
   it('refuses database CAS changes and preserves the edited directory', async () => {
     const f = await setup()
     await f.save()

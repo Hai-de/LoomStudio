@@ -52,7 +52,7 @@ describe('card directory media', () => {
   it('serves authenticated GET/HEAD with content-based revalidation and explicit failures', async () => {
     let bytes = png('first')
     const server = createStudioHttpServer({
-      auth: createApplicationSessionAuth(), rpcRouter: { call: async () => null },
+      auth: createApplicationSessionAuth(),
       cardMedia: { read: async (id, kind) => {
         if (id === 'invalid') throw new Error('Invalid media')
         return kind === 'avatar' ? { bytes, mediaType: 'image/png' } : undefined

@@ -59,9 +59,14 @@ export function createCardTransferService({ applicationRuntime, assets, director
     const avatarAssetId = await createMedia(input.avatar, 'card.avatar')
     const coverAssetId = input.background ? await createMedia(input.background, 'card.background') : undefined
     input.artifact.card.media = { avatarAssetId, ...(coverAssetId ? { coverAssetId } : {}) }
-    const result = await applicationRuntime.importCardBundle({ artifact: input.artifact, newCardId }, { clientId })
-    if (!newCardId) await saveImportedCard(result.card.id).catch(error => { throw new Error(`Card imported as ${result.card.id}, but directory save failed. Do not import again. ${error instanceof Error ? error.message : String(error)}`) })
+    return applicationRuntime.importCardBundle({ artifact: input.artifact, newCardId }, { clientId })
+  }
+  const finishImportedCard = async (result: Awaited<ReturnType<typeof applicationRuntime.importCardBundle>>) => {
+    await saveImportedCard(result.card.id).catch(error => { throw new Error(`Card imported as ${result.card.id}, but directory save failed. Do not import again. ${error instanceof Error ? error.message : String(error)}`) })
     return result
+  }
+  const importArchiveAndSave = async (input: Awaited<ReturnType<typeof decodeCardBundleZip>>, clientId: string) => {
+    return finishImportedCard(await importCardArchive(input, clientId))
   }
   const http: Pick<Parameters<typeof createStudioHttpServer>[0], 'cardMedia' | 'cardPng'> = {
     cardMedia: {
@@ -79,7 +84,7 @@ export function createCardTransferService({ applicationRuntime, assets, director
       },
       import: async (source, session) => {
         const archive = readCardPngArchive(source) ?? readPolyglotArchive(source)
-        if (archive) return await importCardArchive(await decodeCardBundleZip(archive), session.clientId)
+        if (archive) return await importArchiveAndSave(await decodeCardBundleZip(archive), session.clientId)
         let artifact: CardBundleArtifact
         let avatarBytes: Uint8Array
         if (hasLegacyCardPng(source)) {
@@ -102,11 +107,10 @@ export function createCardTransferService({ applicationRuntime, assets, director
           avatarAssetId: media.asset.id,
         }
         const result = await applicationRuntime.importCardBundle({ artifact }, { clientId: session.clientId })
-        await saveImportedCard(result.card.id).catch(error => { throw new Error(`Card imported as ${result.card.id}, but directory save failed. Do not import again. ${error instanceof Error ? error.message : String(error)}`) })
-        return result
+        return finishImportedCard(result)
       },
       exportBundle: async cardId => encodeCardBundleZip(await readCardExport(cardId)),
-      importBundle: async (source, session) => await importCardArchive(await decodeCardBundleZip(source), session.clientId),
+      importBundle: async (source, session) => await importArchiveAndSave(await decodeCardBundleZip(source), session.clientId),
       exportPolyglot: async cardId => {
         const bundle = await readCardExport(cardId)
         const image = bundle.avatar.mediaType === 'image/png' && isPng(bundle.avatar.bytes) ? bundle.avatar.bytes : defaultCardPng

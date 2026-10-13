@@ -5,7 +5,11 @@ import {
 } from '@loom-studio/ai-gateway'
 import { describe, expect, it, vi } from 'vitest'
 import type { JsonValue } from '@loom-studio/shared'
-import { callAiGatewayRpc } from '../../../apps/studio-server/src/rpc/handlers/ai-gateway-rpc.js'
+import { createAiGatewayOperations } from '../../../apps/studio-server/src/rpc/trpc/ai-operations.js'
+
+function callAiGatewayRpc(services: Parameters<typeof createAiGatewayOperations>[0], method: `ai.${keyof ReturnType<typeof createAiGatewayOperations>}`, params?: JsonValue) {
+  return createAiGatewayOperations(services)[method.slice(3) as keyof ReturnType<typeof createAiGatewayOperations>](params)
+}
 
 describe('AI Gateway RPC', () => {
   it.each<JsonValue>([

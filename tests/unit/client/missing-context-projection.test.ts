@@ -99,7 +99,7 @@ const setting: PromptResource = {
 }
 const availableTool: AgentToolDefinition = {
   id: 'available', name: 'USER TOOL', description: 'User description', version: 1,
-  owner: { namespace: 'example' }, input: { kind: 'structured' }, createdAt: '', updatedAt: '',
+  owner: { namespace: 'example' }, input: { kind: 'structured', schema: { type: 'object' } }, createdAt: '', updatedAt: '',
 }
 const mount = (toolId: string, defaultEnabled = true): PresetToolMount => ({
   id: `mount:${toolId}`, presetResourceId: 'preset', toolId, orderIndex: 3,

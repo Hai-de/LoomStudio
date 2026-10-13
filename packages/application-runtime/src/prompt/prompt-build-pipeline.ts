@@ -153,17 +153,8 @@ export function planPromptBlocks(input: PromptDataModel): PromptFragment[][] {
       if (!isActiveNode(node)) return []
       const fragments: PromptFragment[] = []
       if (node.kind === 'entry') {
-        const content = node.body ?? ''
-        if (content.trim().length > 0) {
-          fragments.push({
-            id: inlineContributions.get(node.id)?.id ?? node.id,
-            source: { kind: 'preset', sourceId: node.sourceId, sourceNodeId: node.id },
-            content,
-            role: inheritedRole,
-            targetAnchorId: node.capabilities?.targetAnchorId,
-            localDepth: node.capabilities?.localDepth,
-          })
-        }
+        const fragment = createEntryFragment(node, inheritedRole, inlineContributions.get(node.id))
+        if (fragment) fragments.push(fragment)
       } else if (node.kind === 'virtual') {
         fragments.push(...collectVirtualFragments(node, inheritedRole))
       }
@@ -216,17 +207,8 @@ export function planPromptBlocks(input: PromptDataModel): PromptFragment[][] {
       if (child.kind === 'folder' || child.kind === 'module') {
         dfs(child.id)
       } else if (child.kind === 'entry') {
-        const content = child.body ?? ''
-        if (content.trim().length > 0) {
-          fragments.push({
-            id: inlineContributions.get(child.id)?.id ?? child.id,
-            source: { kind: 'preset', sourceId: child.sourceId, sourceNodeId: child.id },
-            content,
-            role: (child.capabilities?.roleHint as PromptProviderRole | undefined) ?? 'system',
-            targetAnchorId: child.capabilities?.targetAnchorId,
-            localDepth: child.capabilities?.localDepth,
-          })
-        }
+        const fragment = createEntryFragment(child, child.capabilities?.roleHint ?? 'system', inlineContributions.get(child.id))
+        if (fragment) fragments.push(fragment)
       } else if (child.kind === 'virtual') {
         fragments.push(...collectVirtualFragments(child))
       }
@@ -236,6 +218,20 @@ export function planPromptBlocks(input: PromptDataModel): PromptFragment[][] {
   dfs(null)
   
   return [fragments]
+}
+
+/** Both traversals read inline text from the skeleton; callers retain role inheritance. */
+function createEntryFragment(node: SourceNode, role: PromptProviderRole, contribution?: PromptContribution): PromptFragment | undefined {
+  const content = node.body ?? ''
+  if (content.trim().length === 0) return undefined
+  return {
+    id: contribution?.id ?? node.id,
+    source: { kind: 'preset', sourceId: node.sourceId, sourceNodeId: node.id },
+    content,
+    role,
+    targetAnchorId: node.capabilities?.targetAnchorId,
+    localDepth: node.capabilities?.localDepth,
+  }
 }
 
 export function emitPromptBlocks(blocks: PromptFragment[][]): CompiledPrompt {

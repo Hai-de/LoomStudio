@@ -201,7 +201,7 @@ describe('isolated HTML document', () => {
 })
 
 describe('Display consumption', () => {
-  const entry = { id: '1', text: '', originalText: 'raw', depth: 0, appliedRuleIds: [], promotedReasoning: [] }
+  const entry = { source: { kind: 'agent-session' as const, sessionId: 'session' }, sequence: 1, id: '1', text: '', originalText: 'raw', depth: 0, appliedRuleIds: [], promotedReasoning: [] }
   it('honors empty replacements without changing raw text', () => {
     expect(displayText({ entries: new Map([['1', entry]]), pending: false }, '1', 'raw')).toBe('')
     expect(entry.originalText).toBe('raw')

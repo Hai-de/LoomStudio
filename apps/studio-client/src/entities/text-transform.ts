@@ -1,3 +1,4 @@
+import type { StudioRpcOutputs } from '../shared/api/trpc-client.js'
 import type { ClientJsonValue } from '@loom-studio/client-bridge'
 import type { RendererContributionDefinition } from '@loom-studio/extension-sdk'
 
@@ -81,68 +82,8 @@ type ExtensionPackageResourceOrigin = {
 
 type TextExtractorEntry = TextExtractor
 
-export type HistoryProjectionSnapshot = {
-  source: HistorySource
-  phase: 'classify' | 'prompt' | 'display'
-  entries: Array<{
-    id: string
-    text: string
-    originalText: string
-    depth: number
-    appliedRuleIds: string[]
-    promotedReasoning: Array<{ content: string; visibility: string; replay: string; dialect?: string }>
-  }>
-  matches: Array<{
-    matchId: string
-    ruleId: string
-    ruleVersion: number
-    entryId: string
-    depth: number
-    stepIndex: number
-    occurrenceIndex: number
-    inputRange: { start: number; end: number }
-    displayRange?: { start: number; end: number }
-    match: string
-    captures: Array<string | undefined>
-    namedCaptures: Record<string, string | undefined>
-  }>
-  diagnostics: Array<{ code: string; message: string; ruleId?: string; entryId?: string }>
-  ruleIds: string[]
-  trace?: {
-    entryId: string
-    canonicalText: string
-    finalText: string
-    steps: Array<{
-      ruleId: string
-      ruleVersion: number
-      stepIndex: number
-      effect: TextTransformRuleDraft['effect']['kind']
-      matched: boolean
-      inputText: string
-      outputText: string
-      matchIds: string[]
-    }>
-  }
-}
+export type HistoryProjectionSnapshot = StudioRpcOutputs['application']['projectHistory']['snapshot']
 
 export type RendererDefinition = RendererContributionDefinition
 
-export type TextPipelineInspection = {
-  source: HistorySource
-  phase: TextTransformPhase
-  consumer?: TextPipelineConsumer
-  rules: TextTransformRuleEntry[]
-  extractors: TextExtractorEntry[]
-  artifacts: Array<{
-    artifactId: string
-    artifactType: string
-    extractorId: string
-    extractorVersion: number
-    source: HistorySource
-    phase: TextTransformPhase
-    values: Array<{ value: ClientJsonValue; sourceEntryId: string }>
-    stale: boolean
-    diagnostics: Array<{ code: string; message: string; ruleId?: string; entryId?: string }>
-  }>
-  snapshot: HistoryProjectionSnapshot
-}
+export type TextPipelineInspection = StudioRpcOutputs['application']['inspectTextPipeline']

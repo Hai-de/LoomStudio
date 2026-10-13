@@ -1,8 +1,7 @@
 import type {
   ApplicationRuntime,
-  OpeningChatInput,
-  RuntimeRequestContext,
   LoreInput,
+  OpeningChatInput
 } from '@loom-studio/application-runtime'
 import { isCardBundleArtifact, isPromptActivation, parseCardExtensionAdoptions } from '@loom-studio/application-runtime'
 import type { JsonValue } from '@loom-studio/shared'
@@ -18,125 +17,143 @@ import {
   readString,
   readStringArray,
 } from '../../rpc-params.js'
+import { jsonInput, procedure } from '../context.js'
 
-export async function handleCardsRpc(
-  runtime: ApplicationRuntime,
-  method: string,
-  params: JsonValue | undefined,
-  context?: RuntimeRequestContext,
-): Promise<JsonValue | undefined> {
-  switch (method) {
-    case 'application.createCard':
-      return await runtime.createCard({
-        name: readString(params, 'name'),
-        userName: readOptionalString(params, 'userName'),
-        description: readOptionalString(params, 'description'),
-        preset: readOptionalPreset(params, 'preset'),
-        opening: readOptionalOpening(params, 'opening'),
-        lore: readOptionalLore(params, 'lore'),
-        media: readOptionalCardMedia(params, 'media'),
-        macros: readOptionalStringRecord(params, 'macros'),
-        macroOptions: readOptionalObject(params, 'macroOptions') as import('@loom-studio/shared').MacroOptions | undefined,
-      }, context) as unknown as JsonValue
-
-    case 'application.getCard':
-      return await runtime.getCard({
-        cardId: readString(params, 'cardId'),
-      }) as unknown as JsonValue
-
-    case 'application.attachCardExtensionPackage': {
-      const expectedVersion = readOptionalNumber(params, 'expectedVersion')
-      if (!Number.isSafeInteger(expectedVersion) || expectedVersion! < 1) throw new Error('expectedVersion must be a positive integer')
-      const archive = readOptionalObject(params, 'archive')
-      if (!archive) throw new Error('archive is required')
-      return await runtime.attachCardExtensionPackage({
-        cardId: readString(params, 'cardId'), expectedVersion: expectedVersion!,
-        archive: archive as unknown as import('@loom-studio/application-runtime').AttachCardExtensionPackageInput['archive'],
-      }, context) as unknown as JsonValue
+export const cardsProcedures = {
+  'createCard': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['createCard']>[0] => {
+    return {
+      name: readString(params, 'name'),
+      userName: readOptionalString(params, 'userName'),
+      description: readOptionalString(params, 'description'),
+      preset: readOptionalPreset(params, 'preset'),
+      opening: readOptionalOpening(params, 'opening'),
+      lore: readOptionalLore(params, 'lore'),
+      media: readOptionalCardMedia(params, 'media'),
+      macros: readOptionalStringRecord(params, 'macros'),
+      macroOptions: readOptionalObject(params, 'macroOptions') as import('@loom-studio/shared').MacroOptions | undefined,
     }
-
-    case 'application.detachCardExtensionPackage': {
-      const expectedVersion = readOptionalNumber(params, 'expectedVersion')
-      if (typeof expectedVersion !== 'number' || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1) throw new Error('expectedVersion must be a positive integer')
-      return await runtime.detachCardExtensionPackage({
-        cardId: readString(params, 'cardId'), expectedVersion, packageId: readString(params, 'packageId'),
-      }, context) as unknown as JsonValue
+  })).mutation(({ ctx, input }) => ctx.runtime.createCard(input, ctx.request)),
+  'getCard': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['getCard']>[0] => {
+    return {
+      cardId: readString(params, 'cardId'),
     }
-
-    case 'application.listCards':
-      return await runtime.listCards({
-        cursor: readOptionalString(params, 'cursor'),
-        limit: readOptionalNumber(params, 'limit'),
-      }) as unknown as JsonValue
-
-    case 'application.forkCard':
-      return await runtime.forkCard({
-        cardId: readString(params, 'cardId'), expectedVersion: readNumber(params, 'expectedVersion'),
-      }, context) as unknown as JsonValue
-
-    case 'application.updateCard':
-      return await runtime.updateCard({
-        cardId: readString(params, 'cardId'),
-        expectedVersion: readOptionalNumber(params, 'expectedVersion'),
-        name: readOptionalString(params, 'name'),
-        userName: readOptionalString(params, 'userName'),
-        description: readOptionalString(params, 'description'),
-        preset: readOptionalPreset(params, 'preset'),
-        opening: readOptionalOpening(params, 'opening'),
-        lore: readOptionalLore(params, 'lore'),
-        media: readOptionalCardMedia(params, 'media'),
-        stateTemplates: readOptionalStateTemplates(params, 'stateTemplates'),
-        stateDefinitionIds: readOptionalStringArray(params, 'stateDefinitionIds'),
-        stateEntityTypes: readOptionalStateEntityTypes(params, 'stateEntityTypes'),
-        timelineStateEntities: readOptionalStateEntities(params, 'timelineStateEntities'),
-        timelineComponentMounts: readOptionalComponentMounts(params, 'timelineComponentMounts'),
-        stateContributionIds: readOptionalStringArray(params, 'stateContributionIds'),
-        ...(isRecord(params) && params.extensionAdoptions !== undefined
-          ? { extensionAdoptions: parseCardExtensionAdoptions(params.extensionAdoptions) } : {}),
-        timelineStateBindings: readOptionalTimelineStateBindings(params, 'timelineStateBindings'),
-        macros: readOptionalStringRecord(params, 'macros'),
-        macroOptions: readOptionalObject(params, 'macroOptions') as import('@loom-studio/shared').MacroOptions | undefined,
-      }, context) as unknown as JsonValue
-
-    case 'application.deleteCard':
-      return await runtime.deleteCard({
-        cardId: readString(params, 'cardId'),
-        includePlayData: readOptionalBoolean(params, 'includePlayData'),
-        includePromptResources: readOptionalBoolean(params, 'includePromptResources'),
-      }, context) as unknown as JsonValue
-
-    case 'application.deleteCards':
-      return await runtime.deleteCards({
-        cardIds: readStringArray(params, 'cardIds'),
-        includePlayData: readOptionalBoolean(params, 'includePlayData'),
-        includePromptResources: readOptionalBoolean(params, 'includePromptResources'),
-      }, context) as unknown as JsonValue
-
-    case 'application.previewCardDeletion':
-      return await runtime.previewCardDeletion({
-        cardId: readString(params, 'cardId'),
-      }) as unknown as JsonValue
-
-    case 'application.importCardBundle':
-      return await runtime.importCardBundle(readCardBundleImportInput(params), context) as unknown as JsonValue
-
-    case 'application.exportCardBundle':
-      return await runtime.exportCardBundle({
-        cardId: readString(params, 'cardId'),
-      }) as unknown as JsonValue
-
-    case 'application.updateCardPromptResources':
-      return await runtime.updateCardPromptResources({
-        cardId: readString(params, 'cardId'),
-        promptResourceIds: readStringArray(params, 'promptResourceIds'),
-        ...(isRecord(params) && params.externalPromptResourceIds !== undefined ? {
-          externalPromptResourceIds: readStringArray(params, 'externalPromptResourceIds'),
-        } : {}),
-      }, context) as unknown as JsonValue
-
-    default:
-      return undefined
-  }
+  })).query(({ ctx, input }) => ctx.runtime.getCard(input)),
+  'attachCardExtensionPackage': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['attachCardExtensionPackage']>[0] => {
+    const expectedVersion = readOptionalNumber(params, 'expectedVersion')
+    if (!Number.isSafeInteger(expectedVersion) || expectedVersion! < 1) throw new Error('expectedVersion must be a positive integer')
+    const archive = readOptionalObject(params, 'archive')
+    if (!archive) throw new Error('archive is required')
+    return {
+      cardId: readString(params, 'cardId'), expectedVersion: expectedVersion!,
+      archive: archive as unknown as import('@loom-studio/application-runtime').AttachCardExtensionPackageInput['archive'],
+    }
+  })).mutation(({ ctx, input }) => ctx.runtime.attachCardExtensionPackage(input, ctx.request)),
+  'detachCardExtensionPackage': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['detachCardExtensionPackage']>[0] => {
+    const expectedVersion = readOptionalNumber(params, 'expectedVersion')
+    if (typeof expectedVersion !== 'number' || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1) throw new Error('expectedVersion must be a positive integer')
+    return {
+      cardId: readString(params, 'cardId'), expectedVersion, packageId: readString(params, 'packageId'),
+    }
+  })).mutation(({ ctx, input }) => ctx.runtime.detachCardExtensionPackage(input, ctx.request)),
+  'listCards': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['listCards']>[0] => {
+    return {
+      cursor: readOptionalString(params, 'cursor'),
+      limit: readOptionalNumber(params, 'limit'),
+    }
+  })).query(({ ctx, input }) => ctx.runtime.listCards(input)),
+  'forkCard': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['forkCard']>[0] => {
+    return {
+      cardId: readString(params, 'cardId'), expectedVersion: readNumber(params, 'expectedVersion'),
+    }
+  })).mutation(({ ctx, input }) => ctx.runtime.forkCard(input, ctx.request)),
+  'updateCard': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['updateCard']>[0] => {
+    return {
+      cardId: readString(params, 'cardId'),
+      expectedVersion: readOptionalNumber(params, 'expectedVersion'),
+      name: readOptionalString(params, 'name'),
+      userName: readOptionalString(params, 'userName'),
+      description: readOptionalString(params, 'description'),
+      preset: readOptionalPreset(params, 'preset'),
+      opening: readOptionalOpening(params, 'opening'),
+      lore: readOptionalLore(params, 'lore'),
+      media: readOptionalCardMedia(params, 'media'),
+      stateTemplates: readOptionalStateTemplates(params, 'stateTemplates'),
+      stateDefinitionIds: readOptionalStringArray(params, 'stateDefinitionIds'),
+      stateEntityTypes: readOptionalStateEntityTypes(params, 'stateEntityTypes'),
+      timelineStateEntities: readOptionalStateEntities(params, 'timelineStateEntities'),
+      timelineComponentMounts: readOptionalComponentMounts(params, 'timelineComponentMounts'),
+      stateContributionIds: readOptionalStringArray(params, 'stateContributionIds'),
+      ...(isRecord(params) && params.extensionAdoptions !== undefined
+        ? { extensionAdoptions: parseCardExtensionAdoptions(params.extensionAdoptions) } : {}),
+      timelineStateBindings: readOptionalTimelineStateBindings(params, 'timelineStateBindings'),
+      macros: readOptionalStringRecord(params, 'macros'),
+      macroOptions: readOptionalObject(params, 'macroOptions') as import('@loom-studio/shared').MacroOptions | undefined,
+    }
+  })).mutation(({ ctx, input }) => ctx.runtime.updateCard(input, ctx.request)),
+  'deleteCard': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['deleteCard']>[0] => {
+    return {
+      cardId: readString(params, 'cardId'),
+      includePlayData: readOptionalBoolean(params, 'includePlayData'),
+      includePromptResources: readOptionalBoolean(params, 'includePromptResources'),
+    }
+  })).mutation(async ({ ctx, input }) => {
+    const previews = ctx.services?.emitEvent
+      ? await Promise.all([input.cardId].map(cardId => ctx.runtime.previewCardDeletion({ cardId }))) : []
+    const result = await ctx.runtime.deleteCard(input, ctx.request)
+    for (const preview of previews) ctx.services?.emitEvent?.('entity.lifecycle.changed', {
+      operation: 'tombstoned', root: { kind: 'card', id: preview.cardId },
+      affected: {
+        timelines: input.includePlayData ? preview.timelines.length : 0,
+        extensionConfigs: preview.extensionData.cardScoped.configs + (input.includePlayData ? preview.extensionData.timelineScoped.configs : 0),
+        extensionRecords: preview.extensionData.cardScoped.records + (input.includePlayData ? preview.extensionData.timelineScoped.records : 0)
+      },
+      changesetId: result.mutation.changesetId,
+    }, { clientId: ctx.request.clientId!, correlationId: ctx.request.correlationId!, callId: ctx.request.callId!, parentCallId: ctx.request.parentCallId })
+    return result
+  }),
+  'deleteCards': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['deleteCards']>[0] => {
+    return {
+      cardIds: readStringArray(params, 'cardIds'),
+      includePlayData: readOptionalBoolean(params, 'includePlayData'),
+      includePromptResources: readOptionalBoolean(params, 'includePromptResources'),
+    }
+  })).mutation(async ({ ctx, input }) => {
+    const previews = ctx.services?.emitEvent
+      ? await Promise.all(input.cardIds.map(cardId => ctx.runtime.previewCardDeletion({ cardId }))) : []
+    const result = await ctx.runtime.deleteCards(input, ctx.request)
+    for (const preview of previews) ctx.services?.emitEvent?.('entity.lifecycle.changed', {
+      operation: 'tombstoned', root: { kind: 'card', id: preview.cardId },
+      affected: {
+        timelines: input.includePlayData ? preview.timelines.length : 0,
+        extensionConfigs: preview.extensionData.cardScoped.configs + (input.includePlayData ? preview.extensionData.timelineScoped.configs : 0),
+        extensionRecords: preview.extensionData.cardScoped.records + (input.includePlayData ? preview.extensionData.timelineScoped.records : 0)
+      },
+      changesetId: result.mutation.changesetId,
+    }, { clientId: ctx.request.clientId!, correlationId: ctx.request.correlationId!, callId: ctx.request.callId!, parentCallId: ctx.request.parentCallId })
+    return result
+  }),
+  'previewCardDeletion': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['previewCardDeletion']>[0] => {
+    return {
+      cardId: readString(params, 'cardId'),
+    }
+  })).query(({ ctx, input }) => ctx.runtime.previewCardDeletion(input)),
+  'importCardBundle': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['importCardBundle']>[0] => {
+    return readCardBundleImportInput(params)
+  })).mutation(({ ctx, input }) => ctx.runtime.importCardBundle(input, ctx.request)),
+  'exportCardBundle': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['exportCardBundle']>[0] => {
+    return {
+      cardId: readString(params, 'cardId'),
+    }
+  })).query(({ ctx, input }) => ctx.runtime.exportCardBundle(input)),
+  'updateCardPromptResources': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['updateCardPromptResources']>[0] => {
+    return {
+      cardId: readString(params, 'cardId'),
+      promptResourceIds: readStringArray(params, 'promptResourceIds'),
+      ...(isRecord(params) && params.externalPromptResourceIds !== undefined ? {
+        externalPromptResourceIds: readStringArray(params, 'externalPromptResourceIds'),
+      } : {}),
+    }
+  })).mutation(({ ctx, input }) => ctx.runtime.updateCardPromptResources(input, ctx.request)),
 }
 
 function readOptionalPreset(params: JsonValue | undefined, key: string): { system?: string; macros?: Record<string, string>; macroOptions?: import('@loom-studio/shared').MacroOptions } | undefined {
@@ -222,7 +239,6 @@ function readOptionalCardMedia(params: JsonValue | undefined, key: string) {
     coverAssetId: typeof value.coverAssetId === 'string' ? value.coverAssetId : undefined,
   }
 }
-
 
 function readStringRecordValue(value: JsonValue | undefined, key: string): Record<string, string> {
   if (!isRecord(value) || !Object.values(value).every(item => typeof item === 'string')) {

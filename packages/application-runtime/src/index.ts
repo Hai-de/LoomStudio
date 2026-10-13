@@ -83,6 +83,8 @@ export { createStateContentRegistry, type StateContentRegistry } from './state/s
 export type { TimelinePresetConfig } from './prompt/timeline-preset-config.js'
 export type { MacroProviderRegistry, MacroStaticSource } from './prompt/macro-provider-registry.js'
 export type {
+  ResolvedLoomScriptRendererMount,
+  UnavailableLoomScriptMount,
   LoomScriptArtifact,
   LoomScriptAttachmentArtifact,
   LoomScriptContent,

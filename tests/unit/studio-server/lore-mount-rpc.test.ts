@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ApplicationRuntime } from '@loom-studio/application-runtime'
 import type { JsonObject } from '@loom-studio/shared'
-import { handleWorkspacesRpc } from '../../../apps/studio-server/src/rpc/handlers/application/workspaces.js'
+import { callApplicationRpc as handleWorkspacesRpc } from '../../support/trpc-caller.js'
 
 describe('Setting mount RPC input', () => {
   it('accepts mount identities and new resources as well as the legacy ID list', async () => {
@@ -10,12 +10,12 @@ describe('Setting mount RPC input', () => {
     const source = { kind: 'preset', id: 'preset' }
     const input: JsonObject = { source, mounts: [{ id: 'missing-mount' }, { loreResourceId: 'new-setting' }] }
     await handleWorkspacesRpc(runtime, 'application.replaceLoreMounts', input)
-    expect(replaceLoreMounts).toHaveBeenLastCalledWith(input, undefined)
+    expect(replaceLoreMounts).toHaveBeenLastCalledWith(input, {})
     const legacy = { source, loreResourceIds: ['lore'] }
     await handleWorkspacesRpc(runtime, 'application.replaceLoreMounts', legacy)
-    expect(replaceLoreMounts).toHaveBeenLastCalledWith(legacy, undefined)
+    expect(replaceLoreMounts).toHaveBeenLastCalledWith(legacy, {})
     await handleWorkspacesRpc(runtime, 'application.replaceLoreMounts', { source, mounts: [] })
-    expect(replaceLoreMounts).toHaveBeenLastCalledWith({ source, mounts: [] }, undefined)
+    expect(replaceLoreMounts).toHaveBeenLastCalledWith({ source, mounts: [] }, {})
   })
 
   it('rejects malformed or ambiguous lists before calling the runtime', async () => {

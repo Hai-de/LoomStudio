@@ -6,6 +6,7 @@ import { resolveModelBrand, resolveProviderBrand, type ModelBrand } from '../../
 import type { Translator } from '../../shared/i18n/index.js'
 import { tryWriteClipboardText } from '../../shared/browser/clipboard.js'
 import { IconButton, Toggle } from '@loom-studio/ui'
+import { notify } from '../../shared/notifications/index.js'
 import styles from './model-panel.module.scss'
 import { ModelBrandIcon } from './model-brand-icon.js'
 
@@ -129,8 +130,10 @@ function ProviderAccountItem(props: {
     setActionError(undefined)
     try {
       await props.onCreateModel(props.account.id, model)
+      notify.success(props.t('notify.success.created'))
       return true
     } catch (error) {
+      notify.providerError(error, props.t)
       if (mountedRef.current) setActionError(error instanceof Error ? error.message : String(error))
       return false
     } finally {
@@ -153,7 +156,8 @@ function ProviderAccountItem(props: {
       if (!mountedRef.current || request !== catalogRequestRef.current) return
       setFetchedModels(modelIds)
       setModelCatalogState('loaded')
-    } catch {
+    } catch (error) {
+      notify.providerError(error, props.t)
       if (mountedRef.current && request === catalogRequestRef.current) setModelCatalogState('error')
     }
   }
@@ -173,7 +177,9 @@ function ProviderAccountItem(props: {
       setApiKeyDraft('')
       setFetchedModels([])
       setModelCatalogState('idle')
+      notify.success(props.t('notify.success.saved'))
     } catch (error) {
+      notify.providerError(error, props.t)
       if (mountedRef.current) setActionError(error instanceof Error ? error.message : String(error))
     }
   }
@@ -241,7 +247,9 @@ function ProviderAccountItem(props: {
             onClick={event => {
               event.preventDefault()
               event.stopPropagation()
-              void props.onDelete(props.account.id).catch(() => undefined)
+              void props.onDelete(props.account.id)
+                .then(() => notify.success(props.t('notify.success.deleted')))
+                .catch(error => notify.error(props.t('notify.provider.accountDeleteFailed'), { description: error instanceof Error ? error.message : String(error) }))
             }}
           >
             <Trash2 aria-hidden="true" />
@@ -323,7 +331,11 @@ function ProviderAccountItem(props: {
                     }} />
                 </label> : null}
                 {!fake ? (
-                  <IconButton size="small" variant="danger" disabled={props.busy} aria-label={props.t('provider.modelDelete')} onClick={() => void props.onDeleteModel(profile.id).catch(() => undefined)}>
+                  <IconButton size="small" variant="danger" disabled={props.busy} aria-label={props.t('provider.modelDelete')} onClick={() => {
+                    void props.onDeleteModel(profile.id)
+                      .then(() => notify.success(props.t('notify.success.deleted')))
+                      .catch(error => notify.error(props.t('notify.provider.modelDeleteFailed'), { description: error instanceof Error ? error.message : String(error) }))
+                  }}>
                     <Trash2 aria-hidden="true" />
                   </IconButton>
                 ) : null}

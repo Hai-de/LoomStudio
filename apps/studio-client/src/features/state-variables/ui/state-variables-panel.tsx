@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronUp, Clock, Code2, Copy, FileText, Folder, FolderOpen, Globe, Layers, Maximize2, Minus, Plus, RefreshCw, Save } from 'lucide-react'
-import { toast } from 'sonner'
+import { notify } from '../../../shared/notifications/index.js'
 import type { ClientJsonValue } from '@loom-studio/client-bridge'
 import type { StateSnapshot, StateTarget } from '../../../entities/index.js'
 import type { StudioApi } from '../../../shared/api/studio-api.js'
@@ -148,11 +148,13 @@ export function StateVariablesPanel(props: Props) {
       if (!mountedRef.current || sourceRef.current !== source || saveRequestRef.current !== request || editContextRef.current !== saveContextKey) return
       setEditedProperties({})
       setArrayDrafts({})
-      toast.success(`${props.t('stateVariables.savedProperties')} ${Object.keys(changes).length}`)
+      notify.success(`${props.t('stateVariables.savedProperties')} ${Object.keys(changes).length}`)
       await refresh()
       if (mountedRef.current && sourceRef.current === source) void props.onStateMutated?.()
     } catch (cause) {
-      if (mountedRef.current && sourceRef.current === source && saveRequestRef.current === request) setError(readError(cause))
+      const message = readError(cause)
+      if (mountedRef.current && sourceRef.current === source && saveRequestRef.current === request) setError(message)
+      notify.error(message)
     } finally {
       if (mountedRef.current && sourceRef.current === source && saveRequestRef.current === request) {
         saveRequestRef.current = undefined
@@ -171,8 +173,8 @@ export function StateVariablesPanel(props: Props) {
   }
 
   async function copyValue(value: string, successMessage = props.t('longTextEditor.copied')) {
-    if (await tryWriteClipboardText(value)) toast.success(successMessage)
-    else toast.error(props.t('longTextEditor.copyFailed'))
+    if (await tryWriteClipboardText(value)) notify.success(successMessage)
+    else notify.error(props.t('longTextEditor.copyFailed'))
   }
 
   function copyMacro(token: string) {

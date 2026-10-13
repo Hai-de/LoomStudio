@@ -50,15 +50,15 @@ function fixture(adopted = false) {
   const api = {
     inspectResources: vi.fn(async () => ({ timelineId: 'story', installationId, resources: [] })),
     get: vi.fn(async () => config),
-    update: vi.fn(async () => undefined),
+    update: vi.fn(async () => ({ participation: config, revisionId: 'state-2', mutation: { changesetId: 'change' } })),
     previewAdoption: vi.fn(async () => preview),
     previewStateInitialization: vi.fn(async () => preview),
-    initializeState: vi.fn(async () => undefined),
-    adopt: vi.fn(async () => undefined),
+    initializeState: vi.fn(async () => ({ participation: config, revisionId: 'state-2', mutation: { changesetId: 'change' } })),
+    adopt: vi.fn(async () => ({ participation: config, revisionId: 'state-2', mutation: { changesetId: 'change' } })),
     previewRecovery: vi.fn(async () => ({
       ...preview, previousSource: source, source: { kind: 'git' as const, url: 'https://example.com/replacement.git' }, sourceChanged: true,
     })),
-    recover: vi.fn(async () => undefined),
+    recover: vi.fn(async () => ({ participation: config, revisionId: 'state-2', mutation: { changesetId: 'change' } })),
   }
   const props: TimelineExtensionPanelProps = {
     api, t, card: { id: 'card', version: 8, name: 'Card' },

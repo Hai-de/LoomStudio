@@ -7,7 +7,7 @@ import { createSqliteDataEngine } from '@loom-studio/data-engine'
 import { createSqliteDocumentStore } from '@loom-studio/document-store'
 import { createAgentToolRegistry, createApplicationRuntime, createPromptProcessorRegistry, type ApplicationRuntimeOptions, type ToolDefinition } from '@loom-studio/application-runtime'
 import { describe, expect, it, vi } from 'vitest'
-import { handleAgentsRpc } from '../../../apps/studio-server/src/rpc/handlers/application/agents.js'
+import { callApplicationRpc as handleAgentsRpc } from '../../support/trpc-caller.js'
 
 const tool: ToolDefinition = {
   id: 'official/checkpoint_probe', owner: { namespace: 'official' }, name: 'checkpoint_probe',

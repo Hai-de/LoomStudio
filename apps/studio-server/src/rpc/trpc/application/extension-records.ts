@@ -1,6 +1,5 @@
 import type {
-  ApplicationRuntime,
-  RuntimeRequestContext,
+  ApplicationRuntime
 } from '@loom-studio/application-runtime'
 import type { ExtensionEntityRef, ExtensionStorageScope } from '@loom-studio/extension-host'
 import type { JsonValue } from '@loom-studio/shared'
@@ -11,59 +10,51 @@ import {
   readOptionalString,
   readString,
 } from '../../rpc-params.js'
+import { jsonInput, procedure } from '../context.js'
 
-export async function handleExtensionRecordsRpc(
-  runtime: ApplicationRuntime,
-  method: string,
-  params: JsonValue | undefined,
-  context?: RuntimeRequestContext,
-): Promise<JsonValue | undefined> {
-  switch (method) {
-    case 'application.listExtensionRecords':
-      return await runtime.listExtensionRecords({
-        target: readInstallationTarget(params),
-        packageId: readString(params, 'packageId'),
-        scope: readOptionalExtensionStorageScope(params, 'scope'),
-        recordType: readOptionalString(params, 'recordType'),
-        binding: readOptionalExtensionEntityRef(params, 'binding'),
-      }) as unknown as JsonValue
-
-    case 'application.getExtensionRecord':
-      return await runtime.getExtensionRecord({
-        target: readInstallationTarget(params),
-        packageId: readString(params, 'packageId'),
-        recordId: readString(params, 'recordId'),
-      }) as unknown as JsonValue
-
-    case 'application.listExtensionConfigs':
-      return await runtime.listExtensionConfigs({
-        target: readInstallationTarget(params),
-        packageId: readString(params, 'packageId'),
-        scope: readOptionalExtensionStorageScope(params, 'scope'),
-      }) as unknown as JsonValue
-
-    case 'application.getExtensionConfig':
-      return await runtime.getExtensionConfig({
-        target: readInstallationTarget(params),
-        packageId: readString(params, 'packageId'),
-        scope: readRequiredExtensionStorageScope(params, 'scope'),
-        key: readString(params, 'key'),
-      }) as unknown as JsonValue
-
-    case 'application.upsertExtensionConfig':
-      if (!isRecord(params) || !Object.hasOwn(params, 'value')) throw new Error('Expected Extension Config value')
-      return await runtime.upsertExtensionConfig({
-        target: readInstallationTarget(params),
-        packageId: readString(params, 'packageId'),
-        scope: readRequiredExtensionStorageScope(params, 'scope'),
-        key: readString(params, 'key'),
-        value: params.value,
-        expectedVersion: readOptionalNumber(params, 'expectedVersion'),
-      }, context) as unknown as JsonValue
-
-    default:
-      return undefined
-  }
+export const extensionRecordsProcedures = {
+  'listExtensionRecords': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['listExtensionRecords']>[0] => {
+    return {
+      target: readInstallationTarget(params),
+      packageId: readString(params, 'packageId'),
+      scope: readOptionalExtensionStorageScope(params, 'scope'),
+      recordType: readOptionalString(params, 'recordType'),
+      binding: readOptionalExtensionEntityRef(params, 'binding'),
+    }
+  })).query(({ ctx, input }) => ctx.runtime.listExtensionRecords(input)),
+  'getExtensionRecord': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['getExtensionRecord']>[0] => {
+    return {
+      target: readInstallationTarget(params),
+      packageId: readString(params, 'packageId'),
+      recordId: readString(params, 'recordId'),
+    }
+  })).query(({ ctx, input }) => ctx.runtime.getExtensionRecord(input)),
+  'listExtensionConfigs': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['listExtensionConfigs']>[0] => {
+    return {
+      target: readInstallationTarget(params),
+      packageId: readString(params, 'packageId'),
+      scope: readOptionalExtensionStorageScope(params, 'scope'),
+    }
+  })).query(({ ctx, input }) => ctx.runtime.listExtensionConfigs(input)),
+  'getExtensionConfig': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['getExtensionConfig']>[0] => {
+    return {
+      target: readInstallationTarget(params),
+      packageId: readString(params, 'packageId'),
+      scope: readRequiredExtensionStorageScope(params, 'scope'),
+      key: readString(params, 'key'),
+    }
+  })).query(({ ctx, input }) => ctx.runtime.getExtensionConfig(input)),
+  'upsertExtensionConfig': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['upsertExtensionConfig']>[0] => {
+    if (!isRecord(params) || !Object.hasOwn(params, 'value')) throw new Error('Expected Extension Config value')
+    return {
+      target: readInstallationTarget(params),
+      packageId: readString(params, 'packageId'),
+      scope: readRequiredExtensionStorageScope(params, 'scope'),
+      key: readString(params, 'key'),
+      value: params.value,
+      expectedVersion: readOptionalNumber(params, 'expectedVersion'),
+    }
+  })).mutation(({ ctx, input }) => ctx.runtime.upsertExtensionConfig(input, ctx.request)),
 }
 
 function readRequiredExtensionStorageScope(value: JsonValue | undefined, key: string): ExtensionStorageScope {

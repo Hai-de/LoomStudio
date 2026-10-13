@@ -1,3 +1,4 @@
+import type { ApplicationRuntime } from '@loom-studio/application-runtime'
 import { request as httpRequest } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApplicationSessionAuth } from '../../../apps/studio-server/src/http/application-session-auth.js'
@@ -12,7 +13,7 @@ describe('RPC HTTP request budget', () => {
 
   beforeEach(async () => {
     call.mockClear()
-    server = createStudioHttpServer({ auth: createApplicationSessionAuth(), rpcRouter: { call } })
+    server = createStudioHttpServer({ auth: createApplicationSessionAuth(), applicationRuntime: { createAgentPreset: call } as unknown as ApplicationRuntime })
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
     const address = server.address()
     if (!address || typeof address === 'string') throw new Error('Missing server address')
@@ -28,7 +29,7 @@ describe('RPC HTTP request budget', () => {
 
   function post(chunks: Buffer[], headers: Record<string, string>, end = true) {
     return new Promise<{ status: number; connection?: string; body: string }>((resolve, reject) => {
-      const request = httpRequest(`${origin}/rpc`, {
+      const request = httpRequest(`${origin}/trpc/application.createAgentPreset`, {
         method: 'POST', headers: { cookie, 'content-type': 'application/json', ...headers },
       }, response => {
         let body = ''
@@ -49,7 +50,7 @@ describe('RPC HTTP request budget', () => {
     const response = await post([], { 'content-length': String(bodyReader.maxRpcRequestBodyBytes + 1) }, false)
     expect(response.status).toBe(413)
     expect(response.connection).toBe('close')
-    expect(JSON.parse(response.body)).toMatchObject({ id: null, error: { code: 'rpc.request_too_large' } })
+    expect(JSON.parse(response.body)).toMatchObject({ error: { code: 'rpc.request_too_large' } })
     expect(call).not.toHaveBeenCalled()
   })
 
@@ -67,13 +68,13 @@ describe('RPC HTTP request budget', () => {
   })
 
   it('dispatches an exact-limit JSON body with split multibyte text unchanged', async () => {
-    const body = Buffer.from(JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'test.write', params: { text: '中😀' } }))
+    const body = Buffer.from(JSON.stringify({ name: '中😀' }))
     const read = bodyReader.readRpcRequestBody
     vi.spyOn(bodyReader, 'readRpcRequestBody').mockImplementationOnce((request, signal) => read(request, signal, body.length))
     const split = body.indexOf(Buffer.from('中')) + 1
     const response = await post([body.subarray(0, split), body.subarray(split)], { 'content-length': String(body.length) })
     expect(response.status).toBe(200)
-    expect(JSON.parse(response.body)).toMatchObject({ id: 7, result: { accepted: true } })
-    expect(call).toHaveBeenCalledExactlyOnceWith('test.write', { text: '中😀' }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(JSON.parse(response.body)).toMatchObject({ result: { data: { accepted: true } } })
+    expect(call).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ name: '中😀' }), expect.objectContaining({ abortSignal: expect.any(AbortSignal) }))
   })
 })

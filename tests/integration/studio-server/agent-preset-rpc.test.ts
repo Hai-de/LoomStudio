@@ -1,3 +1,4 @@
+import { authenticatedTrpc } from './trpc-helpers.js'
 import { describe, expect, it } from 'vitest'
 import type { AgentPresetEntry } from '@loom-studio/application-runtime'
 import { callRpc, withStudioServer } from './helpers.js'
@@ -37,4 +38,32 @@ describe('Agent preset RPC', () => {
       await expect(callRpc(port, 'application.getAgentPreset', target)).rejects.toThrow()
     })
   })
+  it('persists content placement across RPC and rejects obsolete placement fields without replacing mounts', async () => {
+    await withStudioServer(async port => {
+      const { agentPreset } = await callRpc<{ agentPreset: AgentPresetEntry }>(
+        port, 'application.createAgentPreset', { name: 'Tool placement' },
+      )
+      const { tools } = await callRpc<{ tools: Array<{ id: string; input: { kind: string } }> }>(port, 'application.listAgentTools', {})
+      const tool = tools.find(tool => tool.input.kind === 'freeform')!
+      expect(tool).toBeDefined()
+      const mount = { toolId: tool.id, orderIndex: 0, defaultEnabled: true,
+        activation: { kind: 'always' }, content: { targetAnchorId: '@chat.custom', localDepth: 12 } }
+      const trpc = await authenticatedTrpc(port)
+      const saved = await trpc.application.replacePresetToolMounts.mutate({
+        presetId: agentPreset.id, mounts: [mount],
+      })
+      const read = () => trpc.application.listPresetToolMounts.query({ presetId: agentPreset.id })
+      expect((await read()).mounts).toEqual(saved.mounts)
+      expect(saved.mounts[0]).toMatchObject(mount)
+      for (const content of [{ zone: 'tools', slot: 'old', orderHint: 3 }, { targetAnchorId: 12 }, { localDepth: '12' }]) {
+        await expect(trpc.application.replacePresetToolMounts.mutate({
+          presetId: agentPreset.id, mounts: [{ ...mount,
+            // @ts-expect-error deliberate invalid wire input
+            content }],
+        })).rejects.toThrow()
+      }
+      expect((await read()).mounts).toEqual(saved.mounts)
+    })
+  })
+
 })

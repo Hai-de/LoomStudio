@@ -16,7 +16,7 @@ describe('built client HTTP files', () => {
     const server = createStudioHttpServer({
       clientDirectory: directory,
       auth: createApplicationSessionAuth(),
-      rpcRouter: { call: async () => ({ ok: true }) },
+      applicationRuntime: { listCards: async () => ({ cards: [] }) } as unknown as import('@loom-studio/application-runtime').ApplicationRuntime,
     })
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
     const address = server.address()
@@ -35,7 +35,7 @@ describe('built client HTTP files', () => {
       expect(await asset.text()).toBe('')
       expect((await fetch(`${origin}/app-assets/missing.js`)).status).toBe(404)
       expect((await fetch(`${origin}/studio/missing.js`, { headers: { accept: 'text/html' } })).status).toBe(404)
-      expect((await fetch(`${origin}/rpc`, { method: 'POST' })).status).toBe(401)
+      expect((await fetch(`${origin}/trpc/application.listCards`, { method: 'POST' })).status).toBe(401)
       expect((await fetch(`${origin}/extensions/events`)).status).toBe(401)
       expect((await fetch(`${origin}/assets/private`)).status).toBe(401)
       expect((await fetch(`${origin}/%2e%2e%2fprivate.txt`)).status).toBe(400)
@@ -46,12 +46,13 @@ describe('built client HTTP files', () => {
       const session = await fetch(`${origin}/auth/session`, { method: 'POST', headers: { origin } })
       expect(session.status).toBe(204)
       const cookie = session.headers.get('set-cookie')!.split(';')[0]!
-      const response = await fetch(`${origin}/rpc`, {
+      const response = await fetch(`${origin}/trpc/application.listCards`, {
         method: 'POST', headers: { cookie, 'content-type': 'application/json', origin },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'test.ping' }),
+        body: JSON.stringify({}),
       })
+      expect((await fetch(`${origin}/rpc`, { method: 'POST', headers: { cookie } })).status).toBe(404)
       expect(response.status).toBe(200)
-      expect(await response.json()).toMatchObject({ result: { ok: true } })
+      expect(await response.json()).toMatchObject({ result: { data: { cards: [] } } })
     } finally {
       await server.shutdown()
       await rm(root, { recursive: true, force: true })

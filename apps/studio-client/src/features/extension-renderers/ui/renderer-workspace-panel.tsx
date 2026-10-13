@@ -4,7 +4,7 @@ import { ArrowDown, ArrowLeft, ArrowUp, Braces, Component, ExternalLink, Folder,
 import type { LucideIcon } from 'lucide-react'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { buildStudioLogPath } from '../../../shared/studio-shell/studio-route.js'
-import { toast } from 'sonner'
+import { notify } from '../../../shared/notifications/index.js'
 import type { Card, ListExtensionInstallationsResult, ManagedExtensionModule, ManagedExtensionPackage, PromptResource } from '../../../entities/index.js'
 import type { StudioApi } from '../../../shared/api/studio-api.js'
 import type { Translator } from '../../../shared/i18n/index.js'
@@ -104,7 +104,7 @@ export function RendererWorkspacePanel(props: {
     <Button disabled={!!busyKey} onClick={() => {
       setBusyKey('refresh')
       void props.onRefreshExtensions().catch(error => {
-        toast.error(error instanceof Error ? error.message : String(error))
+        notify.error(error instanceof Error ? error.message : String(error))
       }).finally(() => setBusyKey(undefined))
     }}><RefreshCw aria-hidden="true" size={16} />{props.t('renderer.retryRuntime')}</Button>
   </div> : null
@@ -158,7 +158,7 @@ export function RendererWorkspacePanel(props: {
     try {
       await operation()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      notify.error(error instanceof Error ? error.message : String(error))
     } finally {
       setBusyKey(undefined)
     }
@@ -181,7 +181,11 @@ export function RendererWorkspacePanel(props: {
         enable: props.onEnable, disable: props.onDisable,
       })
       setToggleReport({ key, ...report })
-      if (report.failed.length) toast.error(props.t('renderer.packagePartial'))
+      if (report.failed.length) {
+        notify.error(props.t('renderer.packagePartial'))
+      } else {
+        notify.success(enabled ? props.t('notify.success.enabled') : props.t('notify.success.disabled'))
+      }
     } finally {
       setBusyKey(undefined)
     }
@@ -190,9 +194,9 @@ export function RendererWorkspacePanel(props: {
   async function importResources(packageId: string) {
     try {
       await props.onImportResources(packageId)
-      toast.success(props.t('renderer.resourcesImported'))
+      notify.success(props.t('renderer.resourcesImported'))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      notify.error(error instanceof Error ? error.message : String(error))
     }
   }
 
@@ -200,9 +204,9 @@ export function RendererWorkspacePanel(props: {
     if (!window.confirm(props.t('renderer.removeResourcesConfirm'))) return
     try {
       await props.onRemoveResources(packageId)
-      toast.success(props.t('renderer.resourcesRemoved'))
+      notify.success(props.t('renderer.resourcesRemoved'))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      notify.error(error instanceof Error ? error.message : String(error))
     }
   }
 
@@ -216,9 +220,9 @@ export function RendererWorkspacePanel(props: {
     try {
       await props.onUninstall(removal.packageId, removal.version, deleteData)
       setRemoval(undefined)
-      toast.success(props.t('renderer.uninstalled'))
+      notify.success(props.t('renderer.uninstalled'))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      notify.error(error instanceof Error ? error.message : String(error))
     } finally {
       setBusyKey(undefined)
     }
@@ -338,7 +342,7 @@ export function RendererWorkspacePanel(props: {
                         const card = props.embeddedPackageCard!
                         void run(`${card.id}/${archive.packageId}/import`, async () => {
                           await props.onInstallCardPackage({ cardId: card.id, expectedCardVersion: card.version, packageId: archive.packageId })
-                          toast.success(props.t('renderer.installed'))
+                          notify.success(props.t('renderer.installed'))
                         })
                       }}
                     ><PackagePlus aria-hidden="true" size={16} /></button>
@@ -348,10 +352,13 @@ export function RendererWorkspacePanel(props: {
                         title={props.t('renderer.updateCardPackage')} aria-label={props.t('renderer.updateCardPackage')}
                         onClick={() => {
                           if (!window.confirm(props.t('renderer.updateCardPackageConfirm', { name: archive.packageId, from: installed.packageVersion, to: archive.version }))) return
-                          void run(`${card.id}/${archive.packageId}/update`, () => props.onUpdateCardPackage({
-                            cardId: card.id, packageId: archive.packageId, expectedCardVersion: card.version,
-                            packageVersion: archive.version, expectedInstallationVersion: installed.version,
-                          }))
+                          void run(`${card.id}/${archive.packageId}/update`, async () => {
+                            await props.onUpdateCardPackage({
+                              cardId: card.id, packageId: archive.packageId, expectedCardVersion: card.version,
+                              packageVersion: archive.version, expectedInstallationVersion: installed.version,
+                            })
+                            notify.success(props.t('notify.success.updated'))
+                          })
                         }}
                       ><RefreshCw aria-hidden="true" size={16} /></button>
                       <button
@@ -359,9 +366,12 @@ export function RendererWorkspacePanel(props: {
                         title={props.t('renderer.removeCardResources')} aria-label={props.t('renderer.removeCardResources')}
                         onClick={() => {
                           if (!window.confirm(props.t('renderer.removeCardResourcesConfirm', { name: archive.packageId }))) return
-                          void run(`${card.id}/${archive.packageId}/remove`, () => props.onRemoveCardResources({
-                            cardId: card.id, packageId: archive.packageId, expectedInstallationVersion: installed.version,
-                          }))
+                          void run(`${card.id}/${archive.packageId}/remove`, async () => {
+                            await props.onRemoveCardResources({
+                              cardId: card.id, packageId: archive.packageId, expectedInstallationVersion: installed.version,
+                            })
+                            notify.success(props.t('renderer.resourcesRemoved'))
+                          })
                         }}
                       ><PackageMinus aria-hidden="true" size={16} /></button>
                     </> : null}
@@ -373,7 +383,10 @@ export function RendererWorkspacePanel(props: {
                       onClick={() => {
                         const card = props.embeddedPackageCard!
                         if (!window.confirm(props.t('renderer.detachPackageConfirm', { name: archive.packageId }))) return
-                        void run(`${card.id}/${archive.packageId}/detach`, () => props.onDetachPackage(card.id, card.version, archive.packageId))
+                        void run(`${card.id}/${archive.packageId}/detach`, async () => {
+                          await props.onDetachPackage(card.id, card.version, archive.packageId)
+                          notify.success(props.t('notify.success.deleted'))
+                        })
                       }}
                     ><Trash2 aria-hidden="true" size={16} /></button>
                   </div>
@@ -396,9 +409,12 @@ export function RendererWorkspacePanel(props: {
                         <button type="button" disabled={Boolean(busyKey) || !installed} title={props.t('renderer.uninstall')} aria-label={props.t('renderer.uninstall')}
                           onClick={() => {
                             if (!installed || !window.confirm(props.t('renderer.uninstallCardConfirm', { name: extensionPackage.displayName }))) return
-                            void run(`${target.cardId}/${extensionPackage.packageId}/uninstall`, () => props.onUninstallCardPackage({
-                              cardId: target.cardId, packageId: extensionPackage.packageId, expectedInstallationVersion: installed.version,
-                            }))
+                            void run(`${target.cardId}/${extensionPackage.packageId}/uninstall`, async () => {
+                              await props.onUninstallCardPackage({
+                                cardId: target.cardId, packageId: extensionPackage.packageId, expectedInstallationVersion: installed.version,
+                              })
+                              notify.success(props.t('renderer.uninstalled'))
+                            })
                           }}><Trash2 aria-hidden="true" size={16} /></button>
                       </div>
                       <button className={styles.packageItem} type="button" onClick={() => select({ kind: 'card-package', packageId: extensionPackage.packageId, cardId: target.cardId })}>
@@ -490,7 +506,7 @@ export function RendererWorkspacePanel(props: {
                             if (!cardId || !window.confirm(props.t('renderer.attachPackageConfirm', { name: selected.displayName }))) return
                             void run(`${selected.packageId}/attach`, async () => {
                               await props.onAttachPackage(cardId, selected.packageId, selected.version)
-                              toast.success(props.t('renderer.packageAttached'))
+                              notify.success(props.t('renderer.packageAttached'))
                             })
                           }}
                           title={props.t('renderer.attachPackage')}
@@ -514,7 +530,7 @@ export function RendererWorkspacePanel(props: {
                                 packageVersion: selected.version,
                                 expectedInstallationVersion: installation.version,
                               })
-                              toast.success(props.t('renderer.resourcesUpdated'))
+                              notify.success(props.t('renderer.resourcesUpdated'))
                             })
                           }}
                           title={props.t('renderer.updateResources')}
@@ -909,7 +925,7 @@ function ClientCommandRow(props: {
         target: props.target,
         sourceSurface: 'extension.workbench.actions',
       })
-      if (result.status === 'failed') toast.error(result.message)
+      if (result.status === 'failed') notify.error(result.message)
     } finally {
       props.onBusyChange(false)
     }

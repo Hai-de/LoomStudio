@@ -80,44 +80,29 @@ function parseCatalog(value: JsonValue): ContentCatalog {
 }
 
 export function createOfficialContentService(runtime: ApplicationRuntime, directory: string) {
+  async function confirmed(input: { packageId: string; digest: string }) {
+    const content = await readOfficialContent(directory)
+    if (input.packageId !== content.catalog.id || input.digest !== content.digest) throw new Error('Official package changed; refresh and confirm the current version')
+    return content
+  }
   return {
-    async call(method: string, params: JsonValue | undefined, context?: RuntimeRequestContext): Promise<JsonValue> {
+    async listContent() {
       const content = await readOfficialContent(directory)
-      if (method === 'official.listContent') {
-        const existing = await runtime.listPromptResources()
-        const existingIds = new Set(existing.resources.map(resource => resource.id))
-        return {
-          packages: [{
-            id: content.catalog.id,
-            version: content.catalog.version,
-            name: content.catalog.name,
-            digest: content.digest,
-            resources: content.resources.map(resource => ({
-              id: resource.id,
-              name: resource.artifact.rootNode.label,
-              resourceKind: resource.artifact.resourceKind,
-              available: existingIds.has(resource.id),
-            })),
-          }],
-        }
-      }
-      if (method !== 'official.installContent' && method !== 'official.exportContent') throw new Error(`Unknown official content method: ${method}`)
-      if (readString(params, 'packageId') !== content.catalog.id || readString(params, 'digest') !== content.digest) {
-        throw new Error('Official package changed; refresh and confirm the current version')
-      }
-      if (method === 'official.exportContent') {
-        return {
-          fileName: `${content.catalog.id}-${content.catalog.version}.zip`,
-          base64: Buffer.from(zipSync(content.files)).toString('base64'),
-        }
-      }
-      return await runtime.installOfficialContent({
-        packageId: content.catalog.id,
-        packageVersion: content.catalog.version,
-        resources: content.resources,
-        loreMounts: content.catalog.loreMounts,
-      }, context) as unknown as JsonValue
+      const existing = await runtime.listPromptResources()
+      const existingIds = new Set(existing.resources.map(resource => resource.id))
+      return { packages: [{ id: content.catalog.id, version: content.catalog.version, name: content.catalog.name, digest: content.digest,
+        resources: content.resources.map(resource => ({ id: resource.id, name: resource.artifact.rootNode.label, resourceKind: resource.artifact.resourceKind, available: existingIds.has(resource.id) })),
+      }] }
     },
+    async installContent(input: { packageId: string; digest: string }, context?: RuntimeRequestContext) {
+      const content = await confirmed(input)
+      return runtime.installOfficialContent({ packageId: content.catalog.id, packageVersion: content.catalog.version, resources: content.resources, loreMounts: content.catalog.loreMounts }, context)
+    },
+    async exportContent(input: { packageId: string; digest: string }) {
+      const content = await confirmed(input)
+      return { fileName: `${content.catalog.id}-${content.catalog.version}.zip`, base64: Buffer.from(zipSync(content.files)).toString('base64') }
+    },
+
   }
 }
 

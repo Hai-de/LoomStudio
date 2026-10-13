@@ -17,12 +17,12 @@ export function createCardDirectoryImporter(options: {
   isRegistered(directory: string): Promise<boolean>
   cardExists(cardId: string): Promise<boolean>
   importCard(bundle: CardBundleFilesInput, cardId: string, clientId: string): Promise<void>
-  normalizeCard(cardId: string): Promise<void>
+  saveImportedCard(cardId: string): Promise<void>
 }) {
   const root = resolve(options.dataRoot)
   const importing = new Set<string>()
   async function finish(id: string) {
-    await options.normalizeCard(id)
+    await options.saveImportedCard(id)
     await fs.rm(await safePath(root, `.loom/card-directories/${id}/import.json`))
   }
   return {

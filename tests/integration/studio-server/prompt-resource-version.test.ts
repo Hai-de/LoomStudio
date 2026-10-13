@@ -3,7 +3,7 @@ import { createApplicationRuntime } from '@loom-studio/application-runtime'
 import { createPromptResourceStore } from '@loom-studio/application-data'
 import { createSqliteDataEngine } from '@loom-studio/data-engine'
 import { createSqliteDocumentStore } from '@loom-studio/document-store'
-import { handleWorkspacesRpc } from '../../../apps/studio-server/src/rpc/handlers/application/workspaces.js'
+import { callApplicationRpc as handleWorkspacesRpc } from '../../support/trpc-caller.js'
 
 describe('Prompt Resource editing baseline', () => {
   it.each(['single', 'batch'] as const)('rejects stale %s edits through the RPC handler without replacing committed content', async mode => {
@@ -29,11 +29,11 @@ describe('Prompt Resource editing baseline', () => {
             : { updates: [{ assetId: resource.rootNode.id, label: 'User edit' }] }),
         },
       )
-      await expect(submit(resource.version)).rejects.toMatchObject({ code: 'prompt_resource.conflict' })
+      await expect(submit(resource.version)).rejects.toMatchObject({ cause: { code: 'prompt_resource.conflict' } })
       const unchanged = (await runtime.getPromptResource({ resourceId: resource.id })).resource
       expect(unchanged.version).toBe(latest.version)
       expect(unchanged.rootNode.label).toBe('Agent edit')
-      await expect(submit(0)).rejects.toMatchObject({ code: 'prompt_resource.expected_version_invalid' })
+      await expect(submit(0)).rejects.toMatchObject({ cause: { code: 'prompt_resource.expected_version_invalid' } })
       await submit(latest.version)
       const saved = (await runtime.getPromptResource({ resourceId: resource.id })).resource
       expect(saved.version).toBe(latest.version + 1)

@@ -43,9 +43,9 @@ export function buildPresetToolProjection(input: {
   const slots = new Map<string, Array<{ mount: PresetToolMount; tool: AgentToolDefinition }>>()
   for (const item of mounted) {
     if (item.tool.input.kind === 'structured') continue
-    const zone = item.mount.content?.zone ?? item.tool.prompt?.content?.zone ?? 'tools'
-    const slot = item.mount.content?.slot ?? item.tool.prompt?.content?.slot ?? `${item.tool.owner.namespace}-tools`
-    const key = `${zone}\u0000${slot}`
+    const anchor = item.mount.content?.targetAnchorId ?? '@chat.tools'
+    const depth = item.mount.content?.localDepth ?? 0
+    const key = JSON.stringify([anchor, depth])
     slots.set(key, [...(slots.get(key) ?? []), item])
   }
 
@@ -53,14 +53,15 @@ export function buildPresetToolProjection(input: {
   const toolIdByNodeId = new Map<string, string>()
   const zoneIds = new Set<string>()
   for (const [key, items] of slots) {
-    const [zoneId, slotKey] = key.split('\u0000') as [string, string]
+    const zoneId = items[0]!.mount.content?.targetAnchorId ?? '@chat.tools'
+    const depth = items[0]!.mount.content?.localDepth ?? 0
+    const slotKey = `${zoneId} · ${depth}`
     const sorted = [...items].sort((left, right) => (
-      (left.mount.content?.orderHint ?? left.tool.prompt?.content?.orderHint ?? left.mount.orderIndex)
-      - (right.mount.content?.orderHint ?? right.tool.prompt?.content?.orderHint ?? right.mount.orderIndex)
+      left.mount.orderIndex - right.mount.orderIndex
       || left.tool.name.localeCompare(right.tool.name)
     ))
     const first = sorted[0]!
-    const nodeId = `preset-tool-slot:${encodeURIComponent(zoneId)}:${encodeURIComponent(slotKey)}`
+    const nodeId = `preset-tool-slot:${encodeURIComponent(key)}`
     zoneIds.add(zoneId)
     toolIdByNodeId.set(nodeId, first.tool.id)
     contentNodes.push({
@@ -73,11 +74,11 @@ export function buildPresetToolProjection(input: {
       meta: sorted.map(item => item.tool.name).join(', '),
       readOnly: true,
       projection: {
-        entryOrder: first.mount.content?.orderHint ?? first.tool.prompt?.content?.orderHint ?? first.mount.orderIndex,
+        entryOrder: depth,
         lifecycle: 'preset-default',
-        order: first.mount.content?.rankKey ?? first.tool.prompt?.content?.rankKey ?? 'default',
+        order: 'default',
         slotKey: `content-tool:${slotKey}@${zoneId}`,
-        slotOrder: first.mount.content?.orderHint ?? first.tool.prompt?.content?.orderHint ?? first.mount.orderIndex,
+        slotOrder: depth,
         sourceKind: 'virtual',
         zoneId,
       },
@@ -91,7 +92,7 @@ export function buildPresetToolProjection(input: {
     toolIdByNodeId,
     zoneDefinitions: [...zoneIds].map(id => ({
       id,
-      displayName: id === 'tools' ? 'Content Tools' : id,
+      displayName: id === '@chat.tools' ? 'Content Tools' : id,
     })),
   }
 }

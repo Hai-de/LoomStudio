@@ -16,8 +16,7 @@ import type {
   ExtensionInstallationTarget,
 } from '@loom-studio/extension-sdk'
 import type { LoomRunInput } from '@loom-studio/loom-runner'
-import { isJsonObject, type JsonValue } from '@loom-studio/shared'
-import { nowIso, serializeError } from '@loom-studio/shared'
+import { isJsonObject, nowIso, serializeError, type JsonValue } from '@loom-studio/shared'
 import type {
   CreateKernelOptions,
   EventBus,
@@ -26,375 +25,351 @@ import type {
   ExtensionModuleCapabilityGrants,
   Kernel,
   KernelRpcContext,
-  KernelRpcHandler,
-  RegistrationHandle,
+  RegistrationHandle
 } from './types.js'
 
-export function registerStageOneHandlers(
-  kernel: Kernel,
+export function createBuiltinHandlers(kernel: Kernel,
   options: CreateKernelOptions,
   eventBus: EventBus,
   versions: {
     studioVersion: string
     kernelVersion: string
     protocolVersion: string
-  },
-): RegistrationHandle[] {
-  const registrations: RegistrationHandle[] = []
-  const register = (method: string, handler: KernelRpcHandler) => {
-    const registration = kernel.registerKernelRpc(method, handler)
-    registrations.push(registration)
-  }
+  }) {
+  return {
+    'system.ping': (params: JsonValue | undefined) => {
+      return {
+        ok: true,
+        echo: isRecord(params) ? params.echo : undefined,
+        serverTime: nowIso(),
+      }
+    },
+    'system.introspect': (params: JsonValue | undefined) => {
+      const includeDiagnostics = isRecord(params) && params.includeDiagnostics === true
 
-  register('system.ping', params => {
-    return {
-      ok: true,
-      echo: isRecord(params) ? params.echo : undefined,
-      serverTime: nowIso(),
-    } as JsonValue
-  })
+      return {
+        kernel: {
+          studioVersion: versions.studioVersion,
+          kernelVersion: versions.kernelVersion,
+          protocolVersion: versions.protocolVersion,
+        },
+        namespaces: kernel.getPublicSurface().namespaces,
+        methods: kernel.getPublicSurface().methods,
+        events: eventBus.eventNames(),
+        documentTypes: [],
+        extensions: options.extensionManager?.listPackages() ?? options.extensionHost.list().map(module => ({
+          packageId: module.packageId,
+          moduleId: module.moduleId,
+          version: module.version,
+          active: module.state === 'active',
+        })),
+        diagnostics: includeDiagnostics ? options.diagnostics.list() : undefined,
+      }
+    },
+    'docs.get': async (params: JsonValue | undefined) => {
+      const id = readString(params, 'id')
+      const document = await options.documents.get(id, {
+        includeTombstone: isRecord(params) && params.includeTombstone === true,
+        version: isRecord(params) && typeof params.version === 'number' ? params.version : undefined,
+      })
 
-  register('system.introspect', params => {
-    const includeDiagnostics = isRecord(params) && params.includeDiagnostics === true
+      return { document: document }
+    },
+    'docs.list': async (params: JsonValue | undefined) => {
+      const result = await options.documents.list((isRecord(params) ? params : {}) as ListDocumentsInput)
+      return result
+    },
+    'docs.getChangeset': async (params: JsonValue | undefined) => {
+      const changeset = await options.documents.getChangeset(readString(params, 'changesetId'))
+      return { changeset }
+    },
+    'docs.write': async (params: JsonValue | undefined, context: KernelRpcContext) => {
+      if (!isRecord(params)) throw new Error('docs.write params must be an object')
+      return await options.documents.write(toWriteDocumentInput(params, context))
+    },
+    'docs.delete': async (params: JsonValue | undefined, context: KernelRpcContext) => {
+      if (!isRecord(params)) throw new Error('docs.delete params must be an object')
+      return await options.documents.delete(toDeleteDocumentInput(params, context))
+    },
+    'docs.revertChangeset': async (params: JsonValue | undefined, context: KernelRpcContext) => {
+      if (!isRecord(params)) throw new Error('docs.revertChangeset params must be an object')
+      const targetChangesetId = readString(params, 'changesetId')
 
-    return {
-      kernel: {
-        studioVersion: versions.studioVersion,
-        kernelVersion: versions.kernelVersion,
-        protocolVersion: versions.protocolVersion,
-      },
-      namespaces: kernel.getPublicSurface().namespaces,
-      methods: kernel.getPublicSurface().methods,
-      events: eventBus.eventNames(),
-      documentTypes: [],
-      extensions: options.extensionManager?.listPackages() ?? options.extensionHost.list().map(module => ({
-        packageId: module.packageId,
-        moduleId: module.moduleId,
-        version: module.version,
-        active: module.state === 'active',
-      })),
-      diagnostics: includeDiagnostics ? options.diagnostics.list() : undefined,
-    } as JsonValue
-  })
-
-  register('docs.get', async params => {
-    const id = readString(params, 'id')
-    const document = await options.documents.get(id, {
-      includeTombstone: isRecord(params) && params.includeTombstone === true,
-      version: isRecord(params) && typeof params.version === 'number' ? params.version : undefined,
-    })
-
-    return { document: document as JsonValue | null } as JsonValue
-  })
-
-  register('docs.list', async params => {
-    const result = await options.documents.list((isRecord(params) ? params : {}) as ListDocumentsInput)
-    return result as unknown as JsonValue
-  })
-
-  register('docs.getChangeset', async params => {
-    const changeset = await options.documents.getChangeset(readString(params, 'changesetId'))
-    return { changeset } as unknown as JsonValue
-  })
-
-  register('docs.write', async (params, context) => {
-    if (!isRecord(params)) throw new Error('docs.write params must be an object')
-    return await options.documents.write(toWriteDocumentInput(params, context)) as unknown as JsonValue
-  })
-
-  register('docs.delete', async (params, context) => {
-    if (!isRecord(params)) throw new Error('docs.delete params must be an object')
-    return await options.documents.delete(toDeleteDocumentInput(params, context)) as unknown as JsonValue
-  })
-
-  register('docs.revertChangeset', async (params, context) => {
-    if (!isRecord(params)) throw new Error('docs.revertChangeset params must be an object')
-    const targetChangesetId = readString(params, 'changesetId')
-
-    try {
-      const result = await options.documents.revertChangeset(toRevertChangesetInput(params, context))
-      eventBus.emit('docs.rollback.completed', summarizeDocumentRollback(targetChangesetId, result), context)
-      return result as unknown as JsonValue
-    } catch (error) {
-      eventBus.emit('docs.rollback.failed', {
-        targetChangesetId,
-        error: serializeError(error, 'document.revert_failed'),
+      try {
+        const result = await options.documents.revertChangeset(toRevertChangesetInput(params, context))
+        eventBus.emit('docs.rollback.completed', summarizeDocumentRollback(targetChangesetId, result), context)
+        return result
+      } catch (error) {
+        eventBus.emit('docs.rollback.failed', {
+          targetChangesetId,
+          error: serializeError(error, 'document.revert_failed'),
+        }, context)
+        throw error
+      }
+    },
+    'extensions.listPackages': (params: JsonValue | undefined) => {
+      const target = readOptionalExtensionTarget(params)
+      return {
+        items: target ? requireExtensionManager(options).listPackages(target)
+          : options.extensionManager?.listPackages() ?? options.extensionHost.list(),
+      }
+    },
+    'extensions.installCardPackage': async (params: JsonValue | undefined, context: KernelRpcContext) => {
+      const version = isRecord(params) ? params.expectedCardVersion : undefined
+      if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1) throw new Error('expectedCardVersion must be a positive integer')
+      const cardId = readString(params, 'cardId')
+      const extensionPackage = await requireExtensionManager(options).installCardPackage({
+        cardId, packageId: readString(params, 'packageId'), expectedCardVersion: version,
+      })
+      eventBus.emit('extensions.changed', {
+        packageId: extensionPackage.packageId, target: { kind: 'card', cardId }, action: 'installed',
       }, context)
-      throw error
-    }
-  })
+      return { package: extensionPackage }
+    },
+    'extensions.uninstallCardPackage': async (params: JsonValue | undefined, context: KernelRpcContext) => {
+      const version = isRecord(params) ? params.expectedInstallationVersion : undefined
+      if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1) throw new Error('expectedInstallationVersion must be a positive integer')
+      const cardId = readString(params, 'cardId')
+      const extensionPackage = await requireExtensionManager(options).uninstallCardPackage({
+        cardId, packageId: readString(params, 'packageId'), expectedInstallationVersion: version,
+      })
+      eventBus.emit('extensions.changed', {
+        packageId: extensionPackage.packageId, target: { kind: 'card', cardId }, action: 'uninstalled',
+      }, context)
+      return { package: extensionPackage }
+    },
+    'extensions.updateCardPackage': async (params: JsonValue | undefined, context: KernelRpcContext) => {
+      const cardVersion = isRecord(params) ? params.expectedCardVersion : undefined
+      const installationVersion = isRecord(params) ? params.expectedInstallationVersion : undefined
+      if (typeof cardVersion !== 'number' || !Number.isSafeInteger(cardVersion) || cardVersion < 1
+        || typeof installationVersion !== 'number' || !Number.isSafeInteger(installationVersion) || installationVersion < 1) {
+        throw new Error('Card and installation versions must be positive integers')
+      }
+      const cardId = readString(params, 'cardId')
+      const extensionPackage = await requireExtensionManager(options).updateCardPackage({
+        cardId, packageId: readString(params, 'packageId'), packageVersion: readString(params, 'packageVersion'),
+        expectedCardVersion: cardVersion, expectedInstallationVersion: installationVersion,
+      })
+      eventBus.emit('extensions.changed', {
+        packageId: extensionPackage.packageId, target: { kind: 'card', cardId }, action: 'updated',
+      }, context)
+      return { package: extensionPackage }
+    },
+    'extensions.installPackage': async (params: JsonValue | undefined, context: KernelRpcContext) => {
+      const manager = requireExtensionManager(options)
+      const sourceDirectory = readString(params, 'sourceDirectory')
+      const extensionPackage = await manager.installPackage(sourceDirectory)
+      eventBus.emit('extensions.changed', {
+        packageId: extensionPackage.packageId,
+        version: extensionPackage.version,
+        action: 'installed',
+      }, context)
+      return { package: extensionPackage }
+    },
+    'extensions.installPackageZip': async (params: JsonValue | undefined, context: KernelRpcContext) => {
+      const manager = requireExtensionManager(options)
+      if (!isRecord(params) || typeof params.base64 !== 'string') throw new Error('extensions.installPackageZip requires base64')
+      const extensionPackage = await manager.installPackageZip(new Uint8Array(Buffer.from(params.base64, 'base64')))
+      eventBus.emit('extensions.changed', {
+        packageId: extensionPackage.packageId,
+        version: extensionPackage.version,
+        action: 'installed',
+      }, context)
+      return { package: extensionPackage }
+    },
+    'extensions.previewRemoteInstall': async (params: JsonValue | undefined) => {
+      const manager = requireExtensionManager(options)
+      if (!manager.previewRemoteInstall) throw new Error('Remote extension installation is unavailable')
+      return manager.previewRemoteInstall(params)
+    },
+    'extensions.previewPackageZip': async (params: JsonValue | undefined) => {
+      const manager = requireExtensionManager(options)
+      if (!manager.previewPackageZip || !isRecord(params) || typeof params.base64 !== 'string') throw new Error('ZIP preview requires package bytes')
+      return manager.previewPackageZip(new Uint8Array(Buffer.from(params.base64, 'base64')))
+    },
+    'extensions.officialSetup': async () => {
+      const manager = requireExtensionManager(options)
+      if (!manager.officialSetup) throw new Error('Official extension selection is unavailable')
+      return manager.officialSetup()
+    },
+    'extensions.finishOfficialSetup': async () => {
+      const manager = requireExtensionManager(options)
+      if (!manager.finishOfficialSetup) throw new Error('Official extension selection is unavailable')
+      return manager.finishOfficialSetup()
+    },
+    'extensions.previewRemoteChange': async (params: JsonValue | undefined) => {
+      const manager = requireExtensionManager(options)
+      if (!manager.previewRemoteChange) throw new Error('Remote extension replacement is unavailable')
+      return manager.previewRemoteChange(params)
+    },
+    'extensions.checkRemoteUpdate': async (params: JsonValue | undefined) => {
+      const manager = requireExtensionManager(options)
+      if (!manager.checkRemoteUpdate) throw new Error('Remote extension updates are unavailable')
+      return manager.checkRemoteUpdate(readString(params, 'packageId'))
+    },
+    'extensions.commitRemoteInstall': async (params: JsonValue | undefined, context: KernelRpcContext) => {
+      const manager = requireExtensionManager(options)
+      if (!manager.commitRemoteInstall) throw new Error('Remote extension installation is unavailable')
+      const result = await manager.commitRemoteInstall(readString(params, 'token'))
+      eventBus.emit('extensions.changed', { action: 'installed' }, context)
+      return result
+    },
+    'extensions.uninstallPackage': async (params: JsonValue | undefined, context: KernelRpcContext) => {
+      if (readOptionalExtensionTarget(params)?.kind === 'card') throw new Error('Use extensions.uninstallCardPackage for a Card installation')
+      const manager = requireExtensionManager(options)
+      const packageId = readString(params, 'packageId')
+      const version = isRecord(params) && typeof params.version === 'string' ? params.version : undefined
+      if (isRecord(params) && params.deleteData !== undefined && typeof params.deleteData !== 'boolean') throw new Error('deleteData must be boolean')
+      const extensionPackage = await manager.uninstallPackage(packageId, version, isRecord(params) && params.deleteData === true)
+      eventBus.emit('extensions.changed', {
+        packageId,
+        ...(version ? { version } : {}),
+        action: 'uninstalled',
+      }, context)
+      return { package: extensionPackage }
+    },
+    'extensions.enableModule': async (params: JsonValue | undefined, context: KernelRpcContext) => {
+      const manager = requireExtensionManager(options)
+      const packageId = readString(params, 'packageId')
+      const moduleId = readString(params, 'moduleId')
+      const grants = readExtensionCapabilityGrants(params)
+      const target = readOptionalExtensionTarget(params)
+      const module = await manager.enableModule(packageId, moduleId, grants, target)
+      eventBus.emit('extensions.changed', { packageId, moduleId, ...(target ? { target } : {}), action: 'enabled' }, context)
+      return { module }
+    },
+    'extensions.disableModule': async (params: JsonValue | undefined, context: KernelRpcContext) => {
+      const manager = requireExtensionManager(options)
+      const packageId = readString(params, 'packageId')
+      const moduleId = readString(params, 'moduleId')
+      const target = readOptionalExtensionTarget(params)
+      const module = await manager.disableModule(packageId, moduleId, target)
+      eventBus.emit('extensions.changed', { packageId, moduleId, ...(target ? { target } : {}), action: 'disabled' }, context)
+      return { module }
+    },
+    'extensions.reloadModule': async (params: JsonValue | undefined, context: KernelRpcContext) => {
+      const manager = requireExtensionManager(options)
+      const packageId = readString(params, 'packageId')
+      const moduleId = readString(params, 'moduleId')
+      const target = readOptionalExtensionTarget(params)
+      const module = await manager.reloadModule(packageId, moduleId, target)
+      eventBus.emit('extensions.changed', { packageId, moduleId, ...(target ? { target } : {}), action: 'reloaded' }, context)
+      return { module }
+    },
+    'extensions.importPackageResources': async (params: JsonValue | undefined) => {
+      if (isRecord(params) && params.target !== undefined) throw new Error('Extension installation targets are not exposed by this endpoint yet')
+      const manager = requireExtensionManager(options)
+      return await manager.importPackageResources(readString(params, 'packageId'))
+    },
+    'extensions.removePackageResources': async (params: JsonValue | undefined) => {
+      if (isRecord(params) && params.target !== undefined) throw new Error('Extension installation targets are not exposed by this endpoint yet')
+      const manager = requireExtensionManager(options)
+      return await manager.removePackageResources(readString(params, 'packageId'))
+    },
+    'extensions.updatePackageResources': async (params: JsonValue | undefined) => {
+      if (isRecord(params) && params.target !== undefined) throw new Error('Extension installation targets are not exposed by this endpoint yet')
+      const expectedInstallationVersion = isRecord(params) ? params.expectedInstallationVersion : undefined
+      if (typeof expectedInstallationVersion !== 'number' || !Number.isSafeInteger(expectedInstallationVersion) || expectedInstallationVersion < 1) {
+        throw new Error('expectedInstallationVersion must be a positive integer')
+      }
+      return await requireExtensionManager(options).updatePackageResources({
+        packageId: readString(params, 'packageId'),
+        packageVersion: readString(params, 'packageVersion'),
+        expectedInstallationVersion,
+      })
+    },
+    'extensions.exportPackage': async (params: JsonValue | undefined) => {
+      return await requireExtensionManager(options).exportPackage({
+        packageId: readString(params, 'packageId'),
+        version: readString(params, 'version'),
+      })
+    },
+    'extensions.callPackageRpc': async (params: JsonValue | undefined, context: KernelRpcContext) => {
+      const packageId = readString(params, 'packageId')
+      const method = readString(params, 'method')
+      if (!method.startsWith(`${packageId}.`)) throw new Error('Client extension RPC must use its package namespace')
+      const target = readOptionalExtensionTarget(params)
+      if (!target) throw new Error('Invalid Extension installation target')
+      return await kernel.callRpc(method, isRecord(params) ? params.params : undefined, {
+        ...context, callId: undefined, parentCallId: context.callId,
+        extensionTarget: target, expectedExtensionPackageId: packageId,
+      })
+    },
+    'extensions.importCardPackageResources': async (params: JsonValue | undefined) => {
+      const version = isRecord(params) ? params.expectedCardVersion : undefined
+      if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1) throw new Error('expectedCardVersion must be a positive integer')
+      return await requireExtensionManager(options).importCardPackageResources({
+        cardId: readString(params, 'cardId'), packageId: readString(params, 'packageId'), expectedCardVersion: version,
+      })
+    },
+    'extensions.updateCardPackageResources': async (params: JsonValue | undefined) => {
+      const cardVersion = isRecord(params) ? params.expectedCardVersion : undefined
+      const installationVersion = isRecord(params) ? params.expectedInstallationVersion : undefined
+      if (typeof cardVersion !== 'number' || !Number.isSafeInteger(cardVersion) || cardVersion < 1
+        || typeof installationVersion !== 'number' || !Number.isSafeInteger(installationVersion) || installationVersion < 1) {
+        throw new Error('Card and installation versions must be positive integers')
+      }
+      return await requireExtensionManager(options).importCardPackageResources({
+        cardId: readString(params, 'cardId'), packageId: readString(params, 'packageId'), expectedCardVersion: cardVersion,
+        update: { packageVersion: readString(params, 'packageVersion'), expectedInstallationVersion: installationVersion },
+      })
+    },
+    'extensions.removeCardPackageResources': async (params: JsonValue | undefined) => {
+      const version = isRecord(params) ? params.expectedInstallationVersion : undefined
+      if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1) throw new Error('expectedInstallationVersion must be a positive integer')
+      return await requireExtensionManager(options).removeCardPackageResources({
+        cardId: readString(params, 'cardId'), packageId: readString(params, 'packageId'), expectedInstallationVersion: version,
+      })
+    },
+    'extensions.getDiagnostics': (params: JsonValue | undefined) => {
+      const packageId = isRecord(params) && typeof params.packageId === 'string' ? params.packageId : undefined
+      const moduleId = isRecord(params) && typeof params.moduleId === 'string' ? params.moduleId : undefined
+      return {
+        diagnostics: options.extensionHost.diagnostics(packageId, moduleId),
+      }
+    },
+    'diagnostics.list': (params: JsonValue | undefined) => {
+      const diagnostics = options.diagnostics.list(isRecord(params) ? params : undefined)
+      return { items: diagnostics }
+    },
+    'trace.list': () => {
+      return { items: options.traceAudit.listTraces() }
+    },
+    'audit.list': () => {
+      return { items: options.traceAudit.listAudit() }
+    },
+    'loom.run': async (params: JsonValue | undefined, context: KernelRpcContext) => {
+      if (!isRecord(params)) throw new Error('loom.run params must be an object')
+      rejectForbiddenLoomRunFields(params)
 
-  register('extensions.listPackages', params => {
-    const target = readOptionalExtensionTarget(params)
-    return {
-      items: target ? requireExtensionManager(options).listPackages(target)
-        : options.extensionManager?.listPackages() ?? options.extensionHost.list(),
-    } as unknown as JsonValue
-  })
+      const result = await options.loomRunner.run(toLoomRunInput(params))
+      for (const diagnostic of result.diagnostics ?? []) {
+        options.diagnostics.add(diagnostic)
+      }
+      if ((result.diagnostics?.length ?? 0) > 0) {
+        eventBus.emit('diagnostics.updated', { count: result.diagnostics?.length ?? 0 }, context)
+      }
 
-  register('extensions.installCardPackage', async (params, context) => {
-    const version = isRecord(params) ? params.expectedCardVersion : undefined
-    if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1) throw new Error('expectedCardVersion must be a positive integer')
-    const cardId = readString(params, 'cardId')
-    const extensionPackage = await requireExtensionManager(options).installCardPackage({
-      cardId, packageId: readString(params, 'packageId'), expectedCardVersion: version,
-    })
-    eventBus.emit('extensions.changed', {
-      packageId: extensionPackage.packageId, target: { kind: 'card', cardId }, action: 'installed',
-    }, context)
-    return { package: extensionPackage }
-  })
+      return result
+    },
+  }
+}
 
-  register('extensions.uninstallCardPackage', async (params, context) => {
-    const version = isRecord(params) ? params.expectedInstallationVersion : undefined
-    if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1) throw new Error('expectedInstallationVersion must be a positive integer')
-    const cardId = readString(params, 'cardId')
-    const extensionPackage = await requireExtensionManager(options).uninstallCardPackage({
-      cardId, packageId: readString(params, 'packageId'), expectedInstallationVersion: version,
-    })
-    eventBus.emit('extensions.changed', {
-      packageId: extensionPackage.packageId, target: { kind: 'card', cardId }, action: 'uninstalled',
-    }, context)
-    return { package: extensionPackage }
-  })
+export type BuiltinHandlers = ReturnType<typeof createBuiltinHandlers>
 
-  register('extensions.updateCardPackage', async (params, context) => {
-    const cardVersion = isRecord(params) ? params.expectedCardVersion : undefined
-    const installationVersion = isRecord(params) ? params.expectedInstallationVersion : undefined
-    if (typeof cardVersion !== 'number' || !Number.isSafeInteger(cardVersion) || cardVersion < 1
-      || typeof installationVersion !== 'number' || !Number.isSafeInteger(installationVersion) || installationVersion < 1) {
-      throw new Error('Card and installation versions must be positive integers')
-    }
-    const cardId = readString(params, 'cardId')
-    const extensionPackage = await requireExtensionManager(options).updateCardPackage({
-      cardId, packageId: readString(params, 'packageId'), packageVersion: readString(params, 'packageVersion'),
-      expectedCardVersion: cardVersion, expectedInstallationVersion: installationVersion,
-    })
-    eventBus.emit('extensions.changed', {
-      packageId: extensionPackage.packageId, target: { kind: 'card', cardId }, action: 'updated',
-    }, context)
-    return { package: extensionPackage }
-  })
-
-  register('extensions.installPackage', async (params, context) => {
-    const manager = requireExtensionManager(options)
-    const sourceDirectory = readString(params, 'sourceDirectory')
-    const extensionPackage = await manager.installPackage(sourceDirectory)
-    eventBus.emit('extensions.changed', {
-      packageId: extensionPackage.packageId,
-      version: extensionPackage.version,
-      action: 'installed',
-    }, context)
-    return { package: extensionPackage }
-  })
-
-  register('extensions.installPackageZip', async (params, context) => {
-    const manager = requireExtensionManager(options)
-    if (!isRecord(params) || typeof params.base64 !== 'string') throw new Error('extensions.installPackageZip requires base64')
-    const extensionPackage = await manager.installPackageZip(new Uint8Array(Buffer.from(params.base64, 'base64')))
-    eventBus.emit('extensions.changed', {
-      packageId: extensionPackage.packageId,
-      version: extensionPackage.version,
-      action: 'installed',
-    }, context)
-    return { package: extensionPackage }
-  })
-
-  register('extensions.previewRemoteInstall', async params => {
-    const manager = requireExtensionManager(options)
-    if (!manager.previewRemoteInstall) throw new Error('Remote extension installation is unavailable')
-    return manager.previewRemoteInstall(params)
-  })
-  register('extensions.previewPackageZip', async params => {
-    const manager = requireExtensionManager(options)
-    if (!manager.previewPackageZip || !isRecord(params) || typeof params.base64 !== 'string') throw new Error('ZIP preview requires package bytes')
-    return manager.previewPackageZip(new Uint8Array(Buffer.from(params.base64, 'base64')))
-  })
-  register('extensions.officialSetup', async () => {
-    const manager = requireExtensionManager(options)
-    if (!manager.officialSetup) throw new Error('Official extension selection is unavailable')
-    return manager.officialSetup()
-  })
-  register('extensions.finishOfficialSetup', async () => {
-    const manager = requireExtensionManager(options)
-    if (!manager.finishOfficialSetup) throw new Error('Official extension selection is unavailable')
-    return manager.finishOfficialSetup()
-  })
-  register('extensions.previewRemoteChange', async params => {
-    const manager = requireExtensionManager(options)
-    if (!manager.previewRemoteChange) throw new Error('Remote extension replacement is unavailable')
-    return manager.previewRemoteChange(params)
-  })
-  register('extensions.checkRemoteUpdate', async params => {
-    const manager = requireExtensionManager(options)
-    if (!manager.checkRemoteUpdate) throw new Error('Remote extension updates are unavailable')
-    return manager.checkRemoteUpdate(readString(params, 'packageId'))
-  })
-  register('extensions.commitRemoteInstall', async (params, context) => {
-    const manager = requireExtensionManager(options)
-    if (!manager.commitRemoteInstall) throw new Error('Remote extension installation is unavailable')
-    const result = await manager.commitRemoteInstall(readString(params, 'token'))
-    eventBus.emit('extensions.changed', { action: 'installed' }, context)
-    return result
-  })
-
-  register('extensions.uninstallPackage', async (params, context) => {
-    if (readOptionalExtensionTarget(params)?.kind === 'card') throw new Error('Use extensions.uninstallCardPackage for a Card installation')
-    const manager = requireExtensionManager(options)
-    const packageId = readString(params, 'packageId')
-    const version = isRecord(params) && typeof params.version === 'string' ? params.version : undefined
-    if (isRecord(params) && params.deleteData !== undefined && typeof params.deleteData !== 'boolean') throw new Error('deleteData must be boolean')
-    const extensionPackage = await manager.uninstallPackage(packageId, version, isRecord(params) && params.deleteData === true)
-    eventBus.emit('extensions.changed', {
-      packageId,
-      ...(version ? { version } : {}),
-      action: 'uninstalled',
-    }, context)
-    return { package: extensionPackage }
-  })
-
-  register('extensions.enableModule', async (params, context) => {
-    const manager = requireExtensionManager(options)
-    const packageId = readString(params, 'packageId')
-    const moduleId = readString(params, 'moduleId')
-    const grants = readExtensionCapabilityGrants(params)
-    const target = readOptionalExtensionTarget(params)
-    const module = await manager.enableModule(packageId, moduleId, grants, target)
-    eventBus.emit('extensions.changed', { packageId, moduleId, ...(target ? { target } : {}), action: 'enabled' }, context)
-    return { module }
-  })
-
-  register('extensions.disableModule', async (params, context) => {
-    const manager = requireExtensionManager(options)
-    const packageId = readString(params, 'packageId')
-    const moduleId = readString(params, 'moduleId')
-    const target = readOptionalExtensionTarget(params)
-    const module = await manager.disableModule(packageId, moduleId, target)
-    eventBus.emit('extensions.changed', { packageId, moduleId, ...(target ? { target } : {}), action: 'disabled' }, context)
-    return { module }
-  })
-
-  register('extensions.reloadModule', async (params, context) => {
-    const manager = requireExtensionManager(options)
-    const packageId = readString(params, 'packageId')
-    const moduleId = readString(params, 'moduleId')
-    const target = readOptionalExtensionTarget(params)
-    const module = await manager.reloadModule(packageId, moduleId, target)
-    eventBus.emit('extensions.changed', { packageId, moduleId, ...(target ? { target } : {}), action: 'reloaded' }, context)
-    return { module }
-  })
-
-  // ponytail: Expose targets after Manager grants and runtime consumers use installation identity.
-  register('extensions.importPackageResources', async params => {
-    if (isRecord(params) && params.target !== undefined) throw new Error('Extension installation targets are not exposed by this endpoint yet')
-    const manager = requireExtensionManager(options)
-    return await manager.importPackageResources(readString(params, 'packageId'))
-  })
-
-  register('extensions.removePackageResources', async params => {
-    if (isRecord(params) && params.target !== undefined) throw new Error('Extension installation targets are not exposed by this endpoint yet')
-    const manager = requireExtensionManager(options)
-    return await manager.removePackageResources(readString(params, 'packageId'))
-  })
-
-  register('extensions.updatePackageResources', async params => {
-    if (isRecord(params) && params.target !== undefined) throw new Error('Extension installation targets are not exposed by this endpoint yet')
-    const expectedInstallationVersion = isRecord(params) ? params.expectedInstallationVersion : undefined
-    if (typeof expectedInstallationVersion !== 'number' || !Number.isSafeInteger(expectedInstallationVersion) || expectedInstallationVersion < 1) {
-      throw new Error('expectedInstallationVersion must be a positive integer')
-    }
-    return await requireExtensionManager(options).updatePackageResources({
-      packageId: readString(params, 'packageId'),
-      packageVersion: readString(params, 'packageVersion'),
-      expectedInstallationVersion,
-    })
-  })
-
-  register('extensions.exportPackage', async params => {
-    return await requireExtensionManager(options).exportPackage({
-      packageId: readString(params, 'packageId'),
-      version: readString(params, 'version'),
-    })
-  })
-
-  register('extensions.callPackageRpc', async (params, context) => {
-    const packageId = readString(params, 'packageId')
-    const method = readString(params, 'method')
-    if (!method.startsWith(`${packageId}.`)) throw new Error('Client extension RPC must use its package namespace')
-    const target = readOptionalExtensionTarget(params)
-    if (!target) throw new Error('Invalid Extension installation target')
-    return await kernel.callRpc(method, isRecord(params) ? params.params : undefined, {
-      ...context, callId: undefined, parentCallId: context.callId,
-      extensionTarget: target, expectedExtensionPackageId: packageId,
-    })
-  })
-
-  register('extensions.importCardPackageResources', async params => {
-    const version = isRecord(params) ? params.expectedCardVersion : undefined
-    if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1) throw new Error('expectedCardVersion must be a positive integer')
-    return await requireExtensionManager(options).importCardPackageResources({
-      cardId: readString(params, 'cardId'), packageId: readString(params, 'packageId'), expectedCardVersion: version,
-    })
-  })
-
-  register('extensions.updateCardPackageResources', async params => {
-    const cardVersion = isRecord(params) ? params.expectedCardVersion : undefined
-    const installationVersion = isRecord(params) ? params.expectedInstallationVersion : undefined
-    if (typeof cardVersion !== 'number' || !Number.isSafeInteger(cardVersion) || cardVersion < 1
-      || typeof installationVersion !== 'number' || !Number.isSafeInteger(installationVersion) || installationVersion < 1) {
-      throw new Error('Card and installation versions must be positive integers')
-    }
-    return await requireExtensionManager(options).importCardPackageResources({
-      cardId: readString(params, 'cardId'), packageId: readString(params, 'packageId'), expectedCardVersion: cardVersion,
-      update: { packageVersion: readString(params, 'packageVersion'), expectedInstallationVersion: installationVersion },
-    })
-  })
-
-  register('extensions.removeCardPackageResources', async params => {
-    const version = isRecord(params) ? params.expectedInstallationVersion : undefined
-    if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1) throw new Error('expectedInstallationVersion must be a positive integer')
-    return await requireExtensionManager(options).removeCardPackageResources({
-      cardId: readString(params, 'cardId'), packageId: readString(params, 'packageId'), expectedInstallationVersion: version,
-    })
-  })
-
-  register('extensions.getDiagnostics', params => {
-    const packageId = isRecord(params) && typeof params.packageId === 'string' ? params.packageId : undefined
-    const moduleId = isRecord(params) && typeof params.moduleId === 'string' ? params.moduleId : undefined
-    return {
-      diagnostics: options.extensionHost.diagnostics(packageId, moduleId),
-    } as unknown as JsonValue
-  })
-
-  register('diagnostics.list', params => {
-    const diagnostics = options.diagnostics.list(isRecord(params) ? params : undefined)
-    return { items: diagnostics } as unknown as JsonValue
-  })
-
-  register('trace.list', () => {
-    return { items: options.traceAudit.listTraces() } as unknown as JsonValue
-  })
-
-  register('audit.list', () => {
-    return { items: options.traceAudit.listAudit() } as unknown as JsonValue
-  })
-
-  register('loom.run', async (params, context) => {
-    if (!isRecord(params)) throw new Error('loom.run params must be an object')
-    rejectForbiddenLoomRunFields(params)
-
-    const result = await options.loomRunner.run(toLoomRunInput(params))
-    for (const diagnostic of result.diagnostics ?? []) {
-      options.diagnostics.add(diagnostic)
-    }
-    if ((result.diagnostics?.length ?? 0) > 0) {
-      eventBus.emit('diagnostics.updated', { count: result.diagnostics?.length ?? 0 }, context)
-    }
-
-    return result as unknown as JsonValue
-  })
-
-  return registrations
+export function registerStageOneHandlers(kernel: Kernel,
+  options: CreateKernelOptions,
+  eventBus: EventBus,
+  versions: {
+    studioVersion: string
+    kernelVersion: string
+    protocolVersion: string
+  }): RegistrationHandle[] {
+  const handlers = createBuiltinHandlers(kernel, options, eventBus, versions)
+  return Object.entries(handlers).map(([method, handler]) => kernel.registerKernelRpc(method, async (params, context) => {
+    // The dynamic extension registry transports JSON; concrete built-in outputs stay inferred above.
+    return await handler(params, context) as unknown as JsonValue
+  }))
 }
 
 function requireExtensionManager(options: CreateKernelOptions): ExtensionManagementService {

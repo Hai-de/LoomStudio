@@ -72,14 +72,14 @@ async function manager() {
   } as unknown as ExtensionHost
   const state = createExtensionStateStore({ filename: join(root, 'data', 'state.json'), now: () => '2026-10-02T00:00:00Z' })
   const deleteData = vi.fn(async () => undefined)
-  const importPackageResources = vi.fn(async (_input: Parameters<Parameters<typeof createServerExtensionManager>[0]['importPackageResources']>[0]) => ({}))
+  const importPackageResources = vi.fn(async (_input: Parameters<Parameters<typeof createServerExtensionManager>[0]['importPackageResources']>[0]) => ({ installationId: 'fixture-installation', promptResources: [], agentTools: [], transformRules: [], textExtractors: [] }))
   const listInstallations = vi.fn<Parameters<typeof createServerExtensionManager>[0]['listInstallations']>(async () => ({ installations: [] }))
   const runtime = createServerExtensionManager({
     host, stateStore: state, diagnostics: createInMemoryDiagnosticsRegistry(),
     installedDirectory: join(root, 'app', 'extensions'), devLinksFile: join(root, 'data', 'dev-links.json'),
     officialSetupFile: join(root, 'data', 'setup.json'), deleteData,
     readCardPackage: async () => { throw new Error('Unused') }, listInstallations,
-    importPackageResources, removePackageResources: async () => ({}),
+    importPackageResources, removePackageResources: async () => ({ packageId: 'fixture-package', promptResourceIds: [], agentToolIds: [], textTransformRuleIds: [], textExtractorIds: [], detachedReferences: { cards: 0, timelines: 0, presetToolMounts: 0 } }),
   })
   await runtime.initialize()
   return { root, runtime, host, state, deleteData, importPackageResources, listInstallations }

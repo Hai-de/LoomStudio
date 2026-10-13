@@ -191,6 +191,12 @@ importers:
       '@tanstack/react-virtual':
         specifier: ^3.14.12
         version: 3.14.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@trpc/client':
+        specifier: 11.19.0
+        version: 11.19.0(@trpc/server@11.19.0(typescript@6.0.3))(typescript@6.0.3)
+      '@trpc/server':
+        specifier: 11.19.0
+        version: 11.19.0(typescript@6.0.3)
       lucide-react:
         specifier: ^1.17.0
         version: 1.17.0(react@19.3.0)
@@ -234,6 +240,9 @@ importers:
         specifier: ^5.0.14
         version: 5.0.14(@types/react@19.3.0)(react@19.3.0)
     devDependencies:
+      '@loom-studio/studio-server':
+        specifier: workspace:*
+        version: link:../studio-server
       '@types/hast':
         specifier: 3.0.5
         version: 3.0.5
@@ -306,12 +315,18 @@ importers:
       '@loom-studio/transport':
         specifier: workspace:*
         version: link:../../packages/transport
+      '@trpc/server':
+        specifier: 11.19.0
+        version: 11.19.0(typescript@6.0.3)
       fflate:
         specifier: 0.8.3
         version: 0.8.3
       semver:
         specifier: 7.8.5
         version: 7.8.5
+      zod:
+        specifier: 4.5.4
+        version: 4.5.4
 
   extensions/st-data-compat:
     dependencies:
@@ -475,9 +490,12 @@ importers:
 
   packages/client-bridge:
     dependencies:
-      '@loom-studio/transport':
-        specifier: workspace:*
-        version: link:../transport
+      '@trpc/client':
+        specifier: 11.19.0
+        version: 11.19.0(@trpc/server@11.19.0(typescript@6.0.3))(typescript@6.0.3)
+      '@trpc/server':
+        specifier: 11.19.0
+        version: 11.19.0(typescript@6.0.3)
 
   packages/core: {}
 
@@ -1969,6 +1987,19 @@ packages:
 
   '@tanstack/virtual-core@3.17.10':
     resolution: {integrity: sha512-eMorKWIi2nekElu+8DgSMJR4iR+sTDeh+W8VjKiMH79yUfEDJ3W9aL/96/wwbxNjyV6EfN39HKszSxjd90zAqQ==}
+
+  '@trpc/client@11.19.0':
+    resolution: {integrity: sha512-0MKkPq6MejsKB5Opca1Rl22KVIaqo2+A1EiXyZ8EGUsl9TLrPdpGn+Usux20TZKFwnSC2+wI/WilqNJaP4ODfw==}
+    hasBin: true
+    peerDependencies:
+      '@trpc/server': 11.19.0
+      typescript: '>=5.7.2'
+
+  '@trpc/server@11.19.0':
+    resolution: {integrity: sha512-7C1goiDurz82yFKtZUbEzjXd0Rg/jyisaIZQhdvus+1l7E6mwcEYZXjZ1US/HF8kOyz1LERL8UN3bcboJtjcyQ==}
+    hasBin: true
+    peerDependencies:
+      typescript: '>=5.7.2'
 
   '@tybys/wasm-util@0.10.4':
     resolution: {integrity: sha512-W3c4gRigFS0T/Ma4qIYF3GDAc5AQdHb1yL5znJT1Zv1YaD9Kitx656wBjvr19qbiosmZT8lWDM5BEMynUqX65A==}
@@ -4753,6 +4784,15 @@ snapshots:
       react-dom: 19.3.0(react@19.3.0)
 
   '@tanstack/virtual-core@3.17.10': {}
+
+  '@trpc/client@11.19.0(@trpc/server@11.19.0(typescript@6.0.3))(typescript@6.0.3)':
+    dependencies:
+      '@trpc/server': 11.19.0(typescript@6.0.3)
+      typescript: 6.0.3
+
+  '@trpc/server@11.19.0(typescript@6.0.3)':
+    dependencies:
+      typescript: 6.0.3
 
   '@tybys/wasm-util@0.10.4':
     dependencies:

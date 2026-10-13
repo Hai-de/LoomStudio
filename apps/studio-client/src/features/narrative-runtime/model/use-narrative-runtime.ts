@@ -22,6 +22,9 @@ import { useNarrativeCollections } from './use-narrative-collections.js'
 import { safeLocalStorage } from '../../../shared/browser/safe-local-storage.js'
 import type { LatestOperationContext } from '../../../shared/hooks/use-async-operations.js'
 import { openingChoiceRequest, type OpeningChoice } from '../../cards/model/opening-choice.js'
+import type { Translator } from '../../../shared/i18n/index.js'
+import type { Logger } from '@loom-studio/logging'
+import { notify } from '../../../shared/notifications/index.js'
 
 type NarrativeSubmission = {
   api: StudioApi
@@ -51,6 +54,8 @@ type UseNarrativeRuntimeInput = {
   runAgentAction: (action: () => Promise<void>) => Promise<void>
   runAction: (action: () => Promise<void>) => Promise<boolean>
   runLatestAction: (action: (context: LatestOperationContext) => Promise<void>) => Promise<void>
+  t?: Translator
+  logger?: Logger
 }
 
 export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
@@ -372,8 +377,8 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
         setPromptPreview(undefined)
         setLastRun(undefined)
         activateComposerDraft(page.timeline, page.branch)
-        activatedBranchId = page.branch.id
         await restoreAgentSession(timelineId, selection)
+        activatedBranchId = page.branch.id
       } finally {
         if (selection === agentSelectionRef.current) setAgentSessionLoading(false)
       }
@@ -708,6 +713,9 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
   async function refreshTerminalRun(run: ObservedRun, error?: unknown) {
     if (!ownsRun(run) || (run.status !== 'failed' && run.status !== 'cancelled')) return
     clearRunPlaceholders(run)
+    if (run.status === 'failed' && error) {
+      notify.providerError(error, input.t)
+    }
     const recovery: RunRecovery = {
       target: run.target, status: run.status, input: run.target === 'agent' ? run.input : undefined,
       ...(error ? { error: error instanceof Error ? error.message : String(error) } : {}),
@@ -774,7 +782,7 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
       setPromptPreview(undefined)
       void run.api.agentSessions.acknowledgeRunCompletion(run.runId).catch(error => {
         // The delivery expiry releases this result if acknowledgement is offline.
-        console.warn('Agent completion acknowledgement failed; delivery expiry will release the result.', error)
+        input.logger?.warn('Agent completion acknowledgement failed; delivery expiry will release the result.', { error })
       })
       try {
         await refreshRunState(run)

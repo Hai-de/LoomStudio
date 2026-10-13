@@ -14,7 +14,7 @@ const resource = (id: string, source: 'card' | 'user' | 'extension'): PromptReso
   rootNode: { id: `${id}-root`, label: 'Same title', kind: 'folder', children: [
     { id: `${id}-entry`, label: 'Content', kind: 'entry', body: id },
   ] },
-  ...(source === 'card' ? { sourceArtifactRef: { artifactId: 'card-bundle' } }
+  ...(source === 'card' ? { sourceArtifactRef: { artifactId: 'card-bundle', displayName: 'Card', format: 'loom.cardBundle', schemaVersion: 4, importedAt: '' } }
     : source === 'extension' ? { origin: { kind: 'extension-package', packageId: 'pkg', packageVersion: '1', contributionId: id } }
       : {}),
 })

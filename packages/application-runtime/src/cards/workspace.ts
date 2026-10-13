@@ -2,9 +2,7 @@ import type { DocumentRecord, DocumentStore, DocumentTransaction, SqliteDocument
 import type { PromptResourceStore } from '@loom-studio/application-data'
 import { createId, nowIso } from '@loom-studio/shared'
 import { extensionInstallationId } from '@loom-studio/extension-sdk'
-import { normalizeOpening, normalizeOptionalString, normalizePreset, normalizeLore } from './card.js'
-import { normalizeMacros } from './card.js'
-import { normalizeMacroOptions } from '@loom-studio/shared'
+import { normalizeCardEditableFields, readCardEditableFields } from './card-fields.js'
 import { applicationDocumentTypes } from '../foundation/document-types.js'
 import { listDocuments, readDocument, toVersioned, writeDocument } from '../foundation/document-store.js'
 import type {
@@ -263,9 +261,7 @@ export async function importCardBundle(input: {
         content: {
           artifactId: artifact.artifactId,
           ...(artifact.derivedFrom ? { derivedFrom: structuredClone(artifact.derivedFrom) } : {}),
-          name: artifact.card.name,
-          userName: normalizeOptionalString(artifact.card.userName),
-          description: artifact.card.description,
+          ...normalizeCardEditableFields(artifact.card),
           media: artifact.card.media,
           importBundleId,
           portableExtensionPayloadIds,
@@ -284,11 +280,6 @@ export async function importCardBundle(input: {
           ...(stateContribution ? { timelineStateEntities: structuredClone(stateContribution.entities) } : {}),
           ...(stateContribution ? { timelineComponentMounts: structuredClone(stateContribution.componentMounts) } : {}),
           timelineStateBindings: structuredClone(artifactStateBindings),
-          preset: normalizePreset(artifact.card.preset),
-          opening: normalizeOpening(artifact.card.opening),
-          lore: normalizeLore(artifact.card.lore),
-          ...(artifact.card.macros !== undefined ? { macros: normalizeMacros(artifact.card.macros, 'Card') } : {}),
-          ...(artifact.card.macroOptions !== undefined ? { macroOptions: normalizeMacroOptions(artifact.card.macroOptions) } : {}),
           ...(artifact.card.stateContributionIds !== undefined ? { stateContributionIds: [...artifact.card.stateContributionIds] } : {}),
           ...(artifact.card.extensionAdoptions !== undefined ? { extensionAdoptions: structuredClone(artifact.card.extensionAdoptions) } : {}),
           createdAt: timestamp,
@@ -452,15 +443,8 @@ function buildExportArtifact(input: {
     description: sourceArtifact?.description ?? cardContent.description,
     card: {
       ...sourceArtifact?.card,
-      name: cardContent.name,
-      userName: cardContent.userName,
-      description: cardContent.description,
-      preset: cardContent.preset,
-      opening: cardContent.opening,
-      lore: cardContent.lore,
+      ...readCardEditableFields(cardContent),
       media: cardContent.media,
-      macros: cardContent.macros,
-      macroOptions: cardContent.macroOptions,
       stateContributionIds: cardContent.stateContributionIds,
       ...(cardContent.extensionAdoptions !== undefined ? { extensionAdoptions: structuredClone(cardContent.extensionAdoptions) } : {}),
     },

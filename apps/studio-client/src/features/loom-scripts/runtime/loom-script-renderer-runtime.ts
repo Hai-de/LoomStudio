@@ -208,7 +208,7 @@ export function projectLoomScriptInputs(
         inputs.push({
           kind: 'match',
           id: match.matchId,
-          value: structuredClone({ value: match.value, displayRange: match.displayRange } as unknown as JsonValue),
+          value: structuredClone({ value: match.value, displayRange: { start: match.displayRange.start, end: match.displayRange.end } }),
         })
       }
       continue
@@ -219,7 +219,7 @@ export function projectLoomScriptInputs(
         kind: 'artifact',
         id: artifact.id,
         artifactType: artifact.artifactType,
-        value: structuredClone({ value: artifact.value, sourceEntryId: artifact.sourceEntryId } as unknown as JsonValue),
+        value: structuredClone({ value: artifact.value, sourceEntryId: artifact.sourceEntryId }),
       })
     }
   }

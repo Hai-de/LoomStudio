@@ -1,8 +1,8 @@
-import { createClientBridge } from '@loom-studio/client-bridge'
+import { createStudioTrpcClient } from '../shared/api/trpc-client.js'
 import type { Logger } from '@loom-studio/logging'
-import { useEffect, useMemo, useState } from 'react'
-import { withClientBridgeLogging } from '../shared/api/client-bridge-logging.js'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createTranslator, type Locale } from '../shared/i18n/index.js'
+import { notify } from '../shared/notifications/index.js'
 import { createStudioApi, type NetworkSettings } from '../shared/api/studio-api.js'
 import { useAsyncOperations } from '../shared/hooks/use-async-operations.js'
 import { useCards } from '../features/cards/model/use-cards.js'
@@ -19,6 +19,7 @@ import { useExtensionResourceCommands } from '../features/extension-renderers/mo
 import { usePromptResourceCommands } from '../features/prompt-resources/model/use-prompt-resource-commands.js'
 import { usePromptResourceState } from '../features/prompt-resources/model/use-prompt-resource-state.js'
 import type { ContextAssetNode, PromptResource } from '../entities/index.js'
+import { useStudioStartup } from './use-studio-startup.js'
 import { useStudioDerivedValues } from './use-studio-derived-values.js'
 
 export type HistoryAssetTarget = {
@@ -29,7 +30,9 @@ export type HistoryAssetTarget = {
 export function useStudioState(transportLogger: Logger) {
   const [locale, setLocale] = useState<Locale>('zh-CN')
   const t = useMemo(() => createTranslator(locale), [locale])
-  const [endpoint, setEndpoint] = useState('/rpc')
+  const [transportEndpoint, setEndpoint] = useState('/trpc')
+  // ponytail: Preserve persisted workspace/draft keys during the transport change; remove when workspace identity has its own storage migration.
+  const endpoint = transportEndpoint.replace(/\/trpc$/, '/rpc')
   const [customCss, setCustomCss] = useState('')
   const [networkSettings, setNetworkSettings] = useState<NetworkSettings>({
     proxyMode: 'system',
@@ -40,10 +43,10 @@ export function useStudioState(transportLogger: Logger) {
     tags: [],
   })
   const operations = useAsyncOperations()
-  const bridge = useMemo(() => createClientBridge({ endpoint }), [endpoint])
-  const observedBridge = useMemo(() => withClientBridgeLogging(bridge, transportLogger), [bridge, transportLogger])
-  const api = useMemo(() => createStudioApi(observedBridge), [observedBridge])
-  const [bootstrappedApi, setBootstrappedApi] = useState<typeof api>()
+  const trpc = useMemo(() => createStudioTrpcClient({ endpoint: transportEndpoint, logger: transportLogger }), [transportEndpoint, transportLogger])
+  const api = useMemo(() => createStudioApi(trpc), [trpc])
+  const apiRef = useRef<typeof api | undefined>(api)
+  apiRef.current = api
   const clientExtensionApi = useMemo(() => ({
     extensions: api.extensions,
     extensionRuntime: api.extensionRuntime,
@@ -104,9 +107,10 @@ export function useStudioState(transportLogger: Logger) {
   })
   const agentPresets = useAgentPresets({
     api,
-    refreshResources: async () => {
-      await Promise.all([refreshPromptResourceLibrary(), refreshPresetToolMounts(), refreshLoreMounts()])
-    },
+    resources: promptResources,
+    readResources: promptResourceState.readResources,
+    setResources: setPromptResources,
+    refreshDependents: () => promptResourceState.invalidate({ bindings: true, loreMounts: true, presetToolMounts: true }),
     runAction: action => operations.run('agent-presets', action).then(() => undefined),
   })
   const selectedAgentPreset = agentPresets.agentPresets.find(profile => profile.id === agentPresets.selectedAgentPresetId)
@@ -133,6 +137,8 @@ export function useStudioState(transportLogger: Logger) {
       return completed
     },
     runLatestAction: action => operations.runLatest('session', action).then(() => undefined),
+    t,
+    logger: transportLogger,
   })
 
   async function refreshResourceConsumers(): Promise<void> {
@@ -140,7 +146,7 @@ export function useStudioState(transportLogger: Logger) {
       refreshPromptResourceLibrary(),
       refreshLoreMounts(),
       refreshPresetToolMounts(),
-      agentPresets.refreshAgentPresets(),
+      agentPresets.refreshAgentTools(),
     ])
   }
 
@@ -153,21 +159,21 @@ export function useStudioState(transportLogger: Logger) {
   })
 
   useEffect(() => {
-    let active = true
+    apiRef.current = api
     editHistory.clear()
-    void operations.runReported('bootstrap', async () => {
-      const cards = await cardsState.refreshCards()
-      const selectedCardId = cards[0]?.id
-
-      if (selectedCardId) cardsState.setSelectedCardId(selectedCardId)
-      await narrativeRuntime.refreshAllAgentSessions()
-      await providerSettings.refreshProviderSettings()
-      await agentPresets.refreshAgentPresets()
-      setNetworkSettings(await api.settings.getNetwork())
-      if (active) setBootstrappedApi(api)
-    })
-    return () => { active = false }
-  }, [observedBridge])
+    return () => { if (apiRef.current === api) apiRef.current = undefined }
+  }, [api])
+  const startup = useStudioStartup({
+    source: api,
+    cards: cardsState.refreshCards,
+    sessions: narrativeRuntime.refreshAllAgentSessions,
+    providers: providerSettings.refreshProviderSettings,
+    tools: agentPresets.refreshAgentTools,
+    network: async () => {
+      const settings = await api.settings.getNetwork()
+      if (apiRef.current === api) setNetworkSettings(settings)
+    },
+  })
 
   const macroSelection = useMacroSelection({
     api: api.macros, endpoint, cardId: cardsState.selectedCardId,
@@ -199,7 +205,6 @@ export function useStudioState(transportLogger: Logger) {
     setLoreMounts,
     setPresetToolMounts,
     invalidatePromptResourceState: promptResourceState.invalidate,
-    refreshAgentPresets: agentPresets.refreshAgentPresets,
     refreshCards: cardsState.refreshCards,
     refreshCardTimelines: narrativeRuntime.refreshCardTimelines,
     selectedCardId: cardsState.selectedCardId,
@@ -262,8 +267,18 @@ export function useStudioState(transportLogger: Logger) {
   }
 
   async function updateNetworkSettings(next: { proxyMode: NetworkSettings['proxyMode']; proxyUrl?: string }) {
+    if (!startup.ready('network')) return
     const updated = await operations.runReported('settings', () => api.settings.updateNetwork(next))
-    if (updated) setNetworkSettings(updated)
+    if (updated && apiRef.current === api) {
+      setNetworkSettings(updated)
+      transportLogger.info('Network settings updated', {
+        event: 'network.settings.updated',
+        data: { proxyMode: next.proxyMode },
+      })
+      notify.success(t('notify.success.networkSaved'))
+    } else {
+      notify.error(t('notify.error.general'))
+    }
   }
 
   async function refreshHistoryAnchor(entry: { anchor?: { documentId: string; subjectId?: string } }, canNavigate: () => boolean): Promise<HistoryAssetTarget | undefined> {
@@ -284,7 +299,9 @@ export function useStudioState(transportLogger: Logger) {
   }
 
   return {
-    bootstrapReady: bootstrappedApi === api,
+    startup,
+    presetResourcesReady: promptResourceState.resourcesReady,
+    retryPromptResources: () => Promise.all([refreshPromptResourceLibrary(), refreshLoreMounts(), refreshPresetToolMounts()]),
     // i18n
     locale, setLocale, t,
     networkSettings,
@@ -358,14 +375,20 @@ export function useStudioState(transportLogger: Logger) {
     approveAgentMutation: narrativeRuntime.approveAgentMutation,
     agentChatSessionLoading: narrativeRuntime.agentSessionLoading,
     newAgentSession: narrativeRuntime.newAgentSession,
-    createAgentSession: narrativeRuntime.createAgentSession,
+    createAgentSession: (...args: Parameters<typeof narrativeRuntime.createAgentSession>) => {
+      if (!promptResourceState.resourcesReady || !promptResourceState.readResources().some(resource => resource.resourceKind === 'preset' && resource.id === args[0])) return Promise.resolve(undefined)
+      return narrativeRuntime.createAgentSession(...args)
+    },
     setPrimaryAgentSession: narrativeRuntime.setPrimaryAgentSession,
     refreshAgentSessions: narrativeRuntime.refreshAgentSessions,
     refreshAllAgentSessions: narrativeRuntime.refreshAllAgentSessions,
     agentChatMessages: narrativeRuntime.agentMessages,
     agentChatInput: narrativeRuntime.agentInput,
     setAgentChatInput: narrativeRuntime.setAgentInput,
-    submitAgentTurn: narrativeRuntime.submitAgentTurn,
+    submitAgentTurn: (event: Parameters<typeof narrativeRuntime.submitAgentTurn>[0]) => {
+      if (!narrativeRuntime.agentSession && (!promptResourceState.resourcesReady || !selectedAgentPreset)) { event.preventDefault(); return Promise.resolve() }
+      return narrativeRuntime.submitAgentTurn(event)
+    },
     // run
     lastRun: narrativeRuntime.lastRun,
     // prompt
@@ -382,7 +405,7 @@ export function useStudioState(transportLogger: Logger) {
     aiProviders: providerSettings.aiProviders,
     aiCapabilityProfiles: providerSettings.aiCapabilityProfiles,
     setProviderAccountDraft: providerSettings.setProviderAccountDraft,
-    selectedAgentPresetId: narrativeRuntime.agentSession?.agentPresetId ?? agentPresets.selectedAgentPresetId,
+    selectedAgentPresetId: narrativeRuntime.agentSession?.agentPresetId ?? (promptResourceState.resourcesReady ? agentPresets.selectedAgentPresetId : undefined),
     selectAgentPreset: narrativeRuntime.selectAgentPreset,
     // input
     input: narrativeRuntime.input, setInput: narrativeRuntime.setInput,
@@ -420,7 +443,9 @@ export function useStudioState(transportLogger: Logger) {
     deleteContextAsset: contextAssetState.deleteContextAsset,
     ...promptResourceCommands,
     // derived
-    ...derivedValues, refreshStates,
+    ...derivedValues,
+    canSendAgent: derivedValues.canSendAgent && Boolean(narrativeRuntime.agentSession || (promptResourceState.resourcesReady && selectedAgentPreset)),
+    refreshStates,
     // actions
     undoEdit,
     redoEdit,
@@ -457,7 +482,7 @@ export function useStudioState(transportLogger: Logger) {
     providerAccounts: providerSettings.providerAccounts,
     providerAccountsLoaded: providerSettings.providerAccountsLoaded,
     modelProfiles: providerSettings.modelProfiles,
-    agentPresets: agentPresets.agentPresets,
+    agentPresets: promptResourceState.resourcesReady ? agentPresets.agentPresets : [],
     agentTools: agentPresets.tools,
     presets: agentPresets.agentPresets,
     refreshProviderAccounts: providerSettings.refreshProviderAccounts,

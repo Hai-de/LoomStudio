@@ -10,6 +10,7 @@ import type {
   RegisteredAiGatewayProvider,
 } from '../../entities/index.js'
 import type { Translator } from '../../shared/i18n/index.js'
+import { notify } from '../../shared/notifications/index.js'
 import styles from './model-panel.module.scss'
 
 type AiCapabilityLabProps = {
@@ -446,12 +447,15 @@ function InvocationForm(props: {
     setRunning(true)
     setError(undefined)
     try {
-      setOutput(await props.onInvoke({
+      const res = await props.onInvoke({
         profileId: props.profileId,
         input: readObjectValue(props.capability.inputFields ?? [], input, rawInput),
-      }))
+      })
+      setOutput(res)
+      notify.success(props.t('notify.success.connected'))
     } catch (invokeError) {
       setOutput(undefined)
+      notify.providerError(invokeError, props.t)
       setError(invokeError instanceof Error ? invokeError.message : String(invokeError))
     } finally {
       submitting.current = false

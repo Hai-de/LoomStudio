@@ -1,3 +1,4 @@
+import type { StudioRpcOutputs } from '../shared/api/trpc-client.js'
 import type { ClientJsonValue } from '@loom-studio/client-bridge'
 export type {
   ListLoreMountsResult,
@@ -9,38 +10,7 @@ import type { MutationReceipt } from './common.js'
 import type { Card } from './card.js'
 import type { ContextAssetNode } from './context-asset.js'
 
-export type CardBundleArtifact = {
-  schemaVersion: 4
-  artifactId: string
-  displayName: string
-  description?: string
-  card: {
-    macros?: Record<string, string>
-    macroOptions?: import("@loom-studio/shared").MacroOptions
-    name: string
-    userName?: string
-    description?: string
-    preset?: ClientJsonValue
-    opening?: ClientJsonValue
-    lore?: ClientJsonValue
-  }
-  contextAssets: ContextAssetNode[]
-  stateTemplates?: Array<{
-    id: string
-    templateVersion: number
-    schema: Record<string, ClientJsonValue>
-    initial: Record<string, ClientJsonValue>
-    label?: string
-  }>
-  timelineStateBindings?: Array<{
-    path: string
-    templateId: string
-    templateVersion: number
-    initial?: Record<string, ClientJsonValue>
-  }>
-  extensionPayloads?: PortableExtensionPayloadArtifact[]
-  metadata?: Record<string, ClientJsonValue>
-}
+export type CardBundleArtifact = StudioRpcOutputs['application']['exportCardBundle']['artifact']
 
 type PortableExtensionPayloadArtifact = {
   id: string
@@ -77,71 +47,12 @@ export type MutatePortableExtensionPayloadResult = {
   mutation: MutationReceipt
 }
 
-export type PromptResource = {
-  macros?: Record<string, string>
-  macroOptions?: import("@loom-studio/shared").MacroOptions
-  id: string
-  version: number
-  resourceKind: 'preset' | 'lore' | 'logic' | 'runtime' | 'history' | 'prompt'
-  rootNode: ContextAssetNode
-  historyPolicy?: 'persistent' | 'ephemeral'
-  model?: import('./provider.js').ProviderModelSelection
-  delivery?: 'stream' | 'complete'
-  useCardLore?: boolean
-  textUses?: Array<{ id: string; kind: 'rule' | 'extractor'; enabled: boolean; orderIndex?: number }>
-  origin?: { kind: 'builtin'; key: string } | import('./extension.js').ExtensionPackageResourceOrigin
-  sourceArtifactRef?: ClientJsonValue
-  createdAt: string
-  updatedAt: string
-}
+export type PromptResource = StudioRpcOutputs['application']['getPromptResource']['resource']
 
-export type PresetToolMount = {
-  id: string
-  presetResourceId: string
-  toolId: string
-  orderIndex: number
-  defaultEnabled: boolean
-  activation?: ClientJsonValue
-  provider?: { order?: number }
-  content?: {
-    zone?: string
-    slot?: string
-    rankKey?: string
-    orderHint?: number
-  }
-  origin: Record<string, ClientJsonValue>
-  createdAt: string
-}
+export type { PresetToolMount, PresetToolMountInput, ListPresetToolMountsResult, ReplacePresetToolMountsResult } from '@loom-studio/shared/tool-mounts'
 
-export type PresetToolMountInput = Omit<PresetToolMount, 'id' | 'presetResourceId' | 'origin' | 'createdAt'>
 
-export type ListPresetToolMountsResult = {
-  mounts: PresetToolMount[]
-}
-
-export type ReplacePresetToolMountsResult = {
-  mounts: PresetToolMount[]
-  mutation: MutationReceipt
-}
-
-export type PromptResourceArtifact = {
-  macros?: Record<string, string>
-  macroOptions?: import("@loom-studio/shared").MacroOptions
-  format: 'loom.promptResource'
-  schemaVersion: 1 | 2
-  resourceKind: PromptResource['resourceKind']
-  rootNode: ContextAssetNode
-  scriptAttachments?: Array<{
-    orderIndex: number
-    resourceOrigin?: 'card' | 'external'
-    script: {
-      format: 'loom.script'
-      schemaVersion: 1
-      fileName: string
-      source: string
-    }
-  }>
-}
+export type PromptResourceArtifact = StudioRpcOutputs['application']['exportPromptResource']['artifact']
 
 type ImportBundle = {
   id: string
@@ -192,11 +103,6 @@ export type UpdatePromptResourceResult = {
   mutation: MutationReceipt
 }
 
-export type ImportCardBundleResult = {
-  card: Card
-  importBundle: ImportBundle
-}
+export type ImportCardBundleResult = StudioRpcOutputs['application']['importCardBundle']
 
-export type ExportCardBundleResult = {
-  artifact: CardBundleArtifact
-}
+export type ExportCardBundleResult = StudioRpcOutputs['application']['exportCardBundle']

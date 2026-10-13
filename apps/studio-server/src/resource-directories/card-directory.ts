@@ -2,12 +2,12 @@ import { createHash, randomUUID } from 'node:crypto'
 import * as fs from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
-import type { CardDirectoryPreview, CardDirectorySaveResult, JsonObject, JsonValue } from '@loom-studio/shared'
+import type { CardDirectoryPreview, CardDirectorySaveResult, JsonObject } from '@loom-studio/shared'
 import { encodeCardBundleFiles, loadCardBundleFiles, maxBundleBytes, type CardBundleFilesInput } from '../codecs/card-bundle-zip.js'
 import type { RuntimeRequestContext } from '@loom-studio/application-runtime'
 import { validateBundlePath } from '../codecs/card-bundle-files.js'
 import { isPng, stripPngTextMetadata } from '../codecs/card-png.js'
-import { readString } from '../rpc/rpc-params.js'
+import type { Logger } from '@loom-studio/logging'
 
 type Baseline = { version: 1; cardId: string; files: Record<string, string>; snapshot?: JsonObject; mediaRefs?: { avatarAssetId?: string; coverAssetId?: string } }
 type Journal = { before: Baseline | null; after: Baseline }
@@ -15,6 +15,7 @@ type Operation = { path: string; before: string | null; after: string | null }
 
 export function createCardDirectoryService(options: {
   dataRoot: string
+  logger?: Logger
   readCard(cardId: string): Promise<CardBundleFilesInput & { snapshot?: JsonObject }>
   applyCard?(cardId: string, artifact: CardBundleFilesInput['artifact'], snapshot: JsonObject, context?: RuntimeRequestContext): Promise<void>
 }) {
@@ -265,7 +266,12 @@ export function createCardDirectoryService(options: {
         // The DB tombstone commits deletion. Cleanup cannot roll it back and is retried at startup.
         for (const entry of entries) {
           try { await fs.rm(await safePath(root, metadata(entry.id)), { recursive: true }) }
-          catch (error) { console.error(`Card ${entry.id} deleted; directory cleanup will retry at startup`, error) }
+          catch (error) {
+            options.logger?.error(`Card ${entry.id} deleted; directory cleanup will retry at startup`, {
+              event: 'card.directory.cleanup_failed',
+              data: { cardId: entry.id, error: String(error) },
+            })
+          }
         }
         return result
       } catch (error) {
@@ -365,15 +371,12 @@ export function createCardDirectoryService(options: {
       return savePrepared(id, state)
     }),
     recoverCard: (id: string) => exclusive(id, () => recover(id)),
-    async call(method: string, params: JsonValue | undefined, context?: RuntimeRequestContext): Promise<JsonValue> {
-      const id = readString(params, 'cardId')
-      if (method === 'directories.previewApply') return await this.previewApply(id) as unknown as JsonValue
-      if (method === 'directories.apply') return await this.apply(id, readString(params, 'token'), context)
-      if (method === 'directories.previewCard') return await this.previewCard(id) as unknown as JsonValue
-      if (method === 'directories.saveCard') return await this.saveCard(id, readString(params, 'token')) as unknown as JsonValue
-      if (method === 'directories.recoverCard') return await this.recoverCard(id)
-      throw new Error(`Unknown directory method: ${method}`)
+    async saveImportedCard(id: string): Promise<void> {
+      await this.recoverCard(id)
+      const preview = await this.previewCard(id)
+      await this.saveCard(id, preview.token)
     },
+
   }
 }
 

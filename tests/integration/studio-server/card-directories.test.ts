@@ -71,7 +71,7 @@ it('connects archive import, live directory media, in-place Apply and copied-fol
     await writeFile(join(directory, 'card/description.md'), 'Edited in the source folder')
     const preview = await callRpc<CardDirectoryPreview>(port, 'directories.previewApply', { cardId: card.id })
     expect(preview.conflicts).toEqual([])
-    await callRpc(port, 'directories.apply', { cardId: card.id, token: preview.token })
+    await callRpc(port, 'directories.applyChanges', { cardId: card.id, token: preview.token })
     expect(await readFile(join(directory, manifest.media.avatar))).toEqual(replacement)
     const updated = await callRpc<{ card: { id: string; description: string; promptResourceIds: string[] } }>(port, 'application.getCard', { cardId: card.id })
     expect(updated.card).toMatchObject({ id: card.id, description: 'Edited in the source folder', promptResourceIds: card.promptResourceIds })

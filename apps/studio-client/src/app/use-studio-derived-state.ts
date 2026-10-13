@@ -10,6 +10,8 @@ export function useStudioDerivedState(
     cards: Array<{ id: string; name: string; media?: { avatarAssetId?: string } }>
     narrativeAgentSession?: { agentPresetId: string }
     operationPending: Record<string, { pendingCount: number }>
+    startup: { ready(area: 'cards' | 'providers' | 'tools'): boolean }
+    presetResourcesReady: boolean
     providerAccountsLoaded: boolean
     agentChatSessionLoading: boolean
   },
@@ -20,7 +22,7 @@ export function useStudioDerivedState(
     const assetWorkspaceId = route.panel === 'preset' || route.panel === 'resource'
       ? route.cardId ?? state.selectedCardId ?? 'default'
       : state.selectedCardId ?? 'default'
-    const bootstrapBusy = state.operationPending.bootstrap.pendingCount > 0
+    const bootstrapBusy = !state.startup.ready('cards')
     const activeCardId = state.narrativeTimeline?.createdFrom?.cardId
       ?? (state.narrativeTimeline ? state.selectedCardId : undefined)
     const activeCard = activeCardId
@@ -31,8 +33,8 @@ export function useStudioDerivedState(
       assetWorkspaceId,
       bootstrapBusy,
       cardsBusy: bootstrapBusy || state.operationPending.cards.pendingCount > 0,
-      providerBusy: bootstrapBusy || state.operationPending['provider-settings'].pendingCount > 0,
-      agentPresetBusy: bootstrapBusy || state.operationPending['agent-presets'].pendingCount > 0,
+      providerBusy: !state.startup.ready('providers') || state.operationPending['provider-settings'].pendingCount > 0,
+      agentPresetBusy: !state.presetResourcesReady || state.operationPending['agent-presets'].pendingCount > 0,
       sessionBusy: state.operationPending.session.pendingCount > 0,
       mutationBusy: state.operationPending.mutation.pendingCount > 0,
       activePresetId: state.narrativeAgentSession?.agentPresetId,

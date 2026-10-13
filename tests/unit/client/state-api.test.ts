@@ -1,3 +1,4 @@
+import { createStudioTrpcClient } from '../../../apps/studio-client/src/shared/api/trpc-client.js'
 import type { ClientBridge, ClientJsonValue } from '@loom-studio/client-bridge'
 import { createStudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
 import { describe, expect, it } from 'vitest'
@@ -44,11 +45,9 @@ describe('studio client state api', () => {
   })
 })
 
-function createFakeBridge(calls: Array<{ method: string; params?: ClientJsonValue }>): ClientBridge {
-  return {
-    call: async <T>(method: string, params?: ClientJsonValue) => {
-      calls.push({ method, params })
-      return {} as T
-    },
-  }
+function createFakeBridge(calls: Array<{ method: string; params?: ClientJsonValue }>) {
+  return createStudioTrpcClient({ fetch: async (url, init) => {
+    calls.push({ method: String(url).split('/').at(-1)!, params: init?.body ? JSON.parse(String(init.body)) : undefined })
+    return new Response(JSON.stringify({ result: { data: {} } }))
+  } })
 }

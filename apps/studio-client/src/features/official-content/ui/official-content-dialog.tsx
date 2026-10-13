@@ -1,7 +1,7 @@
 import { Dialog, IconButton } from '@loom-studio/ui'
 import { Download, PackagePlus, RefreshCw, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { toast } from 'sonner'
+import { notify } from '../../../shared/notifications/index.js'
 import type { OfficialContentPackage } from '../../../entities/official-content.js'
 import type { StudioApi } from '../../../shared/api/studio-api.js'
 import { downloadBase64 } from '../../../shared/browser/download.js'
@@ -41,7 +41,9 @@ export function OfficialContentDialog(props: {
     try {
       await operation()
     } catch (caught) {
-      if (active.current) setError(caught instanceof Error ? caught.message : String(caught))
+      const message = caught instanceof Error ? caught.message : String(caught)
+      if (active.current) setError(message)
+      notify.error(message)
     } finally {
       pending.current = false
       if (active.current) setBusy(false)
@@ -61,14 +63,17 @@ export function OfficialContentDialog(props: {
       await reload()
       if (!active.current) return
       await props.onInstalled()
-      if (active.current) toast.success(props.t(result.resources.some(resource => resource.created) ? 'official.installed' : 'official.unchanged'))
+      if (active.current) notify.success(props.t(result.resources.some(resource => resource.created) ? 'official.installed' : 'official.unchanged'))
     })
   }
 
   function exportContent(content: OfficialContentPackage) {
     void run(async () => {
       const result = await props.api.export({ packageId: content.id, digest: content.digest })
-      if (active.current) downloadBase64(result.base64, result.fileName, 'application/zip')
+      if (active.current) {
+        downloadBase64(result.base64, result.fileName, 'application/zip')
+        notify.success(props.t('notify.success.exported'))
+      }
     })
   }
 

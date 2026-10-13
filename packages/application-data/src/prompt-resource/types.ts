@@ -1,3 +1,5 @@
+import type { PresetToolMount } from '@loom-studio/shared/tool-mounts'
+export type { PresetToolMount } from '@loom-studio/shared/tool-mounts'
 import type {
   DataActorRef,
   DataCommitFact,
@@ -130,22 +132,6 @@ export type ReplaceLoreMountsInput = PromptResourceWriteContext & {
 export type ListLoreMountsInput = {
   source?: LoreMountSource
   loreResourceId?: string
-}
-
-export type PresetToolMount = {
-  id: string
-  presetResourceId: string
-  toolId: string
-  orderIndex: number
-  defaultEnabled: boolean
-  activation?: JsonObject
-  provider?: { order?: number }
-  content?: {
-    targetAnchorId?: string
-    localDepth?: number
-  }
-  origin: JsonObject
-  createdAt: string
 }
 
 export type AddPresetToolMountInput = PromptResourceWriteContext & {

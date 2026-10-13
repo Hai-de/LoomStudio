@@ -14,7 +14,7 @@ import {
   captureTimelineExtensionLease,
 } from '../../../packages/application-runtime/src/extensions/timeline-participation.js'
 import { readAvailableExtensionInstallations } from '../../../packages/application-runtime/src/runtime/extension-resource-access.js'
-import { handleStatesRpc } from '../../../apps/studio-server/src/rpc/handlers/application/states.js'
+import { callApplicationRpc as handleStatesRpc } from '../../support/trpc-caller.js'
 
 async function setup() {
   let nextId = 0

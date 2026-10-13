@@ -121,6 +121,8 @@ export const messages = {
   'preset.tools.providerOrder': 'Provider Tool order',
   'preset.tools.contentOrder': 'Content order hint',
   'preset.tools.contentFallback': 'Content fallback placement',
+  'preset.tools.targetAnchorId': 'Target anchor',
+  'preset.tools.localDepth': 'Local depth',
   'preset.tools.zone': 'Zone',
   'preset.tools.slot': 'Slot',
   'preset.tools.rankKey': 'Rank key',

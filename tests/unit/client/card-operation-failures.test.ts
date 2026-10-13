@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { useAsyncOperations } from '../../../apps/studio-client/src/shared/hooks/use-async-operations.js'
 import { useCards } from '../../../apps/studio-client/src/features/cards/model/use-cards.js'
 import type { StudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
-import type { Card } from '../../../apps/studio-client/src/entities/index.js'
+type Card = Awaited<ReturnType<StudioApi['cards']['get']>>['card']
 import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/index.js'
 
 const hooks = vi.hoisted(() => ({
@@ -39,8 +39,7 @@ describe('Card operation failure propagation', () => {
     ['import', 'list'], ['import', 'related'], ['fork', 'list'], ['fork', 'related'],
   ] as const)('retains a committed %s when %s refresh fails', async (operation, stage) => {
     const card: Card = {
-      id: 'imported-card', artifactId: 'work-imported', version: 3, name: 'Imported',
-      opening: { entries: [] }, lore: { entries: [] },
+      id: 'imported-card', artifactId: 'work-imported', version: 3, name: 'Imported', preset: {}, opening: { entries: [] }, lore: { entries: [] },
       createdAt: '2026-09-23', updatedAt: '2026-09-23',
     }
     const failure = new Error('Refresh failed')
@@ -78,7 +77,7 @@ describe('Card operation failure propagation', () => {
   })
 
   it('preserves per-file failures alongside post-import refresh failures', async () => {
-    const card: Card = { id: 'imported', version: 1, name: 'Imported', opening: { entries: [] }, lore: { entries: [] }, createdAt: '', updatedAt: '' }
+    const card: Card = { id: 'imported', version: 1, name: 'Imported', artifactId: 'fixture-artifact', preset: {}, opening: { entries: [] }, lore: { entries: [] }, createdAt: '', updatedAt: '' }
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ card })))
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: 'Invalid card' } }), { status: 400 })))
@@ -94,7 +93,7 @@ describe('Card operation failure propagation', () => {
   })
   it.each(['a', 'b'] as const)('invalidates a pending selection only when its card %s was deleted', async deletedId => {
     const card = (id: string): Card => ({
-      id, name: id, version: 1, opening: { entries: [] }, lore: { entries: [] },
+      id, name: id, version: 1, artifactId: 'fixture-artifact', preset: {}, opening: { entries: [] }, lore: { entries: [] },
       createdAt: '2026-09-23', updatedAt: '2026-09-23',
     })
     let resolve!: (value: { card: Card }) => void
@@ -126,7 +125,7 @@ describe('Card operation failure propagation', () => {
 
   it.each(['create', 'import', 'fork'] as const)('does not replace a later selection when %s finishes', async operation => {
     const card = (id: string): Card => ({
-      id, name: id, version: 1, opening: { entries: [] }, lore: { entries: [] },
+      id, name: id, version: 1, artifactId: 'fixture-artifact', preset: {}, opening: { entries: [] }, lore: { entries: [] },
       createdAt: '2026-09-23', updatedAt: '2026-09-23',
     })
     let release!: () => void
@@ -170,7 +169,7 @@ describe('Card operation failure propagation', () => {
     ['macros', false], ['macros', true], ['state', false], ['state', true],
   ] as const)('refreshes an overlapping list after %s commits (initial=%s)', async (operation, initial) => {
     const original: Card = {
-      id: 'card', name: 'Card', version: 1, opening: { entries: [] }, lore: { entries: [] },
+      id: 'card', name: 'Card', version: 1, artifactId: 'fixture-artifact', preset: {}, opening: { entries: [] }, lore: { entries: [] },
       createdAt: '2026-09-23', updatedAt: '2026-09-23',
     }
     const other = { ...original, id: 'other' }
@@ -205,7 +204,7 @@ describe('Card operation failure propagation', () => {
 
   it.each(['media', 'resources'] as const)('retains the committed %s update without replacing another card editor', async operation => {
     const card = (id: string): Card => ({
-      id, name: id, version: 1, opening: { entries: [] }, lore: { entries: [] },
+      id, name: id, version: 1, artifactId: 'fixture-artifact', preset: {}, opening: { entries: [] }, lore: { entries: [] },
       createdAt: '2026-09-23', updatedAt: '2026-09-23',
     })
     const cards = [card('a'), card('b')]
@@ -281,7 +280,7 @@ describe('Card operation failure propagation', () => {
     'isolates the editor and late %s result after an API switch',
     async operation => {
       const card = (name: string): Card => ({
-        id: 'same-id', name, version: 1, opening: { entries: [] }, lore: { entries: [] },
+        id: 'same-id', name, version: 1, artifactId: 'fixture-artifact', preset: {}, opening: { entries: [] }, lore: { entries: [] },
         createdAt: '2026-09-23', updatedAt: '2026-09-23',
       })
       let resolveWrite!: (value: unknown) => void
@@ -339,7 +338,7 @@ describe('Card operation failure propagation', () => {
 
   it('hides the previous API list immediately and ignores its late refresh', async () => {
     const card = (name: string): Card => ({
-      id: 'same-id', name, version: 1, opening: { entries: [] }, lore: { entries: [] },
+      id: 'same-id', name, version: 1, artifactId: 'fixture-artifact', preset: {}, opening: { entries: [] }, lore: { entries: [] },
       createdAt: '2026-09-23', updatedAt: '2026-09-23',
     })
     let resolveOld!: (value: { cards: Card[] }) => void
@@ -370,7 +369,7 @@ describe('Card operation failure propagation', () => {
     'does not publish a late card selection after %s',
     async change => {
       const card = (id: string): Card => ({
-        id, name: id, version: 1, opening: { entries: [] }, lore: { entries: [] },
+        id, name: id, version: 1, artifactId: 'fixture-artifact', preset: {}, opening: { entries: [] }, lore: { entries: [] },
         createdAt: '2026-09-23', updatedAt: '2026-09-23',
       })
       let resolveOld!: (value: { card: Card }) => void
@@ -403,7 +402,7 @@ describe('Card operation failure propagation', () => {
   it.each(['deleted', 'other'] as const)('keeps a committed deletion after refresh failure with %s selected', async selectedId => {
     const failure = new Error('List refresh failed')
     const cards: Card[] = ['deleted', 'other'].map(id => ({
-      id, name: id, version: 1, opening: { entries: [] }, lore: { entries: [] },
+      id, name: id, version: 1, artifactId: 'fixture-artifact', preset: {}, opening: { entries: [] }, lore: { entries: [] },
       createdAt: '2026-09-23', updatedAt: '2026-09-23',
     }))
     const recordEdit = vi.fn()
@@ -439,7 +438,7 @@ describe('Card operation failure propagation', () => {
     const failure = new Error('List refresh failed')
     const card: Card = {
       id: 'created-card', version: 1, name: 'New card',
-      opening: { entries: [] }, lore: { entries: [] },
+      artifactId: 'fixture-artifact', preset: {}, opening: { entries: [] }, lore: { entries: [] },
       createdAt: '2026-09-23', updatedAt: '2026-09-23',
     }
     const recordEdit = vi.fn()
@@ -486,7 +485,7 @@ describe('Card operation failure propagation', () => {
         update: vi.fn().mockRejectedValue(failure),
         list: async () => ({ cards: [] }),
         get: async () => ({ card: {
-          id: 'card', version: 1, name: 'Original', opening: { entries: [] }, lore: { entries: [] },
+          id: 'card', version: 1, name: 'Original', artifactId: 'fixture-artifact', preset: {}, opening: { entries: [] }, lore: { entries: [] },
           createdAt: '2026-09-23', updatedAt: '2026-09-23',
         } }),
       },

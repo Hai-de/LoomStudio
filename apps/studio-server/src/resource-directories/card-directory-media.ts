@@ -3,6 +3,7 @@ import * as fs from 'node:fs/promises'
 import { basename, extname, resolve } from 'node:path'
 import { stripPngTextMetadata } from '../codecs/card-png.js'
 import { readCardMediaType } from '../codecs/card-bundle-zip.js'
+import type { Logger } from '@loom-studio/logging'
 import { parseBaseline, readCardDirectoryBinding, readOptional, safePath } from './card-directory.js'
 
 const imageTypes: Record<string, string> = {
@@ -10,7 +11,7 @@ const imageTypes: Record<string, string> = {
   '.webp': 'image/webp', '.gif': 'image/gif', '.avif': 'image/avif',
 }
 
-export function createCardDirectoryMedia(options: { dataRoot: string }) {
+export function createCardDirectoryMedia(options: { dataRoot: string; logger?: Logger }) {
   const root = resolve(options.dataRoot)
   return {
     async read(cardId: string, kind: 'avatar' | 'background', assetId?: string, forExport = false): Promise<{ bytes: Uint8Array; mediaType: string } | undefined> {
@@ -51,7 +52,12 @@ export function createCardDirectoryMedia(options: { dataRoot: string }) {
         if (timer) clearTimeout(timer)
         timer = setTimeout(() => { timer = undefined; onChange() }, 100)
       })
-      watcher.on('error', error => console.error('Card directory media watcher failed', error))
+      watcher.on('error', error => {
+        options.logger?.error('Card directory media watcher failed', {
+          event: 'card.directory.media_watcher_failed',
+          data: { error: String(error) },
+        })
+      })
       return { dispose: () => { watcher.close(); clearTimeout(timer) } }
     },
   }

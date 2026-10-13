@@ -1,6 +1,6 @@
 # 审查归档后的延期事项
 
-状态：Deferred / Backlog（更新：2026-10-06）
+状态：Deferred / Backlog（更新：2026-10-13）
 
 本轮审查修复已收尾。本文只保留归档后仍需可发现的事项，不重新启动审查或扩大实施范围。历史证据见[修复实施记录](../../archive/plans/audit-issue-remediation-plan.md)。
 
@@ -71,3 +71,14 @@ UI 细节和读屏验证按用户决定留待后续微调，不是当前阻塞�
 | [开场白 Display/HTML 修补](../../archive/plans/card-opening-display-and-html-layout.md) | 用户实际卡片与最新规则表单/消息页面验收；先核对有效规则和最终 Display，再判断解析或样式问题。第三方 ST API/作者 iframe 循环高度不在此交付承诺内 |
 
 State 订阅的 The World 接入、Shell 动画第二轮、记忆/CodeAct 等仍需实施或验收的路线，以及今天其他任务的新文档仍留在各自活跃入口；不借整理扩展代码修改或关闭其他任务。
+
+<a id="trpc-migration-follow-ups-2026-10-13"></a>
+
+## tRPC 迁移归档后的测试与验收边界
+
+2026-10-13 用户确认归档；[迁移记录](../../archive/plans/trpc-contract-migration-plan.md)保留完整证据。传输迁移已完成，以下不构成继续迁移或自动执行的授权：
+
+- 独立测试维护：目录清理测试的旧 console.error 断言、missing-context-projection 的手工 React 渲染器，以及记录中的 31 条测试类型诊断。
+- 尚未执行：浏览器人工验收、外部模型验证、完整 CI 和正式发布 smoke；不得视作已通过。
+
+后续按用户另行指定的范围接续，不因归档扩大实施或发布范围。

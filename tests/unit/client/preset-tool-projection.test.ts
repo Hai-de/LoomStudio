@@ -9,7 +9,7 @@ function tool(id: string, kind: AgentToolDefinition['input']['kind'], namespace 
     owner: { namespace },
     name: id.split('/').at(-1)!,
     description: `${id} description`,
-    input: { kind },
+    input: kind === 'structured' ? { kind, schema: { type: 'object' } } : kind === 'hybrid' ? { kind, metadataSchema: { type: 'object' }, rawField: 'content', mediaType: 'text/plain' } : { kind, mediaType: 'text/plain' },
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   }
@@ -35,8 +35,8 @@ describe('preset tool projection', () => {
       tools: [tool('official/structured', 'structured'), tool('official/content-a', 'freeform'), tool('official/content-b', 'hybrid')],
       mounts: [
         mount('official/structured', { provider: { order: 20 } }),
-        mount('official/content-a', { provider: { order: 10 }, content: { zone: 'tools', slot: 'official-tools', orderHint: 20 } }),
-        mount('official/content-b', { provider: { order: 30 }, content: { zone: 'tools', slot: 'official-tools', orderHint: 30 } }),
+        mount('official/content-a', { provider: { order: 10 }, content: { targetAnchorId: '@chat.tools', localDepth: 20 } }),
+        mount('official/content-b', { provider: { order: 30 }, content: { targetAnchorId: '@chat.tools', localDepth: 20 } }),
       ],
     })
 
@@ -49,25 +49,25 @@ describe('preset tool projection', () => {
     expect(result.contentNodes[0]).toMatchObject({
       category: 'runtime',
       kind: 'virtual',
-      label: 'official-tools',
-      projection: { sourceKind: 'virtual', zoneId: 'tools' },
+      label: '@chat.tools · 20',
+      projection: { sourceKind: 'virtual', zoneId: '@chat.tools' },
       readOnly: true,
     })
     expect(result.contentNodes[0]?.configRows?.map(row => row.label)).toEqual(['content-a', 'content-b'])
-    expect(result.zoneDefinitions).toEqual([{ id: 'tools', displayName: 'Content Tools' }])
+    expect(result.zoneDefinitions).toEqual([{ id: '@chat.tools', displayName: 'Content Tools' }])
   })
 
-  it('keeps plugin slots separate and omits disabled mounts', () => {
+  it('uses the configured anchor and depth and omits disabled mounts', () => {
     const result = buildPresetToolProjection({
       presetId: 'preset-1',
       tools: [tool('official/content', 'freeform'), tool('weather/query', 'freeform', 'weather')],
       mounts: [
         mount('official/content', { defaultEnabled: false }),
-        mount('weather/query', { content: { zone: 'tools', slot: 'weather-tools' } }),
+        mount('weather/query', { content: { targetAnchorId: '@weather', localDepth: 2 } }),
       ],
     })
 
     expect(result.providerTools.map(item => item.toolId)).toEqual(['weather/query'])
-    expect(result.contentNodes.map(node => node.label)).toEqual(['weather-tools'])
+    expect(result.contentNodes.map(node => node.label)).toEqual(['@weather · 2'])
   })
 })

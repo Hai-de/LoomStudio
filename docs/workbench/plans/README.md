@@ -35,6 +35,10 @@
 
 ## 历史已归档计划
 
+2026-10-13：[主应用 tRPC 契约迁移](../../archive/plans/trpc-contract-migration-plan.md)已实施并按用户要求归档；205 条 procedure 接管旧网络接口，保留测试失败与未验收边界，见[后续清单](../issues/audit-follow-ups.md#trpc-migration-follow-ups-2026-10-13)。
+
+2026-10-12：[重要入口职责与类型契约收束](../../archive/plans/entrypoint-contract-refactor-2026-10-12.md)已完成：目录 Apply 字段修复、Preset 单一快照、局部就绪与核心恢复门槛、导入收尾、Agent Run 服务/工具协议、PromptBuild 与类型断言边界。25 文件 / 244 测试及源码类型构建通过；测试类型 43 条均为 HEAD 既有诊断，人工界面验收未执行。
+
 2026-10-12：[核心模块职责边界收束](../../archive/plans/responsibility-boundary-refactor-2026-10-12.md)首批六包已完成并归档：Sessions/Character 业务模型、Server/CLI 与应用适配、Agent 工具能力、Text Transform 检查状态、Narrative 目录与 Run 观察已分离。定向验证及主应用类型构建通过；原版同样失败的 Character SSR 用例、44 条测试类型诊断及既有 lint/文档问题保留，未做浏览器验收。
 
 2026-10-09：[测试套件真实度与编译基线对齐](../../archive/plans/test-suite-and-compiler-baseline-remediation-plan.md)已完成并归档。Linux 源码构建与 Preset 重命名问题已修复；tsconfig 基线与 lib 统一升级对齐至 ES2024；本地 check:types 与 check:all 类型检查门禁已建立；轻量 happy-dom 与零外部依赖 renderHook 基建已落地并通过真实单测验证；剩余历史测试的假 Mock 清理按规范列入日常渐进维护，未假称全仓旧测试全部重写。

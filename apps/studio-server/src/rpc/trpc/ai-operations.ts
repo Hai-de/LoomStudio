@@ -5,51 +5,56 @@ import { isRecord, readString } from '../rpc-params.js'
 const runStores = new WeakMap<ProfiledAiGateway, Map<string, ReturnType<ProfiledAiGateway['createRun']>>>()
 const maxRetainedRuns = 128
 
-export async function callAiGatewayRpc(
-  services: { registry: AiGatewayCapabilityRegistry; gateway: ProfiledAiGateway },
-  method: string,
-  params: JsonValue | undefined,
-): Promise<JsonValue> {
-  switch (method) {
-    case 'ai.providers.list':
-      return { providers: services.registry.list() as unknown as JsonValue }
-    case 'ai.invoke': {
+export function createAiGatewayOperations(services: { registry: AiGatewayCapabilityRegistry; gateway: ProfiledAiGateway }) {
+  return {
+    'providers.list': async (params: JsonValue | undefined) => {
+      return { providers: services.registry.list() }
+    },
+    'invoke': async (params: JsonValue | undefined) => {
+
       if (!isRecord(params)) throw new Error('Expected AI Gateway invoke params')
       if (params.input === undefined) throw new Error('Expected AI Gateway input')
       return await services.gateway.invoke({
         profileId: readString(params, 'profileId'),
-        input: params.input as JsonValue,
+        input: params.input,
         caller: { kind: 'studio-client' },
-      }) as unknown as JsonValue
-    }
-    case 'ai.run.create': {
+      })
+
+    },
+    'run.create': async (params: JsonValue | undefined) => {
+
       if (!isRecord(params) || params.input === undefined) throw new Error('Expected AI Gateway run params')
-      const run = services.gateway.createRun({ profileId: readString(params, 'profileId'), input: params.input as JsonValue, caller: { kind: 'studio-client' } })
+      const run = services.gateway.createRun({ profileId: readString(params, 'profileId'), input: params.input, caller: { kind: 'studio-client' } })
       const runs = getRunStore(services.gateway)
       runs.set(run.id, run)
       void run.result.catch(() => undefined).finally(() => pruneCompletedRuns(runs))
       return { runId: run.id }
-    }
-    case 'ai.run.subscribe': {
+
+    },
+    'run.subscribe': async (params: JsonValue | undefined) => {
+
       const run = requireRun(getRunStore(services.gateway), params)
       const cursor = isRecord(params) && typeof params.cursor === 'number' && Number.isSafeInteger(params.cursor) && params.cursor >= 0
         ? params.cursor
         : 0
       const batch = run.readEvents(cursor)
       return { ...batch, state: run.getState() }
-    }
-    case 'ai.run.cancel': {
+
+    },
+    'run.cancel': async (params: JsonValue | undefined) => {
+
       const run = requireRun(getRunStore(services.gateway), params)
       if (!isRecord(params)) throw new Error('Expected run params')
       run.cancel(typeof params.reason === 'string' ? params.reason : undefined)
       return { runId: run.id, state: run.getState() }
-    }
-    case 'ai.run.state': {
+
+    },
+    'run.state': async (params: JsonValue | undefined) => {
+
       const run = requireRun(getRunStore(services.gateway), params)
       return { runId: run.id, state: run.getState() }
-    }
-    default:
-      throw new Error(`AI Gateway RPC method not found: ${method}`)
+
+    },
   }
 }
 

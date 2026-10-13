@@ -1,5 +1,5 @@
+import type { CreateLoomScriptMountInput, UpdateLoomScriptMountInput, ListLoomScriptMountsInput } from '@loom-studio/shared/loom-scripts'
 import type { DocumentTransaction } from '@loom-studio/document-store'
-import type { JsonObject } from '@loom-studio/shared'
 import type { ApplicationRuntimeContext } from '../foundation/application-context.js'
 import { applicationDocumentTypes } from '../foundation/document-types.js'
 import { listDocuments, readDocument, toVersioned, writeDocument } from '../foundation/document-store.js'
@@ -118,13 +118,7 @@ export function createLoomScriptsRuntimeMethods(ctx: LoomScriptsRuntimeContext) 
       }
     },
 
-    createLoomScriptMount: async (input: {
-      target: LoomScriptMountTarget
-      scriptDocumentId: string
-      orderIndex: number
-      pinnedDocumentVersion?: number
-      origin?: JsonObject
-    }, requestContext?: RuntimeRequestContext) => {
+    createLoomScriptMount: async (input: CreateLoomScriptMountInput, requestContext?: RuntimeRequestContext) => {
       const result = await executeDocumentMutation(ctx.documents, requestContext, 'application.createLoomScriptMount', async documents => {
         const script = await readDocument<LoomScriptContent>(documents, input.scriptDocumentId, applicationDocumentTypes.loomScript)
         if (script.content.owner.kind === 'extension' && input.pinnedDocumentVersion !== undefined) throw new Error('Installed Loom Scripts follow package updates and cannot pin an old revision')
@@ -150,14 +144,7 @@ export function createLoomScriptsRuntimeMethods(ctx: LoomScriptsRuntimeContext) 
       return { mount: result.value, mutation: result.mutation }
     },
 
-    updateLoomScriptMount: async (input: {
-      mountId: string
-      expectedVersion: number
-      enabled: boolean
-      orderIndex: number
-      pinnedDocumentVersion?: number
-      grantedCapabilities: string[]
-    }, requestContext?: RuntimeRequestContext) => {
+    updateLoomScriptMount: async (input: UpdateLoomScriptMountInput, requestContext?: RuntimeRequestContext) => {
       const result = await executeDocumentMutation(ctx.documents, requestContext, 'application.updateLoomScriptMount', async documents => {
         const existing = await readDocument<LoomScriptMountContent>(documents, input.mountId, applicationDocumentTypes.loomScriptMount)
         const script = await readDocument<LoomScriptContent>(documents, existing.content.scriptDocumentId, applicationDocumentTypes.loomScript)
@@ -185,7 +172,7 @@ export function createLoomScriptsRuntimeMethods(ctx: LoomScriptsRuntimeContext) 
       return { mount: result.value, mutation: result.mutation }
     },
 
-    listLoomScriptMounts: async (input?: { target?: LoomScriptMountTarget; scriptDocumentId?: string }) => {
+    listLoomScriptMounts: async (input?: ListLoomScriptMountsInput) => {
       const mounts = await listDocuments<LoomScriptMountContent>(ctx.documents, applicationDocumentTypes.loomScriptMount)
       return {
         mounts: mounts

@@ -5,8 +5,8 @@ import { createSqliteDataEngine } from '@loom-studio/data-engine'
 import { createSqliteDocumentStore } from '@loom-studio/document-store'
 import { convertSillyTavernCard } from '../../../extensions/st-data-compat/src/normalizer/card.js'
 import { encodeCardBundleZip, decodeCardBundleZip, loadCardBundleFiles } from '../../../apps/studio-server/src/codecs/card-bundle-zip.js'
-import { handleTimelineRpc } from '../../../apps/studio-server/src/rpc/handlers/application/timeline.js'
-import { handleCardsRpc } from '../../../apps/studio-server/src/rpc/handlers/application/cards.js'
+import { callApplicationRpc as handleTimelineRpc } from '../../support/trpc-caller.js'
+import { callApplicationRpc as handleCardsRpc } from '../../support/trpc-caller.js'
 import { unzipSync } from 'fflate'
 
 describe('opening selection', () => {

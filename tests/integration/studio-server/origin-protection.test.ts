@@ -1,3 +1,4 @@
+import type { ApplicationRuntime } from '@loom-studio/application-runtime'
 import type { AssetStore } from '@loom-studio/asset-store'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApplicationSessionAuth } from '../../../apps/studio-server/src/http/application-session-auth.js'
@@ -5,7 +6,7 @@ import { createStudioHttpServer } from '../../../apps/studio-server/src/http/htt
 
 const viteOrigin = 'http://127.0.0.1:18011'
 const configuredOrigin = 'https://localhost:5443'
-const rpcBody = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'test.mutate', params: { value: 'control' } })
+const rpcBody = JSON.stringify({ presetId: 'control', mounts: [] })
 
 describe('protected HTTP Origin boundary', () => {
   let server: ReturnType<typeof createStudioHttpServer>
@@ -21,7 +22,7 @@ describe('protected HTTP Origin boundary', () => {
     vi.clearAllMocks()
     server = createStudioHttpServer({
       auth: createApplicationSessionAuth({ allowedOrigins: [viteOrigin, configuredOrigin] }),
-      rpcRouter: { call },
+      applicationRuntime: { replacePresetToolMounts: call } as unknown as ApplicationRuntime,
       // Only HTTP dispatch is exercised; no database, files or user credentials are used.
       assets: { createMediaAsset: upload } as unknown as AssetStore,
       cardMedia: { read: readMedia },
@@ -45,7 +46,7 @@ describe('protected HTTP Origin boundary', () => {
   afterEach(async () => { await server.shutdown() })
 
   it('rejects wrong Origin with a valid cookie and text/plain before RPC dispatch', async () => {
-    const response = await fetch(`${origin}/rpc`, {
+    const response = await fetch(`${origin}/trpc/application.replacePresetToolMounts`, {
       method: 'POST',
       headers: { cookie, origin: 'http://127.0.0.1:5999', 'content-type': 'text/plain' },
       body: rpcBody,
@@ -58,11 +59,11 @@ describe('protected HTTP Origin boundary', () => {
   it.each(['same-origin', 'vite', 'configured', 'absent'])('accepts JSON RPC with %s Origin', async kind => {
     const headers: Record<string, string> = { cookie, 'content-type': 'application/json; charset=utf-8' }
     if (kind !== 'absent') headers.origin = kind === 'same-origin' ? origin : kind === 'vite' ? viteOrigin : configuredOrigin
-    const response = await fetch(`${origin}/rpc`, { method: 'POST', headers, body: rpcBody })
+    const response = await fetch(`${origin}/trpc/application.replacePresetToolMounts`, { method: 'POST', headers, body: rpcBody })
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toMatchObject({ result: { accepted: true } })
+    await expect(response.json()).resolves.toMatchObject({ result: { data: { accepted: true } } })
     expect(call).toHaveBeenCalledOnce()
-    expect(call).toHaveBeenCalledWith('test.mutate', { value: 'control' }, expect.objectContaining({ clientId: expect.stringMatching(/^session:/) }))
+    expect(call).toHaveBeenCalledWith({ presetId: 'control', mounts: [] }, expect.objectContaining({ clientId: expect.stringMatching(/^session:/) }))
   })
 
   it.each([
@@ -77,7 +78,7 @@ describe('protected HTTP Origin boundary', () => {
     'http://user@127.0.0.1:18011',
     `${viteOrigin}, http://127.0.0.1:5999`,
   ])('rejects non-allowlisted or non-Origin header %j even with JSON', async deniedOrigin => {
-    const response = await fetch(`${origin}/rpc`, {
+    const response = await fetch(`${origin}/trpc/application.replacePresetToolMounts`, {
       method: 'POST',
       headers: { cookie, origin: deniedOrigin, 'content-type': 'application/json' },
       body: rpcBody,
@@ -93,7 +94,7 @@ describe('protected HTTP Origin boundary', () => {
         const headers: Record<string, string> = { cookie }
         if (withOrigin) headers.origin = origin
         if (contentType) headers['content-type'] = contentType
-        const response = await fetch(`${origin}/rpc`, { method: 'POST', headers, body: Buffer.from(rpcBody) })
+        const response = await fetch(`${origin}/trpc/application.replacePresetToolMounts`, { method: 'POST', headers, body: Buffer.from(rpcBody) })
         expect(response.status).toBe(415)
         await expect(response.json()).resolves.toMatchObject({ error: { code: 'rpc.unsupported_media_type' } })
       }

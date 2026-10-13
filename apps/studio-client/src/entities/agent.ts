@@ -1,3 +1,5 @@
+import type { StudioRpcOutputs } from '../shared/api/trpc-client.js'
+import type { ToolContentPlacement, PresetToolMountInput } from '@loom-studio/shared/tool-mounts'
 import type { ClientJsonValue } from '@loom-studio/client-bridge'
 import type { MacroInspection } from '@loom-studio/shared'
 import type { MutationReceipt } from './common.js'
@@ -60,22 +62,8 @@ export type AgentToolDefinition = {
   owner: { namespace: string }
   name: string
   description: string
-  input: {
-    kind: 'structured' | 'freeform' | 'hybrid'
-    [key: string]: ClientJsonValue | undefined
-  }
-  prompt?: {
-    parameterDescriptions?: Record<string, string>
-    guidance?: string
-    activation?: ClientJsonValue
-    provider?: { order?: number }
-    content?: {
-      zone?: string
-      slot?: string
-      rankKey?: string
-      orderHint?: number
-    }
-  }
+  input: import('../shared/api/trpc-client.js').StudioRpcInputs['application']['updateAgentTool']['definition']['input']
+  prompt?: import('../shared/api/trpc-client.js').StudioRpcInputs['application']['updateAgentTool']['definition']['prompt']
   createdAt: string
   updatedAt: string
 }
@@ -88,36 +76,6 @@ type ToolExposure = {
   [key: string]: ClientJsonValue | undefined
 }
 
-export type PreviewAgentTurnResult = {
-  tokenEstimate?: import('@loom-studio/ai-gateway').RequestTokenEstimate
-  promptBuildTrace?: ClientJsonValue
-  macroInspection?: MacroInspection
-  runId: string
-  messages: ChatMessage[]
-  projection: PromptProjection
-  toolExposures: ToolExposure[]
-  toolPromptBuildTrace: ClientJsonValue
-  providerPayloadPreview?: ClientJsonValue
-}
+export type PreviewAgentTurnResult = StudioRpcOutputs['application']['previewAgentTurn']
 
-export type InvokeAgentTurnResult = {
-  promptBuildTrace?: ClientJsonValue
-  macroInspection?: MacroInspection
-  runId: string
-  agentSession: AgentSession
-  entries: {
-    user: AgentTranscriptEntry
-    assistant: AgentTranscriptEntry
-  }
-  provider: {
-    provider: string
-    model: string
-    finishReason?: string
-    usage?: { inputTokens?: number; outputTokens?: number }
-    providerCallId?: string
-  }
-  projection: PromptProjection
-  toolExposures: ToolExposure[]
-  toolPromptBuildTrace: ClientJsonValue
-  mutation: MutationReceipt
-}
+export type InvokeAgentTurnResult = StudioRpcOutputs['application']['invokeAgentTurn']

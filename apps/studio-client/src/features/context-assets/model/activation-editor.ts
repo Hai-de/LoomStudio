@@ -25,14 +25,14 @@ export function readActivationDraft(node: ContextAssetNode): ActivationEditorDra
   }
   if (activation.kind === 'condition' && activation.conditions?.length === 1) {
     const condition = activation.conditions[0]
-    if (condition?.fact === 'agent.mode' && (condition.equals === 'draft' || condition.equals === 'finalize')) {
+    if (condition && 'fact' in condition && 'equals' in condition && condition.fact === 'agent.mode' && (condition.equals === 'draft' || condition.equals === 'finalize')) {
       return {
         ...defaultDraft('condition'),
         conditionPreset: 'agent.mode',
         conditionValue: condition.equals,
       }
     }
-    if (condition?.fact === 'tags' && (condition.includes === 'scene:combat' || condition.includes === 'style:cinematic')) {
+    if (condition && 'fact' in condition && 'includes' in condition && condition.fact === 'tags' && (condition.includes === 'scene:combat' || condition.includes === 'style:cinematic')) {
       return {
         ...defaultDraft('condition'),
         conditionPreset: 'tags',

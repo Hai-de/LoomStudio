@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { toast } from 'sonner'
+import { notify } from '../../shared/notifications/index.js'
 import {
   Button,
   ContextMenu,
@@ -297,6 +297,13 @@ export function SessionsPanel(props: SessionsPanelProps) {
       if (pendingDelete.batch && complete) {
         setIsSelectionMode(false)
       }
+      if (deletedTimelineIds.size + deletedSessionIds.size > 0) {
+        notify.success(props.t('notify.success.deleted'))
+      } else if (!complete) {
+        notify.warning(props.t('notify.error.general'))
+      }
+    } catch (error) {
+      notify.error(props.t('notify.error.general'), { description: error instanceof Error ? error.message : String(error) })
     } finally {
       setDeleteBusy(false)
       setPendingDelete(undefined)
@@ -344,7 +351,12 @@ export function SessionsPanel(props: SessionsPanelProps) {
     const currentTitle = timeline.title || props.t('sessions.untitledTimeline')
     const next = window.prompt(props.t('sessions.renamePrompt'), currentTitle)
     if (next !== null && next.trim() && next.trim() !== timeline.title) {
-      await props.onRenameTimeline?.(timeline.id, next.trim())
+      try {
+        await props.onRenameTimeline?.(timeline.id, next.trim())
+        notify.success(props.t('notify.success.updated'))
+      } catch (error) {
+        notify.error(props.t('notify.error.general'), { description: error instanceof Error ? error.message : String(error) })
+      }
     }
   }
 
@@ -360,7 +372,12 @@ export function SessionsPanel(props: SessionsPanelProps) {
     const currentTitle = session.title || props.t('sessions.untitledAgentSession')
     const next = window.prompt(props.t('sessions.renamePrompt'), currentTitle)
     if (next !== null && next.trim() && next.trim() !== session.title) {
-      await props.onRenameAgentSession?.(session.id, next.trim())
+      try {
+        await props.onRenameAgentSession?.(session.id, next.trim())
+        notify.success(props.t('notify.success.updated'))
+      } catch (error) {
+        notify.error(props.t('notify.error.general'), { description: error instanceof Error ? error.message : String(error) })
+      }
     }
   }
 
@@ -383,7 +400,9 @@ export function SessionsPanel(props: SessionsPanelProps) {
     setPrimaryError(undefined)
     try {
       await props.onSetPrimaryAgentSession?.(session)
+      notify.success(props.t('notify.success.updated'))
     } catch (error) {
+      notify.error(props.t('notify.error.general'), { description: error instanceof Error ? error.message : String(error) })
       setPrimaryError(error instanceof Error ? error.message : String(error))
     }
   }
@@ -1104,7 +1123,11 @@ function TimelineDetail(props: {
         new Blob([JSON.stringify(result.archive, null, 2)], { type: 'application/json' }),
         `${props.timeline.title || props.timeline.id}.loom-timeline.json`,
       )
-    } catch (error) { setArchiveError(error instanceof Error ? error.message : String(error)) }
+      notify.success(props.t('notify.success.exported'))
+    } catch (error) {
+      notify.error(props.t('notify.error.general'), { description: error instanceof Error ? error.message : String(error) })
+      setArchiveError(error instanceof Error ? error.message : String(error))
+    }
     finally { setArchiveBusy(false) }
   }
 
@@ -1123,10 +1146,13 @@ function TimelineDetail(props: {
       setImportedArchive(result)
       const notice = [props.t('sessions.archiveImported', { id: result.timelineId }), ...warnings].join('\n')
       setArchiveNotice(notice)
-      if (warnings.length) toast.warning(notice)
-      else toast.success(notice)
+      if (warnings.length) notify.warning(notice)
+      else notify.success(notice)
       await finishImport(result)
-    } catch (error) { setArchiveError(error instanceof Error ? error.message : String(error)) }
+    } catch (error) {
+      notify.error(props.t('notify.error.general'), { description: error instanceof Error ? error.message : String(error) })
+      setArchiveError(error instanceof Error ? error.message : String(error))
+    }
     finally { setArchiveBusy(false) }
   }
 
@@ -1135,10 +1161,7 @@ function TimelineDetail(props: {
     setArchiveBusy(true); setArchiveError(undefined); setArchiveNotice(undefined)
     setImportedArchive(undefined)
     try {
-      const converted = await props.api.extensionRuntime.call<{
-        title: string
-        messages: Array<{ content: string; createdAt?: string }>
-      }>('sillytavern.importer.convertChat', { jsonl: await file.text() })
+      const converted = parseConvertedChat(await props.api.extensionRuntime.call('sillytavern.importer.convertChat', { jsonl: await file.text() }))
       const result = await props.api.narratives.create({
         cardId: props.card.id,
         title: converted.title,
@@ -1148,9 +1171,12 @@ function TimelineDetail(props: {
       setImportedArchive(imported)
       const notice = props.t('sessions.chatImported', { count: converted.messages.length, id: result.timeline.id })
       setArchiveNotice(notice)
-      toast.success(notice)
+      notify.success(notice)
       await finishImport(imported)
-    } catch (error) { setArchiveError(error instanceof Error ? error.message : String(error)) }
+    } catch (error) {
+      notify.error(props.t('notify.error.general'), { description: error instanceof Error ? error.message : String(error) })
+      setArchiveError(error instanceof Error ? error.message : String(error))
+    }
     finally { setArchiveBusy(false) }
   }
 
@@ -1478,4 +1504,13 @@ function EmptyState(props: { text: string }) {
 
 function formatDate(value: string): string {
   return formatDateTime(value)
+}
+
+function parseConvertedChat(value: unknown): { title: string; messages: Array<{ content: string; createdAt?: string }> } {
+  if (!value || typeof value !== 'object' || !('title' in value) || typeof value.title !== 'string' || !('messages' in value) || !Array.isArray(value.messages)) throw new Error('Chat converter returned an invalid conversation')
+  return { title: value.title, messages: value.messages.map((entry: unknown) => {
+    if (!entry || typeof entry !== 'object' || !('content' in entry) || typeof entry.content !== 'string') throw new Error('Chat converter returned an invalid message')
+    if ('createdAt' in entry && entry.createdAt !== undefined && typeof entry.createdAt !== 'string') throw new Error('Chat converter returned an invalid message timestamp')
+    return { content: entry.content, ...('createdAt' in entry && typeof entry.createdAt === 'string' ? { createdAt: entry.createdAt } : {}) }
+  }) }
 }

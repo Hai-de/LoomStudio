@@ -7,6 +7,7 @@ import type { AgentPreset, AgentToolDefinition } from '../../../apps/studio-clie
 const state = vi.hoisted(() => ({ cursor: 0, values: [] as unknown[], setters: [] as ReturnType<typeof vi.fn>[] }))
 vi.mock('react', async importOriginal => ({
   ...await importOriginal<typeof import('react')>(),
+  useEffect: () => undefined,
   useRef: (current: unknown) => ({ current }),
   useState: (initial: unknown) => {
     const index = state.cursor++
@@ -18,11 +19,13 @@ vi.mock('react', async importOriginal => ({
   },
 }))
 
-beforeEach(() => { state.cursor = 0; state.values = []; state.setters = [] })
+let resources: AgentPreset[] = []
+let refreshDependents = async () => {}
+beforeEach(() => { state.cursor = 0; state.values = []; state.setters = []; resources = []; refreshDependents = async () => {} })
 
 function agentPresets(api: StudioApi, runAction: (action: () => Promise<void>) => Promise<void> = action => action()) {
   state.cursor = 0
-  return useAgentPresets({ api, runAction, refreshResources: async () => {} })
+  return useAgentPresets({ api, runAction, resources, readResources: () => resources, setResources: update => { resources = update(resources) }, refreshDependents })
 }
 
 describe('profile list pagination consumers', () => {
@@ -45,35 +48,33 @@ describe('profile list pagination consumers', () => {
     pending.resolve()
     await expect(creation).resolves.toBe(true)
     let selected: string | undefined
-    for (const [value] of state.setters[2]!.mock.calls) selected = typeof value === 'function' ? value(selected) : value
+    for (const [value] of state.setters[1]!.mock.calls) selected = typeof value === 'function' ? value(selected) : value
     expect(selected).toBe('other')
-    expect(state.setters[0]).toHaveBeenLastCalledWith([created, { id: 'other' }])
+    expect(resources).toEqual([created])
   })
 
-  it('keeps the newest combined Agent refresh when an older request finishes last', async () => {
+  it('keeps the newest Agent tool refresh when an older request finishes last', async () => {
     const pending = Promise.withResolvers<void>()
     const latest = [{ id: 'new-profile' }]
     const list = vi.fn().mockImplementationOnce(async () => {
       await pending.promise
-      return { agentPresets: [{ id: 'old-profile' }] }
-    }).mockResolvedValue({ agentPresets: latest })
+      return { tools: [{ id: 'old-profile' }] }
+    }).mockResolvedValue({ tools: latest })
     const api = {
-      agentPresets: { list },
-      promptResources: { list: async () => ({ resources: [] }) },
-      agentTools: { list: async () => ({ tools: [] }) },
+      agentTools: { list },
     } as unknown as StudioApi
     const profiles = agentPresets(api)
-    const old = profiles.refreshAgentPresets()
-    await profiles.refreshAgentPresets()
+    const old = profiles.refreshAgentTools()
+    await profiles.refreshAgentTools()
     pending.resolve()
     await old
     expect(state.setters[0]).toHaveBeenCalledExactlyOnceWith(latest)
   })
 
-  it('rereads a combined Agent list when a tool was saved during the read', async () => {
+  it('rereads a Agent tool list when a tool was saved during the read', async () => {
     const original: AgentToolDefinition = {
       id: 'tool', version: 1, name: 'Original', description: '', owner: { namespace: 'test' },
-      input: { kind: 'structured' }, createdAt: '', updatedAt: '',
+      input: { kind: 'structured', schema: { type: 'object' } }, createdAt: '', updatedAt: '',
     }
     const saved = { ...original, version: 2, name: 'Saved' }
     const list = vi.fn().mockResolvedValue({ agentPresets: [] })
@@ -84,16 +85,16 @@ describe('profile list pagination consumers', () => {
       agentTools: { list: listTools, update: async () => ({ tool: saved }) },
     } as unknown as StudioApi
     const profiles = agentPresets(api)
-    await profiles.refreshAgentPresets()
+    await profiles.refreshAgentTools()
     const pending = Promise.withResolvers<void>()
-    list.mockImplementationOnce(async () => { await pending.promise; return { agentPresets: [] } })
-    const stale = profiles.refreshAgentPresets()
+    listTools.mockImplementationOnce(async () => { await pending.promise; return { tools: [original] } })
+    const stale = profiles.refreshAgentTools()
     await profiles.updateAgentTool(original)
     listTools.mockResolvedValue({ tools: [saved] })
     pending.resolve()
     await stale
     let tools: AgentToolDefinition[] = []
-    for (const [value] of state.setters[1]!.mock.calls) tools = typeof value === 'function' ? value(tools) : value
+    for (const [value] of state.setters[0]!.mock.calls) tools = typeof value === 'function' ? value(tools) : value
     expect(tools).toEqual([saved])
     expect(listTools).toHaveBeenCalledTimes(3)
   })
@@ -117,7 +118,8 @@ describe('profile list pagination consumers', () => {
       promptResources: { list: async () => ({ resources: [] }) },
       agentTools: { list: async () => ({ tools: [] }) },
     } as unknown as StudioApi
-    state.values[0] = kind === 'create' ? [unrelated] : [original, unrelated]
+    resources = kind === 'create' ? [unrelated] : [original, unrelated]
+    refreshDependents = async () => { throw failure }
     const report = vi.fn()
     const profiles = agentPresets(api, async action => {
       try { await action() } catch (error) { report(error); throw error }
@@ -129,12 +131,10 @@ describe('profile list pagination consumers', () => {
         : profiles.deleteAgentPreset(original.id)
     if (kind === 'create') await expect(operation).resolves.toBe(true)
     else await expect(operation).rejects.toBe(failure)
-    let records = kind === 'create' ? [unrelated] : [original, unrelated]
-    for (const [value] of state.setters[0]!.mock.calls) records = typeof value === 'function' ? value(records) : value
-    expect(records).toEqual(kind === 'delete' ? [unrelated] : [saved, unrelated])
+    expect(resources).toEqual(kind === 'delete' ? [unrelated] : [saved, unrelated])
     expect(report).toHaveBeenCalledExactlyOnceWith(failure)
-    if (kind === 'delete') expect(state.setters[2]).not.toHaveBeenCalled()
-    if (kind === 'create') expect(state.setters[2]).toHaveBeenCalledWith(saved.id)
+    if (kind === 'delete') expect(state.setters[1]).not.toHaveBeenCalled()
+    if (kind === 'create') expect(state.setters[1]).toHaveBeenCalledWith(saved.id)
   })
 
   it.each(['provider', 'capability'] as const)('distinguishes failed %s creation from a committed creation with failed refresh', async kind => {
@@ -206,11 +206,11 @@ describe('profile list pagination consumers', () => {
     if (!success) expect(state.setters.every(setter => setter.mock.calls.length === 0)).toBe(true)
   })
 
-  it.each(['provider', 'capability', 'agent'] as const)('loads all 101 %s profiles into the consuming Hook', async kind => {
+  it.each(['provider', 'capability'] as const)('loads all 101 %s profiles into the consuming Hook', async kind => {
     const records = Array.from({ length: 101 }, (_, index) => ({
       id: `profile-${index}`, enabledModelIds: [], version: 1,
     }))
-    const property = kind === 'provider' ? 'providerProfiles' : kind === 'agent' ? 'agentPresets' : 'profiles'
+    const property = kind === 'provider' ? 'providerProfiles' : 'profiles'
     const list = vi.fn()
       .mockResolvedValueOnce({ [property]: records.slice(0, 100), nextCursor: 'second-page' })
       .mockResolvedValueOnce({ [property]: records.slice(100) })
@@ -222,14 +222,10 @@ describe('profile list pagination consumers', () => {
       promptResources: { list: async () => ({ resources: [] }) },
       agentTools: { list: async () => ({ tools: [] }) },
     } as unknown as StudioApi
-    if (kind === 'agent') {
-      await agentPresets(api).refreshAgentPresets()
-    } else {
-      await useProviderSettings({
-        api, runAction: action => action(),
-        initialProviderAccountDraft: { displayName: '', baseUrl: '', apiKey: '' },
-      }).refreshProviderSettings()
-    }
+    await useProviderSettings({
+      api, runAction: action => action(),
+      initialProviderAccountDraft: { displayName: '', baseUrl: '', apiKey: '' },
+    }).refreshProviderSettings()
     expect(list).toHaveBeenCalledTimes(2)
     expect(list).toHaveBeenNthCalledWith(2, { cursor: 'second-page', limit: 100 })
     expect(state.setters.some(setter => setter.mock.calls.some(([value]) => Array.isArray(value) && value.length === 101))).toBe(true)

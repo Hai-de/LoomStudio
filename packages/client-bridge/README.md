@@ -2,51 +2,23 @@
 
 > **状态**：Active Package Guide / Current Source Is Authority
 
-`@loom-studio/client-bridge` 是供前端 Web Client 消费 Studio Server 服务的 RPC 调用桥梁。它封装基于 HTTP `fetch` 的 JSON-RPC 2.0 传输细节，并提供会话凭证自动重连能力。
+本包提供浏览器会话恢复的 `createSessionFetch`，以及面向字符串方法消费者的 tRPC 适配器 `createClientBridge`。主应用使用 `apps/studio-client/src/shared/api/trpc-client.ts`，从服务端 `AppRouter` 推导输入输出；不使用 `bridge.call<T>` 声明业务结果。
 
-## 业务使命与自动会话刷新
+## 传输与边界
 
-在浏览器端，前端组件与 Feature 逻辑需要调用后端的大量 RPC 方法（如 `application.*`、`docs.*`、`system.*`）。
-`@loom-studio/client-bridge` 解决底层传输与鉴权痛点：
-- **自动封装 JSON-RPC 2.0**：自动分配客户端调用 ID，统一序列化请求体与反序列化响应；
-- **401 会话刷新**：仅浏览器环境收到 HTTP 401 时，尝试一次 `POST /auth/session`；握手成功后用相同 ID 重发一次请求。非 401、网络异常或 RPC 业务错误不会自动重试；这不是业务提交幂等或防丢失保证；
-- **环境适配**：默认使用宿主 `globalThis.fetch`，同时也支持在测试中显式注入自定义 Mock `fetch`。
+- endpoint 为 `/trpc`；使用官方 tRPC HTTP Link，查询与写入都发 POST，不启用 batching。
+- `createSessionFetch` 仅在浏览器收到 401 时启动一次 `/auth/session` 握手，成功后重发原请求；网络错误、非 401 和已执行的业务失败不自动重试。AbortSignal 贯穿请求、握手等待与重发。
+- `bridge.call<T>(method, params, { signal })` 供无法静态描述方法的 SDK 消费者使用。平台命名空间调用对应 procedure，其余方法发送到 `kernel.invoke`。泛型仅是消费者的声明，不能作为动态扩展结果已验证的证据。
+- 不提供 JSON-RPC 2.0 网络传输，不生成 `client-N` 请求 ID。关联 ID 与调用 ID 由服务端响应头提供。
+- 本包不持有 UI、业务 DTO 或领域状态。运行时扩展生命周期与授权仍由 Kernel/Extension Host 处理。
 
----
+## 入口与验证
 
-## 架构规约与职责边界 (Rules & Boundaries)
-
-1. **纯传输适配器定位（Pure Transport Bridge）**：
-   - 本包**只负责底层 RPC 字符串方法调用与网络错误映射**；
-   - **严禁在本包定义具体的业务 API 方法签名或前端状态**；具体的强类型映射由 Client 内部的 `apps/studio-client/src/shared/api/studio-api.ts` 承担。
-2. **禁止侵入 UI 与状态**：
-   - 严禁引入 React、Zustand、TanStack Query 或页面状态逻辑。
-
----
-
-## 公共入口
-
-Package 主入口为 [`src/index.ts`](./src/index.ts)：
-
-- `createClientBridge(options)`：创建客户端调用桥实例；
-- 核心方法：`bridge.call<T>(method, params, { signal })`，可选 `AbortSignal` 贯穿请求、会话刷新与重发；
-- 核心类型：`ClientBridge`、`ClientBridgeOptions`、`ClientJsonValue`。
-
----
-
-## 构建与验证
+入口：[src/index.ts](./src/index.ts)、[src/session-fetch.ts](./src/session-fetch.ts)。
 
 ```bash
-# 编译 TypeScript 产物
 pnpm --filter @loom-studio/client-bridge build
-
-# 运行 ClientBridge 契约与自动重试测试
-pnpm exec vitest run tests/contract/client-bridge
+pnpm exec vitest run tests/contract/client-bridge tests/integration/client-bridge
 ```
 
----
-
-## 正式文档
-
-- [Kernel RPC 机制说明](../../docs/architecture/kernel/README.md)
-- [Client 架构与 typed API Client](../../apps/studio-client/README.md)
+参见 [Kernel](../../docs/architecture/kernel/README.md) 与 [Client](../../apps/studio-client/README.md)。

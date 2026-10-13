@@ -1,8 +1,9 @@
+import { createStudioTrpcClient } from '../../../apps/studio-client/src/shared/api/trpc-client.js'
 // 通过 Vite 加载此模块；只使用内存 API，不访问真实数据库或 Storage。
 import { act, createElement, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { FormEvent } from 'react'
-import type { AgentSession, AgentTranscriptEntry, NarrativeTimeline, NarrativeBranch } from '../../../apps/studio-client/src/entities/index.js'
+import type { AgentSession, AgentTranscriptEntry, NarrativeTimeline } from '../../../apps/studio-client/src/entities/index.js'
 import { createStudioApi, type StudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
 import { useNarrativeRuntime } from '../../../apps/studio-client/src/features/narrative-runtime/model/use-narrative-runtime.js'
 
@@ -14,7 +15,7 @@ const session = (id: string, timelineId?: string, agentPresetId = 'profile-a'): 
 })
 const message = (owner: AgentSession, suffix = '', role: 'user' | 'assistant' = 'user') => ({
   id: `${owner.id}${suffix}`, agentSessionId: owner.id, sequence: 1, createdAt: timestamp,
-  entry: { kind: 'message', role, content: owner.id + suffix },
+  entry: { kind: 'message' as const, role, content: owner.id + suffix },
 } satisfies AgentTranscriptEntry)
 function assert(condition: unknown, message: string): void {
   if (!condition) throw new Error(message)
@@ -37,9 +38,9 @@ async function runChecks() {
   const timeline = (id: string): NarrativeTimeline => ({
     id, title: id, activeBranchId: `${id}-main`, promptResourceIds: [], createdAt: timestamp, updatedAt: timestamp,
   })
-  const branch = (id: string): NarrativeBranch => ({ id: `${id}-main`, timelineId: id, createdAt: timestamp, updatedAt: timestamp })
+  const branch = (id: string): Awaited<ReturnType<StudioApi['narratives']['getPage']>>['branch'] => ({ id: `${id}-main`, timelineId: id, stateHeadRevisionId: 'state', createdAt: timestamp, updatedAt: timestamp })
   const page = (id: string) => ({ timeline: timeline(id), branch: branch(id), nodes: [] })
-  const baseApi = createStudioApi({ call: async method => { throw new Error(`Unexpected probe RPC: ${method}`) } })
+  const baseApi = createStudioApi(createStudioTrpcClient({ fetch: async () => { throw new Error('Unexpected RPC in rendering test') } }))
   const api: StudioApi = {
     ...baseApi,
     narratives: {
@@ -50,7 +51,7 @@ async function runChecks() {
       create: async () => ({ ...page(`created-${++createdTimelines}`), mutation: { changesetId: 'create-timeline' } }),
       appendInput: async input => ({
         ...page(input.timelineId),
-        node: { id: input.nodeId, timelineId: input.timelineId, createdAt: timestamp,
+        node: { id: input.nodeId, timelineId: input.timelineId, stateRevisionId: 'state', createdAt: timestamp,
           body: { format: 'loom-markdown.v1', raw: input.content } },
         mutation: { changesetId: 'append-input' },
       }),
@@ -88,6 +89,10 @@ async function runChecks() {
         return {
           events: [{
             type: 'completed', runId, result: {
+              runId, provider: { provider: 'test', model: 'test-model', finishReason: 'stop' },
+              projection: { messages: [], editorProjection: { sourceRows: [], promptRows: [] } }, toolExposures: [], toolPromptBuildTrace: { sourceCount: 0, activeCount: 0, requestedOrder: [], effectiveOrder: [], activations: [], orders: [] },
+    promptBuildTrace: { version: 'core-compact-1' as const, status: 'ok' as const, initialFragmentCount: 0, finalFragmentCount: 0, messageFragmentCount: 0, diagnostics: [], executions: [] }, macroInspection: { snapshot: { global: {}, computed: {}, aliases: {} }, entries: [], capturedAt: '' },
+              mutation: { changesetId: 'turn-commit', scope: 'agent-session-transcript' as const },
               agentSession: owner, entries: { user: message(owner, '-u'), assistant: message(owner, '-a', 'assistant') },
               ...(input.narrativeTarget ? { narrative: page(input.narrativeTarget.timelineId) } : {}),
             },

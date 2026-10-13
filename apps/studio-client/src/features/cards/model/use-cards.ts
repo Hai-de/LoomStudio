@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type SetStateAction } from 'react'
-import { toast } from 'sonner'
+import { notify } from '../../../shared/notifications/index.js'
 import type { StudioApi } from '../../../shared/api/studio-api.js'
 import type { Translator } from '../../../shared/i18n/index.js'
 import type { Card, CardMedia, CardSummary } from '../../../entities/index.js'
@@ -365,9 +365,9 @@ export function useCards(input: UseCardsInput) {
         await input.onCardsDeleted?.()
       }
       if (deletedNames.length === 1) {
-        toast.success(input.t('character.cardDeletedNotice', { name: deletedNames[0] }))
+        notify.success(input.t('character.cardDeletedNotice', { name: deletedNames[0] }))
       } else if (deletedNames.length > 1) {
-        toast.success(input.t('character.cardsDeletedNotice', { count: deletedNames.length }))
+        notify.success(input.t('character.cardsDeletedNotice', { count: deletedNames.length }))
       }
     })
   }
@@ -450,9 +450,9 @@ export function useCards(input: UseCardsInput) {
       }
       assertCurrentSource()
       if (importedNames.length === 1) {
-        toast.success(input.t('character.cardImportedNotice', { name: importedNames[0] }))
+        notify.success(input.t('character.cardImportedNotice', { name: importedNames[0] }))
       } else if (importedNames.length > 1) {
-        toast.success(input.t('character.cardsImportedNotice', { count: importedNames.length }))
+        notify.success(input.t('character.cardsImportedNotice', { count: importedNames.length }))
       }
       try {
         await refreshCards()
@@ -476,7 +476,7 @@ export function useCards(input: UseCardsInput) {
           throw new Error(input.t('character.directoryConflict', { count: preview.conflicts.length }))
         }
         const saved = await input.api.cards.saveDirectory(card.id, preview.token)
-        toast.success(input.t('character.directorySaved', { count: saved.changedFiles }), { description: saved.directory })
+        notify.success(input.t('character.directorySaved', { count: saved.changedFiles }), { description: saved.directory })
         return
       }
       const suffix = format === 'png' ? 'export.png' : format === 'polyglot' ? 'export.polyglot.png' : 'export.loomcard'
@@ -487,6 +487,7 @@ export function useCards(input: UseCardsInput) {
       }
       const extension = format === 'loomcard' ? '.loomcard.zip' : format === 'polyglot' ? '.polyglot.png' : '.png'
       downloadBlob(await response.blob(), `${sanitizeFileName(card.name) || 'loom-card'}${extension}`)
+      notify.success(input.t('notify.success.exported'))
     })
   }
 

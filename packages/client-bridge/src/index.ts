@@ -1,84 +1,24 @@
-import type { RpcId, RpcRequest, RpcResponse } from '@loom-studio/transport'
+import { createTRPCUntypedClient, httpLink } from '@trpc/client'
+import { createSessionFetch } from './session-fetch.js'
+export { createSessionFetch } from './session-fetch.js'
 
 export type ClientJsonValue = null | boolean | number | string | ClientJsonValue[] | { [key: string]: ClientJsonValue }
-
-export type ClientBridgeOptions = {
-  endpoint: string
-  fetch?: typeof fetch
-}
-
+export type ClientBridgeOptions = { endpoint: string; fetch?: typeof fetch }
 export type ClientBridge = {
   call<T = ClientJsonValue>(method: string, params?: ClientJsonValue, options?: { signal?: AbortSignal }): Promise<T>
 }
 
+// Untyped bridge for dynamic extension/SDK consumers. Main application code
+// uses AppRouter via createStudioTrpcClient and cannot nominate return types.
 export function createClientBridge(options: ClientBridgeOptions): ClientBridge {
-  const fetchImpl = options.fetch ?? globalThis.fetch
-  let nextId = 1
-
-  if (!fetchImpl) {
-    throw new Error('ClientBridge requires fetch')
-  }
-
-  return {
-    call: async <T = ClientJsonValue>(method: string, params?: ClientJsonValue, requestOptions?: { signal?: AbortSignal }) => {
-      const response = await callRpc(fetchImpl, options.endpoint, nextRpcId(nextId++), method, params, requestOptions?.signal)
-
-      if (response.error) {
-        throw new Error(response.error.message)
-      }
-
-      return response.result as T
-    },
-  }
-}
-
-function callRpc(fetchImpl: typeof fetch, endpoint: string, id: RpcId, method: string, params: ClientJsonValue | undefined, signal?: AbortSignal): Promise<RpcResponse> {
-  return sendRequest(fetchImpl, endpoint, {
-    jsonrpc: '2.0',
-    id,
-    method,
-    params,
-  }, signal)
-}
-
-async function sendRequest(fetchImpl: typeof fetch, endpoint: string, request: RpcRequest, signal?: AbortSignal): Promise<RpcResponse> {
-  let response = await fetchImpl(endpoint, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(request),
-    credentials: 'same-origin',
-    signal,
-  })
-
-  if (response.status === 401 && typeof globalThis.window !== 'undefined') {
-    try {
-      const authRes = await fetchImpl('/auth/session', {
-        method: 'POST',
-        credentials: 'same-origin',
-        signal,
-      })
-      if (authRes.ok) {
-        response = await fetchImpl(endpoint, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(request),
-          credentials: 'same-origin',
-          signal,
-        })
-      }
-    } catch {
-      signal?.throwIfAborted()
-      // Fall through to error handling
-    }
-  }
-
-  if (!response.ok) {
-    throw new Error(`RPC HTTP request failed: ${response.status}`)
-  }
-
-  return await response.json() as RpcResponse
-}
-
-function nextRpcId(value: number): RpcId {
-  return `client-${value}`
+  const rawFetch = options.fetch ?? globalThis.fetch
+  if (!rawFetch) throw new Error('ClientBridge requires fetch')
+  const authEndpoint = `${options.endpoint.slice(0, options.endpoint.lastIndexOf('/'))}/auth/session`
+  const client = createTRPCUntypedClient({ links: [httpLink({
+    url: options.endpoint, methodOverride: 'POST', fetch: createSessionFetch(rawFetch, authEndpoint),
+  })] })
+  return { call: <T = ClientJsonValue>(method: string, params?: ClientJsonValue, requestOptions?: { signal?: AbortSignal }) => {
+    const platform = ['application', 'official', 'directories', 'settings', 'logs', 'ai', 'system', 'docs', 'extensions', 'diagnostics', 'loom', 'trace', 'audit', 'kernel'].includes(method.split('.')[0]!)
+    return client.mutation(platform ? method : 'kernel.invoke', platform ? params : { method, params }, requestOptions) as Promise<T>
+  } }
 }

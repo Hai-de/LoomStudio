@@ -71,7 +71,7 @@ export default defineConfig({
       '/assets': studioServerUrl,
       '/cards': studioServerUrl,
       '/extensions': studioServerUrl,
-      '/rpc': studioServerUrl,
+      '/trpc': studioServerUrl,
     },
   },
 })

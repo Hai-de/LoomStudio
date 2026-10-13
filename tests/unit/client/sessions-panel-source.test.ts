@@ -1,8 +1,9 @@
+import { createStudioTrpcClient } from '../../../apps/studio-client/src/shared/api/trpc-client.js'
 import { isValidElement, type ComponentProps, type ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SessionsPanel } from '../../../apps/studio-client/src/widgets/sessions-panel/sessions-panel.js'
 import { AgentSessionCreateDialog } from '../../../apps/studio-client/src/widgets/agent-chat-panel/agent-session-create-dialog.js'
-import { createStudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
+import { createStudioApi, type StudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
 import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/index.js'
 import type { AgentSession, AgentTranscriptEntry, NarrativeNode, NarrativeTimeline } from '../../../apps/studio-client/src/entities/index.js'
 
@@ -61,15 +62,15 @@ const session: AgentSession = {
 }
 
 function source(label: string) {
-  const api = createStudioApi({ call: async method => { throw new Error(`Unexpected RPC: ${method}`) } })
-  const nodes: NarrativeNode[] = [{
-    id: label, timelineId: timeline.id, body: { format: 'loom-markdown.v1', raw: label }, createdAt: timestamp,
+  const api = createStudioApi(createStudioTrpcClient({ fetch: async () => { throw new Error('Unexpected RPC in rendering test') } }))
+  const nodes: Awaited<ReturnType<StudioApi['narratives']['getPage']>>['nodes'] = [{
+    id: label, timelineId: timeline.id, stateRevisionId: 'state', body: { format: 'loom-markdown.v1', raw: label }, createdAt: timestamp,
   }]
-  const entries: AgentTranscriptEntry[] = [{
+  const entries: Awaited<ReturnType<StudioApi['agentSessions']['getTranscript']>>['entries'] = [{
     id: label, agentSessionId: session.id, sequence: 1, createdAt: timestamp,
     entry: { kind: 'message', role: 'user', content: label },
   }]
-  const page = { timeline, branch: { id: 'branch', timelineId: timeline.id, createdAt: timestamp, updatedAt: timestamp }, nodes }
+  const page = { timeline, branch: { id: 'branch', timelineId: timeline.id, stateHeadRevisionId: 'state', createdAt: timestamp, updatedAt: timestamp }, nodes }
   const transcript = { session, entries }
   const getPage = vi.fn(async () => page)
   const getTranscript = vi.fn(async () => transcript)
@@ -254,12 +255,12 @@ describe('Session panel preview source isolation', () => {
 
   it('renders historical tools as a collapsible group without runtime telemetry', async () => {
     const f = fixture('session')
-    const entries: AgentTranscriptEntry[] = [
+    const entries: Awaited<ReturnType<StudioApi['agentSessions']['getTranscript']>>['entries'] = [
       { id: 'state', agentSessionId: session.id, sequence: 1, createdAt: timestamp, entry: { kind: 'run-state', state: 'running' } },
       { id: 'user', agentSessionId: session.id, sequence: 2, createdAt: timestamp, entry: { kind: 'message', role: 'user', content: 'Hello' } },
-      { id: 'call', agentSessionId: session.id, sequence: 3, createdAt: timestamp, entry: { kind: 'tool-invocation', invocationId: 'invoke-1', toolId: 'official/read', exposedName: 'read' } },
-      { id: 'observation', agentSessionId: session.id, sequence: 4, createdAt: timestamp, entry: { kind: 'provider-observation', provider: 'test' } },
-      { id: 'result', agentSessionId: session.id, sequence: 5, createdAt: timestamp, entry: { kind: 'tool-result', invocationId: 'invoke-1', status: 'completed', content: [{ type: 'text', text: 'Read complete' }] } },
+      { id: 'call', agentSessionId: session.id, sequence: 3, createdAt: timestamp, entry: { kind: 'tool-invocation', invocationId: 'invoke-1', toolId: 'official/read', exposedName: 'read', transport: 'native-function', status: 'completed' } },
+      { id: 'observation', agentSessionId: session.id, sequence: 4, createdAt: timestamp, entry: { kind: 'provider-observation', provider: 'test', model: 'model' } },
+      { id: 'result', agentSessionId: session.id, sequence: 5, createdAt: timestamp, entry: { kind: 'tool-result', invocationId: 'invoke-1', toolId: 'official/read', status: 'completed', content: [{ type: 'text', text: 'Read complete' }] } },
     ]
     f.a.getTranscript.mockResolvedValue({ session, entries })
     f.render()

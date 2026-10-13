@@ -41,9 +41,9 @@ pnpm dev:server
 pnpm dev:client
 ```
 
-`dev:client` 会先构建并监听内部 Packages，再启动 `127.0.0.1:18011`（可通过 `PORT` 覆盖）。Vite 将 `/auth`、`/assets`、`/cards`、`/extensions` 和 `/rpc` 代理到 `STUDIO_SERVER_URL`，默认是 `http://127.0.0.1:18010`。
+`dev:client` 会先构建并监听内部 Packages，再启动 `127.0.0.1:18011`（可通过 `PORT` 覆盖）。Vite 将 `/auth`、`/assets`、`/cards`、`/extensions` 和 `/trpc` 代理到 `STUDIO_SERVER_URL`，默认是 `http://127.0.0.1:18010`。
 
-若 Server 通过 `PORT` 改用其他端口，启动 Client 时也需设置对应的 `STUDIO_SERVER_URL`；反之若 Client 改用其他端口，Server 亦可通过 `STUDIO_CLIENT_URL` 放行开发 Origin。RPC 使用 HTTP `POST /rpc`；Extension Catalog 变化使用 `/extensions/events` SSE。
+若 Server 通过 `PORT` 改用其他端口，启动 Client 时也需设置对应的 `STUDIO_SERVER_URL`；反之若 Client 改用其他端口，Server 亦可通过 `STUDIO_CLIENT_URL` 放行开发 Origin。RPC 使用 HTTP `POST /trpc/<procedure>`；Extension Catalog 变化使用 `/extensions/events` SSE。
 
 定向命令：
 
@@ -75,7 +75,7 @@ pnpm exec vitest run tests/unit/client
 - [`src/main.tsx`](./src/main.tsx)：创建 Client Logger，通过 `POST /auth/session` 建立应用会话，再挂载 Router 和 Error Boundary。
 - [`src/app/app.tsx`](./src/app/app.tsx)：组合 Studio 页面和各 Workspace/Panel。
 - [`src/app/use-studio-state.ts`](./src/app/use-studio-state.ts)：组合 Feature hooks，形成 App facade。
-- [`src/shared/api/studio-api.ts`](./src/shared/api/studio-api.ts)：把 Client Bridge 映射为 typed `application.*`、`settings.*`、`logs.*` 等 API。
+- [`src/shared/api/studio-api.ts`](./src/shared/api/studio-api.ts)：封装由 Server `AppRouter` 推导的 typed `application.*`、`settings.*`、`logs.*` 等 API；底层使用 [`trpc-client.ts`](./src/shared/api/trpc-client.ts) 与 Session fetch。
 
 普通面板切换使用同一 `/studio` 的 History State，显式 URI 负责资源身份与外部跳转，不能重新用每个面板的 Path 覆盖 Timeline 上下文。恢复优先级和来源隔离见[导航架构](../../docs/architecture/ui/navigation-and-routing.md)。
 
@@ -90,8 +90,9 @@ Agent Chat 使用独立 [`AgentSessionPicker`](./src/widgets/agent-chat-panel/ag
 ```text
 Route / UI
   -> Feature hook / useStudioState
-  -> createStudioApi(Client Bridge)
-  -> authenticated POST /rpc
+  -> createStudioApi
+  -> typed tRPC client (AppRouter) / Session fetch
+  -> authenticated POST /trpc/<procedure>
   -> Studio Server / Application Runtime
   -> DTO / Client state / UI
 ```

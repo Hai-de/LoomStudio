@@ -1,12 +1,6 @@
-import type { ClientJsonValue } from '@loom-studio/client-bridge'
+import type { LoomScriptOwner } from '@loom-studio/shared/loom-scripts'
+export type { LoomScriptOwner, LoomScriptMount } from '@loom-studio/shared/loom-scripts'
 import type { RendererContributionDefinition } from '@loom-studio/extension-sdk'
-
-export type LoomScriptOwner =
-  | { kind: 'extension'; packageId: string; installationId: string }
-  | { kind: 'workspace'; workspaceId: string }
-  | { kind: 'card'; cardId: string }
-  | { kind: 'preset'; presetId: string }
-  | { kind: 'user' }
 
 type LoomScriptRendererContribution = {
   kind: 'renderer'
@@ -27,20 +21,6 @@ export type LoomScript = {
   requestedCapabilities: string[]
   source: { blobId: string; mediaType: 'text/javascript'; fileName: string }
   sourceDigest: string
-  createdAt: string
-  updatedAt: string
-}
-
-export type LoomScriptMount = {
-  id: string
-  version: number
-  target: Exclude<LoomScriptOwner, { kind: 'extension' }>
-  scriptDocumentId: string
-  enabled: boolean
-  orderIndex: number
-  pinnedDocumentVersion?: number
-  grantedCapabilities: string[]
-  origin: Record<string, ClientJsonValue>
   createdAt: string
   updatedAt: string
 }

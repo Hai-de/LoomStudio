@@ -23,7 +23,6 @@ type UsePromptResourceCommandsInput = {
     resources?: boolean
     loreMounts?: boolean
   }): Promise<void>
-  refreshAgentPresets: () => Promise<unknown>
   refreshCards: () => Promise<unknown>
   refreshCardTimelines: (cardId: string) => Promise<unknown>
   selectedCardId?: string
@@ -33,7 +32,7 @@ export function usePromptResourceCommands(input: UsePromptResourceCommandsInput)
   const {
     api, t, runMutation, recordEdit, promptResources, setPromptResources, setLoreMounts, setPresetToolMounts,
     invalidatePromptResourceState,
-    refreshAgentPresets, refreshCards, refreshCardTimelines, selectedCardId,
+    refreshCards, refreshCardTimelines, selectedCardId,
   } = input
 
   async function updatePresetModel(config: Parameters<StudioApi['agentPresets']['update']>[0]) {
@@ -43,7 +42,6 @@ export function usePromptResourceCommands(input: UsePromptResourceCommandsInput)
         const result = await api.agentPresets.update(config)
         committed = result.agentPreset
         setPromptResources(current => current.map(resource => resource.id === result.agentPreset.id && resource.version <= result.agentPreset.version ? result.agentPreset : resource))
-        await refreshAgentPresets()
         return result.agentPreset
       })
     } catch (error) {
@@ -82,7 +80,6 @@ export function usePromptResourceCommands(input: UsePromptResourceCommandsInput)
         resources: true,
         presetToolMounts: resourceKind === 'preset',
       })
-      if (resourceKind === 'preset') await refreshAgentPresets()
     }).catch(error => {
       if (!resourceId) throw error
     })
@@ -105,7 +102,6 @@ export function usePromptResourceCommands(input: UsePromptResourceCommandsInput)
         loreMounts: result.resource.resourceKind === 'preset',
         presetToolMounts: result.resource.resourceKind === 'preset',
       })
-      if (result.resource.resourceKind === 'preset') await refreshAgentPresets()
     }).catch(error => {
       if (!duplicatedId) throw error
     })
@@ -121,7 +117,6 @@ export function usePromptResourceCommands(input: UsePromptResourceCommandsInput)
       await invalidatePromptResourceState({ resources: true, loreMounts: true, presetToolMounts: true })
       await Promise.all([
         refreshCards(),
-        refreshAgentPresets(),
         selectedCardId ? refreshCardTimelines(selectedCardId) : Promise.resolve(),
       ])
     }).catch(error => {
@@ -144,8 +139,7 @@ export function usePromptResourceCommands(input: UsePromptResourceCommandsInput)
         ...current.filter(mount => mount.source.kind !== source.kind || (source.kind === 'preset' ? mount.source.id !== source.id : mount.source.id !== (source.id ?? 'global'))),
         ...result.mounts,
       ])
-      await invalidatePromptResourceState({ bindings: true })
-      await refreshAgentPresets()
+      await invalidatePromptResourceState({ resources: true })
     })
   }
 
@@ -156,7 +150,7 @@ export function usePromptResourceCommands(input: UsePromptResourceCommandsInput)
         ...current.filter(mount => mount.presetResourceId !== presetId),
         ...result.mounts,
       ])
-      await refreshAgentPresets()
+      await invalidatePromptResourceState({ resources: true })
     })
   }
 
@@ -179,7 +173,6 @@ export function usePromptResourceCommands(input: UsePromptResourceCommandsInput)
         anchor: { documentId: result.resource.id, subjectId: result.resource.rootNode.id },
       })
       await invalidatePromptResourceState({ resources: true })
-      if (result.resource.resourceKind === 'preset') await refreshAgentPresets()
     }).catch(error => {
       if (!resourceId) throw error
     })
@@ -208,7 +201,6 @@ export function usePromptResourceCommands(input: UsePromptResourceCommandsInput)
         anchor: { documentId: result.resource.id, subjectId: result.resource.rootNode.id },
       })
       await invalidatePromptResourceState({ resources: true })
-      if (result.resource.resourceKind === 'preset') await refreshAgentPresets()
     }).catch(error => {
       if (!resourceId) throw error
     })

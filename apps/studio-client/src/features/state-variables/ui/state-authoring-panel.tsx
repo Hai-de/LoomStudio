@@ -1,6 +1,6 @@
 import { Box, Boxes, Braces, Component, FileCode2, Folder, FolderOpen, Link2, Plus, Save, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { toast } from 'sonner'
+import { notify } from '../../../shared/notifications/index.js'
 import { Button } from '@loom-studio/ui'
 import type { Card, CardStateTemplate } from '../../../entities/card.js'
 import type { JsonObject } from '../../../entities/common.js'
@@ -134,9 +134,11 @@ function StateAuthoringEditor(props: StateAuthoringPanelProps) {
       baselineRef.current = yaml
       setConfig(next)
       setSourceText(yaml)
-      toast.success(props.t('stateAuthoring.savedCard'))
+      notify.success(props.t('stateAuthoring.savedCard'))
     } catch (cause) {
-      if (mountedRef.current) setError(cause instanceof Error ? cause.message : String(cause))
+      const message = cause instanceof Error ? cause.message : String(cause)
+      if (mountedRef.current) setError(message)
+      notify.error(message)
     } finally {
       savingRef.current = false
       if (mountedRef.current) setSaving(false)

@@ -108,7 +108,7 @@ export async function runAgentTurn(
       }
       const committedDuringRead = batch !== snapshot && batch.events.some(event =>
         event.type === 'transcript-appended' && Array.isArray(event.entries)
-        && (event.entries as unknown as AgentTranscriptEntry[]).some(entry =>
+        && event.entries.some(entry =>
           entry.runId === runId && (entry.entry.kind === 'tool-invocation'
             || entry.entry.kind === 'message' && entry.entry.role === 'assistant')))
       updateMessages(current => {
@@ -132,7 +132,7 @@ export async function runAgentTurn(
     run.cursor = batch.nextCursor
     for (const event of [...pendingApprovals, ...batch.events]) {
       if (event.type === 'transcript-appended' && Array.isArray(event.entries)) {
-        const appended = event.entries as unknown as AgentTranscriptEntry[]
+        const appended = event.entries
         updateMessages(current => mergeAgentRunEntries(current, appended, run))
       }
       if (event.type === 'text-delta' && typeof event.delta === 'string' && streamingId) {
@@ -149,7 +149,7 @@ export async function runAgentTurn(
           status: 'running',
           approval: {
             requestId: event.requestId,
-            preview: event.preview as NonNullable<AgentMutationApproval['preview']>,
+            preview: event.preview,
           },
         })
       }
@@ -159,14 +159,14 @@ export async function runAgentTurn(
           runId, status: 'running',
           approval: {
             requestId: event.requestId,
-            action: event.action as NonNullable<AgentMutationApproval['action']>,
+            action: event.action,
           },
         })
       }
       if (event.type === 'completed' && event.result && typeof event.result === 'object') {
         run.status = 'completed'
         updateRun({ runId, status: 'completed' })
-        return event.result as unknown as InvokeAgentTurnResult
+        return event.result
       }
       if (event.type === 'failed') {
         run.status = 'failed'

@@ -35,7 +35,6 @@ describe('prompt resource commands', () => {
         },
       } as unknown as StudioApi,
       invalidate: async () => { events.push('invalidate') },
-      refreshAgentPresets: async () => { events.push('agents') },
       refreshCards: async () => { events.push('cards') },
       refreshCardTimelines: async () => { events.push('timelines') },
       selectedCardId: 'card-1',
@@ -44,14 +43,13 @@ describe('prompt resource commands', () => {
     await commands.deletePromptResource('resource-1')
 
     expect(events.slice(0, 2)).toEqual(['delete', 'invalidate'])
-    expect(new Set(events.slice(2))).toEqual(new Set(['agents', 'cards', 'timelines']))
+    expect(new Set(events.slice(2))).toEqual(new Set(['cards', 'timelines']))
   })
 })
 
 function commandInput(overrides: {
   api: StudioApi
   invalidate: (areas: { presetToolMounts?: boolean; resources?: boolean; loreMounts?: boolean }) => Promise<void>
-  refreshAgentPresets?: () => Promise<unknown>
   refreshCards?: () => Promise<unknown>
   refreshCardTimelines?: (cardId: string) => Promise<unknown>
   selectedCardId?: string
@@ -66,7 +64,6 @@ function commandInput(overrides: {
     setLoreMounts: () => undefined,
     setPresetToolMounts: () => undefined,
     invalidatePromptResourceState: overrides.invalidate,
-    refreshAgentPresets: overrides.refreshAgentPresets ?? (async () => undefined),
     refreshCards: overrides.refreshCards ?? (async () => undefined),
     refreshCardTimelines: overrides.refreshCardTimelines ?? (async () => undefined),
     selectedCardId: overrides.selectedCardId,

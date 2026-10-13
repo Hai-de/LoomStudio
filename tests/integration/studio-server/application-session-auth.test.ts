@@ -7,7 +7,7 @@ describe('Studio Server application session auth', () => {
       const health = await fetch(`http://127.0.0.1:${port}/health`)
       expect(health.status).toBe(200)
 
-      const rpc = await fetch(`http://127.0.0.1:${port}/rpc`, { method: 'POST' })
+      const rpc = await fetch(`http://127.0.0.1:${port}/trpc/system.ping`, { method: 'POST' })
       expect(rpc.status).toBe(401)
       await expect(rpc.json()).resolves.toMatchObject({ error: { code: 'auth.unauthorized' } })
     })
@@ -58,16 +58,16 @@ describe('Studio Server application session auth', () => {
   it('accepts the issued cookie without exposing its token in a response body', async () => {
     await withStudioServer(async port => {
       const cookie = await createApplicationSession(port)
-      const response = await fetch(`http://127.0.0.1:${port}/rpc`, {
+      const response = await fetch(`http://127.0.0.1:${port}/trpc/system.ping`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
           cookie,
         },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'system.ping', params: { echo: 'auth-test' } }),
+        body: JSON.stringify({ echo: 'auth-test' }),
       })
       expect(response.status).toBe(200)
-      await expect(response.json()).resolves.toMatchObject({ result: { echo: 'auth-test' } })
+      await expect(response.json()).resolves.toMatchObject({ result: { data: { echo: 'auth-test' } } })
     })
   })
 })

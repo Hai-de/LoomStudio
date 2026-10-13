@@ -6,7 +6,7 @@ import { createKernel, type Kernel } from '@loom-studio/kernel'
 import { createLoomRunner, createSamplePassFactories } from '@loom-studio/loom-runner'
 import { createId } from '@loom-studio/shared'
 import { createInMemoryTraceAuditStore } from '@loom-studio/trace-audit'
-import { createErrorResponse, createSuccessResponse, parseRpcRequest, type RpcRequest, type RpcResponse } from '@loom-studio/transport'
+
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -45,13 +45,12 @@ function createHarness() {
   return { kernel, extensionHost }
 }
 
-function createBridge(kernel: Kernel, calls?: RpcRequest[]): ClientBridge {
-  return createClientBridge({ endpoint: 'memory://kernel', fetch: createKernelFetch(kernel, calls) })
+function createBridge(kernel: Kernel, calls?: Array<{ method: string; params?: import('@loom-studio/shared').JsonValue }>): ClientBridge {
+  return createClientBridge({ endpoint: 'http://kernel/trpc', fetch: createKernelFetch(kernel, calls) })
 }
 
-function createKernelFetch(kernel: Kernel, calls: RpcRequest[] = []): typeof fetch {
-  return (async (_input: RequestInfo | URL, init?: RequestInit) => {
-    let rpcId = null
+function createKernelFetch(kernel: Kernel, calls: Array<{ method: string; params?: import('@loom-studio/shared').JsonValue }> = []): typeof fetch {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const context = {
       clientId: 'client-bridge-scenario',
       correlationId: createId('corr'),
@@ -59,27 +58,28 @@ function createKernelFetch(kernel: Kernel, calls: RpcRequest[] = []): typeof fet
     }
 
     try {
-      const request = parseRpcRequest(JSON.parse(String(init?.body ?? '{}')))
+      const path = new URL(String(input)).pathname.split('/').at(-1)!
+      const data = init?.body === undefined ? undefined : JSON.parse(String(init.body))
+      const request = path === 'kernel.invoke' ? data : { method: path, params: data }
       calls.push(request)
-      rpcId = request.id
       const result = await kernel.callRpc(request.method, request.params, context)
-      return jsonResponse(createSuccessResponse(request.id, result, context))
+      return jsonResponse({ result: { data: result } })
     } catch (error) {
-      return jsonResponse(createErrorResponse(rpcId, error, 'rpc.invalid_request', context))
+      return jsonResponse({ error: { message: error instanceof Error ? error.message : String(error), code: -32603, data: { code: 'INTERNAL_SERVER_ERROR', httpStatus: 500 } } })
     }
   }) as typeof fetch
 }
 
 describe('client bridge data-flow integration', () => {
-  it('uses monotonic request ids', async () => {
+  it('keeps each request payload associated with its call', async () => {
     const { kernel } = createHarness()
-    const calls: RpcRequest[] = []
+    const calls: Array<{ method: string; params?: import('@loom-studio/shared').JsonValue }> = []
     await kernel.start()
     const bridge = createBridge(kernel, calls)
     await bridge.call('system.ping', { echo: 'one' })
     await bridge.call('system.ping', { echo: 'two' })
 
-    expect(calls.map(call => call.id)).toEqual(['client-1', 'client-2'])
+    expect(calls).toEqual([{ method: 'system.ping', params: { echo: 'one' } }, { method: 'system.ping', params: { echo: 'two' } }])
   })
 
   it('loads dashboard data through ClientBridge without direct service access', async () => {
@@ -156,7 +156,7 @@ function createExtensionFixture(name: string, input: { id: string; rpc: Array<{ 
   return root
 }
 
-function jsonResponse(response: RpcResponse): Response {
+function jsonResponse(response: unknown): Response {
   return new Response(JSON.stringify(response), {
     status: 200,
     headers: { 'content-type': 'application/json' },

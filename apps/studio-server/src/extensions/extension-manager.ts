@@ -112,8 +112,8 @@ export function createServerExtensionManager(options: {
       contribution: ExtensionTextExtractorContribution
       artifact: JsonValue
     }>
-  }): Promise<Record<string, JsonValue>>
-  removePackageResources(input: { packageId: string; target?: ExtensionInstallationTarget; expectedInstallationVersion?: number; uninstall?: true }): Promise<Record<string, JsonValue>>
+  }): Promise<import('@loom-studio/application-runtime').ImportExtensionPackageResourcesResult>
+  removePackageResources(input: { packageId: string; target?: ExtensionInstallationTarget; expectedInstallationVersion?: number; uninstall?: true }): Promise<import('@loom-studio/application-runtime').RemoveExtensionPackageResourcesResult>
 }): ServerExtensionManager {
   const catalog = new Map<string, PackageCatalogRecord>()
   const cardCatalog = new Map<string, { target: Extract<ExtensionInstallationTarget, { kind: 'card' }>; record: PackageCatalogRecord }>()
@@ -128,7 +128,7 @@ export function createServerExtensionManager(options: {
     catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {}; throw error }
   }
 
-  async function withPreparationSlot(operation: () => Promise<JsonValue>): Promise<JsonValue> {
+  async function withPreparationSlot<T>(operation: () => Promise<T>): Promise<T> {
     if (prepared.size + preparing >= 4) throw new Error('Extension preparation limit exceeded')
     preparing += 1
     try {
@@ -138,7 +138,7 @@ export function createServerExtensionManager(options: {
     }
   }
 
-  async function prepareSources(sources: unknown[], replacement?: string, snapshot?: ExtensionCandidate, workspace?: string): Promise<JsonValue> {
+  async function prepareSources(sources: unknown[], replacement?: string, snapshot?: ExtensionCandidate, workspace?: string): Promise<import('@loom-studio/kernel').RemoteInstallPreview> {
     if (!sources.length || sources.length > 100) throw new Error('Extension preparation limit exceeded')
     const expected = catalogFingerprint()
     const root = workspace ?? await createDownloadWorkspace()
@@ -216,7 +216,7 @@ export function createServerExtensionManager(options: {
         ...(item.source ? { source: { ...item.source } } : {}), ...(item.commit ? { commit: item.commit } : {}),
         replacing: item.manifest.id === replacement,
         modules: (item.manifest.modules ?? []).map(module => ({ id: module.id, runtime: module.runtime, capabilities: module.capabilities ?? {} })),
-      })) } as JsonValue
+      })) }
     } catch (error) {
       await rm(root, { recursive: true, force: true })
       throw error
@@ -485,8 +485,8 @@ export function createServerExtensionManager(options: {
       return {
         completed,
         items: [
-          { id: 'sillytavern.importer', name: 'ST 数据导入', source: { kind: 'git', url: 'https://github.com/The-LoomStudio/LS_STBridge.git' } },
-          { id: 'official.the-world', name: 'The World', source: { kind: 'git', url: 'https://github.com/The-LoomStudio/LS_The_World.git' } },
+          { id: 'sillytavern.importer', name: 'ST 数据导入', source: { kind: 'git' as const, url: 'https://github.com/The-LoomStudio/LS_STBridge.git' } },
+          { id: 'official.the-world', name: 'The World', source: { kind: 'git' as const, url: 'https://github.com/The-LoomStudio/LS_The_World.git' } },
         ].filter(item => !catalog.has(item.id)),
       }
     },
@@ -505,7 +505,7 @@ export function createServerExtensionManager(options: {
       const record = requirePackage(catalog, packageId)
       const metadata = await readDownloadMetadata(record.directory)
       if (!metadata) throw new Error('This extension has no managed remote source')
-      return checkGitUpdate(metadata) as Promise<JsonValue>
+      return checkGitUpdate(metadata)
     },
     previewRemoteChange: input => withPreparationSlot(async () => {
       assertInitialized(initialized)
@@ -527,12 +527,12 @@ export function createServerExtensionManager(options: {
         : { ...selected.source, ...(value.ref !== undefined ? { ref: value.ref } : {}) }
       return prepareSources([source], value.packageId)
     }),
-    commitRemoteInstall: token => serialize(async (): Promise<JsonValue> => {
+    commitRemoteInstall: token => serialize(async (): Promise<import('@loom-studio/kernel').RemoteInstallResult> => {
       const batch = prepared.get(token)
       if (!batch) throw new Error('Install preview expired. Prepare the download again.')
       prepared.delete(token)
       clearTimeout(batch.timer)
-      const installed: JsonValue[] = []
+      const installed: Array<{ packageId: string; version: string }> = []
       try {
         if (batch.expected !== catalogFingerprint()) throw new Error('Installed extensions changed; review the download again')
         for (const candidate of batch.candidates) {
@@ -969,7 +969,7 @@ export function createServerExtensionManager(options: {
         packageId: input.packageId, target: { kind: 'card', cardId: input.cardId },
         expectedInstallationVersion: input.expectedInstallationVersion,
       })
-      return { packageId: input.packageId, ...removed }
+      return removed
     }),
     exportPackage: input => serialize(async () => {
       assertInitialized(initialized)
@@ -983,7 +983,7 @@ export function createServerExtensionManager(options: {
     removePackageResources: packageId => serialize(async (): Promise<RemovedExtensionPackageResources> => {
       assertInitialized(initialized)
       const removed = await options.removePackageResources({ packageId })
-      return { packageId, ...removed }
+      return removed
     }),
 
     getGrantedEventCapabilities: (packageId, moduleId, target) => {
@@ -1132,7 +1132,7 @@ function toManagedPackage(
         : `/extensions/${encodeURIComponent(packageId)}/${encodeURIComponent(record.manifest.version)}/icon`,
     } : {}),
     tags: record.manifest.tags ?? [],
-    ...(record.remote ? { remote: record.remote as unknown as JsonValue } : {}),
+    ...(record.remote ? { remote: record.remote } : {}),
     available: record.available,
     sourceKinds: [...new Set(record.sources.map(source => source.kind))],
     modules: (record.manifest.modules ?? []).map(moduleManifest => toManagedModule(
@@ -1212,9 +1212,9 @@ function toManagedModule(
       },
       ...(desired.updatedAt ? { updatedAt: desired.updatedAt } : {}),
     },
-    contributions: moduleManifest.contributes as unknown as JsonValue ?? {},
+    contributions: moduleManifest.contributes ?? {},
     ...(moduleManifest.runtime === 'client' ? { entryUrl: packageFileUrl(packageId, target?.kind === 'card' ? record.manifest.version : record.fileRevision ?? record.manifest.version, moduleManifest.entry, target, record.archiveDigest) } : {}),
-    ...(runtime ? { runtime: runtime as unknown as JsonValue } : {}),
+    ...(runtime ? { runtime: runtime } : {}),
   }
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { CharacterCardSummary } from './character-card-summary.js'
+import { notify } from '../../../shared/notifications/index.js'
 
 type CardProfilePatch = { cardId: string; expectedVersion: number; name: string; userName: string; description: string; opening?: CharacterCardSummary['opening'] }
 
@@ -52,7 +53,7 @@ export function useCharacterProfileEditor({ selected, onUpdateCardProfile, refre
       await refreshDetail()
       await onRefreshCards?.()
     } catch (err) {
-      console.error('Failed to update card profile', err)
+      notify.error(err instanceof Error ? err.message : String(err))
     }
   }
 

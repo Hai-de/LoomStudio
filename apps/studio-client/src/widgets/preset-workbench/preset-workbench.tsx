@@ -71,6 +71,8 @@ type PresetWorkbenchProps = {
   resources: PromptResource[]
   loreMounts: LoreMount[]
   tools: AgentToolDefinition[]
+  toolsReady?: boolean
+  providersReady?: boolean
   toolMounts: PresetToolMount[]
   timelinePromptResourceIds?: string[]
   card?: Card
@@ -403,6 +405,7 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
     >
       {activePresetView === 'tools' ? (
         <PresetToolDetail
+          toolsReady={props.toolsReady}
           mount={props.toolMounts.find(mount => mount.presetResourceId === selectedResource?.id && mount.toolId === selectedToolId)}
           preset={selectedResource}
           presetMounts={props.toolMounts.filter(mount => mount.presetResourceId === selectedResource?.id)}
@@ -421,6 +424,8 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
           installations={props.extensionInstallations}
           modelProfiles={props.modelProfiles}
           providerAccounts={props.providerAccounts}
+          toolsReady={props.toolsReady}
+          providersReady={props.providersReady}
           tools={props.tools}
           toolMounts={props.toolMounts}
           loreMounts={props.loreMounts}
@@ -516,6 +521,8 @@ export function AgentPresetOverview(props: {
   modelProfiles: ModelProfile[]
   providerAccounts: ProviderAccount[]
   tools: AgentToolDefinition[]
+  toolsReady?: boolean
+  providersReady?: boolean
   toolMounts: PresetToolMount[]
   loreMounts: LoreMount[]
   card?: Card
@@ -694,7 +701,7 @@ export function AgentPresetOverview(props: {
       </header>
 
       {/* 1. 顶部：模型配置 */}
-      <section className={styles.presetConfigSection}>
+      <section className={styles.presetConfigSection} inert={props.providersReady === false}>
         <h2>
           <span>{props.t('agent.profile.model')}</span>
         </h2>
@@ -757,7 +764,7 @@ export function AgentPresetOverview(props: {
           }} />
         {!nodes.length && <p className={styles.presetResourceEmpty}>没有匹配的 Lore</p>}
       </section>}}
-      toolsContent={<section className={styles.presetResourceList} aria-label={props.t('preset.tools.mountTitle')}>
+      toolsContent={<section inert={props.toolsReady === false} className={styles.presetResourceList} aria-label={props.t('preset.tools.mountTitle')}>
         <SearchField aria-label="搜索工具" placeholder="搜索名称或来源"
           clearLabel="清除搜索" value={toolQuery} onClear={() => setToolQuery('')}
           onChange={event => { setToolQuery(event.target.value); setCollapsedToolSources([]) }} />
@@ -970,6 +977,8 @@ function PresetToolExplorer(props: {
   selectedToolId?: string
   t: Translator
   tools: AgentToolDefinition[]
+  toolsReady?: boolean
+  providersReady?: boolean
   toolMounts: PresetToolMount[]
   unavailableMounts: PresetToolMount[]
   onSelect(toolId: string): void
@@ -1070,6 +1079,7 @@ function PresetToolExplorer(props: {
 }
 
 function PresetToolDetail(props: {
+  toolsReady?: boolean
   preset?: PromptResource
   tool?: AgentToolDefinition
   mount?: PresetToolMount
@@ -1080,7 +1090,7 @@ function PresetToolDetail(props: {
   onUpdateTool(tool: AgentToolDefinition): Promise<void> | void
 }) {
   if (props.preset && !props.tool && props.mount) {
-    return <UnavailableToolDetail
+    return <div inert={props.toolsReady === false}><UnavailableToolDetail
       key={`${props.preset.id}:${props.mount.toolId}`}
       presetId={props.preset.id}
       mount={props.mount}
@@ -1088,13 +1098,13 @@ function PresetToolDetail(props: {
       unavailableMounts={props.unavailableMounts}
       t={props.t}
       onReplaceMounts={props.onReplaceMounts}
-    />
+    /></div>
   }
   if (!props.preset || !props.tool) {
     return <div className={styles.toolEmpty}>{props.t('preset.tools.selectEmpty')}</div>
   }
   return (
-    <div className={styles.toolDetail}>
+    <div className={styles.toolDetail} inert={props.toolsReady === false}>
       <header className={styles.toolDetailHeader}>
         <div>
           <span>{props.t(props.tool.input.kind === 'structured' ? 'preset.tools.kind.provider' : 'preset.tools.kind.custom')}</span>
@@ -1198,7 +1208,7 @@ function ToolMountEditor(props: {
         ? readJsonObject(draft.activation, props.t('preset.tools.activation'))
         : undefined
       const providerOrder = readOptionalFiniteNumber(draft.providerOrder, props.t('preset.tools.providerOrder'))
-      const contentOrder = readOptionalFiniteNumber(draft.contentOrder, props.t('preset.tools.contentOrder'))
+      const contentDepth = readOptionalFiniteNumber(draft.contentDepth, props.t('preset.tools.localDepth'))
       const updated: PresetToolMountInput = {
         toolId: props.tool.id,
         orderIndex: props.mount.orderIndex,
@@ -1207,10 +1217,8 @@ function ToolMountEditor(props: {
         ...(providerOrder === undefined ? {} : { provider: { order: providerOrder } }),
         ...(props.tool.input.kind === 'structured' ? {} : {
           content: {
-            ...(draft.contentZone.trim() ? { zone: draft.contentZone.trim() } : {}),
-            ...(draft.contentSlot.trim() ? { slot: draft.contentSlot.trim() } : {}),
-            ...(draft.contentRankKey.trim() ? { rankKey: draft.contentRankKey.trim() } : {}),
-            ...(contentOrder === undefined ? {} : { orderHint: contentOrder }),
+            ...(draft.contentAnchor.trim() ? { targetAnchorId: draft.contentAnchor.trim() } : {}),
+            ...(contentDepth === undefined ? {} : { localDepth: contentDepth }),
           },
         }),
       }
@@ -1248,10 +1256,8 @@ function ToolMountEditor(props: {
           {props.tool.input.kind === 'structured' ? null : (
             <fieldset>
               <legend>{props.t('preset.tools.contentFallback')}</legend>
-              <label><span>{props.t('preset.tools.zone')}</span><input value={draft.contentZone} onChange={event => setDraft(current => ({ ...current, contentZone: event.target.value }))} /></label>
-              <label><span>{props.t('preset.tools.slot')}</span><input value={draft.contentSlot} onChange={event => setDraft(current => ({ ...current, contentSlot: event.target.value }))} /></label>
-              <label><span>{props.t('preset.tools.rankKey')}</span><input value={draft.contentRankKey} onChange={event => setDraft(current => ({ ...current, contentRankKey: event.target.value }))} /></label>
-              <label><span>{props.t('preset.tools.orderHint')}</span><input inputMode="numeric" value={draft.contentOrder} onChange={event => setDraft(current => ({ ...current, contentOrder: event.target.value }))} /></label>
+              <label><span>{props.t('preset.tools.targetAnchorId')}</span><input value={draft.contentAnchor} onChange={event => setDraft(current => ({ ...current, contentAnchor: event.target.value }))} /></label>
+              <label><span>{props.t('preset.tools.localDepth')}</span><input inputMode="numeric" value={draft.contentDepth} onChange={event => setDraft(current => ({ ...current, contentDepth: event.target.value }))} /></label>
             </fieldset>
           )}
           {error ? <p className={styles.toolError}>{error}</p> : null}
@@ -1334,10 +1340,8 @@ function createMountDraft(tool: AgentToolDefinition, mount?: PresetToolMount) {
         ? JSON.stringify(tool.prompt.activation, null, 2)
         : '',
     providerOrder: (mount ? mount.provider?.order : tool.prompt?.provider?.order)?.toString() ?? '',
-    contentZone: content.zone ?? '',
-    contentSlot: content.slot ?? '',
-    contentRankKey: content.rankKey ?? '',
-    contentOrder: content.orderHint?.toString() ?? '',
+    contentAnchor: content.targetAnchorId ?? '',
+    contentDepth: content.localDepth?.toString() ?? '',
   }
 }
 

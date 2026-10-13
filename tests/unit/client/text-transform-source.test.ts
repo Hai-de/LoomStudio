@@ -350,7 +350,7 @@ describe('Text Transform source isolation', () => {
     const f = fixture()
     const initial = inspection(a)
     initial.snapshot.entries = [{
-      id: 'a-entry', text: 'A', originalText: 'A', depth: 0, appliedRuleIds: [], promotedReasoning: [],
+      source: a, sequence: 1, id: 'a-entry', text: 'A', originalText: 'A', depth: 0, appliedRuleIds: [], promotedReasoning: [],
     }]
     const detail = Promise.withResolvers<TextPipelineInspection>()
     const started = Promise.withResolvers<void>()

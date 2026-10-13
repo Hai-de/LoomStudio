@@ -6,6 +6,7 @@ import { Dialog } from '@loom-studio/ui'
 import { formatEntityReference } from '@loom-studio/shared'
 import { buildStudioTargetLink } from '../../../../shared/studio-shell/studio-target.js'
 import { tryWriteClipboardText } from '../../../../shared/browser/clipboard.js'
+import { notify } from '../../../../shared/notifications/index.js'
 import styles from './prompt-resource-toolbar.module.scss'
 import { ResourceBindings, type ResourceBindingsSource } from './resource-bindings.js'
 import { TokenSnapshotControl, TokenSnapshotSummary } from '../resource-token-summary.js'
@@ -52,16 +53,23 @@ export function PromptResourceToolbar(props: PromptResourceToolbarProps) {
   const [copiedResourceId, setCopiedResourceId] = useState<string>()
   const selected = props.resources.find(resource => resource.id === props.selectedResourceId)
 
-  const selectResult = async (action: Promise<string | undefined>) => {
+  const selectResult = async (action: Promise<string | undefined>, successMessage?: string) => {
     setError(undefined)
     try {
       const resourceId = await action
-      if (resourceId && mountedRef.current) props.onSelect(resourceId)
+      if (resourceId && mountedRef.current) {
+        props.onSelect(resourceId)
+        if (successMessage) notify.success(successMessage)
+      }
     } catch (caught) {
       reportError(caught)
     }
   }
-  const reportError = (caught: unknown) => setError(caught instanceof Error ? caught.message : String(caught))
+  const reportError = (caught: unknown) => {
+    const message = caught instanceof Error ? caught.message : String(caught)
+    setError(message)
+    notify.error(message)
+  }
 
   return (
     <div className={styles.toolbar}>
@@ -100,8 +108,14 @@ export function PromptResourceToolbar(props: PromptResourceToolbarProps) {
             const uri = formatEntityReference({ kind: 'entity', type: 'resource', id: selected.id })
             void tryWriteClipboardText(new URL(buildStudioTargetLink(uri), window.location.origin).href).then(copied => {
               if (!mountedRef.current) return
-              if (copied) { setCopiedResourceId(selected.id); setError(undefined) }
-              else setError(props.t('navigation.copyFailed'))
+              if (copied) {
+                setCopiedResourceId(selected.id)
+                setError(undefined)
+                notify.success(props.t('notify.success.copied'))
+              } else {
+                setError(props.t('navigation.copyFailed'))
+                notify.error(props.t('notify.error.copyFailed'))
+              }
             })
           }}><Link2 aria-hidden="true" /></button> : null}
         {!props.hideSingleResourceActions && selected && copiedResourceId === selected.id ? <span role="status">{props.t('navigation.linkCopied')}</span> : null}
@@ -115,7 +129,10 @@ export function PromptResourceToolbar(props: PromptResourceToolbarProps) {
             onClick={() => {
               setSavingDraft(true)
               setError(undefined)
-              void props.onRetryDraft(selected.id).catch(reportError).finally(() => setSavingDraft(false))
+              void props.onRetryDraft(selected.id)
+                .then(() => notify.success(props.t('notify.success.saved')))
+                .catch(reportError)
+                .finally(() => setSavingDraft(false))
             }}
           >
             <Save aria-hidden="true" />
@@ -137,7 +154,7 @@ export function PromptResourceToolbar(props: PromptResourceToolbarProps) {
           aria-label={props.t('promptResource.create')}
           title={props.t('promptResource.create')}
           type="button"
-          onClick={() => void selectResult(props.onCreate(props.resourceKind))}
+          onClick={() => void selectResult(props.onCreate(props.resourceKind), props.t('notify.success.created'))}
         >
           <Plus aria-hidden="true" />
         </button>
@@ -146,7 +163,7 @@ export function PromptResourceToolbar(props: PromptResourceToolbarProps) {
           disabled={!selected}
           title={props.t('promptResource.duplicate')}
           type="button"
-          onClick={() => selected && void selectResult(props.onDuplicate(selected.id))}
+          onClick={() => selected && void selectResult(props.onDuplicate(selected.id), props.t('notify.success.created'))}
         >
           <Copy aria-hidden="true" />
         </button>
@@ -163,7 +180,10 @@ export function PromptResourceToolbar(props: PromptResourceToolbarProps) {
           disabled={!selected}
           title={props.t('promptResource.export')}
           type="button"
-          onClick={() => selected && void props.onExport(selected.id).then(() => setError(undefined)).catch(reportError)}
+          onClick={() => selected && void props.onExport(selected.id).then(() => {
+            setError(undefined)
+            notify.success(props.t('notify.success.exported'))
+          }).catch(reportError)}
         >
           <Download aria-hidden="true" />
         </button> : null}
@@ -173,7 +193,10 @@ export function PromptResourceToolbar(props: PromptResourceToolbarProps) {
             disabled={!selected}
             title={`${props.t('promptResource.export')} ZIP`}
             type="button"
-            onClick={() => selected && void props.onExportZip?.(selected.id).then(() => setError(undefined)).catch(reportError)}
+            onClick={() => selected && void props.onExportZip?.(selected.id).then(() => {
+              setError(undefined)
+              notify.success(props.t('notify.success.exported'))
+            }).catch(reportError)}
           >
             <Archive aria-hidden="true" />
           </button>
@@ -213,7 +236,7 @@ export function PromptResourceToolbar(props: PromptResourceToolbarProps) {
         onChange={event => {
           const file = event.target.files?.[0]
           event.target.value = ''
-          if (file) void selectResult(file.name.toLowerCase().endsWith('.zip') && props.onImportZip ? props.onImportZip(file) : props.onImport(file))
+          if (file) void selectResult(file.name.toLowerCase().endsWith('.zip') && props.onImportZip ? props.onImportZip(file) : props.onImport(file), props.t('notify.success.imported'))
         }}
       />
       <Dialog
@@ -231,7 +254,10 @@ export function PromptResourceToolbar(props: PromptResourceToolbarProps) {
                 setDeleting(true)
                 setError(undefined)
                 void props.onDelete(pendingDelete.id)
-                  .then(() => setPendingDelete(undefined))
+                  .then(() => {
+                    setPendingDelete(undefined)
+                    notify.success(props.t('notify.success.deleted'))
+                  })
                   .catch(reportError)
                   .finally(() => setDeleting(false))
               }}

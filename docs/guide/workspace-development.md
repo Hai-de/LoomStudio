@@ -47,7 +47,7 @@ docs/workbench/
 | Token、字数、usage、用量、估算 | UI 文本计数、请求估算、Provider 回报是不同口径 | [use-token-counts.ts](../../apps/studio-client/src/shared/tokenizer/use-token-counts.ts)、[token-estimate.ts](../../packages/ai-gateway/src/token-estimate.ts) | [Provider 与 PromptBuild](../architecture/application/agent/provider-and-prompt-build.md) |
 | 撤销、Undo、Revision、版本冲突、草稿 | 编辑历史与领域事务不是整轮 Agent 回滚 | [use-edit-history.ts](../../apps/studio-client/src/features/edit-history/model/use-edit-history.ts) | [编辑与提交](../architecture/application/ui/README.md) |
 | 插件、扩展、安装、授权、重载 | Extension Package / Module / Instance / Grant；声明不等于激活 | [extension-manager.ts](../../apps/studio-server/src/extensions/extension-manager.ts) | [Extension](../architecture/extensions/README.md) |
-| 日志、诊断、报错、Log、Trace | 日志缓冲/历史、诊断与编译 Trace 分属不同入口 | [logs-rpc.ts](../../apps/studio-server/src/rpc/handlers/logs-rpc.ts) | [日志合同](../architecture/platform/logging.md) |
+| 日志、诊断、报错、Log、Trace | 日志缓冲/历史、诊断与编译 Trace 分属不同入口 | [services.ts](../../apps/studio-server/src/rpc/trpc/services.ts) | [日志合同](../architecture/platform/logging.md) |
 
 ## 高频任务路由
 
@@ -82,7 +82,7 @@ rg -n -F '主写作' docs/guide docs/architecture
 # 知道文件名片段：先取文件名，不打印整个目录树
 rg --files packages/application-runtime/src -g '*session*' -g '!*.d.ts'
 # 知道符号或 RPC：缩小到所属实现，再追调用者
-rg -n -F 'application.createAgentSession' apps/studio-server/src/rpc/handlers/application/agents.ts
+rg -n -F 'createAgentSession' apps/studio-server/src/rpc/trpc/application/agents.ts
 # 需要追溯历史时，单独包含被忽略的归档目录
 rg --no-ignore -l -F 'Setting' docs/archive/discussion
 ```

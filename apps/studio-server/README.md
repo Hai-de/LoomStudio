@@ -43,7 +43,7 @@ pnpm exec vitest run tests/unit/studio-server tests/integration/studio-server
 - [`src/extensions/extension-application-adapter.ts`](./src/extensions/extension-application-adapter.ts)：Extension Host 的应用能力、权限与数据适配。
 - [`src/codecs/card-transfer-service.ts`](./src/codecs/card-transfer-service.ts)：Card 媒体读取、PNG/ZIP 导入导出与导入后目录保存。
 - [`src/http/`](./src/http/)：HTTP 传输接入与本地安全认证（`http-server.ts`, `application-session-auth.ts`）。
-- [`src/rpc/`](./src/rpc/)：RPC 路由分发、参数校验与领域处理器（`studio-rpc-router.ts`, `rpc-params.ts`, `handlers/`）。
+- [`src/rpc/`](./src/rpc/)：RPC 路由分发、参数校验与领域处理器（`trpc/router.ts`, `trpc/application/`, `rpc-params.ts`）。
 - [`src/codecs/`](./src/codecs/)：Card PNG / ZIP 编解码与打包器（`card-png.ts`, `card-bundle-zip.ts`）。
 - [`src/platform/`](./src/platform/)：本地运行路径、系统代理与网络设置（`local-paths.ts`, `system-proxy.ts`, `network-settings.ts`）。
 - [`src/logging/`](./src/logging/)：结构化日志观测适配器（`ai-gateway-logging.ts`, `document-store-logging.ts`）。
@@ -62,14 +62,14 @@ Studio Server
 
 - `GET /health`
 - `POST /auth/session`
-- 认证后的 `POST /rpc`
+- 认证后的 `POST /trpc/<procedure>`
 - Asset 上传与读取
 - Card ZIP（下载为 `.loomcard.zip`）与承载同一 ZIP 的 PNG 导入导出；保留的旧入口及 Polyglot 行为见[Card 容器合同](../../docs/architecture/application/card-bundle-files.md)
 - Extension Icon
 - 全局 Extension 文件与按 Card 安装归档摘要校验的私有扩展文件读取入口
 - `GET /extensions/events`：只用于 Extension Catalog 变化的 SSE
 
-`POST /rpc` 的完整 JSON 请求体上限为 384 MiB，按传输字节累计。声明或实际大小超限时，
+`POST /trpc/<procedure>` 的完整 JSON 请求体上限为 384 MiB，按传输字节累计。声明或实际大小超限时，
 在 JSON 解析和业务调用前返回 HTTP 413 / `rpc.request_too_large`，停止累积并关闭该连接。
 Card、Asset 的独立二进制入口保持各自上限；此请求预算不是进程峰值内存保证。
 

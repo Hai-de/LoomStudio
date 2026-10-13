@@ -13,7 +13,7 @@ import { createSqliteDataEngine } from '@loom-studio/data-engine'
 import { createSqliteDocumentStore } from '@loom-studio/document-store'
 import { createId, nowIso, type ChatMessage } from '@loom-studio/shared'
 import { describe, expect, it } from 'vitest'
-import { handleAgentsRpc } from '../../../apps/studio-server/src/rpc/handlers/application/agents.js'
+import { callApplicationRpc as handleAgentsRpc } from '../../support/trpc-caller.js'
 import { readSessionHistory } from '../../../packages/application-runtime/src/agents/session-history.js'
 
 const actor = { kind: 'system' as const, id: 'context-test' }

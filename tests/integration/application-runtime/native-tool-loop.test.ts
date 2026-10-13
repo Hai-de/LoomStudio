@@ -17,7 +17,7 @@ import { createPromptResourceStore } from '@loom-studio/application-data'
 import { createNarrativeStore } from '@loom-studio/application-data'
 import { createMemoryLogSink, createRootLogger } from '@loom-studio/logging'
 import { describe, expect, it, vi } from 'vitest'
-import { handleAgentsRpc } from '../../../apps/studio-server/src/rpc/handlers/application/agents.js'
+import { callApplicationRpc as handleAgentsRpc } from '../../support/trpc-caller.js'
 
 const readContextTool: ToolDefinition = {
   id: 'official/read_context',

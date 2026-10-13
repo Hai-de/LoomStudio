@@ -101,7 +101,7 @@ Loom Studio 使用 `pnpm` workspace 构建 Monorepo。核心代码区域是 `pac
 - 📦 [`packages/ai-gateway/`](../../packages/ai-gateway/README.md)
   - 统一的多模型厂商调度网关（基于 Vercel AI SDK），支持流式执行、工具调用、能力画像映射与离线测试 Fake Provider。
 - 📦 [`packages/transport/`](../../packages/transport/README.md)
-  - 定义了系统内所有 RPC 消息与事件通知的跨端信封格式 (Message Envelope 与 JSON-RPC 2.0)。
+  - 定义了系统内事件通知格式；请求/响应由服务端 tRPC Router 与官方 Adapter 接管。
 - 📦 [`packages/client-bridge/`](../../packages/client-bridge/README.md)
   - 供前端使用的 typed RPC 调用桥，连接到后端的 Transport 以进行远程调用，并在 401 时自动触发会话刷新。
 - 📦 [`packages/logging/`](../../packages/logging/README.md)
@@ -184,5 +184,5 @@ Loom Studio 使用 `pnpm` workspace 构建 Monorepo。核心代码区域是 `pac
 
 1. 当你需要理解 **Application Runtime 公共合同** 时，先看 `packages/application-runtime/README.md`，再按需进入 `src/types.ts`；持久化类型还需查看对应领域 Store。
 2. 当你需要修改 **前端 UI 界面** 时，先定位页面级 widget，再把业务状态、RPC 与领域算法放回对应 `features/`。widget 只保留布局、局部交互和 props 传递。
-3. 当你需要查看 **RPC 如何分流** 时，先看 `apps/studio-server/src/rpc/studio-rpc-router.ts`；`application.*` 的边界映射再看 `apps/studio-server/src/rpc/handlers/application/index.ts` 及相邻领域 Handler。
+3. 当你需要查看 **RPC 如何分流** 时，先看 `apps/studio-server/src/rpc/trpc/router.ts`；`application.*` 的边界映射再看 `apps/studio-server/src/rpc/trpc/router.ts` 及相邻领域 procedure。
 4. **绝对不要** 为了贪图便利在不合适的层级写代码（比如在 `kernel` 里写 `Prompt` 的解析）。

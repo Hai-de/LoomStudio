@@ -1,3 +1,4 @@
+import type { ToolContentPlacement } from '@loom-studio/shared/tool-mounts'
 import type { JsonObject, JsonValue } from '@loom-studio/shared'
 import {
   isPromptActivation,
@@ -56,10 +57,7 @@ export type ToolDefinition = {
     provider?: {
       order?: number
     }
-    content?: {
-      targetAnchorId?: string
-      localDepth?: number
-    }
+    content?: ToolContentPlacement
   }
 }
 

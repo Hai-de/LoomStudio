@@ -40,18 +40,43 @@ Streaming domain lifecycle   -> owning Agent / Narrative feature
 
 | 问题 | 当前选择 | 所有权边界 |
 | --- | --- | --- |
-| Server HTTP | Node `node:http` | Studio Server 的 HTTP/RPC 入口。当前没有 Express、Fastify 或 Hono 平行层。 |
+| Server HTTP | Node `node:http` | HTTP listener、Session 认证、Origin 检查、请求体预算与请求排空/取消；RPC 请求交给下述 tRPC adapter。当前没有 Express、Fastify 或 Hono 平行层。 |
+| 主应用 RPC | `@trpc/server` / `@trpc/client` | 官方 adapter/client 负责 procedure 路由、请求响应协议、错误封装和跨端类型推导。业务逻辑仍由 Application Runtime、领域服务和 Store 拥有；不重复维护手写 RPC 方法表与传输协议。 |
 | SQLite | Node `node:sqlite` + `@loom-studio/data-engine` | Connection、migration 和 transaction 的统一入口。领域 Store 不各自创建数据库基础设施。 |
 | Provider HTTP 与代理 | Undici | Application Runtime 的 Provider 请求和 `ProxyAgent`。普通 Server 路由优先使用平台现有 HTTP 能力。 |
 | ZIP 编解码 | fflate | Card、Prompt Resource、Extension Package 和官方内容压缩/解压。Card 另用现有 `zip-checksums.ts` 读取完整性元数据、配合 Node CRC32 验证实际数据；这不是第二套解压器，不另建重复编解码。 |
-| 边界 Schema | Zod | 当前用于 AI Gateway Provider 配置和 Shared Lore Mount RPC Schema。新增跨端结构化边界且没有既有 parser 时优先复用；可信内部纯函数不重复 parse。 |
+| 边界 Schema | Zod | 用于 tRPC 输入边界、AI Gateway Provider 配置和 Shared Lore Mount RPC Schema；既有领域 reader 通过 adapter 接入 tRPC，不要求全部改写为 Zod object。新增跨端结构化边界且没有既有 parser 时优先复用；可信内部纯函数不重复 parse。 |
 | 系统凭据与敏感密钥托管 | `@napi-rs/keyring` + `@loom-studio/secret-store` | 操作系统安全凭据链（Keychain/SecretService）与 SQLite 元数据双层物理隔离；受控闭包临时借用、写入意图防丢失持久化与生命周期清理队列，绝不向数据库或日志写入明文。 |
 | 沙箱代码隔离执行 | `quickjs-emscripten` / `node:vm` | CodeAct 与命令行沙箱的隔离执行环境；提供确定性内存/时间预算，杜绝未经授权的宿主文件、网络或进程访问。 |
-| 跨端纯契约 | `@loom-studio/shared` | JSON DTO、Schema 和浏览器/Node 都可执行的纯逻辑。不得依赖 React、数据库、Node 专属 API 或 Application Runtime。 |
+| 跨端纯契约 | `@loom-studio/shared` | 纯领域 JSON DTO、Schema 和浏览器/Node 都可执行的纯逻辑；主应用 RPC 方法签名由 Server `AppRouter` 推导，不在 Shared 另建一份方法表。不得依赖 React、数据库、Node 专属 API 或 Application Runtime。 |
 | 基础文本 Token 计数 | `gpt-tokenizer` / `@loom-studio/tokenizer` | 固定 `o200k_base`，按字面计数；目标模型系数是估算，不替代 Provider usage。词表由独立包拥有，Client 仅在共享 Worker 加载；派生资源计数不写数据库。 |
 
 TypeScript 类型不替代运行时信任边界校验，Zod 也不替代内部类型系统。某个跨端领域采用 Zod 后，
 Schema 应成为该字段的类型来源；已有 Manifest 等专用 parser 不因本规则被机械重写。
+
+### 主应用 RPC 的契约与运行时边界
+
+服务端 [`studioTrpcRouter`](../../../apps/studio-server/src/rpc/trpc/router.ts) 导出 `AppRouter` 类型。
+客户端 [`trpc-client.ts`](../../../apps/studio-client/src/shared/api/trpc-client.ts) 通过
+`import type` 引用 `@loom-studio/studio-server/trpc`，推导输入、输出和 typed client；
+[`studio-api.ts`](../../../apps/studio-client/src/shared/api/studio-api.ts) 保留面向 UI 的调用封装。
+Server 的 `./trpc` 是仅含 `types` 的 package export，Client 通过 TypeScript project reference 获取声明；
+这是一条编译期依赖，不允许前端导入 Server router、Runtime 或 Node 模块的运行时代码。
+类型推导不替代输入校验，也不为动态扩展返回值提供未经验证的静态保证。
+
+当前 HTTP 合同如下：
+
+- 主应用使用 `POST /trpc/<procedure>`，Query 也通过 POST；使用普通 `httpLink`，服务端关闭 batching。旧 `/rpc` 不再提供兼容入口。
+- Node HTTP 层完成认证与 Origin 检查，并将有大小预算的请求体、可信 Session 身份和取消信号交给官方 Fetch adapter。客户端的 `createSessionFetch` 负责 Session bootstrap 与一次 401 恢复。
+- procedure 错误使用 tRPC 格式；原始领域错误码在 `error.data.domainCode`，关联信息在 `error.data.correlationId` / `callId`，不向客户端输出 stack。认证、请求体过大等 HTTP 前置失败仍由 HTTP 层响应。
+- `kernel.invoke` 只承接动态扩展方法，转入 Kernel 已有的权限与生命周期调度；静态平台命名空间必须走具体 typed procedure，不能借该网关绕过输入契约。Kernel 自身不依赖 tRPC。
+- SSE 与 `/assets` 媒体 HTTP 路径保持独立；本次选型不建立 tRPC subscription，也不改变领域状态或持久化所有权。`@loom-studio/transport` 只保留事件契约，不再定义主应用 RPC envelope。
+
+实现入口：[`HTTP adapter`](../../../apps/studio-server/src/http/trpc-request.ts)、
+[`procedure context / error formatter`](../../../apps/studio-server/src/rpc/trpc/context.ts)、
+[`Kernel gateway`](../../../apps/studio-server/src/rpc/trpc/kernel.ts)。
+动态客户端边界另见 [`Client Bridge`](../../../packages/client-bridge/README.md)，
+方法导航见 [`RPC Methods`](../../workbench/reference/rpc-methods.md)。
 
 ## 3. 构建与质量依赖
 

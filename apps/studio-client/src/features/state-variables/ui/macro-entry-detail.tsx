@@ -1,7 +1,7 @@
 import { Copy, Save, Trash2 } from 'lucide-react'
 import { Button, TextInput } from '@loom-studio/ui'
 import type { ReactNode } from 'react'
-import { toast } from 'sonner'
+import { notify } from '../../../shared/notifications/index.js'
 import { tryWriteClipboardText } from '../../../shared/browser/clipboard.js'
 import type { Translator } from '../../../shared/i18n/index.js'
 import styles from './state-variables-panel.module.scss'
@@ -26,8 +26,8 @@ export function MacroEntryDetail(props: {
   async function copyMacro() {
     if (!props.name.trim()) return
     const copied = await tryWriteClipboardText(`{{${props.name.trim()}}}`)
-    if (copied) toast.success(props.t('stateVariables.copiedMacro'))
-    else toast.error(props.t('longTextEditor.copyFailed'))
+    if (copied) notify.success(props.t('stateVariables.copiedMacro'))
+    else notify.error(props.t('longTextEditor.copyFailed'))
   }
 
   return <section className={styles.macroAuthoringDetail} data-loom-component="macro-entry-detail">

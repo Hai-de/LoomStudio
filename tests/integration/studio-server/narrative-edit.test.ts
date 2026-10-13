@@ -6,7 +6,7 @@ import { createSqliteDataEngine } from '@loom-studio/data-engine'
 import { createNarrativeStore, createPromptResourceStore, createStateStore } from '@loom-studio/application-data'
 import { createSqliteDocumentStore } from '@loom-studio/document-store'
 import { createApplicationRuntime } from '@loom-studio/application-runtime'
-import { handleTimelineRpc } from '../../../apps/studio-server/src/rpc/handlers/application/timeline.js'
+import { callApplicationRpc as handleTimelineRpc } from '../../support/trpc-caller.js'
 
 describe('branch-local Narrative text editing', () => {
   it('persists text without changing descendants, sibling branches or State references, and rejects stale saves', async () => {
@@ -50,7 +50,7 @@ describe('branch-local Narrative text editing', () => {
       }
       const count = (await store.listNodes(created.timeline.id)).length
       await expect(handleTimelineRpc(runtime, 'application.editNarrativeNode', { ...params, expectedRaw: 'Wrong' }))
-        .rejects.toMatchObject({ code: 'narrative.body_conflict' })
+        .rejects.toMatchObject({ cause: { code: 'narrative.body_conflict' } })
       expect(await store.listNodes(created.timeline.id)).toHaveLength(count)
       await handleTimelineRpc(runtime, 'application.editNarrativeNode', params)
       const page = await store.getPage({ timelineId: created.timeline.id, branchId: created.branch.id })
@@ -65,7 +65,7 @@ describe('branch-local Narrative text editing', () => {
       expect(sibling.nodes).toEqual(created.nodes)
       expect(sibling.branch.stateHeadRevisionId).toBe('state-sibling')
       await expect(handleTimelineRpc(runtime, 'application.editNarrativeNode', params))
-        .rejects.toMatchObject({ code: 'narrative.head_conflict' })
+        .rejects.toMatchObject({ cause: { code: 'narrative.head_conflict' } })
       expect(await store.listNodes(created.timeline.id)).toHaveLength(count + 2)
       const exported = await runtime.exportTimelineArchive({ timelineId: created.timeline.id })
       const imported = await runtime.importTimelineArchive({ source: JSON.stringify(exported.archive) })

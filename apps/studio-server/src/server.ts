@@ -34,7 +34,7 @@ import { createNarrativeStore } from '@loom-studio/application-data'
 import { createPromptResourceStore, migrateLoreDocuments, type PromptResourceStore } from '@loom-studio/application-data'
 import { createKeyringSecretBackend, createSecretStore, type SecretBackend } from '@loom-studio/secret-store'
 import { createLoomRunner } from '@loom-studio/loom-runner'
-import { createId, nowIso, type JsonValue } from '@loom-studio/shared'
+import { createId, nowIso } from '@loom-studio/shared'
 import { createStateStore } from '@loom-studio/application-data'
 import { createInMemoryTraceAuditStore } from '@loom-studio/trace-audit'
 import { join, resolve } from 'node:path'
@@ -46,7 +46,7 @@ import { resolveSystemProxyUrl } from './platform/system-proxy.js'
 import { createApplicationSessionAuth } from './http/application-session-auth.js'
 import { withDocumentStoreLogging } from './logging/document-store-logging.js'
 import { createStudioHttpServer } from './http/http-server.js'
-import { createStudioRpcRouter } from './rpc/studio-rpc-router.js'
+import type { StudioRpcServices } from './rpc/trpc/services-context.js'
 import { createServerExtensionManager } from './extensions/extension-manager.js'
 import { createExtensionStateStore } from './extensions/extension-state-store.js'
 import { createExtensionImportConversions } from './extensions/import-conversion.js'
@@ -55,7 +55,6 @@ import { createCardDirectoryService } from './resource-directories/card-director
 import { createCardDirectoryCatalog } from './resource-directories/card-directory-catalog.js'
 import { createCardDirectoryImporter } from './resource-directories/card-directory-import.js'
 import { createCardDirectoryMedia } from './resource-directories/card-directory-media.js'
-import { readString } from './rpc/rpc-params.js'
 import { resolveLoomStudioLocalPaths, type LoomStudioLocalPaths } from './platform/local-paths.js'
 
 const defaultPort = 18010
@@ -278,10 +277,10 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
     listInstallations: () => applicationRuntime.listExtensionInstallations(),
     importPackageResources: input => applicationRuntime.importExtensionPackageResources(input, {
       actor: { kind: 'extension', id: input.packageId },
-    }) as Promise<Record<string, JsonValue>>,
+    }),
     removePackageResources: input => applicationRuntime.removeExtensionPackageResources(input, {
       actor: { kind: 'extension', id: input.packageId },
-    }) as Promise<Record<string, JsonValue>>,
+    }),
   })
   const kernel = createKernel({
     documents,
@@ -311,10 +310,11 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
     },
   })
   const startupDirectoryScan = directoryCatalog.scan()
-  const directoryMedia = createCardDirectoryMedia({ dataRoot: localPaths.dataRoot })
+  const directoryMedia = createCardDirectoryMedia({ dataRoot: localPaths.dataRoot, logger: options.logger?.child('card.directory.media') })
   let mediaWatcher: { dispose(): void } | undefined
   const resourceDirectories = assets ? createCardDirectoryService({
     dataRoot: localPaths.dataRoot,
+    logger: options.logger?.child('card.directory'),
     readCard: cardId => cardTransfer.readCardExport(cardId),
     applyCard: async (cardId, artifact, snapshot, context) => { await applicationRuntime.applyCardDirectoryState({ cardId, artifact, snapshot }, context) },
   }) : undefined
@@ -324,9 +324,7 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
   }
   const saveImportedCard = async (id: string) => {
     if (!resourceDirectories) throw new Error('Card directory service unavailable')
-    await resourceDirectories.recoverCard(id)
-    const preview = await resourceDirectories.previewCard(id)
-    await resourceDirectories.saveCard(id, preview.token)
+    await resourceDirectories.saveImportedCard(id)
   }
   const directoryImporter = createCardDirectoryImporter({
     dataRoot: localPaths.dataRoot,
@@ -339,25 +337,13 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
       return Boolean(entry?.registeredCardId)
     },
     importCard: async (bundle, id, clientId) => { await cardTransfer.importCardArchive(bundle, clientId, id) },
-    normalizeCard: saveImportedCard,
+    saveImportedCard,
   })
-  const rpcRouter = createStudioRpcRouter({
+  const rpcServices: StudioRpcServices = {
+    directoryCatalog, directoryResources: resourceDirectories, directoryImporter, startupDirectoryScan,
     convertPromptResource: importConversions.promptResource,
     applicationRuntime,
     officialContent: createOfficialContentService(applicationRuntime, resolve(officialContentDirectory)),
-    resourceDirectories: {
-      call: async (method, params, context) => {
-        if (method === 'directories.import') {
-          const result = await directoryImporter.importDirectory(readString(params, 'directory'), readString(params, 'token'), context.clientId)
-          await directoryCatalog.scan()
-          return result
-        }
-        if (method === 'directories.list') await startupDirectoryScan
-        if (['directories.list', 'directories.scan', 'directories.open', 'directories.attachment'].includes(method)) return directoryCatalog.call(method, params)
-        if (!resourceDirectories) throw new Error('Card directory saving requires the Asset Store')
-        return resourceDirectories.call(method, params, context)
-      },
-    },
     aiCapabilities,
     aiGateway: profiledAiGateway,
     kernel,
@@ -371,9 +357,11 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
         ...context,
       })
     },
-  })
+  }
   const cardTransfer = createCardTransferService({ applicationRuntime, assets, directoryMedia, importConversions, saveImportedCard })
   const server = createStudioHttpServer({
+    trpcServices: rpcServices,
+    applicationRuntime,
     auth: createApplicationSessionAuth({
       allowedOrigins: options.applicationSessionOrigins ?? (options.runtimeMode === 'production' ? [] : [defaultClientOrigin]),
     }),
@@ -423,7 +411,6 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
       },
     },
     logger: options.rpcLogger,
-    rpcRouter,
   })
 
   return {
@@ -443,7 +430,12 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
           ...await directoryImporter.recoverImports(),
           ...await resourceDirectories!.recoverApplies(),
         ]
-        for (const failure of recoveryErrors) console.error(`Card ${failure.cardId} directory recovery requires attention: ${failure.error}`)
+        for (const failure of recoveryErrors) {
+          logger?.error(`Card ${failure.cardId} directory recovery requires attention: ${failure.error}`, {
+            event: 'card.directory.recovery_failed',
+            data: { cardId: failure.cardId, error: String(failure.error) },
+          })
+        }
         await directoryCatalog.scan()
         await applicationRuntime.initialize()
         await installBuiltinStarterContent(applicationRuntime, resolve(officialContentDirectory))

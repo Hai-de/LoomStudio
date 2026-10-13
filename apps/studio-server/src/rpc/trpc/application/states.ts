@@ -1,9 +1,8 @@
 import type {
   ApplicationRuntime,
-  RuntimeRequestContext,
   StateDefinitionDraft,
   StateMutationOperation,
-  StateTarget,
+  StateTarget
 } from '@loom-studio/application-runtime'
 import type { JsonValue } from '@loom-studio/shared'
 import {
@@ -15,61 +14,52 @@ import {
   readOptionalStringArray,
   readString,
 } from '../../rpc-params.js'
+import { jsonInput, procedure } from '../context.js'
 
-export async function handleStatesRpc(
-  runtime: ApplicationRuntime,
-  method: string,
-  params: JsonValue | undefined,
-  context?: RuntimeRequestContext,
-): Promise<JsonValue | undefined> {
-  switch (method) {
-    case 'application.inspectStateSources': {
-      const target = readOptionalObject(params, 'target') ? readStateTarget(params) : undefined
-      if (target?.scope === 'global') throw new Error('State source inspection requires a Timeline target')
-      return await runtime.inspectStateSources({
-        cardId: readOptionalString(params, 'cardId'), target,
-      }) as unknown as JsonValue
+export const statesProcedures = {
+  'inspectStateSources': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['inspectStateSources']>[0] => {
+    const target = readOptionalObject(params, 'target') ? readStateTarget(params) : undefined
+    if (target?.scope === 'global') throw new Error('State source inspection requires a Timeline target')
+    return {
+      cardId: readOptionalString(params, 'cardId'), target,
     }
-
-    case 'application.getStateSnapshot':
-      return await runtime.getStateSnapshot({
-        extensionTarget: readOptionalInstallationTarget(params, 'extensionTarget'),
-        target: readStateTarget(params),
-      }) as unknown as JsonValue
-
-    case 'application.applyStateMutation':
-      return await runtime.applyStateMutation({
-        target: readStateTarget(params),
-        expectedRevisionId: readString(params, 'expectedRevisionId'),
-        operations: readStateMutationOperations(params),
-        idempotencyKey: readOptionalString(params, 'idempotencyKey'),
-      }, context) as unknown as JsonValue
-
-    case 'application.listStateDefinitions':
-      return await runtime.listStateDefinitions({
-        kind: readOptionalStateDefinitionKind(params, 'kind'),
-        ids: readOptionalStringArray(params, 'ids'),
-      }) as unknown as JsonValue
-
-    case 'application.getStateDefinition':
-      return await runtime.getStateDefinition({ definitionId: readString(params, 'definitionId') }) as unknown as JsonValue
-
-    case 'application.upsertStateDefinition':
-      return await runtime.upsertStateDefinition({
-        definitionId: readString(params, 'definitionId'),
-        expectedVersion: readOptionalNumber(params, 'expectedVersion'),
-        definition: readStateDefinitionDraft(params),
-      }, context) as unknown as JsonValue
-
-    case 'application.deleteStateDefinition':
-      return await runtime.deleteStateDefinition({
-        definitionId: readString(params, 'definitionId'),
-        expectedVersion: readOptionalNumber(params, 'expectedVersion'),
-      }, context) as unknown as JsonValue
-
-    default:
-      return undefined
-  }
+  })).query(({ ctx, input }) => ctx.runtime.inspectStateSources(input)),
+  'getStateSnapshot': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['getStateSnapshot']>[0] => {
+    return {
+      extensionTarget: readOptionalInstallationTarget(params, 'extensionTarget'),
+      target: readStateTarget(params),
+    }
+  })).query(({ ctx, input }) => ctx.runtime.getStateSnapshot(input)),
+  'applyStateMutation': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['applyStateMutation']>[0] => {
+    return {
+      target: readStateTarget(params),
+      expectedRevisionId: readString(params, 'expectedRevisionId'),
+      operations: readStateMutationOperations(params),
+      idempotencyKey: readOptionalString(params, 'idempotencyKey'),
+    }
+  })).mutation(({ ctx, input }) => ctx.runtime.applyStateMutation(input, ctx.request)),
+  'listStateDefinitions': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['listStateDefinitions']>[0] => {
+    return {
+      kind: readOptionalStateDefinitionKind(params, 'kind'),
+      ids: readOptionalStringArray(params, 'ids'),
+    }
+  })).query(({ ctx, input }) => ctx.runtime.listStateDefinitions(input)),
+  'getStateDefinition': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['getStateDefinition']>[0] => {
+    return { definitionId: readString(params, 'definitionId') }
+  })).query(({ ctx, input }) => ctx.runtime.getStateDefinition(input)),
+  'upsertStateDefinition': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['upsertStateDefinition']>[0] => {
+    return {
+      definitionId: readString(params, 'definitionId'),
+      expectedVersion: readOptionalNumber(params, 'expectedVersion'),
+      definition: readStateDefinitionDraft(params),
+    }
+  })).mutation(({ ctx, input }) => ctx.runtime.upsertStateDefinition(input, ctx.request)),
+  'deleteStateDefinition': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['deleteStateDefinition']>[0] => {
+    return {
+      definitionId: readString(params, 'definitionId'),
+      expectedVersion: readOptionalNumber(params, 'expectedVersion'),
+    }
+  })).mutation(({ ctx, input }) => ctx.runtime.deleteStateDefinition(input, ctx.request)),
 }
 
 function readStateTarget(params: JsonValue | undefined): StateTarget {

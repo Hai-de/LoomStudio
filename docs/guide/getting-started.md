@@ -35,7 +35,7 @@ Loom Studio 是一个典型的 C/S 架构。你需要同时启动 Server 端和 
 pnpm dev:server
 ```
 
-Server 默认监听 `127.0.0.1:18010`，可通过 `PORT` 覆盖。当前主 RPC 是建立应用会话后的 HTTP `POST /rpc`；Extension Catalog 变化通过专用 `GET /extensions/events` SSE 推送，不存在通用 WebSocket 当前合同。
+Server 默认监听 `127.0.0.1:18010`，可通过 `PORT` 覆盖。当前主 RPC 是建立应用会话后的 HTTP `POST /trpc/<procedure>`；Extension Catalog 变化通过专用 `GET /extensions/events` SSE 推送，不存在通用 WebSocket 当前合同。
 
 **终端 B: 启动 Client**
 
@@ -44,7 +44,7 @@ Server 默认监听 `127.0.0.1:18010`，可通过 `PORT` 覆盖。当前主 RPC 
 pnpm dev:client
 ```
 
-Client 默认监听 `127.0.0.1:18011`。打开浏览器访问该地址即可；Vite 会把 `/auth`、`/assets`、`/cards`、`/extensions` 与 `/rpc` 代理到 Studio Server。
+Client 默认监听 `127.0.0.1:18011`。打开浏览器访问该地址即可；Vite 会把 `/auth`、`/assets`、`/cards`、`/extensions` 与 `/trpc` 代理到 Studio Server。
 
 若 Server 设置了不同的 `PORT`，启动 Client 时须同步设置 `STUDIO_SERVER_URL`（例如 `http://127.0.0.1:4174`）；代理目标不会自动跟随 Server 的端口环境变量。
 

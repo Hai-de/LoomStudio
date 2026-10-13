@@ -1,3 +1,4 @@
+import type { LoomScriptMountTarget } from '@loom-studio/shared/loom-scripts'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type {
   HistorySource,
@@ -18,6 +19,7 @@ import type { StudioApi } from '../../../shared/api/studio-api.js'
 import type { Translator } from '../../../shared/i18n/index.js'
 import type { ClientRendererHost, ClientRendererRegistration } from '../../../shared/extension-renderer-runtime/client-renderer-host.js'
 import { rendererContributionKey, rendererSurfacePolicies } from '../../../shared/extension-renderer-runtime/renderer-registry.js'
+import { notify } from '../../../shared/notifications/index.js'
 import { useTextTransformInspection } from './use-text-transform-inspection.js'
 
 export type OwnerScope = TextRuleOwner | { kind: 'runtime' } | { kind: 'catalog' }
@@ -227,7 +229,12 @@ export function useTextTransformController(props: TextTransformProps) {
       await refresh()
       props.onRuntimeChanged?.()
       await selectScript(result.script.id)
-    } catch (cause) { setError(readError(cause)) } finally { setBusy(false) }
+      notify.success(props.t('notify.success.imported'))
+    } catch (cause) {
+      const message = readError(cause)
+      setError(message)
+      notify.error(message)
+    } finally { setBusy(false) }
   }
 
   async function saveScript() {
@@ -240,7 +247,12 @@ export function useTextTransformController(props: TextTransformProps) {
       setScriptDraft(current => current === scriptDraft ? { ...current, version: result.script.version } : current)
       await refresh()
       props.onRuntimeChanged?.()
-    } catch (cause) { setError(readError(cause)) } finally { setBusy(false) }
+      notify.success(props.t('notify.success.saved'))
+    } catch (cause) {
+      const message = readError(cause)
+      setError(message)
+      notify.error(message)
+    } finally { setBusy(false) }
   }
 
   async function updateScriptMount(mount: LoomScriptMount, patch: Partial<Pick<LoomScriptMount, 'enabled' | 'orderIndex' | 'grantedCapabilities'>>) {
@@ -367,7 +379,12 @@ export function useTextTransformController(props: TextTransformProps) {
       setRules(current => [...current.filter(rule => rule.id !== result.rule.id), result.rule])
       setSavedRule({ scope: catalogScope, id: selectedRuleId, text: ruleText })
       await refresh()
-    } catch (cause) { setError(readError(cause)) }
+      notify.success(props.t('notify.success.saved'))
+    } catch (cause) {
+      const message = readError(cause)
+      setError(message)
+      notify.error(message)
+    }
     finally {
       if (ruleWriteRef.current === task) ruleWriteRef.current = undefined
       if (isCurrentCatalog()) setRuleWrite(undefined)
@@ -380,7 +397,12 @@ export function useTextTransformController(props: TextTransformProps) {
       await props.api.deleteRule({ ruleId: selectedRuleId, expectedVersion: existing?.version })
       props.onRuntimeChanged?.()
       await refresh()
-    } catch (cause) { setError(readError(cause)) }
+      notify.success(props.t('notify.success.deleted'))
+    } catch (cause) {
+      const message = readError(cause)
+      setError(message)
+      notify.error(message)
+    }
   }
 
   async function saveExtractor() {
@@ -394,7 +416,12 @@ export function useTextTransformController(props: TextTransformProps) {
       if (extractorDraftRef.current === baseline) baseline.version = result.extractor.version
       setExtractors(current => [...current.filter(item => item.id !== result.extractor.id), result.extractor])
       await refresh()
-    } catch (cause) { setError(readError(cause)) }
+      notify.success(props.t('notify.success.saved'))
+    } catch (cause) {
+      const message = readError(cause)
+      setError(message)
+      notify.error(message)
+    }
   }
 
   function formatJson(text: string, setter: (value: string) => void) {
@@ -402,7 +429,9 @@ export function useTextTransformController(props: TextTransformProps) {
       setter(JSON.stringify(JSON.parse(text), null, 2))
       setError('')
     } catch (cause) {
-      setError(props.t('textTransform.invalidJson', { error: readError(cause) }))
+      const message = props.t('textTransform.invalidJson', { error: readError(cause) })
+      setError(message)
+      notify.error(message)
     }
   }
 
@@ -492,7 +521,7 @@ function ownerMatches(value: TextRuleOwner, scope: OwnerScope): boolean {
   return value.kind === 'user-override'
 }
 function ownerId(owner: OwnerScope): string { return owner.kind === 'runtime' ? 'runtime' : owner.kind === 'catalog' ? 'catalog' : JSON.stringify(owner) }
-function toScriptOwner(owner: OwnerScope): LoomScriptOwner | undefined { if (owner.kind === 'card') return { kind: 'card', cardId: owner.cardId }; if (owner.kind === 'preset') return { kind: 'preset', presetId: owner.presetId }; if (owner.kind === 'workspace') return { kind: 'workspace', workspaceId: 'workspace' }; if (owner.kind === 'user-override') return { kind: 'user' }; return undefined }
+function toScriptOwner(owner: OwnerScope): LoomScriptMountTarget | undefined { if (owner.kind === 'card') return { kind: 'card', cardId: owner.cardId }; if (owner.kind === 'preset') return { kind: 'preset', presetId: owner.presetId }; if (owner.kind === 'workspace') return { kind: 'workspace', workspaceId: 'workspace' }; if (owner.kind === 'user-override') return { kind: 'user' }; return undefined }
 function scriptOwnerMatches(left: LoomScriptOwner, right: LoomScriptOwner): boolean { return JSON.stringify(left) === JSON.stringify(right) }
 export function sourceLabel(source: HistorySource, t: Translator): string { return source.kind === 'narrative' ? t('textTransform.narrativeSource', { id: source.timelineId }) : t('textTransform.agentSessionSource', { id: source.sessionId }) }
 function sourceId(source: HistorySource): string { return source.kind === 'narrative' ? `narrative:${source.timelineId}:${source.branchId}` : `agent-session:${source.sessionId}` }

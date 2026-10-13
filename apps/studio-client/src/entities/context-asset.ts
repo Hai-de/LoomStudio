@@ -1,3 +1,4 @@
+import type { StudioRpcOutputs } from '../shared/api/trpc-client.js'
 export type ContextAssetNode = {
   body?: string
   category?: 'preset' | 'lore' | 'logic' | 'runtime' | 'history' | (string & {})
@@ -29,8 +30,8 @@ export type ContextAssetNode = {
   slotRanks?: ProjectionSlotRank[]
   projection?: {
     entryOrder?: number
-    lifecycle: string
-    order: string
+    lifecycle?: string
+    order?: string
     reason?: string
     slotKey?: string
     slotOrder?: number
@@ -107,9 +108,4 @@ export type PromptMessageBlock = PromptCompositionItemBase & {
 
 export type PromptCompositionItem = PromptMessageBlock | PromptCompositionZone | PromptCompositionSlot | PromptCompositionEntry
 
-type PromptActivationCapability = {
-  activations?: PromptActivationCapability[]
-  conditions?: Array<{ fact: string; equals?: string | number | boolean; includes?: string }>
-  kind: string
-  keywords?: string[]
-}
+export type PromptActivationCapability = NonNullable<NonNullable<StudioRpcOutputs['application']['getPromptResource']['resource']['rootNode']['capabilities']>['activation']>

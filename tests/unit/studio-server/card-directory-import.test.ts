@@ -32,10 +32,9 @@ async function fixture() {
       if (failImport) throw new Error('database failure')
       cards.set(id, { ...bundle, artifact: { ...bundle.artifact, metadata: { ...bundle.artifact.metadata, exportedFromCardId: id } } })
     },
-    normalizeCard: async id => {
+    saveImportedCard: async id => {
       if (failNormalize) throw new Error('normalization failed')
-      await service.recoverCard(id)
-      await service.saveCard(id, (await service.previewCard(id)).token)
+      await service.saveImportedCard(id)
     },
   })
   return { root, directory, cards, service, catalog, importer, setFailure: (kind: 'import' | 'normalize', value: boolean) => { if (kind === 'import') failImport = value; else failNormalize = value } }

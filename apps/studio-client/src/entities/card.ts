@@ -69,7 +69,7 @@ export type Card = {
       title?: string
       content: string
       enabled?: boolean
-      activation?: JsonObject
+      activation?: import('./context-asset.js').PromptActivationCapability
       tags?: string[]
     }>
   }
@@ -102,7 +102,7 @@ export type LoreInput = {
     title?: string
     content: string
     enabled?: boolean
-    activation?: JsonObject
+    activation?: import('./context-asset.js').PromptActivationCapability
     tags?: string[]
   }>
 }

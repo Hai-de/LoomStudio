@@ -102,14 +102,14 @@ function createRuntime(paths: Awaited<ReturnType<typeof createFixture>>, cardArc
           createdAt: '2026-09-22T00:00:00.000Z', updatedAt: '2026-09-22T00:00:00.000Z',
         })
       }
-      return {}
+      return { installationId: 'fixture-installation', promptResources: [], agentTools: [], transformRules: [], textExtractors: [] }
     },
     removePackageResources: async input => {
       if (input.uninstall && input.target) {
         const index = installations.findIndex(installation => installation.id === extensionInstallationId(input.packageId, input.target!))
         if (index >= 0) installations.splice(index, 1)
       }
-      return {}
+      return { packageId: input.packageId, promptResourceIds: [], agentToolIds: [], textTransformRuleIds: [], textExtractorIds: [], detachedReferences: { cards: 0, timelines: 0, presetToolMounts: 0 } }
     },
   })
   return { host, manager, stateStore, registrations, diagnostics }

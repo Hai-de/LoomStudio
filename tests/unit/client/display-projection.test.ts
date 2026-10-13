@@ -11,7 +11,7 @@ afterEach(() => clients.splice(0).forEach(client => client.clear()))
 const source = { kind: 'agent-session', sessionId: 'a' } as const
 const snapshot: HistoryProjectionSnapshot = {
   source, phase: 'display', ruleIds: [], matches: [], diagnostics: [],
-  entries: [{ id: '1', originalText: 'raw', text: '<p>Display</p>', depth: 0, appliedRuleIds: [], promotedReasoning: [] }],
+  entries: [{ source, sequence: 1, id: '1', originalText: 'raw', text: '<p>Display</p>', depth: 0, appliedRuleIds: [], promotedReasoning: [] }],
 }
 
 function setup() {

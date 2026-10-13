@@ -1,3 +1,6 @@
+import type { CreateLoomScriptMountInput, UpdateLoomScriptMountInput, ListLoomScriptMountsInput, MutateLoomScriptMountResult, ListLoomScriptMountsResult } from '@loom-studio/shared/loom-scripts'
+import type { ListPresetToolMountsInput, ListPresetToolMountsResult, PresetToolMountInput, ReplacePresetToolMountsInput, ReplacePresetToolMountsResult } from '@loom-studio/shared/tool-mounts'
+export type { ListPresetToolMountsInput, ListPresetToolMountsResult, PresetToolMountInput, ReplacePresetToolMountsInput, ReplacePresetToolMountsResult } from '@loom-studio/shared/tool-mounts'
 import type { TokenUsage } from '@loom-studio/tokenizer/contracts'
 import type { RequestTokenEstimate } from '@loom-studio/ai-gateway'
 import type {
@@ -128,8 +131,6 @@ import type { TimelineArchive, TimelineArchiveParticipant } from './archive/time
 import type {
   LoomScriptArtifact,
   LoomScriptEntry,
-  LoomScriptMountEntry,
-  LoomScriptMountTarget,
   LoomScriptOwner,
   ResolvedLoomScriptRendererMount,
   UnavailableLoomScriptMount,
@@ -213,9 +214,9 @@ export type ApplicationRuntime = {
   getLoomScript(input: { scriptDocumentId: string }): Promise<{ script: LoomScriptEntry }>
   listLoomScripts(input?: { owner?: LoomScriptOwner }): Promise<{ scripts: LoomScriptEntry[] }>
   exportLoomScript(input: { scriptDocumentId: string }): Promise<{ artifact: LoomScriptArtifact }>
-  createLoomScriptMount(input: { target: LoomScriptMountTarget; scriptDocumentId: string; orderIndex: number; pinnedDocumentVersion?: number; origin?: JsonObject }, context?: RuntimeRequestContext): Promise<{ mount: LoomScriptMountEntry; mutation: MutationReceipt }>
-  updateLoomScriptMount(input: { mountId: string; expectedVersion: number; enabled: boolean; orderIndex: number; pinnedDocumentVersion?: number; grantedCapabilities: string[] }, context?: RuntimeRequestContext): Promise<{ mount: LoomScriptMountEntry; mutation: MutationReceipt }>
-  listLoomScriptMounts(input?: { target?: LoomScriptMountTarget; scriptDocumentId?: string }): Promise<{ mounts: LoomScriptMountEntry[] }>
+  createLoomScriptMount(input: CreateLoomScriptMountInput, context?: RuntimeRequestContext): Promise<MutateLoomScriptMountResult>
+  updateLoomScriptMount(input: UpdateLoomScriptMountInput, context?: RuntimeRequestContext): Promise<MutateLoomScriptMountResult>
+  listLoomScriptMounts(input?: ListLoomScriptMountsInput): Promise<ListLoomScriptMountsResult>
   resolveLoomScriptRendererMounts(input?: { workspaceId?: string; timelineId?: string; presetId?: string }): Promise<{ mounts: ResolvedLoomScriptRendererMount[]; unavailableMounts: UnavailableLoomScriptMount[] }>
   listExtensionRecords(input: { packageId: string; target?: ExtensionInstallationTarget; scope?: ExtensionStorageScope; recordType?: string; binding?: ExtensionEntityRef }): Promise<{ records: ExtensionRecordEntry[] }>
   getExtensionRecord(input: { packageId: string; target?: ExtensionInstallationTarget; recordId: string }): Promise<{ record: ExtensionRecordEntry | null }>
@@ -600,34 +601,6 @@ export type DeleteStateDefinitionInput = {
 
 export type DeleteStateDefinitionResult = {
   deleted: true
-  mutation: MutationReceipt
-}
-
-export type ListPresetToolMountsInput = {
-  presetId?: string
-  toolId?: string
-}
-
-export type ListPresetToolMountsResult = {
-  mounts: PresetToolMount[]
-}
-
-export type PresetToolMountInput = {
-  toolId: string
-  orderIndex: number
-  defaultEnabled: boolean
-  activation?: PromptActivation
-  provider?: PresetToolMount['provider']
-  content?: PresetToolMount['content']
-}
-
-export type ReplacePresetToolMountsInput = {
-  presetId: string
-  mounts: PresetToolMountInput[]
-}
-
-export type ReplacePresetToolMountsResult = {
-  mounts: PresetToolMount[]
   mutation: MutationReceipt
 }
 

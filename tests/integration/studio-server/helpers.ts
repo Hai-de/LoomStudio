@@ -24,30 +24,14 @@ export async function withStudioServer<T>(run: (port: number, dir: string) => Pr
 }
 
 export async function callRpc<T>(port: number, method: string, params: unknown): Promise<T> {
-  const response = await authenticatedFetch(port, '/rpc', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: method,
-      method,
-      params,
-    }),
+  const platform = ['application','official','directories','settings','logs','ai','system','docs','extensions','diagnostics','loom','trace','audit','kernel'].includes(method.split('.')[0]!)
+  const response = await authenticatedFetch(port, `/trpc/${platform ? method : 'kernel.invoke'}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(platform ? params : { method, params }),
   })
-  const payload = await response.json() as {
-    result?: T
-    error?: { message: string }
-  }
-
-  if (payload.error) {
-    throw new Error(payload.error.message)
-  }
-
-  if (!payload.result) {
-    throw new Error(`Missing RPC result: ${method}`)
-  }
-
-  return payload.result
+  const payload = await response.json() as { result?: { data: T }; error?: { message: string } }
+  if (payload.error) throw new Error(payload.error.message)
+  if (!payload.result) throw new Error(`Missing RPC result: ${method}`)
+  return payload.result.data
 }
 
 export async function authenticatedFetch(port: number, path: string, init: RequestInit = {}): Promise<Response> {

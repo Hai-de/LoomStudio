@@ -1,7 +1,7 @@
 import { Button, Dialog } from '@loom-studio/ui'
 import { Download, GitBranch, RefreshCw, Undo2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { toast } from 'sonner'
+import { notify } from '../../../shared/notifications/index.js'
 import type { StudioApi } from '../../../shared/api/studio-api.js'
 import type { Translator } from '../../../shared/i18n/index.js'
 import type { ManagedExtensionPackage } from '../../../entities/extension.js'
@@ -79,11 +79,19 @@ export function RemoteExtensionInstall(props: {
       const result = await props.api.commitRemoteInstall(preview.token)
       setPreview(undefined)
       await props.onInstalled()
-      if (result.failed) setError(`${result.installed.length} ${t('renderer.remote.completed')} · ${result.failed.packageId}: ${result.failed.message}`)
-      else props.onClose()
+      if (result.failed) {
+        const message = `${result.installed.length} ${t('renderer.remote.completed')} · ${result.failed.packageId}: ${result.failed.message}`
+        setError(message)
+        notify.error(message)
+      } else {
+        notify.success(t('renderer.installed'))
+        props.onClose()
+      }
     } catch (error) {
       setPreview(undefined)
-      setError(error instanceof Error ? error.message : String(error))
+      const message = error instanceof Error ? error.message : String(error)
+      setError(message)
+      notify.error(message)
     } finally { setBusy(false) }
   }
   return <Dialog open title={t('renderer.install')} dismissible={!busy} onClose={props.onClose}
@@ -149,13 +157,13 @@ export function OfficialExtensionSetup(props: { api: StudioApi['extensions']; re
     let active = true
     setState(undefined)
     void props.api.officialSetup().then(result => { if (active) setState(result) })
-      .catch(error => { if (active) toast.error(String(error)) })
+      .catch(error => { if (active) notify.error(String(error)) })
     return () => { active = false }
   }, [props.api, props.ready])
   if (!state || state.completed || !state.items.length) return null
   async function close() {
     try { await props.api.finishOfficialSetup(); setState(undefined) }
-    catch (error) { toast.error(String(error)) }
+    catch (error) { notify.error(String(error)) }
   }
   return <>
     <OfficialExtensionPicker api={props.api} t={props.t} items={state.items} onClose={() => void close()} onInstalled={props.onInstalled} />

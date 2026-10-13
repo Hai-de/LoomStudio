@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { useNarrativeRuntime } from '../../../apps/studio-client/src/features/narrative-runtime/model/use-narrative-runtime.js'
 import type { StudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
 import type { DataOperation } from '../../../apps/studio-client/src/shared/api/data-commit-events.js'
-import type { AgentSession, AgentTranscriptEntry } from '../../../apps/studio-client/src/entities/index.js'
+import type { AgentSession, AgentTranscriptEntry, InvokeAgentTurnResult } from '../../../apps/studio-client/src/entities/index.js'
 
 const hooks = vi.hoisted(() => ({
   cursor: 0,
@@ -69,18 +69,22 @@ export function fixture() {
   }
   const narrative: Awaited<ReturnType<StudioApi['narratives']['getPage']>> = { timeline, branch, nodes: [] }
   const result = {
-    narrative, agentSession: session,
+    narrative, agentSession: session, runId: 'run',
+    provider: { provider: 'test', model: 'test-model', finishReason: 'stop' },
+    projection: { messages: [], editorProjection: { sourceRows: [], promptRows: [] } }, toolExposures: [], toolPromptBuildTrace: { sourceCount: 0, activeCount: 0, requestedOrder: [], effectiveOrder: [], activations: [], orders: [] },
+    promptBuildTrace: { version: 'core-compact-1' as const, status: 'ok' as const, initialFragmentCount: 0, finalFragmentCount: 0, messageFragmentCount: 0, diagnostics: [], executions: [] }, macroInspection: { snapshot: { global: {}, computed: {}, aliases: {} }, entries: [], capturedAt: '' },
+    mutation: { changesetId: 'turn-commit', scope: 'agent-session-transcript' as const },
     entries: {
       user: {
         id: 'user', agentSessionId: session.id, sequence: 1, createdAt: timeline.createdAt,
-        entry: { kind: 'message', role: 'user', content: 'Draft' },
+        entry: { kind: 'message' as const, role: 'user', content: 'Draft' },
       } satisfies AgentTranscriptEntry,
       assistant: {
         id: 'assistant', agentSessionId: session.id, sequence: 2, createdAt: timeline.createdAt,
-        entry: { kind: 'message', role: 'assistant', content: 'Reply' },
+        entry: { kind: 'message' as const, role: 'assistant', content: 'Reply' },
       } satisfies AgentTranscriptEntry,
     },
-  }
+  } satisfies InvokeAgentTurnResult & { narrative: typeof narrative }
   const createTimeline = vi.fn(async () => narrative)
   const appendInput = vi.fn<StudioApi['narratives']['appendInput']>(async input => {
     const node = { id: input.nodeId, timelineId: timeline.id, stateRevisionId: 'state',

@@ -10,7 +10,7 @@ import type { PromptResource } from '../../../apps/studio-client/src/entities/in
 describe('User resources navigation and tree model', () => {
   it('lists manually authored resources without claiming card imports or extension content', () => {
     expect(isUserPromptResource({})).toBe(true)
-    expect(isUserPromptResource({ sourceArtifactRef: { artifactId: 'card-bundle' } })).toBe(false)
+    expect(isUserPromptResource({ sourceArtifactRef: { artifactId: 'card-bundle', displayName: 'Card', format: 'loom.cardBundle', schemaVersion: 4, importedAt: '' } })).toBe(false)
     expect(isUserPromptResource({ origin: { kind: 'builtin', key: 'starter' } })).toBe(false)
     expect(isUserPromptResource({ origin: {
       kind: 'extension-package', packageId: 'package', packageVersion: '1', contributionId: 'lore',

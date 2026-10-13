@@ -2,7 +2,7 @@ import { Bot, Braces, Boxes, Component, Plus, Trash2, BookOpen } from 'lucide-re
 import type { MacroOption, MacroOptions } from '@loom-studio/shared'
 import { SearchField, TextInput } from '@loom-studio/ui'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { toast } from 'sonner'
+import { notify } from '../../../shared/notifications/index.js'
 import type { Translator } from '../../../shared/i18n/index.js'
 import { normalizeSearchText } from '../../../shared/lib/text.js'
 import { FileTree, type FileTreeNode } from '../../../shared/ui/file-tree/file-tree.js'
@@ -172,9 +172,11 @@ export function useMacroAuthoring(sources: MacroAuthoringSource[], t: Translator
         draftVersions: { ...prev.draftVersions, [sourceId]: result.version },
       }))
       setError('')
-      toast.success(t('macroAuthoring.saved'))
+      notify.success(t('macroAuthoring.saved'))
     } catch (cause) {
-      if (mountedRef.current) setError(cause instanceof Error ? cause.message : String(cause))
+      const message = cause instanceof Error ? cause.message : String(cause)
+      if (mountedRef.current) setError(message)
+      notify.error(message)
     } finally {
       if (mountedRef.current) setSavingSourceId(undefined)
     }

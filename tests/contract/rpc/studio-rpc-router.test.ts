@@ -1,7 +1,7 @@
 import type { ApplicationRuntime } from '@loom-studio/application-runtime'
 import type { JsonValue } from '@loom-studio/shared'
 import { describe, expect, it } from 'vitest'
-import { createStudioRpcRouter } from '../../../apps/studio-server/src/rpc/studio-rpc-router.js'
+import { createStudioRpcRouter } from '../../support/trpc-caller.js'
 
 const context = {
   clientId: 'test-client',
@@ -175,7 +175,7 @@ describe('studio rpc router', () => {
         defaultEnabled: true,
         activation: { kind: 'keyword', keywords: ['write'] },
         provider: { order: 10 },
-        content: { zone: 'tools', slot: 'official-tools', rankKey: '10', orderHint: 20 },
+        content: { targetAnchorId: 'tools', localDepth: 2 },
       }],
     }, context)
 
@@ -187,7 +187,7 @@ describe('studio rpc router', () => {
         defaultEnabled: true,
         activation: { kind: 'keyword', keywords: ['write'] },
         provider: { order: 10 },
-        content: { zone: 'tools', slot: 'official-tools', rankKey: '10', orderHint: 20 },
+        content: { targetAnchorId: 'tools', localDepth: 2 },
       }],
     })
   })
@@ -420,14 +420,8 @@ describe('studio rpc router', () => {
   })
 })
 
-function createKernelCaller(): {
-  callRpc(method: string, params: JsonValue | undefined, callContext: typeof context): Promise<JsonValue>
-} {
-  return {
-    callRpc: async (method, params, callContext) => ({
-      method,
-      params: params ?? null,
-      callId: callContext.callId,
-    }),
-  }
+function createKernelCaller(): Pick<import('@loom-studio/kernel').Kernel, 'callRpc'> {
+  return { async callRpc<T>(method: string, params?: JsonValue, callContext?: Partial<typeof context>) {
+    return { method, params: params ?? null, callId: callContext?.callId } as T
+  } }
 }

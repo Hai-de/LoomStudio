@@ -9,7 +9,7 @@ import { createKernel, type Kernel } from '@loom-studio/kernel'
 import { createLoomRunner, createSamplePassFactories } from '@loom-studio/loom-runner'
 import { createId } from '@loom-studio/shared'
 import { createInMemoryTraceAuditStore } from '@loom-studio/trace-audit'
-import { createErrorResponse, createSuccessResponse, parseRpcRequest, type RpcResponse, type StudioEvent } from '@loom-studio/transport'
+import type { StudioEvent } from '@loom-studio/transport'
 import { describe, expect, it } from 'vitest'
 
 function createHarness() {
@@ -47,12 +47,11 @@ function createHarness() {
 }
 
 function createBridge(kernel: Kernel): ClientBridge {
-  return createClientBridge({ endpoint: 'memory://kernel', fetch: createKernelFetch(kernel) })
+  return createClientBridge({ endpoint: 'http://kernel/trpc', fetch: createKernelFetch(kernel) })
 }
 
 function createKernelFetch(kernel: Kernel): typeof fetch {
-  return (async (_input: RequestInfo | URL, init?: RequestInit) => {
-    let rpcId = null
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const context = {
       clientId: 'document-scenario-client',
       correlationId: createId('corr'),
@@ -60,12 +59,13 @@ function createKernelFetch(kernel: Kernel): typeof fetch {
     }
 
     try {
-      const request = parseRpcRequest(JSON.parse(String(init?.body ?? '{}')))
-      rpcId = request.id
+      const path = new URL(String(input)).pathname.split('/').at(-1)!
+      const data = init?.body === undefined ? undefined : JSON.parse(String(init.body))
+      const request = path === 'kernel.invoke' ? data : { method: path, params: data }
       const result = await kernel.callRpc(request.method, request.params, context)
-      return jsonResponse(createSuccessResponse(request.id, result, context))
+      return jsonResponse({ result: { data: result } })
     } catch (error) {
-      return jsonResponse(createErrorResponse(rpcId, error, 'rpc.invalid_request', context))
+      return jsonResponse({ error: { message: error instanceof Error ? error.message : String(error), code: -32603, data: { code: 'INTERNAL_SERVER_ERROR', httpStatus: 500 } } })
     }
   }) as typeof fetch
 }
@@ -238,7 +238,7 @@ describe('document, trace, and diagnostics integration', () => {
   })
 })
 
-function jsonResponse(response: RpcResponse): Response {
+function jsonResponse(response: unknown): Response {
   return new Response(JSON.stringify(response), {
     status: 200,
     headers: { 'content-type': 'application/json' },

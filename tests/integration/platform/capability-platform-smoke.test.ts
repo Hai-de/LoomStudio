@@ -6,7 +6,7 @@ import { createKernel, type Kernel } from '@loom-studio/kernel'
 import { createLoomRunner, createSamplePassFactories } from '@loom-studio/loom-runner'
 import { createId } from '@loom-studio/shared'
 import { createInMemoryTraceAuditStore } from '@loom-studio/trace-audit'
-import { createErrorResponse, createSuccessResponse, parseRpcRequest, type RpcResponse, type StudioEvent } from '@loom-studio/transport'
+import type { StudioEvent } from '@loom-studio/transport'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -47,8 +47,7 @@ function createHarness() {
 }
 
 function createKernelFetch(kernel: Kernel): typeof fetch {
-  return (async (_input: RequestInfo | URL, init?: RequestInit) => {
-    let rpcId = null
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const context = {
       clientId: 'platform-smoke-client',
       correlationId: createId('corr'),
@@ -56,12 +55,13 @@ function createKernelFetch(kernel: Kernel): typeof fetch {
     }
 
     try {
-      const request = parseRpcRequest(JSON.parse(String(init?.body ?? '{}')))
-      rpcId = request.id
+      const path = new URL(String(input)).pathname.split('/').at(-1)!
+      const data = init?.body === undefined ? undefined : JSON.parse(String(init.body))
+      const request = path === 'kernel.invoke' ? data : { method: path, params: data }
       const result = await kernel.callRpc(request.method, request.params, context)
-      return jsonResponse(createSuccessResponse(request.id, result, context))
+      return jsonResponse({ result: { data: result } })
     } catch (error) {
-      return jsonResponse(createErrorResponse(rpcId, error, 'rpc.invalid_request', context))
+      return jsonResponse({ error: { message: error instanceof Error ? error.message : String(error), code: -32603, data: { code: 'INTERNAL_SERVER_ERROR', httpStatus: 500 } } })
     }
   }) as typeof fetch
 }
@@ -74,7 +74,7 @@ describe('platform capability integration smoke', () => {
     kernel.getEventBus().subscribe(['docs.changed', 'diagnostics.updated'], (event: StudioEvent) => { events.push(event) })
     await extensionHost.discover(join(process.cwd(), 'tests/fixtures/extensions/echo'))
     await extensionHost.activate('example.echo', 'server')
-    const bridge = createClientBridge({ endpoint: 'memory://kernel', fetch: createKernelFetch(kernel) })
+    const bridge = createClientBridge({ endpoint: 'http://kernel/trpc', fetch: createKernelFetch(kernel) })
 
     const introspect = await bridge.call<{ methods: Array<{ name: string; owner: string }>; events: string[] }>('system.introspect')
     const writeResult = await bridge.call<{ documents: Array<{ id: string; content: { ok: boolean } }> }>('docs.write', {
@@ -129,7 +129,7 @@ describe('platform capability integration smoke', () => {
   })
 })
 
-function jsonResponse(response: RpcResponse): Response {
+function jsonResponse(response: unknown): Response {
   return new Response(JSON.stringify(response), {
     status: 200,
     headers: { 'content-type': 'application/json' },

@@ -74,6 +74,8 @@ export default defineConfig({
       '@loom-studio/logging': resolvePath('./packages/logging/src/index.ts'),
       '@loom-studio/loom-runner': resolvePath('./packages/loom-runner/src/index.ts'),
       '@loom-studio/ui': resolvePath('./packages/loom-ui/src/index.ts'),
+      '@loom-studio/shared/loom-scripts': resolvePath('./packages/shared/src/loom-script-contracts.ts'),
+      '@loom-studio/shared/tool-mounts': resolvePath('./packages/shared/src/tool-mount-contracts.ts'),
       '@loom-studio/shared/macros': resolvePath('./packages/shared/src/macros.ts'),
       '@loom-studio/shared': resolvePath('./packages/shared/src/index.ts'),
       '@loom-studio/trace-audit': resolvePath('./packages/trace-audit/src/index.ts'),

@@ -1,3 +1,4 @@
+import { loomScriptMountSchema } from '@loom-studio/shared/loom-scripts'
 import { createApplicationRuntime } from '@loom-studio/application-runtime'
 import { createBlobStore } from '@loom-studio/blob-store'
 import { createSqliteDataEngine } from '@loom-studio/data-engine'
@@ -7,7 +8,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { callApplicationRpc } from '../../../apps/studio-server/src/rpc/handlers/application/index.js'
+import { callApplicationRpc } from '../../support/trpc-caller.js'
 
 const roots: string[] = []
 
@@ -40,6 +41,26 @@ describe('Loom Script Application RPC', () => {
       grantedCapabilities: ['state.read'],
     }) as any
     expect(updated.mount).toMatchObject({ enabled: true, grantedCapabilities: ['state.read'] })
+    expect(loomScriptMountSchema.parse(updated.mount)).toEqual(updated.mount)
+    const listed = await callApplicationRpc(runtime, 'application.listLoomScriptMounts', {
+      target: { kind: 'workspace', workspaceId: 'workspace-1' }, scriptDocumentId: imported.script.id,
+    }) as any
+    expect(listed.mounts).toEqual([updated.mount])
+
+    // Ownership is not a mount target; invalid writes must preserve existing grants.
+    await expect(callApplicationRpc(runtime, 'application.createLoomScriptMount', {
+      target: { kind: 'extension', packageId: 'example', installationId: 'installation-1' },
+      scriptDocumentId: imported.script.id, orderIndex: 0,
+    })).rejects.toThrow()
+    await expect(callApplicationRpc(runtime, 'application.updateLoomScriptMount', {
+      mountId: created.mount.id, expectedVersion: updated.mount.version,
+      enabled: true, orderIndex: 1, grantedCapabilities: ['state.write'],
+    })).rejects.toThrow('unique requested capabilities')
+    const afterRejected = await callApplicationRpc(runtime, 'application.listLoomScriptMounts', {
+      scriptDocumentId: imported.script.id,
+    }) as any
+    expect(afterRejected.mounts).toEqual(listed.mounts)
+
 
     const resolved = await callApplicationRpc(runtime, 'application.resolveLoomScriptRendererMounts', {
       workspaceId: 'workspace-1',

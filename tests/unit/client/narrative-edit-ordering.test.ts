@@ -25,7 +25,7 @@ describe('Narrative edit and read ordering', () => {
     const pending = readKind === 'older' ? f.render().loadOlderNodes() : f.render().submitTurn(f.event)
     await readStarted.promise
     const target = f.render().nodes.at(-1)!
-    const edited = { ...target, id: 'edited', body: { ...target.body, raw: 'Edited' } }
+    const edited = { ...target, stateRevisionId: 'state', id: 'edited', body: { ...target.body, raw: 'Edited' } }
     f.input.api.narratives.editNode = async () => ({
       timeline: page.timeline, branch: { ...page.branch, headNodeId: edited.id },
       replacements: [{ previousNodeId: target.id, node: edited }], mutation: { changesetId: 'edit' },

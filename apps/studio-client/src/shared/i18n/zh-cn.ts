@@ -9,6 +9,7 @@ import { messages as extensions } from './zh-cn/extensions.js'
 import { messages as settings } from './zh-cn/settings.js'
 import { messages as textTransforms } from './zh-cn/textTransforms.js'
 import { messages as logs } from './zh-cn/logs.js'
+import { messages as notifications } from './zh-cn/notifications.js'
 
 export const zhCN = {
   ...common,
@@ -22,4 +23,5 @@ export const zhCN = {
   ...settings,
   ...textTransforms,
   ...logs,
+  ...notifications,
 } as const

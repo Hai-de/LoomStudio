@@ -4,7 +4,8 @@ import type { JsonObject, JsonValue } from '@loom-studio/shared'
 import type { ApplicationRuntimeContext } from '../foundation/application-context.js'
 import { applicationDocumentTypes as types } from '../foundation/document-types.js'
 import { listDocuments, readDocument, writeDocument } from '../foundation/document-store.js'
-import { normalizeCardContent, normalizeOpening, normalizePreset, normalizeLore } from '../cards/card.js'
+import { normalizeCardContent } from '../cards/card.js'
+import { normalizeCardEditableFields } from '../cards/card-fields.js'
 import { exportCardArtifact } from '../cards/workspace.js'
 import { normalizeCardBundleArtifact } from '../cards/workspace-codec.js'
 import type { CardBundleArtifact, PortableExtensionPayloadContent } from '../cards/workspace-types.js'
@@ -210,9 +211,7 @@ export function createCardDirectoryRuntimeMethods(ctx: CardDirectoryRuntimeConte
             const state = artifact.state?.contribution
             const next = normalizeCardContent({
               ...current.card.content,
-              name: artifact.card.name, userName: artifact.card.userName, description: artifact.card.description,
-              preset: normalizePreset(artifact.card.preset), opening: normalizeOpening(artifact.card.opening),
-              lore: normalizeLore(artifact.card.lore), macros: artifact.card.macros,
+              ...normalizeCardEditableFields(artifact.card),
               promptResourceIds: artifact.contextAssets.map(node => prompts.get(node.id)!.id),
               ...(artifact.externalContextAssetIds !== undefined || current.card.content.externalPromptResourceIds !== undefined ? {
                 externalPromptResourceIds: (artifact.externalContextAssetIds ?? []).map(id => prompts.get(id)!.id),

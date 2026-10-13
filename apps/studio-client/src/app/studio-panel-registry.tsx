@@ -415,7 +415,7 @@ export function createStudioPanels(input: {
     ),
     settings: () => (
       <LazySettingsPanel
-        busy={state.operationPending.settings.pendingCount > 0}
+        busy={!state.startup.ready('network') || state.operationPending.settings.pendingCount > 0}
         customCss={state.customCss}
         locale={state.locale}
         networkSettings={state.networkSettings}

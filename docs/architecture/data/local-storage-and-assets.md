@@ -57,7 +57,7 @@ Card Bundle 导出以当前 canonical 字段覆盖原值，同时透传导入对
 
 ## 4. Media Asset 数据面与容器解耦
 
-正式媒体使用稳定 `assetId`。`POST /assets` 接受 raw HTTP body，创建 Blob 与 Media Asset；`GET /assets/:assetId` 和 `HEAD /assets/:assetId` 返回正确 MIME、长度、immutable cache 与 `nosniff`。大型媒体不经过 JSON-RPC base64。
+正式媒体使用稳定 `assetId`。`POST /assets` 接受 raw HTTP body，创建 Blob 与 Media Asset；`GET /assets/:assetId` 和 `HEAD /assets/:assetId` 返回正确 MIME、长度、immutable cache 与 `nosniff`。大型媒体通过上述独立 HTTP 路径传输，不放入 tRPC JSON 请求体进行 base64 编码。
 
 Card 资产模型已将**容器与内部素材解耦**：
 - 媒体素材不限于静态头像或封面，支持保存 GIF、APNG、WebP、音频与视频等测试/业务素材；

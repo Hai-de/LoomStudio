@@ -1,16 +1,14 @@
+import type { ApplicationRuntime } from '@loom-studio/application-runtime'
+import { handleTrpcRequest } from './trpc-request.js'
 import { readLogFailure, type Logger } from '@loom-studio/logging'
-import { createId, type JsonValue } from '@loom-studio/shared'
 import type { StudioEvent } from '@loom-studio/transport'
-import { createErrorResponse, createSuccessResponse, parseRpcRequest } from '@loom-studio/transport'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AssetStore } from '@loom-studio/asset-store'
 import type { ApplicationSession, ApplicationSessionAuth } from './application-session-auth.js'
-import { isTechnicalRpc, summarizeRpc } from '../rpc/rpc-summary.js'
-import type { StudioRpcRouter } from '../rpc/studio-rpc-router.js'
+import type { StudioRpcServices } from '../rpc/trpc/services-context.js'
 import { maxCardPngBytes } from '../codecs/card-png.js'
 import { createHash } from 'node:crypto'
 import { pipeline } from 'node:stream/promises'
-import { maxRpcRequestBodyBytes, readRpcRequestBody, RpcRequestBodyTooLargeError } from './rpc-request-body.js'
 import { serveClientFile } from './client-files.js'
 
 export function createStudioHttpServer(options: {
@@ -38,7 +36,8 @@ export function createStudioHttpServer(options: {
     subscribe(handler: (event: StudioEvent) => void): { dispose(): void | Promise<void> }
   }
   logger?: Logger
-  rpcRouter: StudioRpcRouter
+  trpcServices?: StudioRpcServices
+  applicationRuntime?: ApplicationRuntime
 }): Server & { shutdown(): Promise<void> } {
   const requests = new Map<AbortController, Promise<void>>()
   let shutdownPromise: Promise<void> | undefined
@@ -199,17 +198,20 @@ export function createStudioHttpServer(options: {
       return
     }
 
-    if (request.method !== 'POST' || request.url !== '/rpc') {
-      writeJson(response, 404, { error: { code: 'not_found', message: 'Not found' } })
+    if (request.url?.startsWith('/trpc/') && options.applicationRuntime) {
+      if (request.method !== 'POST') {
+        writeJson(response, 405, { error: { code: 'rpc.method_not_allowed', message: 'RPC requires POST' } })
+        return
+      }
+      if (readMediaType(request.headers['content-type']) !== 'application/json') {
+        writeJson(response, 415, { error: { code: 'rpc.unsupported_media_type', message: 'RPC requires application/json' } })
+        return
+      }
+      await handleTrpcRequest(request, response, options.applicationRuntime, session, signal, options.logger, options.trpcServices)
       return
     }
 
-    if (readMediaType(request.headers['content-type']) !== 'application/json') {
-      writeJson(response, 415, { error: { code: 'rpc.unsupported_media_type', message: 'RPC requires application/json' } })
-      return
-    }
-
-    await handleRpcRequest(request, response, options.rpcRouter, session, signal, options.logger)
+    writeJson(response, 404, { error: { code: 'not_found', message: 'Not found' } })
   }
 }
 
@@ -366,7 +368,7 @@ async function handleExtensionEventStream(
   }
   write(': connected\n\n')
   const subscription = events.subscribe(event => {
-    write(`event: ${event.name}\nid: ${event.meta.eventId}\ndata: ${JSON.stringify(event as unknown as JsonValue)}\n\n`)
+    write(`event: ${event.name}\nid: ${event.meta.eventId}\ndata: ${JSON.stringify(event)}\n\n`)
   })
   const heartbeat = setInterval(() => {
     write(': heartbeat\n\n')
@@ -581,106 +583,6 @@ function writeAssetError(response: ServerResponse, error: unknown): void {
       message: error instanceof Error ? error.message : String(error),
     },
   })
-}
-
-async function handleRpcRequest(
-  request: IncomingMessage,
-  response: ServerResponse,
-  rpcRouter: StudioRpcRouter,
-  session: ApplicationSession,
-  signal: AbortSignal,
-  logger?: Logger,
-): Promise<void> {
-  const startedAt = performance.now()
-  let rpcId: string | number | null = null
-  let method = 'unknown'
-  let context: {
-    clientId: string
-    correlationId: string
-    callId: string
-    parentCallId?: string
-    signal?: AbortSignal
-  } | undefined
-
-  try {
-    const body = await readRpcRequestBody(request, signal, maxRpcRequestBodyBytes)
-    signal.throwIfAborted()
-    const rpcRequest = parseRpcRequest(JSON.parse(body))
-    rpcId = rpcRequest.id
-    method = rpcRequest.method
-    context = {
-      clientId: session.clientId,
-      correlationId: rpcRequest.meta?.correlationId ?? createId('corr'),
-      callId: createId('call'),
-      parentCallId: rpcRequest.meta?.parentCallId,
-      signal,
-    }
-    const result = await rpcRouter.call(rpcRequest.method, rpcRequest.params, context)
-    const durationMs = readDurationMs(startedAt)
-    if (!method.startsWith('logs.')) {
-      const summary = summarizeRpc(method, result)
-      const messageText = summary.textSuffix
-        ? `${method} · ${summary.textSuffix}`
-        : `${method} completed`
-
-      logger?.info(messageText, {
-        event: 'rpc.completed',
-        correlationId: context.correlationId,
-        callId: context.callId,
-        parentCallId: context.parentCallId,
-        data: {
-          method,
-          transport: 'http',
-          durationMs,
-          outcome: 'success',
-          technical: isTechnicalRpc(method),
-          ...(summary.summaryData ?? {}),
-        },
-      })
-    }
-    const responseMeta = {
-      clientId: context.clientId,
-      correlationId: context.correlationId,
-      callId: context.callId,
-      durationMs,
-      serverTime: new Date().toISOString(),
-    }
-    writeJson(response, 200, createSuccessResponse(rpcRequest.id, result, responseMeta))
-  } catch (error) {
-    if (method === 'logs.history' && signal.aborted) return
-    const durationMs = readDurationMs(startedAt)
-    const responseMeta = context ? {
-      clientId: context.clientId,
-      correlationId: context.correlationId,
-      callId: context.callId,
-      durationMs,
-      serverTime: new Date().toISOString(),
-    } : undefined
-
-    const failure = readLogFailure(error)
-    logger?.error(`${method} failed · ${failure.failureReason}`, {
-      event: 'rpc.failed',
-      correlationId: context?.correlationId,
-      callId: context?.callId,
-      parentCallId: context?.parentCallId,
-      data: {
-        method,
-        transport: 'http',
-        durationMs,
-        outcome: 'failure',
-        ...failure,
-      },
-    })
-    const status = error instanceof RpcRequestBodyTooLargeError ? 413 : 200
-    // Let HTTP flush the rejection before closing the unread request's connection.
-    if (status === 413) response.setHeader('connection', 'close')
-    writeJson(response, status, createErrorResponse(rpcId, error, 'rpc.invalid_request', responseMeta))
-  }
-}
-
-
-function readDurationMs(startedAt: number): number {
-  return Math.round((performance.now() - startedAt) * 100) / 100
 }
 
 function readBinaryRequestBody(request: IncomingMessage, maxBytes: number): Promise<Buffer> {

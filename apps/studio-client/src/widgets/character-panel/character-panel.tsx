@@ -20,6 +20,7 @@ import type { CharacterCardSummary } from '../../features/cards/model/character-
 import { useCharacterProfileEditor } from '../../features/cards/model/use-character-profile-editor.js'
 import { useCardDirectoryDiscovery } from '../../features/cards/model/use-card-directory-discovery.js'
 import { useRemoteCardImport } from '../../features/cards/model/use-remote-card-import.js'
+import { notify } from '../../shared/notifications/index.js'
 
 type NarrativeTimelineView = { id: string; title?: string; createdAt: string; updatedAt: string }
 type GalleryMode = 'grid' | 'list'
@@ -436,7 +437,9 @@ export function CharacterPanel(props: CharacterPanelProps) {
               onChange={event => {
                 const files = Array.from(event.target.files ?? [])
                 event.target.value = ''
-                if (files.length > 0) void props.onImportCards(files).catch(() => undefined)
+                if (files.length > 0) void props.onImportCards(files).catch(err => {
+                  notify.error(err instanceof Error ? err.message : String(err))
+                })
               }}
             />
             <header className={styles.galleryToolbar}>
@@ -456,7 +459,9 @@ export function CharacterPanel(props: CharacterPanelProps) {
                       {props.directoryApi ? <button aria-label={props.t('directory.refresh')} className={styles.toolbarButton} disabled={refreshing || props.busy} title={props.t('directory.refresh')} type="button" onClick={() => void refreshGallery()}><RefreshCw aria-hidden="true" /></button> : null}
                       <button aria-label={props.t('character.import')} className={styles.toolbarButton} disabled={props.busy} title={props.t('character.import')} type="button" onClick={() => cardImportInputRef.current?.click()}><Upload aria-hidden="true" /></button>
                       <button aria-label={props.t('character.importRemote')} className={styles.toolbarButton} disabled={props.busy} title={props.t('character.importRemote')} type="button" onClick={() => setRemoteImportOpen(true)}><CloudDownload aria-hidden="true" /></button>
-                      <button aria-label={props.t('character.create')} className={styles.createButton} disabled={props.busy} title={props.t('character.create')} type="button" onClick={() => void props.onCreateCard().catch(() => undefined)}><Plus aria-hidden="true" /></button>
+                      <button aria-label={props.t('character.create')} className={styles.createButton} disabled={props.busy} title={props.t('character.create')} type="button" onClick={() => void props.onCreateCard().catch(err => {
+                        notify.error(err instanceof Error ? err.message : String(err))
+                      })}><Plus aria-hidden="true" /></button>
                     </div>
                     <div className={styles.viewSwitcher} role="group" aria-label={props.t('character.gallery')}>
                       <button

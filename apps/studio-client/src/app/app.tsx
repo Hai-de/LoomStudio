@@ -1,3 +1,4 @@
+import { startupAreas } from './use-studio-startup.js'
 import type { Logger, MemoryLogSink } from '@loom-studio/logging'
 import { useStudioState } from './use-studio-state.js'
 import { StudioPage } from '../pages/studio/studio-page.js'
@@ -21,7 +22,7 @@ import type { ClientRendererScope } from '../shared/extension-renderer-runtime/c
 
 import { NotificationToaster } from '../shared/ui/notification-toaster/notification-toaster.js'
 import type { StudioApi } from '../shared/api/studio-api.js'
-import { toast } from 'sonner'
+import { notify } from '../shared/notifications/index.js'
 import { useQueryClient } from '@tanstack/react-query'
 import { createRendererNotifications } from '../shared/extension-renderer-runtime/renderer-notifications.js'
 import { hasCompleteProviderAccount } from '../features/provider-settings/model/provider-account-status.js'
@@ -63,7 +64,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
   useEffect(() => applyEffectiveMotion(effectiveMotion), [effectiveMotion])
   const rendererHost = useMemo(() => createClientRendererHost(), [])
   const notifications = useMemo(() => createRendererNotifications((owner, input) => {
-    toast[input.level ?? 'info'](input.message, { description: owner, duration: 4000 })
+    notify[input.level ?? 'info'](input.message, { description: owner, duration: 4000 })
   }), [])
   const clientExtensions = useClientExtensionRuntime({ api: state.clientExtensionApi, rendererHost, logger: props.extensionLogger, clientLogs: props.clientLogs, notify: notifications.show })
   const reportedExtensionError = useRef<string | undefined>(undefined)
@@ -75,7 +76,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
     props.extensionLogger.warn('Client extension runtime synchronization failed', {
       event: 'extension.sync.failed', error: extensionError,
     })
-    toast.warning(state.t('renderer.runtimeUnavailable'), {
+    notify.warning(state.t('renderer.runtimeUnavailable'), {
       id: 'extension-runtime-unavailable', description: extensionError,
     })
   }, [extensionError, props.extensionLogger, state.t])
@@ -119,6 +120,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
     uiState.bumpLoomScriptRefreshToken()
     void queryClient.invalidateQueries({ queryKey: ['user-resources', state.endpoint, 'rules'] })
   }
+  const [navigationRetry, setNavigationRetry] = useState(0)
   const [navigationFailure, setNavigationFailure] = useState<{ target: string; message: string }>()
   const narrativeTarget = JSON.stringify([state.endpoint, navigation.route.timelineId, navigation.route.branchId])
   const uiScale = useStudioLayoutStore(current => current.uiScale)
@@ -160,7 +162,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
   })
   const historyNavigationContext = useRef('')
   historyNavigationContext.current = JSON.stringify([state.endpoint, navigation.locationKey, assetWorkspaceId, state.selectedCardId])
-  const narrativeNavigating = !state.bootstrapReady || navigation.targetPending
+  const narrativeNavigating = navigation.targetPending
     || navigation.route.timelineId !== state.narrativeTimeline?.id
     || Boolean(navigation.route.branchId && navigation.route.branchId !== state.branch?.id)
   const composerCommandContext = {
@@ -187,7 +189,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
         target: action.target,
         sourceSurface: 'composer.quick-actions',
       }).then(result => {
-        if (result.status === 'failed') toast.error(result.message)
+        if (result.status === 'failed') notify.error(result.message)
       })
     },
   }))
@@ -208,7 +210,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
         type="button"
         onClick={() => {
           void clientExtensions.host.executeCommand({ packageId: action.packageId, moduleId: action.moduleId, commandId: action.command.id, target: action.target, sourceSurface: 'stage.header.actions' }).then(result => {
-            if (result.status === 'failed') toast.error(result.message)
+            if (result.status === 'failed') notify.error(result.message)
           })
         }}
       >
@@ -241,14 +243,37 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
 
   useEffect(() => {
     if (!state.operationError) return
-    toast.error(state.operationError.message, {
-      id: `operation-error-${state.operationError.sequence}`,
-    })
-  }, [state.operationError])
+    const isProvider = state.operationError.scope === 'provider-settings'
+      || state.operationError.scope === 'agent-chat'
+      || /(?:HTTP\s*|failed\s*\(|Provider|timeout|fetch)/i.test(state.operationError.message)
+    if (isProvider) {
+      notify.providerError(state.operationError.message, state.t, {
+        id: `operation-error-${state.operationError.sequence}`,
+      })
+    } else {
+      notify.error(state.operationError.message, {
+        id: `operation-error-${state.operationError.sequence}`,
+      })
+    }
+  }, [state.operationError, state.t])
 
   useEffect(() => {
-    if (!state.promptResourceError) return
-    toast.error(state.promptResourceError.message, { id: 'prompt-resource-query-error' })
+    for (const area of startupAreas) {
+      if (!state.startup.failures.some(failure => failure.area === area)) notify.dismiss(`startup-${area}`)
+    }
+    for (const { area, error } of state.startup.failures) {
+      notify.error(error.message, {
+        id: `startup-${area}`, duration: Infinity,
+        action: { label: state.t('appError.reload'), onClick: () => { void state.startup.retry(area) } },
+      })
+    }
+  }, [state.startup.failures])
+
+  useEffect(() => {
+    if (!state.promptResourceError) { notify.dismiss('prompt-resource-query-error'); return }
+    notify.error(state.promptResourceError.message, { id: 'prompt-resource-query-error', duration: Infinity,
+      action: { label: state.t('appError.reload'), onClick: () => { void state.retryPromptResources().catch(() => undefined) } },
+    })
   }, [state.promptResourceError])
 
   useEffect(() => {
@@ -287,10 +312,10 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
       if (disposed) return
       runtime.reconcile(result.mounts)
       for (const mount of result.unavailableMounts) {
-        if (mount.enabled) toast.warning(mount.message, { id: `loom-script-unavailable:${mount.mountId}` })
+        if (mount.enabled) notify.warning(mount.message, { id: `loom-script-unavailable:${mount.mountId}` })
       }
     }).catch(error => {
-      if (!disposed) toast.error(error instanceof Error ? error.message : String(error))
+      if (!disposed) notify.error(error instanceof Error ? error.message : String(error))
     })
     return () => {
       disposed = true
@@ -299,14 +324,14 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
   }, [activePresetId, uiState.loomScriptRefreshToken, rendererHost, notifications, state.agentChatSession?.id, state.api, state.branch?.id, state.narrativeTimeline?.id, state.statesApi])
 
   useEffect(() => {
-    if (!state.bootstrapReady || navigation.route.targetUri !== undefined) return
+    if (navigation.route.targetUri !== undefined) return
     setNavigationFailure(undefined)
     const requestId = ++timelineRouteRequestRef.current
     if (!navigation.route.timelineId) {
       if (state.narrativeTimeline) state.resetToDraftTimeline()
       return
     }
-    if (navigation.route.timelineId === state.narrativeTimeline?.id && (!navigation.route.branchId || navigation.route.branchId === state.branch?.id)) return
+    if (state.agentChatSessionReady && navigation.route.timelineId === state.narrativeTimeline?.id && (!navigation.route.branchId || navigation.route.branchId === state.branch?.id)) return
 
     void state.activateTimeline(navigation.route.timelineId, navigation.route.branchId).then(branchId => {
       if (requestId !== timelineRouteRequestRef.current) return
@@ -314,7 +339,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
       else if (branchId !== navigation.route.branchId) navigation.updateNarrativeContext(navigation.route.timelineId!, branchId)
     })
     return () => { timelineRouteRequestRef.current++ }
-  }, [narrativeTarget, state.bootstrapReady, navigation.route.targetUri])
+  }, [narrativeTarget, navigation.route.targetUri, navigationRetry])
   const resourcePanels = StudioResourcePanels({ state, uiState, navigation, assetWorkspaceId })
   const panels = createStudioPanels({ state, uiState, navigation, rendererHost, clientExtensions, clientLogs: props.clientLogs, resourcePanels, assetWorkspaceId, cardsBusy, providerBusy, agentPresetBusy, activePresetId, sourceCardId, sessionBusy, openStateSource, openAgentSession, onTextTransformsChanged, uiScale, setUiScale, backgrounds: clientExtensions.host.backgrounds() })
 
@@ -530,13 +555,14 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
 
   return (
     <>
-      <OfficialExtensionSetup api={state.api.extensions} ready={state.bootstrapReady} t={state.t}
+      <OfficialExtensionSetup api={state.api.extensions} ready={state.startup.ready('cards')} t={state.t}
         onInstalled={async () => {
           await Promise.all([clientExtensions.refresh(), state.refreshResourceConsumers()])
         }} />
       {navigation.targetError || navigationFailure?.target === narrativeTarget ? (
         <section role="alert">
           <p>{navigation.targetError ?? navigationFailure?.message}</p>
+          {navigationFailure?.target === narrativeTarget ? <button type="button" onClick={() => setNavigationRetry(value => value + 1)}>{state.t('appError.reload')}</button> : null}
           <button type="button" onClick={() => {
             setNavigationFailure(undefined)
             void navigation.openNarrative()

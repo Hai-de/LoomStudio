@@ -9,6 +9,7 @@ import { messages as extensions } from './en-us/extensions.js'
 import { messages as settings } from './en-us/settings.js'
 import { messages as textTransforms } from './en-us/textTransforms.js'
 import { messages as logs } from './en-us/logs.js'
+import { messages as notifications } from './en-us/notifications.js'
 import type { zhCN } from './zh-cn.js'
 
 export const enUS = {
@@ -23,4 +24,5 @@ export const enUS = {
   ...settings,
   ...textTransforms,
   ...logs,
+  ...notifications,
 } satisfies Record<keyof typeof zhCN, string>

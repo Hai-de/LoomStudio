@@ -1,12 +1,6 @@
+import type { LoomScriptOwner, LoomScriptMount } from '@loom-studio/shared/loom-scripts'
+export type { LoomScriptOwner, LoomScriptMountTarget } from '@loom-studio/shared/loom-scripts'
 import type { RendererContributionDefinition } from '@loom-studio/extension-sdk'
-import type { JsonObject } from '@loom-studio/shared'
-
-export type LoomScriptOwner =
-  | { kind: 'extension'; packageId: string; installationId: string }
-  | { kind: 'workspace'; workspaceId: string }
-  | { kind: 'card'; cardId: string }
-  | { kind: 'preset'; presetId: string }
-  | { kind: 'user' }
 
 export type LoomScriptInput =
   | { kind: 'match'; ruleId: string }
@@ -41,25 +35,8 @@ export type LoomScriptContent = {
 
 export type LoomScriptEntry = LoomScriptContent & { id: string; version: number }
 
-export type LoomScriptMountTarget =
-  | { kind: 'workspace'; workspaceId: string }
-  | { kind: 'card'; cardId: string }
-  | { kind: 'preset'; presetId: string }
-  | { kind: 'user' }
-
-export type LoomScriptMountContent = {
-  target: LoomScriptMountTarget
-  scriptDocumentId: string
-  enabled: boolean
-  orderIndex: number
-  pinnedDocumentVersion?: number
-  grantedCapabilities: string[]
-  origin: JsonObject
-  createdAt: string
-  updatedAt: string
-}
-
-export type LoomScriptMountEntry = LoomScriptMountContent & { id: string; version: number }
+export type LoomScriptMountContent = Omit<LoomScriptMount, 'id' | 'version'>
+export type LoomScriptMountEntry = LoomScriptMount
 
 export type LoomScriptRuntimeMountSnapshot = {
   mountId: string

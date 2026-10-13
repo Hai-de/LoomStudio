@@ -24,12 +24,6 @@ import type {
   ToolDiagnostic,
 } from './tool-registry.js'
 import {
-  createLoomContentScannerState,
-  finishLoomContentScan,
-  pushLoomContentChunk,
-  renderLoomContentToolResult,
-} from './content-transport.js'
-import {
   compileToolPromptSources,
   type CompiledToolExposure,
   type ToolPromptBuildTrace,
@@ -42,12 +36,9 @@ import type {
   RuntimeRequestContext,
   InvokeAgentTurnInput,
 } from '../types.js'
-import {
-  projectHistoryEntries,
-  type TextTransformRuleEntry,
-} from '../transforms/history-text.js'
+import type { TextTransformRuleEntry } from '../transforms/history-text.js'
 import { codeActToolIds } from './codeact/prompts.js'
-import { renderToolResult } from './tool-result-text.js'
+import { classifyAssistantContent, decodeToolResponse, encodeToolResultMessage, scanContentTools } from './tool-response-protocol.js'
 import { applicationDocumentTypes } from '../foundation/document-types.js'
 import { isExtensionResourceAvailable, readAvailableExtensionInstallations } from '../runtime/extension-resource-access.js'
 import type { AgentToolContent } from '../types.js'
@@ -482,77 +473,10 @@ async function runToolLoop(
       await assertPromptDependencies()
       progress.stage = 'response'
       await append([{ ...providerObservation(providerResult), measurementId, providerStep: step }])
-      const toolCalls = providerResult.message.tool_calls ?? []
-      const nativeInvocationPairs = toolCalls.map((call) => {
-        const resolved = byExposedName.get(call.function.name)
-        const invocation: ToolInvocation = {
-          id: input.ctx.createId('tool-invocation'),
-          toolId: resolved?.definition.id ?? `unresolved/${call.function.name}`,
-          arguments: parseToolArguments(
-            call.function.arguments,
-            call.function.name,
-          ),
-          transport: 'native-function',
-          ...(providerResult.providerCallId
-            ? { providerCallId: providerResult.providerCallId }
-            : {}),
-          providerItemId: call.id,
-        }
-        return { call, invocation, resolved, transport: 'native-function' as const }
+      const { classified, contentScan, invocationPairs } = decodeToolResponse({
+        providerResult, sessionId: session.id, classificationRules: input.classificationRules ?? [],
+        byExposedName, contentTools, createInvocationId: () => input.ctx.createId('tool-invocation'),
       })
-      const classified = classifyAssistantContent(
-        providerResult.message.content ?? '',
-        session.id,
-        input.classificationRules ?? [],
-      )
-      const contentScan = classified.text
-        ? scanContentTools(
-            classified.text,
-            contentTools.map((tool) => tool.definition.name),
-          )
-        : { text: '', invocations: [] }
-      const codeActContentNames = new Set(contentTools
-        .filter(tool => codeActToolIds.has(tool.definition.id))
-        .map(tool => tool.definition.name))
-      const rawCodeActCalls = contentScan.invocations.some(call => codeActContentNames.has(call.name))
-        ? scanContentTools(
-            providerResult.message.content ?? '',
-            contentTools.map(tool => tool.definition.name),
-          ).invocations.filter(call => codeActContentNames.has(call.name))
-        : []
-      let codeActContentIndex = 0
-      if (nativeInvocationPairs.length && contentScan.invocations.length)
-        throw new Error(
-          'Provider emitted native and content tool calls in the same Step',
-        )
-      const contentInvocationPairs = contentScan.invocations.map((parsed) => {
-        const resolved = byExposedName.get(parsed.name)
-        const invocation: ToolInvocation = {
-          id: input.ctx.createId('tool-invocation'),
-          toolId: resolved?.definition.id ?? `unresolved/${parsed.name}`,
-          // The content envelope requires metadata even when a freeform tool has no arguments.
-          arguments: resolved?.definition.input.kind === 'freeform' && Object.keys(parsed.metadata).length === 0
-            ? undefined
-            : parsed.metadata,
-          rawInput: parsed.content,
-          transport: 'content',
-          ...(providerResult.providerCallId
-            ? { providerCallId: providerResult.providerCallId }
-            : {}),
-        }
-        return {
-          invocation,
-          resolved,
-          exposedName: parsed.name,
-          transport: 'content' as const,
-          sourceChanged: codeActContentNames.has(parsed.name)
-            && rawCodeActCalls[codeActContentIndex++]?.content !== parsed.content,
-        }
-      })
-      const invocationPairs = [
-        ...nativeInvocationPairs,
-        ...contentInvocationPairs,
-      ]
       checkpointMessages = [...stepMessages, providerResult.message]
 
       const stepEntries: AgentTranscriptEntryData[] = []
@@ -637,17 +561,7 @@ async function runToolLoop(
       for (const pair of invocationPairs) {
         pendingTools.set(pair.invocation.id, {
           invocation: pair.invocation,
-          render: result => pair.transport === 'native-function'
-            ? { role: 'tool', tool_call_id: pair.call.id, content: renderToolResult(result) }
-            : {
-                role: 'user',
-                content: renderLoomContentToolResult({
-                  invocationId: result.invocationId,
-                  name: pair.exposedName,
-                  status: result.status === 'completed' ? 'completed' : 'failed',
-                  content: renderToolResult(result),
-                }),
-              },
+          render: result => encodeToolResultMessage(pair, result),
         })
       }
       streamedText = ''
@@ -730,23 +644,7 @@ async function runToolLoop(
         })
         activeTool = undefined
         progress.stage = 'transcript'
-        if (pair.transport === 'native-function') {
-          checkpointMessages.push({
-            role: 'tool',
-            tool_call_id: pair.call.id,
-            content: renderToolResult(result),
-          })
-        } else {
-          checkpointMessages.push({
-            role: 'user',
-            content: renderLoomContentToolResult({
-              invocationId: result.invocationId,
-              name: pair.exposedName,
-              status: result.status === 'completed' ? 'completed' : 'failed',
-              content: renderToolResult(result),
-            }),
-          })
-        }
+        checkpointMessages.push(encodeToolResultMessage(pair, result))
         freshContextMessages.push(...renderFreshContextMounts(result))
         const resultEntries: AgentTranscriptEntryData[] = [toTranscriptResult(result, input.requestContext?.abortSignal)]
         if (pair === invocationPairs.at(-1)) resultEntries.push({
@@ -758,23 +656,7 @@ async function runToolLoop(
         pendingTools.delete(pair.invocation.id)
         if (input.requestContext?.abortSignal?.aborted)
           throw createAbortError(input.requestContext.abortSignal.reason)
-        if (pair.transport === 'native-function') {
-          providerMessages.push({
-            role: 'tool',
-            tool_call_id: pair.call.id,
-            content: renderToolResult(result),
-          })
-        } else {
-          providerMessages.push({
-            role: 'user',
-            content: renderLoomContentToolResult({
-              invocationId: result.invocationId,
-              name: pair.exposedName,
-              status: result.status === 'completed' ? 'completed' : 'failed',
-              content: renderToolResult(result),
-            }),
-          })
-        }
+        providerMessages.push(encodeToolResultMessage(pair, result))
       }
       completeStep(`${invocationPairs.length} tools processed · continuing`)
     }
@@ -1035,43 +917,6 @@ function readNativeSchema(tool: CompiledToolExposure): JsonObject {
   return schema
 }
 
-function classifyAssistantContent(
-  content: string,
-  sessionId: string,
-  rules: TextTransformRuleEntry[],
-) {
-  if (!content || rules.length === 0) return { text: content, reasoning: [] as import('../transforms/history-text.js').PromotedReasoningPart[] }
-  const snapshot = projectHistoryEntries({
-    source: { kind: 'agent-session', sessionId },
-    phase: 'classify',
-    entries: [{
-      id: 'provider.current.assistant-content',
-      source: { kind: 'agent-session', sessionId },
-      role: 'assistant',
-      text: content,
-      sequence: 1,
-    }],
-    rules,
-  })
-  const entry = snapshot.entries[0]
-  return { text: entry?.text ?? content, reasoning: entry?.promotedReasoning ?? [] }
-}
-
-function scanContentTools(content: string, knownToolNames: string[]) {
-  const options = { knownToolNames }
-  const pushed = pushLoomContentChunk(
-    createLoomContentScannerState(),
-    content,
-    options,
-  )
-  const finished = finishLoomContentScan(pushed.state, options)
-  if (finished.result.status === 'failed')
-    throw new Error(
-      finished.result.error?.message ?? 'Content tool response is invalid',
-    )
-  return finished.result
-}
-
 function renderContentToolInstructions(tools: CompiledToolExposure[]): string {
   const descriptions = tools
     .map((tool) => {
@@ -1218,19 +1063,6 @@ function createToolSignal(externalSignal?: AbortSignal): {
       clearTimeout(timeout)
       externalSignal?.removeEventListener('abort', abort)
     },
-  }
-}
-
-function parseToolArguments(value: string, toolName: string) {
-  try {
-    const parsed = JSON.parse(value) as unknown
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
-      throw new Error()
-    return parsed as Record<string, import('@loom-studio/shared').JsonValue>
-  } catch {
-    throw new Error(
-      `Provider tool arguments are invalid JSON object: ${toolName}`,
-    )
   }
 }
 

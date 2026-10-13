@@ -18,6 +18,11 @@ const input: Parameters<typeof useStudioDerivedValues>[0] = {
 const session = { id: 'writer', timelineId: 'timeline', agentPresetId: 'preset', entryCount: 0, createdAt: '', updatedAt: '' }
 
 describe('Studio send target availability', () => {
+  it('blocks failed core Session restoration and enables sending after retry restores readiness', () => {
+    expect(useStudioDerivedValues({ ...input, primarySession: session, agentSessionReady: false }).canSend).toBe(false)
+    expect(useStudioDerivedValues({ ...input, primarySession: session, agentSessionReady: true }).canSend).toBe(true)
+  })
+
   it('enables Narrative sending for the primary Session without a separately selected preset', () => {
     expect(useStudioDerivedValues({ ...input, primarySession: session }).canSend).toBe(true)
     expect(useStudioDerivedValues({ ...input, selectedAgentPreset: {} }).canSend).toBe(false)
