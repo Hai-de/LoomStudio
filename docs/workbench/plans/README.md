@@ -9,6 +9,7 @@
 
 | 路线图 / 计划                                                                                | 当前状态     | 关注点                                                                  |
 | -------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------- |
+| [Agent 通用触发与主写作常驻配置](./agent-trigger-and-standing-resource-bindings-plan.md) | 方向已确认 / 待收束实施合同 | 通用 Session 投递、后端主写作与首次初始化、常驻引用和扩展来源可用性；绑定冲突与迁移待决定 |
 | [Settings → Lore 全量命名切换](./settings-to-lore-plan.md) | 源码已实施 / 文件数据迁移待停服 | 全量领域改名、官方扩展同步；数据库已升级，文件型测试卡副本已验证；State 不变 |
 | [审查归档后续](../issues/audit-follow-ups.md) | Deferred / Backlog | 远端 CI、旧计划接续及精简后的用户 UI 验收/独立测试维护；完整修复账目已移出活跃目录 |
 | [扩展模块补全](./extension-module-completion-plan.md) | 待调研 / 未实施 | 远程安装与独立官方扩展发行接续；来源、构建脚本与权限合同待决定 |
@@ -34,6 +35,8 @@
 ---
 
 ## 历史已归档计划
+
+2026-10-14：[Timeline 与 Agent Session 命名及辨识信息](../../archive/plans/ui/timeline-session-identification-plan.md)已完成并归档；Studio 创建时生成简短名称，四处列表复用来源 metadata，保留人工视觉验收边界。
 
 2026-10-13：[全局资源搜索与范围 Token](../../archive/plans/global-resource-search-plan.md)已实现并经用户确认归档；当前合同见 [全局资源搜索 Architecture](../../architecture/application/global-resource-search.md)，覆盖范围浏览、全文检索、持久化与定位高亮，保留真实大库性能验证边界。
 

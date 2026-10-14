@@ -47,7 +47,7 @@ async function setup() {
     expectedVersion: 'new', actor,
   })
   await runtime.updateCard({ cardId: card.id, extensionAdoptions: [{ packageId, target: 'global' }] })
-  const a = await runtime.createNarrativeTimeline({ cardId: card.id, openingNodes: [{ content: 'Opening' }] })
+  const a = await runtime.createNarrativeTimeline({ cardId: card.id, openingContent: 'Opening' })
   const b = await runtime.createNarrativeTimeline({ cardId: card.id })
   return { engine, documents, narratives, runtime, a, b, card, installationId, actor, stateContributions, registration,
     initializations: () => initializations, context: { documents, narratives, createId } }
@@ -195,7 +195,7 @@ describe('Timeline extension participation', () => {
         },
       })
       const { card } = await f.runtime.createCard({ name: 'Checkpoint source inspection' })
-      const story = await f.runtime.createNarrativeTimeline({ cardId: card.id, openingNodes: [{ content: 'Opening' }] })
+      const story = await f.runtime.createNarrativeTimeline({ cardId: card.id, openingContent: 'Opening' })
       const checkpoint = await f.runtime.forkNarrativeBranch({
         timelineId: story.timeline.id, fromBranchId: story.branch.id, fromNodeId: story.nodes[0]!.id,
       })
@@ -325,7 +325,7 @@ describe('Timeline extension participation', () => {
     const { engine, runtime, installationId, initializations } = await setup()
     try {
       const { card } = await runtime.createCard({ name: 'Late adoption' })
-      const story = await runtime.createNarrativeTimeline({ cardId: card.id, openingNodes: [{ content: 'Opening' }] })
+      const story = await runtime.createNarrativeTimeline({ cardId: card.id, openingContent: 'Opening' })
       const checkpoint = await runtime.forkNarrativeBranch({
         timelineId: story.timeline.id, fromBranchId: story.branch.id, fromNodeId: story.nodes[0]!.id,
       })
@@ -373,7 +373,7 @@ describe('Timeline extension participation', () => {
     const f = await setup()
     try {
       const { card } = await f.runtime.createCard({ name: 'Checkpoint initialization' })
-      const story = await f.runtime.createNarrativeTimeline({ cardId: card.id, openingNodes: [{ content: 'Opening' }] })
+      const story = await f.runtime.createNarrativeTimeline({ cardId: card.id, openingContent: 'Opening' })
       const checkpoint = await f.runtime.forkNarrativeBranch({
         timelineId: story.timeline.id, fromBranchId: story.branch.id, fromNodeId: story.nodes[0]!.id,
       })
@@ -436,7 +436,7 @@ describe('Timeline extension participation', () => {
         },
       })
       const { card } = await f.runtime.createCard({ name: 'Entity checkpoint' })
-      const story = await f.runtime.createNarrativeTimeline({ cardId: card.id, openingNodes: [{ content: 'Opening' }] })
+      const story = await f.runtime.createNarrativeTimeline({ cardId: card.id, openingContent: 'Opening' })
       const checkpoint = await f.runtime.forkNarrativeBranch({
         timelineId: story.timeline.id, fromBranchId: story.branch.id, fromNodeId: story.nodes[0]!.id,
       })

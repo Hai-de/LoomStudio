@@ -1,4 +1,8 @@
 export const messages = {
+  'promptResource.processingWarning': '提示词处理出现警告，部分 Lore 可能已跳过。请查看构建诊断。',
+  'promptResource.invalidResources': '以下资源暂时无法读取；其他资源仍可使用。',
+  'promptResource.invalidResourcesHelp': '原始数据已保留。请根据资源 ID 检查来源文件或备份，修复后重新加载。',
+  'promptResource.invalidResourcesNotice': '部分提示词资源无法读取，请在个人资源中查看详情。',
   'reference.title': '资源引用',
   'reference.openEditor': '打开编辑器',
   'reference.versionChanged': '资源版本已变化 · 显示当前内容',

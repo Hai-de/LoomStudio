@@ -3,14 +3,16 @@ import { IconButton } from '@loom-studio/ui'
 import { formatDateTime, formatTime } from '../../i18n/index.js'
 import styles from './conversation-message-chrome.module.scss'
 
-export function ConversationMessageChrome(props: { actions: ReactNode; createdAt: string; index: number; metadata?: ReactNode }) {
+export function ConversationMessageChrome(props: { actions?: ReactNode; createdAt?: string; index?: number; metadata?: ReactNode; trailing?: ReactNode }) {
   return (
     <footer className={styles.footer} data-conversation-message-footer>
-      <span className={styles.timestamp} data-conversation-message-timestamp title={formatFullTimestamp(props.createdAt)}>
-        #{props.index + 1} · {formatConversationTimestamp(props.createdAt)}
+      <span className={styles.timestamp} data-conversation-message-timestamp title={props.createdAt ? formatFullTimestamp(props.createdAt) : undefined}>
+        {props.index !== undefined ? `#${props.index + 1}` : null}
+        {props.createdAt ? <> · {formatConversationTimestamp(props.createdAt)}</> : null}
         {props.metadata}
       </span>
-      <div className={styles.actions} data-conversation-message-actions>{props.actions}</div>
+      {props.actions ? <div className={styles.actions} data-conversation-message-actions>{props.actions}</div> : null}
+      {props.trailing}
     </footer>
   )
 }

@@ -1,3 +1,5 @@
+import { subscribeExtensionEvents } from './extension-events.js'
+
 export type DataOperation = {
   entityType: string; entityId: string; kind?: string
   scope?: { store: string; entityType: string; entityId: string }
@@ -7,9 +9,7 @@ export function subscribeDataCommits(
   onCommit: (operations: DataOperation[]) => void,
   onConnected: () => void,
 ): () => void {
-  const events = new EventSource('/extensions/events')
-  events.addEventListener('open', onConnected)
-  events.addEventListener('data.changed', event => {
+  return subscribeExtensionEvents({ onConnected, events: { 'data.changed': event => {
     let payload: unknown
     try {
       payload = JSON.parse(event.data)
@@ -30,6 +30,5 @@ export function subscribeDataCommits(
           ? { scope: { store: item.scope.store, entityType: item.scope.entityType, entityId: item.scope.entityId } } : {}),
       }))
     onCommit(operations)
-  })
-  return () => events.close()
+  } } })
 }

@@ -36,7 +36,7 @@ function details(id: string) {
   const branch: NarrativeBranch = {
     id: timeline.activeBranchId, timelineId: id, createdAt: timeline.createdAt, updatedAt: timeline.updatedAt,
   }
-  return { timeline, branch, branches: [branch], nodes: [], nextCursor: undefined as string | undefined }
+  return { timeline, branch, branches: [branch], nodes: [] as NarrativeNode[], nextCursor: undefined as string | undefined }
 }
 function session(id: string, title = id): AgentSession {
   return { id, title, agentPresetId: 'profile', entryCount: 0, createdAt: '2026-09-23', updatedAt: '2026-09-23' }
@@ -82,6 +82,105 @@ beforeEach(() => { hooks.cursor = 0; hooks.values = []; hooks.effects = [] })
 afterEach(() => vi.unstubAllGlobals())
 
 describe('Card timeline selection', () => {
+  it('restores edited custom content from only its node while retaining the source candidate identity', async () => {
+    const f = fixture()
+    const page = details('edited')
+    page.timeline.opening = { id: 'source-candidate', nodeId: 'opening-node', custom: true, locked: false }
+    page.nodes = ['other-node', 'opening-node'].map(id => ({ id, timelineId: 'edited', stateRevisionId: 'state',
+      body: { format: 'loom-markdown.v1', raw: id === 'opening-node' ? 'Edited opening' : 'Unrelated node' }, createdAt: 'now' }))
+    f.getPage.mockResolvedValueOnce(page)
+    await f.render().activateTimeline('edited')
+    expect(f.render().openingChoice).toEqual({ kind: 'custom', content: 'Edited opening' })
+    expect(f.render().timeline?.opening?.id).toBe('source-candidate')
+  })
+
+  it('retains locked opening identity without allowing replacement or blocking input as a changed opening', async () => {
+    const f = fixture()
+    const page = details('locked')
+    page.timeline.opening = { id: 'source-candidate', locked: true }
+    f.getPage.mockResolvedValueOnce(page)
+    f.input.api.narratives.replaceOpening = vi.fn()
+    await f.render().activateTimeline('locked')
+    expect(f.render().openingChoice).toEqual({ kind: 'card', id: 'source-candidate' })
+    f.render().setOpeningChoice({ kind: 'empty' })
+    expect(f.render().openingChanged).toBe(false)
+    await f.render().replaceOpening()
+    expect(f.input.api.narratives.replaceOpening).not.toHaveBeenCalled()
+  })
+
+  it('requires an explicit start in preview, including when a primary Session is requested', async () => {
+    const f = fixture()
+    f.input.selectedCardId = 'a'
+    f.input.initialInput = 'Do not lose this draft'
+    await f.render().submitTurn({ preventDefault() {} } as never)
+    await expect(f.render().createAgentSession('preset', true)).rejects.toThrow('开始一个新故事')
+    expect(f.create).not.toHaveBeenCalled()
+    expect(f.render().input).toBe('Do not lose this draft')
+    const selected = f.render().selectCardTimeline('a')
+    f.requests.get('a')!.resolve({ timelines: [] })
+    await expect(selected).resolves.toBeNull()
+    expect(f.create).not.toHaveBeenCalled()
+  })
+
+  it('deduplicates an in-flight explicit start and keeps the selected opening', async () => {
+    const f = fixture()
+    f.input.selectedCardId = 'a'
+    const created = Promise.withResolvers<ReturnType<typeof details>>()
+    f.create.mockReturnValueOnce(created.promise)
+    f.render().setOpeningChoice({ kind: 'card', id: 'alternative-2' })
+    const state = f.render()
+    const first = state.createTimelineFromCard()
+    await state.createTimelineFromCard()
+    expect(f.create).toHaveBeenCalledOnce()
+    expect(f.create).toHaveBeenCalledWith(expect.objectContaining({ cardId: 'a', openingId: 'alternative-2' }))
+    f.requests.get('a')!.resolve({ timelines: [] })
+    created.resolve(details('created'))
+    await first
+    expect(f.render().timeline?.id).toBe('created')
+  })
+
+  it('replaces an initialized opening without clearing drafts or selecting another Session', async () => {
+    const f = fixture()
+    const first = details('story')
+    first.timeline.opening = { id: 'root-opening', locked: false }
+    f.getPage.mockResolvedValueOnce(first)
+    await f.render().activateTimeline('story')
+    f.render().setInput('My unsent name and background')
+    f.render().setAgentInput('My separate Agent draft')
+    const replacement = { ...first, timeline: { ...first.timeline, opening: { id: 'alternative-1', nodeId: 'opening', locked: false } },
+      branch: { ...first.branch, stateHeadRevisionId: 'state', headNodeId: 'opening' },
+      nodes: [{ id: 'opening', timelineId: 'story', stateRevisionId: 'state',
+        body: { format: 'loom-markdown.v1' as const, raw: 'New opening' }, createdAt: 'now' }],
+      mutation: { changesetId: 'replace' } }
+    const replace = vi.fn<StudioApi['narratives']['replaceOpening']>(async () => replacement)
+    f.input.api.narratives.replaceOpening = replace
+    await f.render().replaceOpening({ kind: 'card', id: 'alternative-1' })
+    const result = f.render()
+    expect(result.openingChoice).toEqual({ kind: 'card', id: 'alternative-1' })
+    expect(result.nodes.map(node => node.body.raw)).toEqual(['New opening'])
+    expect(result.input).toBe('My unsent name and background')
+    expect(result.agentInput).toBe('My separate Agent draft')
+    expect(result.agentSession).toBeUndefined()
+    expect(f.create).not.toHaveBeenCalled()
+  })
+
+  it('does not publish a late opening replacement into another Timeline', async () => {
+    const f = fixture()
+    const first = details('story')
+    first.timeline.opening = { id: 'root-opening', locked: false }
+    f.getPage.mockResolvedValueOnce(first)
+    await f.render().activateTimeline('story')
+    const pending = Promise.withResolvers<Awaited<ReturnType<StudioApi['narratives']['replaceOpening']>>>()
+    f.input.api.narratives.replaceOpening = vi.fn(() => pending.promise)
+    const replacing = f.render().replaceOpening({ kind: 'empty' })
+    await f.render().activateTimeline('other')
+    f.render().setInput('Other story draft')
+    pending.resolve({ ...first, branch: { ...first.branch, stateHeadRevisionId: 'state' }, nodes: [], mutation: { changesetId: 'replace' } })
+    await replacing
+    expect(f.render().timeline?.id).toBe('other')
+    expect(f.render().input).toBe('Other story draft')
+  })
+
   it('refreshes Timeline session choices from commit events without resetting drafts or selecting a session', async () => {
     const streams: Array<{ listeners: Map<string, (event: { data: string }) => void>; closed: boolean }> = []
     vi.stubGlobal('EventSource', class {
@@ -402,9 +501,9 @@ describe('Card timeline selection', () => {
 
   it('shares selection/effect reads and ignores an older Card list that finishes last', async () => {
     const f = fixture()
-    const a = f.render().selectCardTimeline('a', true)
+    const a = f.render().selectCardTimeline('a')
     f.render()
-    const b = f.render().selectCardTimeline('b', true)
+    const b = f.render().selectCardTimeline('b')
     f.render()
     f.requests.get('b')!.resolve({ timelines: [details('b-timeline').timeline] })
     await expect(b).resolves.toEqual({ timelineId: 'b-timeline', branchId: 'b-timeline-branch' })
@@ -442,9 +541,8 @@ describe('Card timeline selection', () => {
     const created = Promise.withResolvers<ReturnType<typeof details>>()
     const createStarted = Promise.withResolvers<void>()
     f.create.mockImplementationOnce(() => { createStarted.resolve(); return created.promise })
-    const a = f.render().selectCardTimeline('a', true)
-    f.render()
-    f.requests.get('a')!.resolve({ timelines: [] })
+    f.input.selectedCardId = 'a'
+    const a = f.render().createTimelineFromCard()
     await createStarted.promise
     const b = f.render().selectCardTimeline('b')
     f.render()
@@ -498,9 +596,8 @@ describe('Card timeline selection', () => {
     const state = f.render()
     if (failure === 'list') f.list.mockRejectedValueOnce(new Error('Unavailable'))
     else f.create.mockRejectedValueOnce(new Error('Unavailable'))
-    const selected = state.selectCardTimeline('a', true)
+    const selected = failure === 'list' ? state.selectCardTimeline('a') : state.createTimelineFromCard('a')
     f.render()
-    if (failure === 'create') f.requests.get('a')!.resolve({ timelines: [] })
     await expect(selected).resolves.toBeUndefined()
     expect(f.render().agentSessionLoading).toBe(false)
     expect(f.render().agentSessionReady).toBe(true)

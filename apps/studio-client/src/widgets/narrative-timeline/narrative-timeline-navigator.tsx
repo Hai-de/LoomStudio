@@ -21,6 +21,7 @@ type NarrativeTimelineNavigatorProps = {
   items: NarrativeTimelineNavigatorItem[]
   label: string
   markers?: NarrativeTimelineMarker[]
+  renderPreview?(text: string): string
   onNavigate(id: string): void
 }
 
@@ -148,7 +149,7 @@ export function NarrativeTimelineNavigator(props: NarrativeTimelineNavigatorProp
           <aside className={styles.preview} style={{ top: previewPosition }}>
             <strong>{previewItem.meta}</strong>
             <span>{previewItem.role}</span>
-            <p>{readNarrativeTimelinePreview(previewItem.preview)}</p>
+            <p>{readNarrativeTimelinePreview(props.renderPreview ? props.renderPreview(previewItem.preview) : previewItem.preview)}</p>
           </aside>
         ) : null}
       </div>

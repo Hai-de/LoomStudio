@@ -5,8 +5,34 @@ import { unzipSync, zipSync, Zip, ZipPassThrough, ZipDeflate } from 'fflate'
 import { crc32, deflateSync } from 'node:zlib'
 import { decodeCardBundleZip, encodeCardBundleZip, loadCardBundleFiles } from '../../../apps/studio-server/src/codecs/card-bundle-zip.js'
 import { defaultCardPng, encodeCardBundlePng, readCardPngArchive } from '../../../apps/studio-server/src/codecs/card-png.js'
+import { normalizeOpening } from '../../../packages/application-runtime/src/cards/card.js'
 
 describe('Loom Card ZIP', () => {
+  it('assigns missing opening IDs once and preserves titles and IDs through repeated ZIP round trips', async () => {
+    const opening = normalizeOpening({ title: 'Default', content: 'Hello', alternatives: [{ title: 'Alternative', content: 'Welcome' }] })
+    expect(opening.id).toBeTruthy()
+    expect(opening.alternatives?.[0]?.id).toBeTruthy()
+    expect(opening.alternatives?.[0]?.id).not.toBe(opening.id)
+    expect(normalizeOpening(opening)).toEqual(opening)
+    const artifact: CardBundleArtifact = {
+      schemaVersion: 4, artifactId: 'opening-identity', displayName: 'Opening', card: { name: 'Opening', opening }, contextAssets: [],
+    }
+    const first = await decodeCardBundleZip(encodeCardBundleZip({ artifact, avatar: { bytes: defaultCardPng, mediaType: 'image/png' } }))
+    const second = await decodeCardBundleZip(encodeCardBundleZip(first))
+    expect(first.artifact.card.opening).toEqual(opening)
+    expect(second.artifact.card.opening).toEqual(opening)
+  })
+
+  it('rejects duplicate opening IDs and the removed entries format', () => {
+    const artifact: CardBundleArtifact = {
+      schemaVersion: 4, artifactId: 'duplicate-openings', displayName: 'Opening', card: {
+        name: 'Opening', opening: { id: 'same', content: 'Hello', alternatives: [{ id: 'same', content: 'Welcome' }] },
+      }, contextAssets: [],
+    }
+    expect(() => encodeCardBundleZip({ artifact, avatar: { bytes: defaultCardPng, mediaType: 'image/png' } })).toThrow('Duplicate opening ID')
+    expect(() => normalizeOpening({ entries: [{ role: 'assistant', content: 'Old' }] } as never)).toThrow('single string content')
+  })
+
   it('preserves work identity and derivation through files, ZIP and PNG', async () => {
     const artifact: CardBundleArtifact = {
       schemaVersion: 4, artifactId: 'derived-work', derivedFrom: { artifactId: 'original-work' },
@@ -330,7 +356,7 @@ describe('Loom Card ZIP', () => {
           system: 'System prompt', macros: { user: 'Player' },
           macroOptions: { tone: [{ id: 'quiet', label: 'Quiet', value: 'soft' }, { id: 'loud', label: 'Loud', value: 'bold' }] },
         },
-        opening: { entries: [{ role: 'assistant', content: 'Opening text' }] },
+        opening: { id: 'default-opening', title: 'Arrival', content: 'Opening text', alternatives: [{ id: 'alternative-opening', title: 'Return', content: 'Alternative text' }] },
         lore: { entries: [{ id: 'legacy', content: 'Legacy text', enabled: true }] },
       },
       contextAssets: [{

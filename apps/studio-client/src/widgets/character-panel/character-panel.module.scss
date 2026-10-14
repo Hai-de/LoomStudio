@@ -164,7 +164,7 @@
 .toolbarButton,
 .toolbarButtonActive,
 .galleryActions > button,
-.profileIdentity > button,
+.startActions > button,
 .editorActions > button,
 .sessionCard button,
 .selectionToolbar > div > button {
@@ -279,7 +279,7 @@
 }
 
 .galleryActions > button:last-child,
-.profileIdentity > button,
+.startActions > button,
 .editorActions > button:first-child {
   min-height: 28px;
   display: inline-flex;
@@ -438,6 +438,24 @@
   filter: saturate(1);
 }
 
+.cardInvalid {
+  color: var(--loom-color-text-subtle);
+
+  .cardOpen img {
+    filter: grayscale(1);
+  }
+
+  strong {
+    color: var(--loom-color-text-subtle);
+  }
+}
+
+.invalidReason {
+  margin: 0 16px 18px;
+  color: var(--loom-color-text-subtle);
+  overflow-wrap: anywhere;
+}
+
 @media (min-width: 641px) {
   .profileBackButton {
     display: none !important;
@@ -531,16 +549,6 @@
   width: min(32rem, calc(100% - 24px));
 }
 
-.deletePlayDataOption {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  color: var(--loom-color-text-muted);
-}
-
-.deletePlayDataOption input {
-  margin-top: 2px;
-}
 
 .groupRowWrap,
 .groupRow,
@@ -722,6 +730,7 @@
 }
 
 .profileIdentity {
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 16px;
   padding: 0 16px 18px;
@@ -729,6 +738,24 @@
   > div {
     flex: 1;
     min-width: 0;
+  }
+}
+
+.profileIdentity > .startActions {
+  flex: 0 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  > button {
+    white-space: normal;
+    text-align: start;
+
+    > svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
   }
 }
 
@@ -1137,15 +1164,6 @@
   text-overflow: ellipsis;
 }
 
-.openingContentExpanded {
-  margin: 0;
-  color: var(--loom-color-text);
-  font-size: var(--loom-font-size-3);
-  line-height: 1.6;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
 .currentSession,
 .sessionList small,
 .sessionList > p {
@@ -1522,9 +1540,8 @@
     padding-inline: 10px;
   }
 
-  .profileIdentity > button {
+  .startActions > button {
     padding-inline: 4px;
-    white-space: nowrap;
   }
 
   .profileContent,

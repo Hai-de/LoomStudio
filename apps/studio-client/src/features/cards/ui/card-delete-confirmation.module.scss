@@ -1,0 +1,12 @@
+.deletePlayDataOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--loom-color-text-muted);
+}
+
+.deletePlayDataOption input {
+  margin-top: 2px;
+}
+
+.deleteButton { color: var(--loom-color-danger); }

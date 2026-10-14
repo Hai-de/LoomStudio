@@ -569,13 +569,19 @@ export function createServerExtensionManager(options: {
       if (initialized) return
       await options.stateStore.load()
       const setup = await readOfficialState()
+      const bundled = new Map<string, ReturnType<typeof parseExtensionManifest>>()
       for (const directory of options.bundledDirectories ?? []) {
-        const manifest = parseExtensionManifest(JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8')))
-        if (setup.bundled?.includes(manifest.id)) continue
-        try { await stat(join(options.installedDirectory, manifest.id)) }
-        catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-          await installExtensionPackageFromDirectory({ sourceDirectory: directory, installedDirectory: options.installedDirectory, flat: true })
+        try {
+          const manifest = parseExtensionManifest(JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8')))
+          if (setup.bundled?.includes(manifest.id)) continue
+          try { await stat(join(options.installedDirectory, manifest.id)) }
+          catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+            await installExtensionPackageFromDirectory({ sourceDirectory: directory, installedDirectory: options.installedDirectory, flat: true })
+          }
+          bundled.set(directory, manifest)
+        } catch (error) {
+          reportDiscoveryFailure(options.diagnostics, { kind: 'installed', directory }, error)
         }
       }
       const result = await discoverExtensionSources(options)
@@ -609,13 +615,13 @@ export function createServerExtensionManager(options: {
           directory: uniqueDirectories[0]!,
           available: true,
         }
-        const metadata = await readDownloadMetadata(record.directory)
-        if (metadata) {
-          record.remote = { source: metadata.source, ...(metadata.commit ? { commit: metadata.commit } : {}), canRollback: !!metadata.previous }
-          record.fileRevision = `${manifest.version}-${randomUUID()}`
-        }
         catalog.set(packageId, record)
         try {
+          const metadata = await readDownloadMetadata(record.directory)
+          if (metadata) {
+            record.remote = { source: metadata.source, ...(metadata.commit ? { commit: metadata.commit } : {}), canRollback: !!metadata.previous }
+            record.fileRevision = `${manifest.version}-${randomUUID()}`
+          }
           await options.host.discover(record.directory)
         } catch (error) {
           record.available = false
@@ -633,13 +639,23 @@ export function createServerExtensionManager(options: {
 
       initialized = true
       const installations = await options.listInstallations()
-      for (const directory of options.bundledDirectories ?? []) {
-        const manifest = parseExtensionManifest(JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8')))
-        if (setup.bundled?.includes(manifest.id)) continue
-        if (!installations.installations.some(item => item.packageId === manifest.id && item.target.kind === 'global')) await importResources(manifest.id)
-        if (options.officialSetupFile) {
-          setup.bundled = [...setup.bundled ?? [], manifest.id]
-          await writeJsonAtomically(options.officialSetupFile, setup)
+      for (const [directory, manifest] of bundled) {
+        try {
+          if (!installations.installations.some(item => item.packageId === manifest.id && item.target.kind === 'global')) await importResources(manifest.id)
+          if (options.officialSetupFile) {
+            const next = { ...setup, bundled: [...setup.bundled ?? [], manifest.id] }
+            await writeJsonAtomically(options.officialSetupFile, next)
+            setup.bundled = next.bundled
+          }
+        } catch (error) {
+          const record = catalog.get(manifest.id)
+          if (record) record.available = false
+          options.diagnostics.add({
+            severity: 'error', code: 'extension.bundled_setup_failed',
+            message: `Bundled extension setup failed: ${manifest.id}`,
+            source: 'extension-manager', packageId: manifest.id,
+            details: { directory, error: serializeError(error, 'extension.bundled_setup_failed') },
+          })
         }
       }
       for (const installation of (await options.listInstallations()).installations) {

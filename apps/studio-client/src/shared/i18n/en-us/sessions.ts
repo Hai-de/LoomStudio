@@ -1,6 +1,12 @@
 import type { messages as zhCN } from '../zh-cn/sessions.js'
 
 export const messages = {
+  'sessions.defaultTimelineName': 'Story',
+  'sessions.defaultSessionName': 'Session',
+  'sessions.characterUnavailable': 'Character unavailable',
+  'sessions.presetUnavailable': 'Preset unavailable',
+  'sessions.timelineUnavailable': 'Story unavailable',
+
   'sessions.searchPlaceholder': 'Search timelines, characters, or conversations...',
   'sessions.selectTimelineNamed': 'Select Timeline {{name}}',
   'sessions.selectSessionNamed': 'Select conversation {{name}}',
@@ -123,4 +129,5 @@ export const messages = {
   'timeline.empty.noBranch': 'Session is open, but no branch is loaded.',
   'timeline.empty.ready': 'This branch has no accepted narrative entries yet. You can send the first player input.',
   'timeline.opening.placeholder': 'No opening message configured. Where should we begin?',
+  'timeline.startStory': 'Start a new story',
 } satisfies Record<keyof typeof zhCN, string>

@@ -109,7 +109,10 @@ export function fixture() {
   const reportFailure = vi.fn<(error: unknown) => void>()
   const input: Parameters<typeof useNarrativeRuntime>[0] = {
     api: {
-      narratives: { create: createTimeline, appendInput, getPage },
+      narratives: {
+        create: createTimeline, appendInput, getPage,
+        list: vi.fn<StudioApi['narratives']['list']>(async () => ({ timelines: [] })),
+      },
       agentSessions: {
         create: createSession, createRun, subscribeRun, getTranscript, resumeRun, acknowledgeRunCompletion,
       },
@@ -130,6 +133,7 @@ export function fixture() {
 
 export async function primaryFixture() {
   const f = fixture()
+  await f.render().createTimelineFromCard()
   const primary = await f.render().createAgentSession('profile', true)
   f.input.api.agentSessions.list = vi.fn(async () => ({ sessions: [primary!] }))
   f.getTranscript.mockResolvedValueOnce({ session: primary!, entries: [] })

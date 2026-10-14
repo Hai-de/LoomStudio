@@ -175,32 +175,25 @@ function readOptionalOpening(params: JsonValue | undefined, key: string): Openin
   const value = params[key]
   if (typeof value === 'string') return value
   if (!isRecord(value)) throw new Error(`Expected opening param: ${key}`)
-  function readEntries(entries: JsonValue | undefined): NonNullable<OpeningChatInput['entries']> {
-    if (entries !== undefined && !Array.isArray(entries)) throw new Error(`Expected opening entries array: ${key}`)
-    return (entries ?? []).map(entry => {
-      if (!isRecord(entry) || typeof entry.content !== 'string') {
-        throw new Error(`Expected opening entry content: ${key}`)
-      }
-      if (entry.role !== undefined && entry.role !== 'user' && entry.role !== 'assistant') {
-        throw new Error(`Expected opening entry role: ${key}`)
-      }
-
-      return {
-        role: entry.role,
-        content: entry.content,
-      }
-    })
+  function readCandidate(candidate: JsonValue): Omit<OpeningChatInput, 'alternatives'> {
+    if (!isRecord(candidate) || typeof candidate.content !== 'string' || 'entries' in candidate || 'role' in candidate) {
+      throw new Error(`Expected single opening content: ${key}`)
+    }
+    if (candidate.id !== undefined && (typeof candidate.id !== 'string' || !candidate.id.trim())) throw new Error('Invalid opening ID')
+    if (candidate.title !== undefined && typeof candidate.title !== 'string') throw new Error('Invalid opening title')
+    return {
+      ...(candidate.id !== undefined ? { id: candidate.id as string } : {}),
+      ...(candidate.title !== undefined ? { title: candidate.title as string } : {}),
+      content: candidate.content,
+    }
   }
   if (value.alternatives !== undefined && !Array.isArray(value.alternatives)) {
     throw new Error('Expected opening alternatives array')
   }
   return {
-    entries: readEntries(value.entries),
+    ...readCandidate(value),
     ...(value.alternatives !== undefined ? {
-      alternatives: value.alternatives.map(alternative => {
-        if (!isRecord(alternative) || !Array.isArray(alternative.entries)) throw new Error('Expected opening alternative entries')
-        return { entries: readEntries(alternative.entries) }
-      }),
+      alternatives: value.alternatives.map(readCandidate),
     } : {}),
   }
 }

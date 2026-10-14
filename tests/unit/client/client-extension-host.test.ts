@@ -28,6 +28,32 @@ function extensionPackage(enabled = true): ManagedClientExtensionPackage {
 }
 
 describe('Client Extension Host', () => {
+  it('blocks Timeline State in preview and rejects reads completing after returning to preview', async () => {
+    const rendererHost = createClientRendererHost()
+    const target = { scope: 'timeline' as const, timelineId: 'story', branchId: 'main' }
+    const pending = Promise.withResolvers<ClientStateSnapshot>()
+    const get = vi.fn(() => pending.promise)
+    let context!: ClientExtensionActivationContext
+    const host = createClientExtensionHost({
+      rendererHost, data: { state: { get } } as unknown as ClientExtensionDataApi,
+      loadModule: async () => ({ activate: value => { context = value } }),
+    })
+    try {
+      rendererHost.setScopeSnapshot({ workspace: 'workspace', cardId: 'card' })
+      await host.reconcile([extensionPackage()])
+      await expect(context.state.get(target)).rejects.toThrow('outside the mounted story')
+      expect(() => context.state.subscribe(target, () => {})).toThrow('outside the mounted story')
+      expect(get).not.toHaveBeenCalled()
+      rendererHost.setScopeSnapshot({ workspace: 'workspace', cardId: 'card', timelineId: 'story', branchId: 'main' })
+      const reading = context.state.get(target)
+      const rejected = expect(reading).rejects.toThrow('outside the mounted story')
+      rendererHost.setScopeSnapshot({ workspace: 'workspace', cardId: 'card' })
+      pending.resolve({ target, scopeId: 'story', revisionId: 'r1', value: {}, createdAt: 'now' })
+      await rejected
+      expect(get).toHaveBeenCalledOnce()
+    } finally { await host.dispose() }
+  })
+
   it('binds Timeline modules to adoption and replaces them on Branch or generation changes', async () => {
     const pkg = { ...extensionPackage(), participation: 'timeline' as const }
     const rendererHost = createClientRendererHost()

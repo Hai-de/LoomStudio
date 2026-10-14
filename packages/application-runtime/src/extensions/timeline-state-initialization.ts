@@ -118,7 +118,8 @@ export function createTimelineExtensionStateInitializationMethods(ctx: Context) 
         const contributions: StateContribution[] = []
         for (const source of sources) {
           contributions.push(await ctx.stateContributions.initialize(source.contributionId, {
-            cardId: runtime.content.sourceCardId, characterName: runtime.content.cardName ?? '', opening: [], resources, signal: work.signal,
+            cardId: runtime.content.sourceCardId, characterName: runtime.content.cardName ?? '',
+            opening: '', openingId: timeline.opening?.id, resources, signal: work.signal,
           }))
         }
         const addition = missingState(runtime.content, state.value, input.installationId, contributions)

@@ -42,6 +42,7 @@ import type {
   NarrativeNode,
   NarrativeTimeline,
 } from '../../entities/index.js'
+import { sessionPresetName, sessionSourceLabel, timelineCharacterName } from '../../entities/session-identification.js'
 import type { StudioApi } from '../../shared/api/studio-api.js'
 import { cardMediaUrl, useCardMediaRevision } from '../../shared/lib/card-media.js'
 import { downloadBlob } from '../../shared/browser/download.js'
@@ -649,11 +650,11 @@ export function SessionsPanel(props: SessionsPanelProps) {
                                   </div>
                                 )}
                                 <span className={styles.itemBody}>
-                                  <strong>{timeline.title || card?.name || props.t('sessions.untitledTimeline')}</strong>
-                                  <small>
-                                    {card?.name ? `${card.name} · ` : ''}
-                                    {formatDate(timeline.updatedAt)}
+                                  <strong title={timeline.title || props.t('sessions.untitledTimeline')}>{timeline.title || props.t('sessions.untitledTimeline')}</strong>
+                                  <small title={timelineCharacterName(timeline, props.cards ?? [], props.t)}>
+                                    {timelineCharacterName(timeline, props.cards ?? [], props.t)} · {formatDateTime(timeline.updatedAt)}
                                   </small>
+                                  {timeline.latestPreview || timeline.openingPreview ? <small title={timeline.latestPreview || timeline.openingPreview}>{timeline.latestPreview || timeline.openingPreview}</small> : null}
                                 </span>
                               </button>
 
@@ -772,10 +773,10 @@ export function SessionsPanel(props: SessionsPanelProps) {
                                       ) : null}
                                       <Bot aria-hidden="true" />
                                       <span className={styles.childItemBody}>
-                                        <strong>{session.title || profile?.rootNode.label || props.t('sessions.untitledAgentSession')}
+                                        <strong title={session.title || profile?.rootNode.label || props.t('sessions.untitledAgentSession')}>{session.title || profile?.rootNode.label || props.t('sessions.untitledAgentSession')}
                                           {session.id === props.narrativeAgentSession?.id ? ` · ${props.t('agent.primarySession')}` : ''}
                                         </strong>
-                                        <small>{formatDate(session.updatedAt)}</small>
+                                        <small title={sessionPresetName(session, props.agentPresets, props.t)}>{sessionPresetName(session, props.agentPresets, props.t)} · {formatDateTime(session.updatedAt)}</small>
                                       </span>
                                       <span className={styles.count}>{session.entryCount}</span>
                                       {!isSelectionMode ? (
@@ -921,10 +922,11 @@ export function SessionsPanel(props: SessionsPanelProps) {
                                 <Bot aria-hidden="true" />
                               </div>
                               <span className={styles.itemBody}>
-                                <strong>{session.title || profile?.rootNode.label || props.t('sessions.untitledAgentSession')}
+                                <strong title={session.title || profile?.rootNode.label || props.t('sessions.untitledAgentSession')}>{session.title || profile?.rootNode.label || props.t('sessions.untitledAgentSession')}
                                   {session.id === props.narrativeAgentSession?.id ? ` · ${props.t('agent.primarySession')}` : ''}
                                 </strong>
-                                <small>{profile?.rootNode.label ?? session.agentPresetId} · {formatDate(session.updatedAt)}</small>
+                                <small title={sessionSourceLabel(session, props.timelines, props.cards ?? [], props.t)}>{sessionSourceLabel(session, props.timelines, props.cards ?? [], props.t)}</small>
+                                <small title={sessionPresetName(session, props.agentPresets, props.t)}>{sessionPresetName(session, props.agentPresets, props.t)} · {formatDateTime(session.updatedAt)}</small>
                               </span>
                             </button>
                             <span className={styles.count}>{session.entryCount}</span>
@@ -1162,10 +1164,10 @@ function TimelineDetail(props: {
     setImportedArchive(undefined)
     try {
       const converted = parseConvertedChat(await props.api.extensionRuntime.call('sillytavern.importer.convertChat', { jsonl: await file.text() }))
-      const result = await props.api.narratives.create({
+      const result = await props.api.narratives.importHistory({
         cardId: props.card.id,
         title: converted.title,
-        openingNodes: converted.messages,
+        messages: converted.messages,
       })
       const imported = { timelineId: result.timeline.id, unknownParticipantNamespaces: [], participantFailures: [] }
       setImportedArchive(imported)
@@ -1317,7 +1319,7 @@ function TimelineDetail(props: {
                 <div key={session.id} className={styles.boundSessionCard}>
                   <div className={styles.boundSessionInfo}>
                     <div className={styles.boundSessionTitleRow}>
-                      <strong>{session.title || profile?.rootNode.label || props.t('sessions.untitledAgentSession')}</strong>
+                      <strong title={session.title || profile?.rootNode.label || props.t('sessions.untitledAgentSession')}>{session.title || profile?.rootNode.label || props.t('sessions.untitledAgentSession')}</strong>
                       {profile?.rootNode.label ? <span className={styles.profileBadge}>{profile.rootNode.label}</span> : null}
                     </div>
                     <div className={styles.boundSessionMeta}>

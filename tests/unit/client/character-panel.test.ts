@@ -11,7 +11,7 @@ describe('CharacterPanel MasterDetail', () => {
       description: '奇境漫游者',
       media: { avatarAssetId: 'avatar-1' },
       lore: { entries: [] },
-      opening: { entries: [{ role: 'assistant' as const, content: '你好，我是爱丽丝。' }] },
+      opening: { id: 'root-opening', content: '你好，我是爱丽丝。' },
     },
     {
       id: 'card-2',
@@ -39,10 +39,13 @@ describe('CharacterPanel MasterDetail', () => {
     expect(html).toContain('character.grid')
     expect(html).toContain('character.list')
 
-    // Detail 区域默认渲染第一个选中角色的档案与开场白
-    expect(html).toContain('你好，我是爱丽丝。')
+    // 编辑草稿由 effect 填充；静态渲染仅检查编辑入口。
+    expect(html).toContain('character.opening')
     expect(html).toContain('character.resources')
-    expect(html).toContain('character.expandOpening')
+    expect(html).toContain('character.continueNarrative')
+    expect(html).toContain('character.newNarrative')
+    expect(html).toContain('character.preview')
+    expect(html).not.toContain('character.chooseOpening')
     expect(html).toContain('directory.attachments')
   })
 

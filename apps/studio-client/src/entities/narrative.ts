@@ -2,6 +2,7 @@ import type { MutationReceipt } from './common.js'
 
 export type NarrativeTimeline = {
   id: string
+  opening?: { id?: string; nodeId?: string; locked: boolean; custom?: boolean }
   title?: string
   openingPreview?: string
   latestPreview?: string

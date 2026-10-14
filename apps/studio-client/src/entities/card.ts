@@ -59,8 +59,10 @@ export type Card = {
     system?: string
   }
   opening: {
-    entries: Array<{ role: 'user' | 'assistant'; content: string }>
-    alternatives?: Array<{ entries: Array<{ role: 'user' | 'assistant'; content: string }> }>
+    id: string
+    title?: string
+    content: string
+    alternatives?: Array<{ id: string; title?: string; content: string }>
   }
   lore: {
     entries: Array<{
@@ -84,15 +86,17 @@ export type CardMedia = {
 
 export type CardSummary = Pick<Card,
   'id' | 'artifactId' | 'derivedFrom' | 'version' | 'name' | 'userName' | 'description' | 'media' | 'createdAt' | 'updatedAt'
-> & { openingPreview?: string }
+> & { openingPreview?: string; validationError?: string }
 
 export type CardPresetInput = {
   system?: string
 }
 
 export type OpeningChatInput = {
-  entries?: Array<{ role?: 'user' | 'assistant'; content: string }>
-  alternatives?: Array<{ entries: Array<{ role?: 'user' | 'assistant'; content: string }> }>
+  id?: string
+  title?: string
+  content: string
+  alternatives?: Array<{ id?: string; title?: string; content: string }>
 }
 
 export type LoreInput = {

@@ -82,9 +82,9 @@ InMemory DocumentStore 的公开读写与 transaction 同样经过串行队列�
 
 Studio Server 直接把共享 SQLite Data Engine 作为 Kernel 的 Data Commit Source。测试或其他宿主组合如果使用非 Engine Document Store，可直接注入 Store；其 `subscribeCommits` 已满足同一订阅合同，不需要转发工厂。
 
-当前 Document Store 与 Narrative Store 已接入共享 Engine。Narrative Store 使用 `application.narrative` migration namespace，当前版本 3，拥有：
+当前 Document Store 与 Narrative Store 已接入共享 Engine。Narrative Store 使用 `application.narrative` migration namespace，当前版本 4，拥有：
 
-- `narrative_timelines`：Timeline 根、来源 Card、资源链接、active branch 与 tombstone；
+- `narrative_timelines`：Timeline 根、来源 Card、资源链接、active branch、可空 `opening_json` 与 tombstone；
 - `narrative_branches`：Branch head、父 Branch 与 fork 来源；
 - `narrative_nodes`：不可变的 `loom-markdown.v1` 正文、parent 关系与可选 provenance。
 
@@ -95,6 +95,7 @@ State Store 使用 `application.state` migration namespace，当前支持到版�
 Studio Server 已在组合根创建 Narrative Store，并注入 Application Runtime。当前新增独立 RPC：
 
 - `application.createNarrativeTimeline`；
+- `application.replaceNarrativeOpening`；
 - `application.getNarrativeTimeline`；
 - `application.getNarrativePage`；
 - `application.appendNarrativeInput`；
@@ -104,6 +105,10 @@ Studio Server 已在组合根创建 Narrative Store，并注入 Application Runt
 - `application.deleteNarrativeTimeline`。
 
 创建 Timeline 时读取 Card 当前版本，将有序 Prompt Resource ID 与经现有宏规则处理后的 Opening materialize 为 roleless Narrative Nodes。Card 后续修改不会静默更新既有 Timeline 的来源版本、标题或资源链接。
+
+新建故事保存 `opening: { id?: string; nodeId?: string; locked: boolean; custom?: boolean }`：id 是角色包内作者候选的稳定身份，无 id 表示临时自编或空白开始；nodeId 只指向一个开场节点，空白正文没有节点。custom 标记编辑过的自编正文，保留作者来源 id。`replaceNarrativeOpening` 接受 timelineId、branchId、expectedHeadNodeId，以及互斥的 openingId / openingContent 和可选 expectedCardVersion。替换只作用于当前唯一分支的单个开场节点；同一事务检查窗口、Head、渲染时读取的 State Head 和节点归属，替换并删除旧开场节点，保留现有 stateHeadRevisionId，不重跑初始化器、不重置世界书或 Session。
+
+首条 `appendNarrativeInput` 成功落盘时在同一事务将 locked 设为 true，保留开局身份；后续 Agent 投递失败及输入重放不能解锁。直接追加节点或创建分支也关闭窗口。初始化期编辑只在窗口仍开放、当前单分支且只有开场节点时保留窗口：`editNode` 保留 nodeId；`editBranchNode` 更新 nodeId，并删除被替换的旧节点。两者都标记 custom，不清除作者来源 id，不重置 State；已锁定时沿用普通历史编辑行为，不重新解锁。窗口及关闭状态持久化在 opening_json。归档保留开局身份并映射 nodeId，导入时锁定。旧多节点开场结构不提供兼容转换。这不是运行时 Swipe，不保存未选候选或候选 Session。
 
 后端旧 `Session / NarrativeEntry / submitTurn` 路径已经删除，不再公开旧 Session、Transcript、Run RPC，也不保留双轨或兼容读取。Studio Client 已切换到 Narrative Timeline、Agent Preset 与按需 Agent Session 合同。
 

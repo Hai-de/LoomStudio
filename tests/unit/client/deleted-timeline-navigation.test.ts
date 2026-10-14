@@ -17,7 +17,7 @@ vi.mock('react-router-dom', () => ({
 }))
 
 const workspace: StudioWorkspace = {
-  panel: 'play', search: '', cardId: 'other-card',
+  panel: 'sessions', search: '', cardId: 'other-card',
   timelineId: 'deleted', branchId: 'branch', nodeId: 'node',
 }
 
@@ -35,16 +35,37 @@ describe('Deleted Timeline navigation', () => {
     harness.unmount()
   })
 
-  it('replaces deleted narrative context with its source-card preview without closing the panel', () => {
+  it('replaces deleted narrative context with its source-card preview and closes the panel', () => {
     const harness = renderHook(() => useStudioNavigation({ endpoint: '/rpc', api: {} as StudioApi }))
     harness.current.clearDeletedTimeline('deleted', 'source-card')
     expect(fixture.navigate).toHaveBeenCalledExactlyOnceWith('/studio', {
       replace: true,
       state: studioHistoryState('/rpc', {
-        ...workspace, cardId: 'source-card',
+        ...workspace, panel: null, cardId: 'source-card',
         timelineId: undefined, branchId: undefined, nodeId: undefined,
       }),
     })
+    harness.unmount()
+  })
+
+  it('opens a card preview without retaining narrative or panel context', () => {
+    const harness = renderHook(() => useStudioNavigation({ endpoint: '/rpc', api: {} as StudioApi }))
+    harness.current.openCardPreview('preview-card')
+    expect(fixture.navigate).toHaveBeenCalledWith('/studio', {
+      replace: false,
+      state: studioHistoryState('/rpc', {
+        panel: null, search: '', cardId: 'preview-card',
+      }),
+    })
+    harness.unmount()
+  })
+
+  it('does not close a newer panel opened while deletion was pending', () => {
+    const harness = renderHook(() => useStudioNavigation({ endpoint: '/rpc', api: {} as StudioApi }))
+    harness.current.openPanel('model')
+    fixture.navigate.mockClear()
+    harness.current.clearDeletedTimeline('deleted', 'source-card')
+    expect(fixture.navigate).not.toHaveBeenCalled()
     harness.unmount()
   })
 

@@ -56,7 +56,7 @@ Document、Prompt Resource、State、Narrative 等 Store 共享 SQLite Data Engi
 | State | 不可变 Snapshot Revision、Parent、幂等键与 Head CAS；State Undo 生成补偿 Revision |
 | Narrative | 不可变 Node 与 Branch Head；Fork 引用既有 Node 和对应 State Revision，不是通用对象 revert |
 
-Timeline UI 正文编辑属于当前分支：以开始编辑时的 Branch Head 和原正文作为并发基线，在同一 Changeset 中复制目标节点至末节点的路径，仅替换目标正文，并切换该分支 Head。后续正文、节点 State Revision、分支 State Head 和来源信息保持不变；其他分支继续引用原路径。不触发回滚、生成或 State 重算。被替换路径使用新节点 ID，原 ID 保留用于历史引用；不是删除或修改历史字节。
+Timeline UI 正文编辑属于当前分支：以开始编辑时的 Branch Head 和原正文作为并发基线，在同一 Changeset 中复制目标节点至末节点的路径，仅替换目标正文，并切换该分支 Head。后续正文、节点 State Revision、分支 State Head 和来源信息保持不变；其他分支继续引用原路径。不触发回滚、生成或 State 重算。被替换路径使用新节点 ID，普通历史编辑保留原 ID 用于历史引用。唯一例外是仍开放且只有单个节点的初始化开场：同步更新 opening.nodeId、标记 custom 并保留作者候选 id，删除旧开场节点，使编辑后的自编开场仍可替换；已关闭窗口不重新打开。
 
 归档恢复按节点父链与分支记录分别恢复拓扑。`forkedFromNodeId` 是历史分叉来源，不保证仍处于父分支当前路径；正文编辑保留下来的历史节点允许一同归档。UI 保存失败保留草稿，分支 Head 或原文变化时拒绝旧保存，不自动强制覆盖。
 
@@ -69,7 +69,7 @@ Changeset 是提交事实，不是能够恢复任意领域对象的完整快照�
 - Card 模板在创建 Timeline 时物化为初始 State；Schema 等运行依赖写入 Timeline Runtime Context。后续 Card 模板修改不重写既有 Timeline State。
 - Timeline 创建时保存的 Prompt Resource ID 列表仍可作为历史记录；后续 Agent Turn 以关联 Card 的当前 Prompt Resource IDs 加全局 Mount 读取 Lore，不再由创建时清单决定当前注入。移除挂载或删除资源后不回退旧清单；主 Preset 缺失仍明确失败，可选 Lore 缺失保留诊断。
 - Card 作者宏、规则/提取器与脚本 Mount 同样读取当前定义，不再从 Timeline Runtime Context 的旧动态资源快照恢复。State 约束与既有 Revision 保持原生命周期，不因更新作者资源自动重置。
-- Opening 在创建时渲染并保存成 Narrative Node；Branch Fork 保留既有 Node，而不是重新渲染来源 Card 的 Opening。
+- Opening 在创建时渲染并保存成 Narrative Node；初始化窗口内可显式替换整套开场正文，按当前 Branch State 渲染作者候选，但不重新物化 State。初始化开场编辑后转为自编并保留窗口；首条用户故事输入落盘、正文路径被追加或分支化后关闭窗口。Branch Fork 保留既有 Node，而不是重新渲染来源 Card 的 Opening。持久化与归档边界见 [Narrative 合同](../data/README.md)。
 - Extension Record 的绑定目标不等于其存储 Scope，也不意味着绑定对象的所有行为自动传播给 Record。
 
 因此，Timeline Fork 当前不能解释为“所有引用文本、State、Extension 数据一起获得完整的历史快照”。删除拥有者、删除来源、解除引用、切换消费者和回退 Branch 也不是同一个操作。

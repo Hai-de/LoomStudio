@@ -135,11 +135,18 @@ export function createLoomScriptRendererRuntime(input: {
                     scriptDocumentId: mount.script.id,
                     documentVersion: mount.script.version,
                     source: mount.source,
-                    stateRead: target => {
-                      if (disposed || !canReadStateTarget(currentContext.scope, target)) {
-                        return Promise.reject(new Error('Loom Script state.read target is outside the Renderer scope'))
+                    stateRead: async target => {
+                      const assertTarget = () => {
+                        const mounted = input.rendererHost.scopeSnapshot()
+                        if (disposed || !canReadStateTarget(currentContext.scope, target)
+                          || (target.scope === 'timeline' && (mounted.timelineId !== target.timelineId || mounted.branchId !== target.branchId))) {
+                          throw new Error('Loom Script state.read target is outside the mounted Renderer scope')
+                        }
                       }
-                      return input.stateRead(target)
+                      assertTarget()
+                      const value = await input.stateRead(target)
+                      assertTarget()
+                      return value
                     },
                     notify: notification => {
                       if (disposed) throw new Error('Renderer is disposed')

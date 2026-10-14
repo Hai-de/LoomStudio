@@ -1,6 +1,10 @@
 import type { messages as zhCN } from '../zh-cn/resources.js'
 
 export const messages = {
+  'promptResource.processingWarning': 'Prompt processing reported warnings; some Lore may have been skipped. See build diagnostics.',
+  'promptResource.invalidResources': 'These resources cannot be read; other resources remain available.',
+  'promptResource.invalidResourcesHelp': 'Original data is preserved. Check source files or backups using the resource ID, then reload after repair.',
+  'promptResource.invalidResourcesNotice': 'Some Prompt resources cannot be read. See personal resources for details.',
   'reference.title': 'Resource reference',
   'reference.openEditor': 'Open editor',
   'reference.versionChanged': 'Resource version changed · Showing current content',

@@ -237,7 +237,7 @@ export function createTransformsRuntimeMethods(ctx: TransformsRuntimeContext & P
     projectHistory: async (input: { source: HistorySource; phase: TextTransformPhase; entryIds?: string[]; consumerAgentSessionId?: string; extensionTarget?: ExtensionInstallationTarget }): Promise<{ snapshot: HistoryProjectionSnapshot }> => {
       input = structuredClone(input)
       await assertHistoryInstallationAccess(ctx, input)
-      const snapshot = await projectRuntimeHistory(ctx, input.source, input.phase, input.consumerAgentSessionId)
+      const snapshot = await projectRuntimeHistory(ctx, input.source, input.phase, input.consumerAgentSessionId, input.entryIds)
       if (input.entryIds !== undefined) {
         const ids = new Set(input.entryIds)
         snapshot.entries = snapshot.entries.filter(entry => ids.has(entry.id))
@@ -320,10 +320,11 @@ async function projectRuntimeHistory(
   source: HistorySource,
   phase: TextTransformPhase,
   consumerAgentSessionId?: string,
+  entryIds?: readonly string[],
 ) {
   const entries = await readRuntimeHistoryEntries(ctx, source)
   const effective = await resolveEffectiveTextPipeline(ctx, source, phase, consumerAgentSessionId)
-  return projectHistoryEntries({ source, phase, entries, rules: effective.rules, preserveRuleOrder: true })
+  return projectHistoryEntries({ source, phase, entries, entryIds, rules: effective.rules, preserveRuleOrder: true })
 }
 
 export async function resolveEffectiveTextPipeline(

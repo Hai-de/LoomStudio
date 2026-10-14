@@ -1133,8 +1133,8 @@
 .stageHeaderCenter {
   position: absolute;
   left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  top: 0;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1311,130 +1311,10 @@
   }
 }
 
-:global(html[data-loom-material-preview='glass']) .stageCharacterCapsule {
-  background: color-mix(in srgb, var(--loom-color-surface) var(--loom-preview-opacity, 42%), transparent);
-  -webkit-backdrop-filter: blur(calc(var(--loom-preview-blur, 18px) * 0.7)) saturate(130%);
-  backdrop-filter: blur(calc(var(--loom-preview-blur, 18px) * 0.7)) saturate(130%);
-  border: 1px solid color-mix(in srgb, var(--loom-color-border) 45%, transparent);
-}
-
-:global(html[data-loom-material-preview='glass']) .stageCharacterCapsule:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--loom-color-surface) 54%, transparent);
-}
-
 .stageHeaderButtonIcon {
   width: var(--loom-page-header-icon-size);
   height: var(--loom-page-header-icon-size);
   stroke-width: var(--loom-page-header-icon-stroke);
-  pointer-events: none;
-}
-
-.stageAvatarFallbackIcon {
-  width: var(--loom-page-header-icon-size);
-  height: var(--loom-page-header-icon-size);
-  color: var(--loom-color-text-subtle);
-  stroke-width: var(--loom-page-header-icon-stroke);
-  pointer-events: none;
-}
-
-.stageCharacterCapsule {
-  display: inline-flex;
-  align-items: center;
-  height: 32px;
-  padding: 2px 10px 2px 4px;
-  gap: 7px;
-  max-width: 320px;
-  border: 1px solid color-mix(in srgb, var(--loom-color-border) 55%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--loom-color-surface) 72%, transparent);
-  -webkit-backdrop-filter: blur(16px) saturate(135%);
-  backdrop-filter: blur(16px) saturate(135%);
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.14),
-    0 1px 3px rgba(0, 0, 0, 0.08);
-  color: var(--loom-color-text);
-  cursor: pointer;
-  outline: none;
-  pointer-events: auto;
-  user-select: none;
-  transition:
-    color var(--loom-motion-duration-fast) ease,
-    background-color var(--loom-motion-duration-fast) ease,
-    border-color var(--loom-motion-duration-fast) ease,
-    box-shadow var(--loom-motion-duration-fast) ease;
-
-  &:hover:not(:disabled) {
-    color: var(--loom-color-accent-strong);
-    background: color-mix(in srgb, var(--loom-color-surface) 84%, transparent);
-    border-color: color-mix(in srgb, var(--loom-color-border) 70%, transparent);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-
-    .stageCharacterCapsuleArrow {
-      color: var(--loom-color-text);
-    }
-
-    .stageCharacterCapsuleAvatar img {
-      transform: scale(1.08);
-    }
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--loom-color-accent);
-    outline-offset: 1px;
-  }
-}
-
-.stageCharacterCapsuleActive {
-  color: var(--loom-color-accent-strong);
-  border-color: color-mix(in srgb, var(--loom-color-accent) 60%, transparent);
-  background: color-mix(in srgb, var(--loom-color-accent) 15%, transparent);
-
-  .stageCharacterCapsuleArrow {
-    transform: rotate(180deg);
-    color: var(--loom-color-accent-strong);
-  }
-}
-
-.stageCharacterCapsuleAvatar {
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  min-height: 24px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  background: var(--loom-color-surface-inset);
-  flex-shrink: 0;
-
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    transition: transform 240ms var(--loom-motion-ease-out, cubic-bezier(0.215, 0.61, 0.355, 1));
-  }
-}
-
-.stageCharacterCapsuleName {
-  font-size: 13px;
-  font-weight: 500;
-  color: inherit;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 180px;
-  line-height: 1;
-}
-
-.stageCharacterCapsuleArrow {
-  width: 14px;
-  height: 14px;
-  stroke-width: var(--loom-page-header-icon-stroke);
-  color: var(--loom-color-text-subtle);
-  flex-shrink: 0;
-  transition:
-    transform var(--loom-motion-duration-fast) ease,
-    color var(--loom-motion-duration-fast) ease;
   pointer-events: none;
 }
 
@@ -1617,29 +1497,6 @@
     height: 32px;
     padding: 2px 4px;
     gap: 2px;
-  }
-
-  .stageCharacterCapsule {
-    width: 32px !important;
-    min-width: 32px !important;
-    height: 32px !important;
-    padding: 0 !important;
-    border-radius: 50% !important;
-    display: grid !important;
-    place-items: center !important;
-    justify-content: center !important;
-  }
-
-  .stageCharacterCapsuleAvatar {
-    width: 26px !important;
-    height: 26px !important;
-    min-width: 26px !important;
-    min-height: 26px !important;
-  }
-
-  .stageCharacterCapsuleName,
-  .stageCharacterCapsuleArrow {
-    display: none !important;
   }
 
   .stageHeaderRight {

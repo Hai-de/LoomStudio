@@ -73,15 +73,29 @@ describe('Display projection lifecycle', () => {
     expect(render({ opening: undefined }).state).toBeUndefined()
   })
 
-  it('uses the display API and rejects missing or stale raw-text baselines', async () => {
+  it('uses the display API and diagnoses missing or stale entries independently', async () => {
     const { project, render } = setup()
     const first = render()
     await first.query.fetch()
     expect(project).toHaveBeenCalledWith({ source, phase: 'display', entryIds: ['1'] })
     expect(render().state?.entries.get('1')?.text).toBe('<p>Display</p>')
     const changed = render({ entries: [{ id: '1', text: 'edited' }] })
-    await expect(changed.query.fetch()).rejects.toThrow('current message')
-    expect(render({ entries: [{ id: '1', text: 'edited' }] }).state?.error).toContain('current message')
+    await changed.query.fetch()
+    const state = render({ entries: [{ id: '1', text: 'edited' }] }).state
+    expect(state?.error).toBeUndefined()
+    expect(state?.warning).toContain('current message')
+    expect(state?.entries.has('1')).toBe(false)
+  })
+
+  it('keeps a matching message when another message is stale', async () => {
+    const { render } = setup()
+    const input = { entries: [{ id: '1', text: 'raw' }, { id: 'missing', text: 'edited' }] }
+    await render(input).query.fetch()
+    const state = render(input).state
+    expect(state?.entries.get('1')?.text).toBe('<p>Display</p>')
+    expect(state?.entries.has('missing')).toBe(false)
+    expect(state?.warning).toContain('missing')
+    expect(displayText(state, '1', 'raw')).toBe('<p>Display</p>')
   })
 
   it('retains a valid previous snapshot during same-source refresh, but never across scopes', async () => {

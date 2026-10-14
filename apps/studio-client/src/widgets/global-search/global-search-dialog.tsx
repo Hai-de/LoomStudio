@@ -114,6 +114,9 @@ export function GlobalSearchDialog({ open, search, recent, t, onClose, onOpenPan
               return <CommandMenu.Item className={styles.item} key={item.kind} value={`kind:${item.kind}`} onSelect={() => search.selectKind(item.kind)}><Icon size={17} className={styles.resultIcon} /><span className={styles.title}>{item.label}</span>{search.kind === item.kind ? <Check size={15} /> : null}</CommandMenu.Item>
             })}
           </CommandMenu.Group> : null}
+          {search.diagnostics?.length ? <details className={styles.status} role="status"><summary>{t('promptResource.invalidResources')}</summary>
+            {search.diagnostics.map(item => <p key={item.resourceId}>{item.resourceId}: {item.message}</p>)}
+          </details> : null}
           {search.error ? <div role="alert" className={styles.status}><span>{t('search.error')}</span><span className={styles.errorDetail}>{search.error.message}</span><button type="button" onClick={search.retry}>{t('search.retry')}</button>{search.scope || search.kind ? <button type="button" onClick={search.clearFilters}>{t('search.clearFilters')}</button> : null}</div> : null}
           {!hasItems && !search.error ? <div className={styles.status} role="status">{search.loading ? t('search.loading') : search.mode === 'results' && emptyQuery ? t('search.enterQuery') : t('search.empty')}{!search.loading && (search.scope || search.kind) ? <button type="button" onClick={search.clearFilters}>{t('search.clearFilters')}</button> : null}</div> : null}
           {search.hasMore && !(emptyQuery && search.mode === 'results') ? <CommandMenu.Item className={`${styles.item} ${styles.more}`} value="search:more" disabled={search.loadingMore} onSelect={search.loadMore}>{search.loadingMore ? t('search.loading') : t('search.more')}</CommandMenu.Item> : null}

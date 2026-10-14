@@ -416,6 +416,7 @@ export function useStudioState(transportLogger: Logger) {
     operationPending: operations.pending,
     operationError: operations.error,
     promptResourceError: promptResourceState.error,
+    invalidPromptResources: promptResourceState.invalidPromptResources,
     promptResourceLoading: promptResourceState.loading,
     canUndoEdit: editHistory.canUndo,
     canRedoEdit: editHistory.canRedo,
@@ -445,6 +446,7 @@ export function useStudioState(transportLogger: Logger) {
     ...promptResourceCommands,
     // derived
     ...derivedValues,
+    canSend: derivedValues.canSend && !narrativeRuntime.openingChanged,
     canSendAgent: derivedValues.canSendAgent && Boolean(narrativeRuntime.agentSession || (promptResourceState.resourcesReady && selectedAgentPreset)),
     refreshStates,
     // actions
@@ -464,6 +466,7 @@ export function useStudioState(transportLogger: Logger) {
     createTimelineFromCard: narrativeRuntime.createTimelineFromCard,
     openingChoice: narrativeRuntime.openingChoice,
     setOpeningChoice: narrativeRuntime.setOpeningChoice,
+    replaceOpening: narrativeRuntime.replaceOpening,
     resetToDraftTimeline: narrativeRuntime.resetToDraftTimeline,
     activateTimeline: narrativeRuntime.activateTimeline,
     selectCardTimeline: narrativeRuntime.selectCardTimeline,

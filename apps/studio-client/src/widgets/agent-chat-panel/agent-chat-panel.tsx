@@ -1,3 +1,5 @@
+import { ContentErrorBoundary } from '../../shared/ui/content-error-boundary.js'
+import { SelectionToolbar, appendQuote } from '../../shared/ui/selection-toolbar/selection-toolbar.js'
 import {
   AlertCircle,
   BookOpen,
@@ -16,6 +18,7 @@ import {
 } from 'lucide-react'
 import {
   lazy,
+  memo,
   Suspense,
   useMemo,
   useRef,
@@ -27,6 +30,8 @@ import type {
   AgentTranscriptEntry as AgentTranscriptEntryEntity,
   AgentPreset,
   AgentSession,
+  CardSummary,
+  NarrativeTimeline,
   ProviderAccount,
 } from '../../entities/index.js'
 import type { Translator } from '../../shared/i18n/index.js'
@@ -218,6 +223,7 @@ export function buildRenderItems(entries: AgentTranscriptEntryEntity[]): RenderI
 }
 
 export type AgentChatPanelProps = RunRecoveryControlsProps & {
+  active?: boolean
   displayProjection?: DisplayProjection
   busy: boolean
   activeRun?: ActiveAgentRun
@@ -229,6 +235,8 @@ export type AgentChatPanelProps = RunRecoveryControlsProps & {
   selectedProfileId?: string
   session?: AgentSession
   sessions?: AgentSession[]
+  cards?: CardSummary[]
+  timelines?: NarrativeTimeline[]
   sessionReady?: boolean
   sessionTail?: ReactNode
   t: Translator
@@ -250,7 +258,8 @@ export type AgentChatPanelProps = RunRecoveryControlsProps & {
   onApproveMutation?(allow: boolean, reason?: string): Promise<boolean>
 }
 
-export function AgentChatPanel(props: AgentChatPanelProps) {
+export const AgentChatPanel = memo(function AgentChatPanel(props: AgentChatPanelProps) {
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const recovery = props.runRecovery?.target === 'agent' ? props.runRecovery : undefined
   const disconnected = props.runRecovery?.status === 'disconnected'
   const [createOpen, setCreateOpen] = useState(false)
@@ -261,6 +270,7 @@ export function AgentChatPanel(props: AgentChatPanelProps) {
   const renderItems = useMemo(() => buildRenderItems(effectiveMessages), [effectiveMessages])
   const { scrollRef: conversationRef, contentRef, listRef, headerRef, virtualizer, scrollMargin, onScroll } = useConversationViewport({
     items: renderItems,
+    active: props.active,
     scopeId: props.session?.id,
   })
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
@@ -280,10 +290,12 @@ export function AgentChatPanel(props: AgentChatPanelProps) {
 
   return (
     <div className={styles.panel} data-loom-component="agent-chat-panel">
+      <SelectionToolbar key={props.session?.id} containerRef={conversationRef} inputRef={inputRef} t={props.t}
+        onQuote={text => props.onChangeInput(appendQuote(props.input, text))} />
       <header className={styles.sessionBar}>
         <AgentSessionPicker session={props.session}
           sessions={props.sessions ?? (props.session ? [props.session] : [])}
-          presets={props.profiles} t={props.t}
+          presets={props.profiles} cards={props.cards} timelines={props.timelines} t={props.t}
           disabled={props.busy}
           sessionReady={props.sessionReady} primarySessionId={props.primarySessionId} timelineId={props.timelineId}
           onSelect={props.onSelectSession} onRename={props.onRenameSession} onSetPrimary={props.onSetPrimary} />
@@ -381,7 +393,7 @@ export function AgentChatPanel(props: AgentChatPanelProps) {
             }
             return <div key={item.id} data-index={row.index} ref={virtualizer.measureElement}
               className={styles.virtualRow} style={{ transform: `translateY(${row.start - scrollMargin}px)` }}>
-              <Suspense fallback={<div aria-busy="true"><SkeletonText lines={5} /></div>}>{content}</Suspense>
+              <ContentErrorBoundary resetKey={item} fallback={error => <p role="alert">{error.message}</p>}><Suspense fallback={<div aria-busy="true"><SkeletonText lines={5} /></div>}>{content}</Suspense></ContentErrorBoundary>
             </div>
           })}
           </div>
@@ -397,6 +409,7 @@ export function AgentChatPanel(props: AgentChatPanelProps) {
 
       <footer className={styles.footer}>
         <ChatComposer
+          inputRef={inputRef}
           canPreviewPrompt={false}
           canSend={Boolean(props.input.trim()) && !props.busy && !disconnected && !props.runRecoveryBusy && props.sessionReady !== false && Boolean(props.selectedProfileId)}
           sheet={recovery ? <RunRecoveryControls {...props} runRecovery={recovery} /> : undefined}
@@ -432,12 +445,8 @@ export function AgentChatPanel(props: AgentChatPanelProps) {
       </footer>
     </div>
   )
-}
+}, (previous, next) => previous.active === false && next.active === false)
 
-/**
- * 统一 FLIP 展开收起容器组件
- * 遵循项目动画规范：cubic-bezier(0.2, 0, 0.2, 1)，优雅支持平滑展开与收起
- */
 function ToolCollapse(props: {
   open: boolean
   className?: string

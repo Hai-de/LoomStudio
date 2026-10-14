@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { initializeMvuData, updateMvuData } from '../../../extensions/st-data-compat/src/runtime/mvu-engine.js'
 
 function initial(content = 'hp: [10, health]\nitems: ["$__META_EXTENSIBLE__$"]') {
-  return initializeMvuData({ opening: [], resources: [{
+  return initializeMvuData({ opening: '', resources: [{
     id: 'primary', name: 'World', metadata: { stPrimaryWorldbook: true },
     entries: [{ id: 'init', label: '[initvar]', content, enabled: false }],
   }] }).value
@@ -20,7 +20,7 @@ describe('MVU data engine', () => {
 
   it('uses opening initvar instead of the primary book, retaining additional books', () => {
     const value = initializeMvuData({
-      opening: ['<initvar>\n```yaml\nhp: 20\n```\n</initvar>'],
+      opening: '<initvar>\n```yaml\nhp: 20\n```\n</initvar>',
       resources: [
         { id: 'a', name: 'Same', metadata: { stPrimaryWorldbook: true }, entries: [
           { id: '1', label: '[initvar]', content: 'hp: 5\nprimaryOnly: true', enabled: false },

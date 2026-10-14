@@ -57,6 +57,27 @@
   color: var(--loom-color-text-muted);
 }
 
+.startStory {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  max-width: calc(100% - 32px);
+  padding: 10px 20px;
+  border: 1px solid var(--loom-color-accent);
+  border-radius: 999px;
+  background: var(--loom-color-surface);
+  color: var(--loom-color-text);
+  font: inherit;
+  cursor: pointer;
+
+  svg { flex-shrink: 0; }
+  &:hover:not(:disabled) { background: color-mix(in srgb, var(--loom-color-accent) 15%, var(--loom-color-surface)); }
+  &:focus-visible { outline: 2px solid var(--loom-color-accent); outline-offset: 3px; }
+  &:disabled { opacity: 0.5; cursor: default; }
+}
+
 .renderingMessages,
 .messagePending {
   width: 100%;

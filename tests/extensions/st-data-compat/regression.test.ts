@@ -111,7 +111,7 @@ describe('SillyTavern compatibility', () => {
     if (!importedOpening || typeof importedOpening === 'string') {
       throw new Error('Imported opening must be a structured chat')
     }
-    const imported = importedOpening.entries?.[0]?.content
+    const imported = importedOpening.content
     expect(imported).toBe(opening)
     if (typeof imported !== 'string') throw new Error('Imported opening must contain text')
     const html = renderToStaticMarkup(createElement(MarkdownContent, {
@@ -120,7 +120,7 @@ describe('SillyTavern compatibility', () => {
     }))
     expect(html).toContain('<p>第一行</p>\n<p>第二行</p>\n<p>第四行</p>')
     expect(artifact.card.opening).toBe(importedOpening)
-    expect(importedOpening.entries?.[0]?.content).toBe(opening)
+    expect(importedOpening.content).toBe(opening)
   })
 
   it('uses semantic fingerprints that ignore generated resource IDs', () => {

@@ -1,6 +1,6 @@
 # 审查归档后的延期事项
 
-状态：Deferred / Backlog（更新：2026-10-13）
+状态：Deferred / Backlog（更新：2026-10-14）
 
 本轮审查修复已收尾。本文只保留归档后仍需可发现的事项，不重新启动审查或扩大实施范围。历史证据见[修复实施记录](../../archive/plans/audit-issue-remediation-plan.md)。
 
@@ -78,7 +78,24 @@ State 订阅的 The World 接入、Shell 动画第二轮、记忆/CodeAct 等仍
 
 2026-10-13 用户确认归档；[迁移记录](../../archive/plans/trpc-contract-migration-plan.md)保留完整证据。传输迁移已完成，以下不构成继续迁移或自动执行的授权：
 
-- 独立测试维护：目录清理测试的旧 console.error 断言、missing-context-projection 的手工 React 渲染器，以及记录中的 31 条测试类型诊断。
+- 独立测试维护：missing-context-projection 的手工 React 渲染器，以及记录中的 31 条测试类型诊断。目录清理测试的旧 console.error 断言已在 2026-10-14 故障隔离修复中对齐 Logger 并通过定向测试。
 - 尚未执行：浏览器人工验收、外部模型验证、完整 CI 和正式发布 smoke；不得视作已通过。
 
 后续按用户另行指定的范围接续，不因归档扩大实施或发布范围。
+
+
+<a id="fault-isolation-browser-follow-ups-2026-10-14"></a>
+
+## 浏览器诊断与跨层故障隔离归档后续
+
+[浏览器诊断](../../archive/issues/browser-runtime-audit-2026-10-14.md)与[Prompt / 跨层故障隔离](../../archive/issues/prompt-resource-fault-isolation.md)的已确认缺陷已修复，2026-10-14 归档。以下保持未完成或未验证，不因归档关闭，也不自动启动新的实施范围。
+
+| 事项 | 当前事实与接续条件 |
+| --- | --- |
+| Host 权限错误码统一 | 部分 Host 仍抛普通 Error，Prompt 处理暂按现有权限消息保守识别，代码有 ponytail 标记；结构化 code/name 仍优先。触及 Host 错误契约时统一错误码并验证取消/权限仍中止，不能声称任意第三方错误文本均已覆盖。 |
+| Opening 集成测试样本 | Prompt Resource 集成套件曾出现 15 通过 / 1 失败，失败在 loom-city-v0.json 旧 Opening 格式导入，先于本次修复路径。留给 Opening 样本维护，修复后定向重跑；不同于本次已修正并通过的目录单元测试夹具。 |
+| 浏览器真实流程验收 | 尚未执行浏览器退出重开、真实 Timeline/Branch 切换、扩展重载和目录文件修改的完整浏览器链路。重连/媒体事件等已有定向测试，不能替代真实流程验收。 |
+| 故障提示与真实生成验收 | 人工检查局部错误占位、坏资源诊断、警告定位及投影重试；真实 Provider 生成未执行。本轮仅临时数据库/文件与组件故障注入，没有改坏真实用户数据。 |
+| 头像与整页性能候选 | 头像首次仍传原图，缩略图未实施；缓存不等于原约 0.8 秒 TTFB 已完全解释。按实际卡顿证据再评估缩略图、服务端 profiling 和真实长会话性能；局部微基准不代表整页收益，也未完成 heap 泄漏验证。 |
+
+扩大故障隔离批次的 9 文件 / 71 项定向测试、Packages/Server/Client 类型检查及 Client 正式构建已通过，证据保留在归档记录。未执行全仓验收，不声称不存在其他局部错误传播链。

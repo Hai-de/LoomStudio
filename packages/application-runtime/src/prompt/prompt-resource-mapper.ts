@@ -1,3 +1,5 @@
+import { PromptResourceStoreError } from '@loom-studio/application-data'
+import type { ListPromptResourcesResult } from '../types.js'
 import type {
   PromptResource as StoredPromptResource,
   PromptResourceNodeDraft as StoredPromptResourceNodeDraft,
@@ -182,4 +184,33 @@ export async function listMappedResources(
   return resources
     .sort((left, right) => left.label.localeCompare(right.label))
     .map(resource => fromStoredResource(resource))
+}
+
+/** Management listing keeps unreadable identities separate from executable resources. */
+export async function listResourceCatalog(store: PromptResourceStore, resourceKind?: PromptResourceKind): Promise<ListPromptResourcesResult> {
+  const resources: ListPromptResourcesResult['resources'] = []
+  const invalidResources: NonNullable<ListPromptResourcesResult['invalidResources']> = []
+  let cursor: string | undefined
+  do {
+    const page = await store.listResourceHeaders({ resourceKind, cursor, limit: 500, order: 'id' })
+    for (const header of page.resources) {
+      let stored: StoredPromptResource | null
+      try {
+        stored = await store.getResource(header.id)
+      } catch (error) {
+        if (!(error instanceof PromptResourceStoreError) || !['prompt_resource.json_invalid', 'prompt_resource.root_missing'].includes(error.code)) throw error
+        invalidResources.push({ id: header.id, resourceKind: header.resourceKind, label: header.label, version: header.version, error: error.message })
+        continue
+      }
+      if (!stored) continue // Deleted between the header page and the strict read.
+      try {
+        resources.push(fromStoredResource(stored))
+      } catch (error) {
+        invalidResources.push({ id: stored.id, resourceKind: stored.resourceKind, label: stored.label, version: stored.version, error: error instanceof Error ? error.message : String(error) })
+      }
+    }
+    cursor = page.nextCursor
+  } while (cursor)
+  resources.sort((a, b) => a.rootNode.label.localeCompare(b.rootNode.label))
+  return { resources, ...(invalidResources.length ? { invalidResources } : {}) }
 }

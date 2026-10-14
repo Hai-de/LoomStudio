@@ -28,6 +28,7 @@ describe('Narrative Run recovery', () => {
   })
   it('publishes the Inspector result after expired replay and acknowledges only received completion', async () => {
     const f = fixture()
+    await f.render().createTimelineFromCard()
     await f.render().createAgentSession('profile', true)
     const projection: Awaited<ReturnType<StudioApi['agentSessions']['invoke']>>['projection'] = { messages: [{ role: 'user', content: 'Large compiled prompt', fragmentIds: [] }], editorProjection: { sourceRows: [], promptRows: [] } }
     const result = { ...f.result, projection, promptBuildTrace: { ...f.result.promptBuildTrace, buildId: 'original-trace' } }
@@ -44,6 +45,7 @@ describe('Narrative Run recovery', () => {
   })
   it('resynchronizes expired replay before accepting new deltas and restores pending approval', async () => {
     const f = fixture()
+    await f.render().createTimelineFromCard()
     await f.render().createAgentSession('profile', true)
     const user = { id: 'committed-user', agentSessionId: 'session', runId: 'run', sequence: 1,
       entry: { kind: 'message' as const, role: 'user' as const, content: 'Draft' }, createdAt: '' }
@@ -109,6 +111,7 @@ describe('Narrative Run recovery', () => {
 
   it('finishes expired completed replay through authoritative refresh without a completed result', async () => {
     const f = fixture()
+    await f.render().createTimelineFromCard()
     await f.render().createAgentSession('profile', true)
     f.subscribeRun.mockResolvedValueOnce({
       events: [], nextCursor: 100, done: true, state: 'completed',

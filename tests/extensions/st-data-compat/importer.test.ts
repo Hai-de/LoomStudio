@@ -45,6 +45,23 @@ function createMockPngWithText(keyword: string, text: string): Uint8Array {
 }
 
 describe('SillyTavern Importer Extension', () => {
+  it('imports native greetings as single bodies with distinct non-index IDs', () => {
+    const { artifact } = convertSillyTavernCard({
+      spec: 'chara_card_v2', spec_version: '2.0',
+      data: { name: 'Greetings', first_mes: 'Default body', alternate_greetings: ['Alternative body', 'Another body'] },
+    })
+    const opening = artifact.card.opening
+    if (!opening || typeof opening === 'string') throw new Error('Expected structured opening')
+    const candidates = [opening, ...(opening.alternatives ?? [])]
+    expect(candidates.map(candidate => candidate.content)).toEqual(['Default body', 'Alternative body', 'Another body'])
+    expect(new Set(candidates.map(candidate => candidate.id)).size).toBe(3)
+    for (const candidate of candidates) {
+      expect(candidate.id).toMatch(/^[a-f0-9-]{36}$/)
+      expect(candidate).not.toHaveProperty('entries')
+      expect(candidate).not.toHaveProperty('role')
+    }
+  })
+
   it('identifies and extracts Card V3 from PNG chunk', () => {
     const mockCardV3 = {
       spec: 'chara_card_v3',
@@ -99,7 +116,7 @@ describe('SillyTavern Importer Extension', () => {
     expect(artifact.card.name).toBe('Seraphina The Mage')
     expect(artifact.card.preset?.system).toBe('Respond with mystical arcane knowledge.')
     expect(artifact.card.opening).toEqual({
-      entries: [{ role: 'assistant', content: 'Greetings, mortal traveler.' }],
+      id: expect.any(String), content: 'Greetings, mortal traveler.',
     })
 
     // Context assets check: Arcane Codex setting module + post-session module
@@ -309,8 +326,8 @@ describe('SillyTavern Importer Extension', () => {
 
     expect(artifact.card.name).toBe('指针不再前进')
     const opening = typeof artifact.card.opening === 'object' ? artifact.card.opening : null
-    expect(opening?.entries?.[0]?.content).toBeTruthy()
-    expect(opening?.entries?.[0]?.content?.length).toBeGreaterThan(1000)
+    expect(opening?.content).toBeTruthy()
+    expect(opening?.content.length).toBeGreaterThan(1000)
 
     // Verify embedded character_book is converted as a standalone Setting module in contextAssets
     const lorebookModule = artifact.contextAssets.find(a => a.category === 'lore' && a.label === '发条不再转动')
@@ -445,7 +462,7 @@ describe('SillyTavern Importer Extension', () => {
     const timeline = await runtime.createNarrativeTimeline({
       cardId: imported.card.id,
       title: 'fixture-chat',
-      openingNodes: [{ content: '第一行\n第二行' }],
+      openingContent: '第一行\n第二行',
     })
 
     expect((await promptResources.listResources()).resources).toHaveLength(1)

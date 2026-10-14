@@ -8,6 +8,7 @@ import { createExtensionHost } from '@loom-studio/extension-host'
 import { createInMemoryDocumentStore } from '@loom-studio/document-store'
 import { createInMemoryDiagnosticsRegistry } from '@loom-studio/diagnostics'
 import type { ExtensionInstallationTarget, ExtensionRpcHandler } from '@loom-studio/extension-sdk'
+import type { JsonValue } from '@loom-studio/shared'
 import * as instanceLoader from '../../../packages/extension-sdk/extension-host/src/instance.js'
 import { activate } from '../../../extensions/st-data-compat/src/index.js'
 import { createPromptProcessorRegistry, createStateContributionRegistry, createStateContentRegistry } from '@loom-studio/application-runtime'
@@ -80,6 +81,56 @@ async function withMigrationHost(run: (fixture: {
 }
 
 describe('SillyTavern migration lifecycle', () => {
+  it('imports every chat message through the dedicated history RPC with original bodies and timestamps', async () => {
+    const handlers = new Map<string, ExtensionRpcHandler>()
+    const rpcCalls: Array<{ method: string; params?: JsonValue }> = []
+    const disposers: Array<() => unknown> = []
+    // Isolate migration mapping from the host's application-namespace permission policy.
+    await activate!({
+      rpc: {
+        register: (name: string, handler: ExtensionRpcHandler) => { handlers.set(name, handler) },
+        call: async (method: string, params?: JsonValue) => {
+          rpcCalls.push({ method, params })
+          return method === 'application.importCardBundle' ? { card: { id: 'imported-hero' } } : null
+        },
+      },
+      prompt: { registerProcessor: () => {} },
+      state: { contribute: () => {}, registerContentHandler: () => {} },
+      lifecycle: { signal: new AbortController().signal, onDispose: (dispose: () => unknown) => { disposers.push(dispose) } },
+      diagnostics: { report: () => {} },
+    } as unknown as Parameters<NonNullable<typeof activate>>[0])
+    const instanceId = 'adapter-test'
+    const call = (_instanceId: string, action: string, params: JsonValue = {}) => {
+      const handler = handlers.get(`sillytavern.importer.migration.${action}`)!
+      return handler(params, { packageId: 'sillytavern.importer', moduleId: 'server', instanceId })
+    }
+    try {
+      const { sessionId } = await call(instanceId, 'start') as { sessionId: string }
+      await call(instanceId, 'appendBatch', { sessionId, files: [
+        { path: 'characters/Hero.json', source: JSON.stringify({ name: 'Hero' }) },
+        { path: 'chats/Hero/history.jsonl', source: [
+          { chat_metadata: { chat_id: 'Imported history' } },
+          { is_user: false, mes: 'First\nbody', send_date: '2026-10-01T00:00:00Z' },
+          { is_user: true, mes: 'User body', send_date: '2026-10-01T00:01:00Z' },
+          { is_user: false, mes: 'Last body' },
+        ].map(message => JSON.stringify(message)).join('\n') },
+      ] })
+      expect(await call(instanceId, 'commit', { sessionId })).toEqual({ imported: 2 })
+      expect(rpcCalls.filter(call => call.method === 'application.importNarrativeHistory')).toEqual([{
+        method: 'application.importNarrativeHistory', params: {
+          cardId: 'imported-hero', title: 'Imported history', messages: [
+            { content: 'First\nbody', createdAt: '2026-10-01T00:00:00.000Z' },
+            { content: 'User body', createdAt: '2026-10-01T00:01:00.000Z' },
+            { content: 'Last body' },
+          ],
+        },
+      }])
+      expect(rpcCalls.some(call => call.method === 'application.createNarrativeTimeline')).toBe(false)
+    } finally {
+      for (const dispose of disposers) await dispose()
+    }
+  })
+
   it.each(['dispose', 'cancel'] as const)('waits for an in-flight scan on %s and prevents late staging writes', async action => {
     await withMigrationHost(async ({ host, activateTarget, call, sourceDirectory, stagingDirectories }) => {
       const instanceId = await activateTarget()

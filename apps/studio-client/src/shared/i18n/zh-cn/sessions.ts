@@ -1,4 +1,10 @@
 export const messages = {
+  'sessions.defaultTimelineName': '故事',
+  'sessions.defaultSessionName': '会话',
+  'sessions.characterUnavailable': '角色不可用',
+  'sessions.presetUnavailable': '预设不可用',
+  'sessions.timelineUnavailable': '故事不可用',
+
   'sessions.searchPlaceholder': '搜索时间线、角色或会话...',
   'sessions.selectTimelineNamed': '选择时间线 {{name}}',
   'sessions.selectSessionNamed': '选择会话 {{name}}',
@@ -121,4 +127,5 @@ export const messages = {
   'timeline.empty.noBranch': '会话已打开，但没有加载分支。',
   'timeline.empty.ready': '这个分支还没有已接受的剧情正文。可以发送第一条玩家输入。',
   'timeline.opening.placeholder': '尚未配置开场白，我们从哪里开始？',
+  'timeline.startStory': '开始一个新故事',
 } as const

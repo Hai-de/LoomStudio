@@ -69,15 +69,24 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
     cardSourceRef.current = { api: input.api, cardId: input.selectedCardId }
   }
   const [timeline, setTimeline] = useState<NarrativeTimeline>()
-  const [openingSelection, setOpeningSelection] = useState<{ source: CardSource; choice: OpeningChoice }>()
-  const openingChoice: OpeningChoice = openingSelection?.source === cardSourceRef.current
-    ? openingSelection.choice : { kind: 'card', index: 0 }
-  function setOpeningChoice(choice: OpeningChoice) {
-    setOpeningSelection({ source: cardSourceRef.current, choice })
-  }
+  const [openingSelection, setOpeningSelection] = useState<{ source: CardSource; timelineId?: string; choice: OpeningChoice }>()
+  const creatingTimelineRef = useRef(false)
+  const replacingOpeningRef = useRef(false)
   const [branch, setBranch] = useState<NarrativeBranch>()
   const [branches, setBranches] = useState<NarrativeBranch[]>([])
   const [nodes, setNodes] = useState<NarrativeNode[]>(() => input.initialNodes ?? [])
+  const savedOpeningChoice: OpeningChoice = timeline?.opening
+    ? timeline.opening.custom ? { kind: 'custom', content: nodes.find(node => node.id === timeline.opening!.nodeId)?.body.raw ?? '' }
+      : timeline.opening.id !== undefined ? { kind: 'card', id: timeline.opening.id }
+      : timeline.opening.nodeId ? { kind: 'custom', content: nodes.find(node => node.id === timeline.opening!.nodeId)?.body.raw ?? '' }
+        : { kind: 'empty' }
+    : input.selectedCard && input.selectedCard.id === input.selectedCardId ? { kind: 'card', id: input.selectedCard.opening.id } : { kind: 'empty' }
+  const openingChoice = openingSelection?.source === cardSourceRef.current && openingSelection.timelineId === timeline?.id
+    ? openingSelection.choice : savedOpeningChoice
+  const openingChanged = Boolean(timeline?.opening && !timeline.opening.locked && JSON.stringify(openingChoiceRequest(openingChoice)) !== JSON.stringify(openingChoiceRequest(savedOpeningChoice)))
+  function setOpeningChoice(choice: OpeningChoice) {
+    setOpeningSelection({ source: cardSourceRef.current, timelineId: timeline?.id, choice })
+  }
   const narrativeWriteRevisionRef = useRef(0)
   const displayedNarrativeRef = useRef({ timelineId: timeline?.id, branchId: branch?.id, api: input.api })
   displayedNarrativeRef.current = { timelineId: timeline?.id, branchId: branch?.id, api: input.api }
@@ -136,7 +145,7 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
         setTimeline(page.timeline)
         setBranch(page.branch)
         setBranches(current => current.map(item => item.id === branchId ? page.branch : item))
-        setNodes(current => reconcileNarrativeNodes(current, page.nodes))
+        setNodes(current => page.timeline.opening && !page.timeline.opening.locked ? page.nodes : reconcileNarrativeNodes(current, page.nodes))
         if (!olderWindowRef.current) {
           olderCursorRef.current = page.nextCursor
           setOlderCursor(page.nextCursor)
@@ -284,7 +293,7 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
     })
   }
 
-  async function selectCardTimeline(cardId: string, createIfMissing = false) {
+  async function selectCardTimeline(cardId: string) {
     const source: CardSource = { api: input.api, cardId }
     cardSourceRef.current = source
     input.onSelectCard(cardId)
@@ -303,8 +312,6 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
     if (latest) {
       const branchId = await activateTimeline(latest.id)
       if (branchId && cardSourceRef.current === source && !source.disposed) return { timelineId: latest.id, branchId }
-    } else if (createIfMissing) {
-      return await createTimelineFromCard(cardId)
     } else {
       resetToDraftTimeline()
       return null
@@ -320,40 +327,80 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
   }, [])
 
   async function createTimelineFromCard(cardId = input.selectedCardId, choice?: OpeningChoice, cardVersion?: number) {
-    if (!cardId) return
+    if (!cardId || creatingTimelineRef.current) return
+    creatingTimelineRef.current = true
 
-    let activated: { branchId: string; timelineId: string } | undefined
-    let activatedSelection: number | undefined
-    const source = cardSourceRef.current
-    const selection = beginAgentSelection()
-    await input.runAction(async () => {
-      const selectedOpening = choice ?? (cardId === input.selectedCardId ? openingChoice : { kind: 'card' as const, index: 0 })
-      const result = await input.api.narratives.create({
-        cardId, ...openingChoiceRequest(selectedOpening),
-        expectedCardVersion: cardVersion ?? (input.selectedCard?.id === cardId ? input.selectedCard.version : undefined),
+    try {
+      let activated: { branchId: string; timelineId: string } | undefined
+      let activatedSelection: number | undefined
+      const source = cardSourceRef.current
+      const selection = beginAgentSelection()
+      await input.runAction(async () => {
+        const selectedOpening = choice ?? (cardId === input.selectedCardId ? openingChoice
+          : input.selectedCard && input.selectedCard.id === cardId ? { kind: 'card' as const, id: input.selectedCard.opening.id } : undefined)
+        const result = await input.api.narratives.create({
+          cardId, ...(selectedOpening ? openingChoiceRequest(selectedOpening) : {}),
+          expectedCardVersion: cardVersion ?? (input.selectedCard?.id === cardId ? input.selectedCard.version : undefined),
+        })
+        if (source.disposed || cardSourceRef.current !== source || selection !== agentSelectionRef.current) return
+        setTimeline(result.timeline)
+        displayedNarrativeRef.current = { timelineId: result.timeline.id, branchId: result.branch.id, api: input.api }
+        setAllTimelines(current => [result.timeline, ...current.filter(item => item.id !== result.timeline.id)])
+        setBranch(result.branch)
+        setBranches([result.branch])
+        setNodes(result.nodes)
+        setOlderCursor(undefined)
+        resetAgentSession()
+        publishPrimarySession(undefined)
+        setAgentSessions([])
+        setPromptPreview(undefined)
+        setLastRun(undefined)
+        activateComposerDraft(result.timeline, result.branch, composerInput)
+        activatedSelection = agentSelectionRef.current
+        activated = { branchId: result.branch.id, timelineId: result.timeline.id }
+        await refreshCardTimelines(cardId)
       })
-      if (source.disposed || cardSourceRef.current !== source || selection !== agentSelectionRef.current) return
-      setTimeline(result.timeline)
-      setAllTimelines(current => [result.timeline, ...current.filter(item => item.id !== result.timeline.id)])
-      setBranch(result.branch)
-      setBranches([result.branch])
-      setNodes(result.nodes)
-      setOlderCursor(undefined)
-      resetAgentSession()
-      setAgentSessions([])
-      setPromptPreview(undefined)
-      setLastRun(undefined)
-      activateComposerDraft(result.timeline, result.branch, composerInput)
-      activatedSelection = agentSelectionRef.current
-      activated = { branchId: result.branch.id, timelineId: result.timeline.id }
-      await refreshCardTimelines(cardId)
-    })
-    if (cardSourceRef.current === source && selection === agentSelectionRef.current) {
-      setAgentSessionLoading(false)
-      markAgentSessionReady(true)
+      if (cardSourceRef.current === source && selection === agentSelectionRef.current) {
+        setAgentSessionLoading(false)
+        markAgentSessionReady(true)
+      }
+      if (!source.disposed && cardSourceRef.current === source && activatedSelection === agentSelectionRef.current) {
+        return activated
+      }
+    } finally {
+      creatingTimelineRef.current = false
     }
-    if (!source.disposed && cardSourceRef.current === source && activatedSelection === agentSelectionRef.current) {
-      return activated
+  }
+
+  async function replaceOpening(choice = openingChoice) {
+    if (replacingOpeningRef.current || creatingTimelineRef.current || startingRunRef.current) return
+    const source = cardSourceRef.current
+    const timelineId = timeline?.id
+    const branchId = branch?.id
+    replacingOpeningRef.current = true
+    try {
+      await input.runAction(async () => {
+        if (!timeline?.opening || timeline.opening.locked || !branch || !timelineId || !branchId) throw new Error('当前时间线已不能切换开场')
+        if (displayedNarrativeRef.current.timelineId !== timelineId || displayedNarrativeRef.current.branchId !== branchId) return
+        const result = await input.api.narratives.replaceOpening({
+          timelineId, branchId, expectedHeadNodeId: branch.headNodeId ?? null,
+          expectedCardVersion: input.selectedCard?.id === timeline.createdFrom?.cardId ? input.selectedCard?.version : undefined,
+          ...openingChoiceRequest(choice),
+        })
+        if (source.disposed || cardSourceRef.current !== source || displayedNarrativeRef.current.timelineId !== timelineId
+          || displayedNarrativeRef.current.branchId !== branchId) return
+        narrativeWriteRevisionRef.current++
+        setTimeline(result.timeline)
+        setAllTimelines(current => current.map(item => item.id === timelineId ? result.timeline : item))
+        setBranch(result.branch)
+        setBranches(current => current.map(item => item.id === branchId ? result.branch : item))
+        setNodes(result.nodes)
+        setOpeningSelection(undefined)
+        setOlderCursor(undefined)
+        setPromptPreview(undefined)
+      })
+    } finally {
+      replacingOpeningRef.current = false
     }
   }
 
@@ -389,6 +436,8 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
   }
 
   function resetToDraftTimeline() {
+    setOpeningSelection(undefined)
+    displayedNarrativeRef.current = { timelineId: undefined, branchId: undefined, api: input.api }
     setTimeline(undefined)
     setBranch(undefined)
     setBranches([])
@@ -424,17 +473,19 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
     setNarrativeSubmission(submission)
   }
 
-  async function sendNarrativeInput(retry?: NarrativeSubmission) {
+  async function sendNarrativeInput(retry?: NarrativeSubmission): Promise<void> {
     const content = retry?.content ?? composerInput.trim()
     if (content.length === 0) return undefined
-    if (!timeline && !input.selectedCardId) return undefined
+    if (!timeline || !branch || displayedNarrativeRef.current.timelineId !== timeline.id || displayedNarrativeRef.current.branchId !== branch.id) {
+      await input.runAction(async () => { throw new Error('请先点击“开始一个新故事”') })
+      return undefined
+    }
+    if (replacingOpeningRef.current || openingChanged) return undefined
     if (!agentSessionReadyRef.current) return undefined
     if (runRecovery?.target === 'narrative' && runRecovery.refreshFailed) return undefined
     if (startingRunRef.current || (observedRunRef.current?.target === 'narrative' && ownsRun(observedRunRef.current)
       && (observedRunRef.current.status === 'running' || observedRunRef.current.observing))) return undefined
 
-    let resultActivated: { timelineId: string; branchId: string } | undefined
-    const submissionSource = cardSourceRef.current
     startingRunRef.current = true
     try {
       await input.runAction(async () => {
@@ -443,20 +494,6 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
         }
         let currentTimeline = timeline
         let currentBranch = branch
-        if (!currentTimeline || !currentBranch) {
-          const created = await input.api.narratives.create({ cardId: input.selectedCardId! })
-          currentTimeline = created.timeline
-          currentBranch = created.branch
-          setTimeline(created.timeline)
-          setBranch(created.branch)
-          displayedNarrativeRef.current = { timelineId: created.timeline.id, branchId: created.branch.id, api: input.api }
-          setBranches([created.branch])
-          setNodes(created.nodes)
-          setOlderCursor(undefined)
-          resetAgentSession()
-          setAgentSessions([])
-          resultActivated = { timelineId: created.timeline.id, branchId: created.branch.id }
-        }
 
         const selection = agentSelectionRef.current
         const previous = narrativeSubmissionRef.current
@@ -485,7 +522,6 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
         }
         if (selection !== agentSelectionRef.current || input.api !== cardSourceRef.current.api
           || displayedNarrativeRef.current.timelineId !== currentTimeline.id || displayedNarrativeRef.current.branchId !== currentBranch.id) {
-          resultActivated = undefined
           return
         }
         const session = primarySessionRef.current
@@ -506,7 +542,6 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
         publishNarrativeSubmission({ ...submission, delivered: true })
         if (selection !== agentSelectionRef.current || input.api !== cardSourceRef.current.api
           || displayedNarrativeRef.current.timelineId !== currentTimeline.id || displayedNarrativeRef.current.branchId !== currentBranch.id) {
-          resultActivated = undefined
           return
         }
         setRunRecovery(undefined)
@@ -547,13 +582,7 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
           narrativeTarget: { timelineId: currentTimeline.id, branchId: currentBranch.id },
           optimisticEntryId, streamingId, cursor: 0, status: 'running', observing: false,
         })
-        if (selection !== agentSelectionRef.current) resultActivated = undefined
       })
-      // Navigation follows the persisted Timeline, not the outcome of Session delivery.
-      return submissionSource === cardSourceRef.current && input.api === cardSourceRef.current.api
-        && resultActivated?.timelineId === displayedNarrativeRef.current.timelineId
-        && resultActivated?.branchId === displayedNarrativeRef.current.branchId
-        ? resultActivated : undefined
     } finally {
       startingRunRef.current = false
     }
@@ -913,6 +942,7 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
 
     const source = cardSourceRef.current
     const selection = agentSelectionRef.current
+    let activated = false
     await input.runAction(async () => {
       const switched = await input.api.narratives.switch({
         timelineId: timeline.id,
@@ -929,7 +959,9 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
       setPromptPreview(undefined)
       setLastRun(undefined)
       activateComposerDraft(switched.timeline, page.branch)
+      activated = true
     })
+    return activated
   }
 
   function loadOlderNodes(): Promise<void> {
@@ -993,7 +1025,6 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
       const created = await input.api.agentSessions.create({
         agentPresetId: input.selectedAgentPresetId!,
         timelineId: targetTimeline?.id,
-        title: targetTimeline?.title ?? input.selectedCard?.name,
       })
       if (selection !== agentSelectionRef.current) throw new Error('Agent Session selection changed during creation')
       publishAgentSession(created.session)
@@ -1043,25 +1074,11 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
   async function createAgentSession(presetId: string, makeMain: boolean): Promise<AgentSession | undefined> {
     const source = cardSourceRef.current
     const selection = agentSelectionRef.current
-    let targetTimeline = timeline
+    const targetTimeline = timeline
     const isCurrent = () => ownsCollectionSource() && !source.disposed && cardSourceRef.current === source
       && selection === agentSelectionRef.current && displayedNarrativeRef.current.timelineId === targetTimeline?.id
     if (makeMain && !targetTimeline) {
-      if (!input.selectedCardId) throw new Error('请先选择角色')
-      const created = await input.api.narratives.create({ cardId: input.selectedCardId })
-      setAllTimelines(current => [created.timeline, ...current.filter(item => item.id !== created.timeline.id)])
-      const publish = isCurrent()
-      targetTimeline = created.timeline
-      if (publish) {
-        setTimeline(created.timeline)
-        setBranch(created.branch)
-        setBranches([created.branch])
-        setNodes(created.nodes)
-        setOlderCursor(undefined)
-        displayedNarrativeRef.current = { timelineId: created.timeline.id, branchId: created.branch.id, api: input.api }
-        composerDraftsRef.current.set(readComposerDraftKey(created.timeline, created.branch, input.selectedCardId), composerInput)
-        activateComposerDraft(created.timeline, created.branch, composerInput)
-      }
+      throw new Error('请先点击“开始一个新故事”，再设置主写作对话')
     }
     const created = await input.api.agentSessions.create({
       agentPresetId: presetId, ...(targetTimeline ? { timelineId: targetTimeline.id } : {}),
@@ -1364,6 +1381,8 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
     createTimelineFromCard,
     openingChoice,
     setOpeningChoice,
+    openingChanged,
+    replaceOpening,
     deleteTimeline,
     renameTimeline,
     deleteAgentSession,

@@ -4,7 +4,7 @@ import { applicationDocumentTypes } from '../foundation/document-types.js'
 import { listDocuments, writeDocument } from '../foundation/document-store.js'
 import {
   fromStoredResource,
-  listMappedResources,
+  listResourceCatalog,
   readMappedResource,
   toStoredNodeDraft,
   toStoredResourceInput,
@@ -75,9 +75,7 @@ export function createPromptRuntimeMethods(ctx: PromptRuntimeContext) {
       resource: await readMappedResource(ctx.promptResources, input.resourceId),
     }),
 
-    listPromptResources: async (input?: ListPromptResourcesInput): Promise<ListPromptResourcesResult> => ({
-      resources: await listMappedResources(ctx.promptResources, input?.resourceKind),
-    }),
+    listPromptResources: (input?: ListPromptResourcesInput): Promise<ListPromptResourcesResult> => listResourceCatalog(ctx.promptResources, input?.resourceKind),
 
     getPromptResourceBindings: async (input: GetPromptResourceInput): Promise<GetPromptResourceBindingsResult> => {
       if (!await ctx.promptResources.hasResource(input.resourceId)) throw new Error(`Prompt resource not found: ${input.resourceId}`)

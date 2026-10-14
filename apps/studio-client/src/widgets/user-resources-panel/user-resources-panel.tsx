@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
+import { Button } from '@loom-studio/ui'
 import { useQuery } from '@tanstack/react-query'
 import { BookOpen, Bot, FileText, Folder, Regex } from 'lucide-react'
-import type { PromptResource } from '../../entities/index.js'
+import type { ListPromptResourcesResult, PromptResource } from '../../entities/index.js'
 import type { StudioApi } from '../../shared/api/studio-api.js'
 import type { Translator } from '../../shared/i18n/index.js'
 import { FileTree, type FileTreeNode } from '../../shared/ui/file-tree/file-tree.js'
@@ -46,6 +47,8 @@ export function UserResourcesPanel(props: {
   api: StudioApi['textTransforms']
   endpoint: string
   resources: PromptResource[]
+  invalidResources?: ListPromptResourcesResult['invalidResources']
+  onRefresh?(): Promise<unknown>
   t: Translator
   onOpenResource(resource: PromptResource, nodeId: string): void
   onOpenRule(ruleId: string): void
@@ -62,6 +65,16 @@ export function UserResourcesPanel(props: {
 
   return <section aria-label={props.t('rail.user')} className={styles.panel}>
     {rules.isError ? <p role="alert">{rules.error.message}</p> : null}
+    {props.invalidResources?.length ? <div role="alert">
+      <p>{props.t('promptResource.invalidResources')}</p>
+      {props.invalidResources.map(resource => <details key={resource.id}>
+        <summary>{resource.label} · {resource.resourceKind}</summary>
+        <p>{resource.id} · v{resource.version}</p>
+        <p>{resource.error}</p>
+      </details>)}
+      <p>{props.t('promptResource.invalidResourcesHelp')}</p>
+      <Button onClick={() => { void props.onRefresh?.().catch(() => undefined) }}>{props.t('appError.reload')}</Button>
+    </div> : null}
     <FileTree
       ariaLabel={props.t('rail.user')}
       expandedIds={expandedIds}

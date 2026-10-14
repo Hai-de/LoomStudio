@@ -26,7 +26,7 @@ type Dependencies = {
 }
 
 export function createCardTransferService({ applicationRuntime, assets, directoryMedia, importConversions, saveImportedCard }: Dependencies) {
-  const readCardMedia = async (cardId: string, kind: 'avatar' | 'background', assetId?: string, forExport = false): Promise<CardBundleMedia | undefined> => {
+  const readCardMedia = async (cardId: string, kind: 'avatar' | 'background', assetId?: string, forExport = false): Promise<(CardBundleMedia & { etag?: string }) | undefined> => {
     const directory = await directoryMedia.read(cardId, kind, assetId, forExport)
     if (directory) return directory
     if (!assetId) return kind === 'avatar' ? { bytes: defaultCardPng, mediaType: 'image/png' } : undefined

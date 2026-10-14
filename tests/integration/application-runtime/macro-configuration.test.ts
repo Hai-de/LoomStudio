@@ -33,7 +33,7 @@ async function setup(f: ReturnType<typeof open>) {
     name: 'Card', macros: { tone: 'CARD_TONE' },
     macroOptions: { tone: [{ id: 'card-alternative', label: 'Alternative', value: 'CARD_ALTERNATIVE' }] },
   })
-  const story = await runtime.createNarrativeTimeline({ cardId: card.id, openingNodes: [{ content: 'Opening' }] })
+  const story = await runtime.createNarrativeTimeline({ cardId: card.id, openingContent: 'Opening' })
   const { resource: initial } = await runtime.createPromptResource({ resourceKind: 'preset', name: 'Preset' })
   const { resource: withBody } = await runtime.createPromptResourceAsset({
     resourceId: initial.id, targetAssetId: initial.rootNode.id, position: 'inside',

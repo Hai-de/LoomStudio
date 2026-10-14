@@ -45,6 +45,7 @@ export function createNarrativeStore(options: CreateNarrativeStoreOptions): Narr
       { version: 1, migrate: migrateVersionOne },
       { version: 2, migrate: migrateVersionTwo },
       { version: 3, migrate: migrateVersionThree },
+      { version: 4, migrate: database => database.exec('ALTER TABLE narrative_timelines ADD COLUMN opening_json TEXT') },
     ],
   })
   assertNarrativeSchema(engine.database)
@@ -53,6 +54,44 @@ export function createNarrativeStore(options: CreateNarrativeStoreOptions): Narr
     const { database } = tx
 
     return {
+      replaceOpening: input => {
+        const timeline = requireTimeline(database, input.timelineId)
+        const branch = requireBranch(database, input.branchId)
+        assertBranchTimeline(branch, timeline.id)
+        if ((branch.headNodeId ?? null) !== input.expectedHeadNodeId) {
+          throw new NarrativeStoreError('narrative.head_conflict', 'Narrative branch head changed while choosing an opening')
+        }
+        if (branch.stateHeadRevisionId !== input.expectedStateHeadRevisionId) {
+          throw new NarrativeStoreError('narrative.state_head_conflict', 'Narrative State changed while choosing an opening')
+        }
+        const opening = readEditableOpening(database, timeline, branch)
+        if (!opening) {
+          throw new NarrativeStoreError('narrative.opening_locked', 'Narrative opening is locked')
+        }
+        const timestamp = now()
+        const nodes: NarrativeNode[] = []
+        const replacement = input.openingNode
+        if (replacement) {
+          validateBody(replacement.body)
+          const node = insertNode(database, {
+            id: nextId('node'), timelineId: timeline.id,
+            stateRevisionId: branch.stateHeadRevisionId, body: replacement.body,
+            source: { changesetId: tx.changesetId }, createdAt: replacement.createdAt ?? timestamp,
+          })
+          nodes.push(node)
+        }
+        database.prepare('UPDATE narrative_branches SET head_node_id = ?, updated_at = ? WHERE id = ?')
+          .run(nodes[0]?.id ?? null, timestamp, branch.id)
+        if (opening.nodeId) database.prepare('DELETE FROM narrative_nodes WHERE id = ?').run(opening.nodeId)
+        database.prepare('UPDATE narrative_timelines SET opening_json = ?, updated_at = ? WHERE id = ?')
+          .run(JSON.stringify({ id: input.openingId, nodeId: nodes[0]?.id, locked: false }), timestamp, timeline.id)
+        tx.recordOperations([
+          ...(opening.nodeId ? [operation('delete', opening.nodeId, 'narrative.node')] : []),
+          ...nodes.map(node => operation('create', node.id, 'narrative.node')),
+          operation('update', branch.id, 'narrative.branch'), operation('update', timeline.id, 'narrative.timeline'),
+        ])
+        return { timeline: requireTimeline(database, timeline.id), branch: requireBranch(database, branch.id), nodes }
+      },
       getTimeline: id => readTimeline(database, id),
       restoreArchivePaths: input => {
         const timeline = requireTimeline(database, input.timelineId)
@@ -104,6 +143,7 @@ export function createNarrativeStore(options: CreateNarrativeStoreOptions): Narr
         if (target.body.format !== input.expectedBody.format || target.body.raw !== input.expectedBody.raw) {
           throw new NarrativeStoreError('narrative.body_conflict', 'Narrative text changed while editing')
         }
+        const opening = readEditableOpening(database, timeline, branch)
         const replacements: Array<{ previousNodeId: string; node: NarrativeNode }> = []
         let parentNodeId = target.parentNodeId
         // ponytail: Copying the suffix is linear in later messages; keeps branch isolation without mutable shared text.
@@ -120,9 +160,16 @@ export function createNarrativeStore(options: CreateNarrativeStoreOptions): Narr
         const timestamp = now()
         database.prepare('UPDATE narrative_branches SET head_node_id = ?, updated_at = ? WHERE id = ?')
           .run(parentNodeId!, timestamp, branch.id)
-        database.prepare('UPDATE narrative_timelines SET updated_at = ? WHERE id = ?').run(timestamp, timeline.id)
+        let updatedOpening = timeline.opening
+        if (opening) {
+          updatedOpening = { ...opening, nodeId: replacements[0]!.node.id, custom: true }
+          database.prepare('DELETE FROM narrative_nodes WHERE id = ?').run(opening.nodeId!)
+        }
+        database.prepare('UPDATE narrative_timelines SET opening_json = ?, updated_at = ? WHERE id = ?')
+          .run(updatedOpening ? JSON.stringify(updatedOpening) : null, timestamp, timeline.id)
         tx.recordOperations([
           ...replacements.map(({ node }) => operation('create', node.id, 'narrative.node')),
+          ...(opening ? replacements.map(({ previousNodeId }) => operation('delete', previousNodeId, 'narrative.node')) : []),
           operation('update', branch.id, 'narrative.branch'),
           operation('update', timeline.id, 'narrative.timeline'),
         ])
@@ -154,34 +201,33 @@ export function createNarrativeStore(options: CreateNarrativeStoreOptions): Narr
         )
 
         const nodes: NarrativeNode[] = []
-        let parentNodeId: string | undefined
-        for (const opening of input.openingNodes ?? []) {
+        const opening = input.openingNode
+        if (opening) {
           validateBody(opening.body)
           const node = insertNode(database, {
             id: opening.id ?? nextId('node'),
             timelineId,
-            parentNodeId,
             stateRevisionId: input.stateRevisionId,
             body: opening.body,
             source: { ...opening.source, changesetId: tx.changesetId },
-            createdAt: now(),
+            createdAt: opening.createdAt ?? now(),
           })
           nodes.push(node)
-          parentNodeId = node.id
         }
 
         const branch: NarrativeBranch = {
           id: branchId,
           timelineId,
           title: input.primaryBranchTitle,
-          headNodeId: parentNodeId,
+          headNodeId: nodes[0]?.id,
           stateHeadRevisionId: input.stateRevisionId,
           createdAt: timestamp,
           updatedAt: timestamp,
         }
         validateOptionalText(branch.title, 'primaryBranchTitle')
         insertBranch(database, branch)
-        database.prepare('UPDATE narrative_timelines SET active_branch_id = ? WHERE id = ?').run(branchId, timelineId)
+        database.prepare('UPDATE narrative_timelines SET active_branch_id = ?, opening_json = ? WHERE id = ?')
+          .run(branchId, input.opening ? JSON.stringify({ ...input.opening, nodeId: nodes[0]?.id ?? input.opening.nodeId }) : null, timelineId)
 
         tx.recordOperations([
           operation('create', timelineId, 'narrative.timeline'),
@@ -222,7 +268,8 @@ export function createNarrativeStore(options: CreateNarrativeStoreOptions): Narr
           SET head_node_id = ?, state_head_revision_id = ?, updated_at = ?
           WHERE id = ?
         `).run(node.id, input.stateRevisionId, updatedAt, branch.id)
-        database.prepare('UPDATE narrative_timelines SET updated_at = ? WHERE id = ?').run(updatedAt, timeline.id)
+        database.prepare('UPDATE narrative_timelines SET opening_json = ?, updated_at = ? WHERE id = ?')
+          .run(timeline.opening ? JSON.stringify({ ...timeline.opening, locked: true }) : null, updatedAt, timeline.id)
         tx.recordOperations([
           operation('create', node.id, 'narrative.node'),
           operation('update', branch.id, 'narrative.branch'),
@@ -243,13 +290,15 @@ export function createNarrativeStore(options: CreateNarrativeStoreOptions): Narr
         if (existingNode.timelineId !== timeline.id) {
           throw new NarrativeStoreError('narrative.node_not_found', `Narrative node ${input.nodeId} does not belong to timeline ${timeline.id}`)
         }
+        const opening = readEditableOpening(database, timeline, requireBranch(database, timeline.activeBranchId))
         database.prepare(`
           UPDATE narrative_nodes
           SET body_format = ?, body_raw = ?
           WHERE id = ?
         `).run(input.body.format, input.body.raw, existingNode.id)
         const updatedAt = now()
-        database.prepare('UPDATE narrative_timelines SET updated_at = ? WHERE id = ?').run(updatedAt, timeline.id)
+        database.prepare('UPDATE narrative_timelines SET opening_json = ?, updated_at = ? WHERE id = ?')
+          .run(timeline.opening ? JSON.stringify(opening ? { ...opening, custom: true } : timeline.opening) : null, updatedAt, timeline.id)
         tx.recordOperations([
           operation('update', existingNode.id, 'narrative.node'),
           operation('update', timeline.id, 'narrative.timeline'),
@@ -283,7 +332,9 @@ export function createNarrativeStore(options: CreateNarrativeStoreOptions): Narr
           updatedAt: timestamp,
         }
         insertBranch(database, branch)
-        tx.recordOperations([operation('create', branch.id, 'narrative.branch')])
+        database.prepare('UPDATE narrative_timelines SET opening_json = ?, updated_at = ? WHERE id = ?')
+          .run(timeline.opening ? JSON.stringify({ ...timeline.opening, locked: true }) : null, timestamp, timeline.id)
+        tx.recordOperations([operation('create', branch.id, 'narrative.branch'), operation('update', timeline.id, 'narrative.timeline')])
         return branch
       },
 
@@ -482,6 +533,17 @@ export function createNarrativeStore(options: CreateNarrativeStoreOptions): Narr
 
 function sameStringArray(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index])
+}
+
+function readEditableOpening(database: DatabaseSync, timeline: NarrativeTimeline, branch: NarrativeBranch): NarrativeTimeline['opening'] {
+  const opening = timeline.opening
+  if (!opening || opening.locked || timeline.activeBranchId !== branch.id || readBranches(database, timeline.id).length !== 1) return undefined
+  if (opening.nodeId) {
+    const node = requireNode(database, opening.nodeId)
+    if (node.timelineId !== timeline.id || node.parentNodeId) return undefined
+  }
+  const count = database.prepare('SELECT count(*) AS count FROM narrative_nodes WHERE timeline_id = ?').get(timeline.id)!
+  return branch.headNodeId === opening.nodeId && Number(count.count) === (opening.nodeId ? 1 : 0) ? opening : undefined
 }
 
 function migrateVersionOne(database: DatabaseSync): void {
@@ -694,7 +756,7 @@ function readTimeline(database: DatabaseSync, id: string, includeDeleted = false
             WHERE node.timeline_id = narrative_timelines.id
             ORDER BY node.created_at DESC, node.id DESC LIMIT 1) AS latest_preview,
            created_from_card_id, created_from_card_version, prompt_resource_ids_json,
-           active_branch_id, created_at, updated_at, tombstoned, deleted_at
+           active_branch_id, opening_json, created_at, updated_at, tombstoned, deleted_at
     FROM narrative_timelines WHERE id = ?
   `).get(id)
   if (!row) return null
@@ -740,7 +802,7 @@ function readTimelines(
             WHERE node.timeline_id = narrative_timelines.id
             ORDER BY node.created_at DESC, node.id DESC LIMIT 1) AS latest_preview,
            created_from_card_id, created_from_card_version, prompt_resource_ids_json,
-           active_branch_id, created_at, updated_at, tombstoned, deleted_at
+           active_branch_id, opening_json, created_at, updated_at, tombstoned, deleted_at
     FROM narrative_timelines
     WHERE ${conditions.join(' AND ')}
     ORDER BY updated_at DESC, id DESC
@@ -813,6 +875,7 @@ function timelineFromRow(row: unknown): NarrativeTimeline {
   }
   return {
     id: String(value.id),
+    ...(typeof value.opening_json === 'string' ? { opening: JSON.parse(value.opening_json) as NarrativeTimeline['opening'] } : {}),
     title: optionalString(value.title),
     openingPreview: optionalString(value.opening_preview),
     latestPreview: optionalString(value.latest_preview),

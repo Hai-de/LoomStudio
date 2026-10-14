@@ -17,7 +17,7 @@ export function createStudioHttpServer(options: {
   assets?: AssetStore
   canReadCardExtensionAsset?(input: { packageId: string; moduleId: string; cardId: string; assetId: string }): Promise<boolean>
   cardMedia?: {
-    read(cardId: string, kind: 'avatar' | 'background'): Promise<{ bytes: Uint8Array; mediaType: string } | undefined>
+    read(cardId: string, kind: 'avatar' | 'background'): Promise<{ bytes: Uint8Array; mediaType: string; etag?: string } | undefined>
   }
   cardPng?: {
     export(cardId: string): Promise<Uint8Array>
@@ -27,7 +27,7 @@ export function createStudioHttpServer(options: {
     exportPolyglot(cardId: string): Promise<Uint8Array>
   }
   extensionIcons?: {
-    read(packageId: string, version: string): Promise<{ bytes: Uint8Array; mediaType: string } | undefined>
+    read(packageId: string, version: string): Promise<{ bytes: Uint8Array; mediaType: string; etag?: string } | undefined>
   }
   extensionFiles?: {
     read(packageId: string, version: string, path: string, installation?: { cardId: string; archiveDigest: string }): Promise<{ bytes: Uint8Array; mediaType: string }>
@@ -228,7 +228,7 @@ async function handleCardMedia(
       writeJson(response, 404, { error: { code: 'card.media_not_found', message: 'Card media not found' } })
       return
     }
-    const etag = `"${createHash('sha256').update(result.bytes).digest('hex')}"`
+    const etag = result.etag ?? `"${createHash('sha256').update(result.bytes).digest('hex')}"`
     response.setHeader('content-type', result.mediaType)
     response.setHeader('x-content-type-options', 'nosniff')
     response.setHeader('cache-control', 'no-cache')

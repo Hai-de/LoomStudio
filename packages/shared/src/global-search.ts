@@ -43,7 +43,8 @@ export type GlobalSearchHit = {
   source?: { packageId: string; installationId: string; cardId?: string; cardName?: string }
 }
 
-export type SearchResourcesResult = { items: GlobalSearchHit[]; nextCursor?: string }
+type SearchDiagnostics = { diagnostics?: Array<{ resourceId: string; message: string }> }
+export type SearchResourcesResult = SearchDiagnostics & { items: GlobalSearchHit[]; nextCursor?: string }
 export type SearchScopeOption = {
   kind: 'card' | 'resource' | 'extension'
   id: string
@@ -51,4 +52,4 @@ export type SearchScopeOption = {
   description?: string
   sources?: NonNullable<GlobalSearchHit['source']>[]
 }
-export type ListGlobalSearchScopesResult = { items: SearchScopeOption[]; nextCursor?: string }
+export type ListGlobalSearchScopesResult = SearchDiagnostics & { items: SearchScopeOption[]; nextCursor?: string }

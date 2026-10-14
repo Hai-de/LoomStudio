@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 
-let revision = Date.now()
+// Stable across page loads; the media endpoint revalidates directory-backed files.
+let revision = 0
 const listeners = new Set<() => void>()
 const subscribe = (listener: () => void) => {
   listeners.add(listener)

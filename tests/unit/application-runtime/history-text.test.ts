@@ -34,6 +34,22 @@ function entry(id: string, sequence: number, text: string): HistoryTextEntry<typ
 }
 
 describe('history text projection', () => {
+  it('isolates a display entry failure but keeps prompt processing strict', () => {
+    const input = { source, entries: [entry('bad', 1, 'secret secret'), entry('good', 2, 'secret')],
+      rules: [rule({ id: 'limited', phases: ['display', 'prompt'] })], budget: { maxMatchesPerRulePerEntry: 1 } }
+    const result = projectHistoryEntries({ ...input, phase: 'display' })
+    expect(result.entries.map(item => item.text)).toEqual(['secret secret', 'visible'])
+    expect(result.diagnostics).toEqual([expect.objectContaining({ entryId: 'bad', code: 'text.entry.projection_failed' })])
+    expect(result.matches.every(match => match.entryId === 'good')).toBe(true)
+    expect(() => projectHistoryEntries({ ...input, phase: 'prompt' })).toThrow('match budget')
+  })
+
+  it('projects only requested entries while retaining full-history depth', () => {
+    const result = projectHistoryEntries({ source, phase: 'prompt', entryIds: ['old'],
+      entries: [entry('old', 1, 'secret'), entry('unrequested', 2, 'secret secret')],
+      rules: [rule({ id: 'older-only', range: { minDepth: 1, maxDepth: 1 } })], budget: { maxEntries: 1, maxMatchesPerRulePerEntry: 1 } })
+    expect(result.entries.map(item => [item.id, item.depth, item.text])).toEqual([['old', 1, 'visible']])
+  })
   it('returns sampled history after ordered replacements without mutating canonical text', () => {
     const canonical = [entry('old', 1, 'secret A'), entry('new', 2, 'secret B')]
     const snapshot = projectHistoryEntries({

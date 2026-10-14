@@ -4,6 +4,11 @@ import { AgentSessionPicker } from '../../../apps/studio-client/src/widgets/agen
 import type { AgentPreset, AgentSession } from '../../../apps/studio-client/src/entities/index.js'
 import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/index.js'
 
+// Pointer animation is outside this component's session-selection contract.
+vi.mock('../../../apps/studio-client/src/shared/hooks/use-sliding-hover.js', () => ({
+  useSlidingHover: () => ({ containerRef: { current: null }, indicatorStyle: {}, onPointerOver: () => {}, onPointerLeave: () => {} }),
+}))
+
 const hooks = vi.hoisted(() => ({ cursor: 0, values: [] as unknown[] }))
 vi.mock('react', async original => ({
   ...await original<typeof import('react')>(),
@@ -71,6 +76,21 @@ describe('Agent session picker', () => {
     expect(f.props.onSelect).toHaveBeenCalledWith('b')
     expect(f.props.onSetPrimary).not.toHaveBeenCalled()
     expect(f.render().some(element => element.props.title === 'Agent 会话')).toBe(false)
+  })
+
+  it('shows and searches the live character and story metadata', () => {
+    const f = fixture()
+    f.props.cards = [{ id: 'card', name: 'Long character name' }] as NonNullable<typeof f.props.cards>
+    f.props.timelines = [{ id: 'timeline', title: 'Evening story', createdFrom: { cardId: 'card' } }] as NonNullable<typeof f.props.timelines>
+    f.open()
+    f.control('搜索会话').props.onChange({ target: { value: 'Long character' } })
+    expect(f.render().filter(element => String(element.props['aria-label']).startsWith('打开会话：'))
+      .map(element => element.props['aria-label'])).toEqual(['打开会话：Story', '打开会话：Notes'])
+    expect(f.render().some(element => element.props.title === 'Long character name · Evening story')).toBe(true)
+    f.props.cards[0].name = 'Renamed character'
+    f.control('搜索会话').props.onChange({ target: { value: 'Renamed' } })
+    expect(f.render().some(element => element.props.title === 'Renamed character · Evening story')).toBe(true)
+    expect(f.sessions[0].title).toBe('Story')
   })
 
   it('sets primary independently of viewing and keeps a failed selection visible', async () => {

@@ -1,3 +1,4 @@
+import * as cardMedia from '../../../apps/studio-client/src/shared/lib/card-media.js'
 import type { EffectCallback } from 'react'
 import { extensionInstallationId, type ClientExtensionModule } from '@loom-studio/extension-sdk'
 import type { ListExtensionInstallationsResult, TimelineExtensionParticipation } from '../../../apps/studio-client/src/entities/extension.js'
@@ -107,6 +108,8 @@ afterEach(() => {
 describe('Client Extension Runtime Effect lifecycle', () => {
   it('follows adoption and State through SSE, rejects changed installations and stops on disconnect', async () => {
     class TestEvents extends EventTarget {
+      static OPEN = 1
+      readyState = 0
       static instance: TestEvents
       onerror?: () => void
       constructor() { super(); TestEvents.instance = this }
@@ -138,6 +141,7 @@ describe('Client Extension Runtime Effect lifecycle', () => {
     rendererHost.setScopeSnapshot({ workspace: 'workspace', ...target })
     const cleanup = setup() as () => void
     try {
+      TestEvents.instance.dispatchEvent(new Event('open'))
       await drainTasks()
       expect(hooks.loadModule).not.toHaveBeenCalled()
       getParticipation.mockResolvedValue({ timelineId: 'story', version: 2, entries: [entry] })
@@ -154,6 +158,11 @@ describe('Client Extension Runtime Effect lifecycle', () => {
       TestEvents.instance.dispatchEvent(new Event('extensions.data.changed'))
       await drainTasks()
       expect(stateChanged).toHaveBeenCalledTimes(2)
+      harness.listRules.mockRejectedValueOnce(new Error('one malformed Rule'))
+      await runtime.refresh()
+      expect(contexts[0]!.signal.aborted).toBe(false)
+      expect(runtime.host.isPackageAvailable(pkg)).toBe(true)
+      expect(hooks.loadModule).toHaveBeenCalledOnce()
       getParticipation.mockResolvedValue({ timelineId: 'story', version: 3, entries: [{ ...entry, enabled: false }] })
       TestEvents.instance.dispatchEvent(new Event('extensions.data.changed'))
       await drainTasks()
@@ -163,7 +172,7 @@ describe('Client Extension Runtime Effect lifecycle', () => {
       TestEvents.instance.dispatchEvent(new Event('extensions.data.changed'))
       await drainTasks()
       expect(hooks.loadModule).toHaveBeenCalledTimes(2)
-      TestEvents.instance.onerror!()
+      TestEvents.instance.dispatchEvent(new Event('error'))
       expect(contexts[1]!.signal.aborted).toBe(true)
       await drainTasks()
       TestEvents.instance.dispatchEvent(new Event('open'))
@@ -207,6 +216,8 @@ describe('Client Extension Runtime Effect lifecycle', () => {
 
   it('resynchronizes catalog and configs on reconnect without reloading unchanged modules', async () => {
     class TestEvents extends EventTarget {
+      static OPEN = 1
+      readyState = 0
       static instance: TestEvents
       onerror?: () => void
       constructor() { super(); TestEvents.instance = this }
@@ -214,14 +225,17 @@ describe('Client Extension Runtime Effect lifecycle', () => {
     }
     vi.stubGlobal('EventSource', TestEvents)
     const { runtime, list, setup } = createHarness()
+    const mediaChanged = vi.spyOn(cardMedia, 'invalidateCardMedia')
     const changed = vi.spyOn(runtime.host, 'notifyConfigsChanged')
     const cleanup = setup() as () => void
     try {
       await drainTasks()
-      expect(hooks.loadModule).toHaveBeenCalledOnce()
+      expect(hooks.loadModule).not.toHaveBeenCalled()
+      expect(list).not.toHaveBeenCalled()
       TestEvents.instance.dispatchEvent(new Event('open'))
       await drainTasks()
-      expect(list).toHaveBeenCalledTimes(2)
+      expect(list).toHaveBeenCalledOnce()
+      expect(mediaChanged).not.toHaveBeenCalled()
       expect(changed).toHaveBeenCalledOnce()
       expect(hooks.loadModule).toHaveBeenCalledOnce()
       list.mockResolvedValueOnce({ items: [] })
@@ -229,11 +243,39 @@ describe('Client Extension Runtime Effect lifecycle', () => {
       await drainTasks()
       expect(runtime.host.summaries()).toEqual([])
       expect(changed).toHaveBeenCalledTimes(2)
+      expect(mediaChanged).toHaveBeenCalledOnce()
+      TestEvents.instance.dispatchEvent(new Event('directories.media.changed'))
+      expect(mediaChanged).toHaveBeenCalledTimes(2)
+      mediaChanged.mockRestore()
+      expect(hooks.loadModule).toHaveBeenCalledOnce()
+    } finally { cleanup(); await runtime.host.dispose() }
+  })
+  it('loads the catalog when initial SSE fails and resynchronizes on recovery', async () => {
+    class TestEvents extends EventTarget {
+      static OPEN = 1
+      readyState = 0
+      static instance: TestEvents
+      constructor() { super(); TestEvents.instance = this }
+      close() {}
+    }
+    vi.stubGlobal('EventSource', TestEvents)
+    const { runtime, list, setup } = createHarness()
+    const cleanup = setup() as () => void
+    try {
+      TestEvents.instance.dispatchEvent(new Event('error'))
+      await drainTasks()
+      expect(list).toHaveBeenCalledOnce()
+      expect(hooks.loadModule).toHaveBeenCalledOnce()
+      TestEvents.instance.dispatchEvent(new Event('open'))
+      await drainTasks()
+      expect(list).toHaveBeenCalledTimes(2)
       expect(hooks.loadModule).toHaveBeenCalledOnce()
     } finally { cleanup(); await runtime.host.dispose() }
   })
   it('recovers a missed same-version reload from the catalog and does not reload it twice', async () => {
     class TestEvents extends EventTarget {
+      static OPEN = 1
+      readyState = 0
       static instance: TestEvents
       onerror?: () => void
       constructor() { super(); TestEvents.instance = this }
@@ -243,6 +285,7 @@ describe('Client Extension Runtime Effect lifecycle', () => {
     const { runtime, rendererHost, list, setup } = createHarness()
     const cleanup = setup() as () => void
     try {
+      TestEvents.instance.dispatchEvent(new Event('open'))
       await drainTasks()
       const first = runtime.host.summaries()[0]?.instanceId
       const reloaded = { ...extensionPackage, modules: extensionPackage.modules.map(module => ({ ...module, reloadId: 'reload-1' })) }

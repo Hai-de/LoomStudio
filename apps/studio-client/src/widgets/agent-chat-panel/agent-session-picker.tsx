@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
 import { Check, MessagesSquare, Pencil, Star, X } from 'lucide-react'
 import { Button, Dialog, IconButton, SearchField, TextInput } from '@loom-studio/ui'
-import type { AgentPreset, AgentSession } from '../../entities/index.js'
+import type { AgentPreset, AgentSession, CardSummary, NarrativeTimeline } from '../../entities/index.js'
 import { formatDateTime, type Translator } from '../../shared/i18n/index.js'
+import { sessionPresetName, sessionSourceLabel } from '../../entities/session-identification.js'
 import { normalizeSearchText } from '../../shared/lib/text.js'
 import { useSlidingHover } from '../../shared/hooks/use-sliding-hover.js'
 import styles from './agent-session-picker.module.scss'
@@ -77,6 +78,8 @@ export function AgentSessionPicker(props: {
   session?: AgentSession
   sessions: AgentSession[]
   presets: AgentPreset[]
+  cards?: CardSummary[]
+  timelines?: NarrativeTimeline[]
   primarySessionId?: string
   timelineId?: string
   disabled: boolean
@@ -93,11 +96,12 @@ export function AgentSessionPicker(props: {
   const [error, setError] = useState('')
   const [renaming, setRenaming] = useState(false)
   const presetName = (session: AgentSession) =>
-    props.presets.find(preset => preset.id === session.agentPresetId)?.rootNode.label ?? session.agentPresetId
+    sessionPresetName(session, props.presets, props.t)
+  const sourceLabel = (session: AgentSession) => sessionSourceLabel(session, props.timelines ?? [], props.cards ?? [], props.t)
   const title = (session: AgentSession) => session.title ?? props.t('sessions.untitledAgentSession')
   const search = normalizeSearchText(query)
   const sessions = props.sessions.filter(session =>
-    normalizeSearchText(`${title(session)} ${presetName(session)}`).includes(search))
+    normalizeSearchText(`${title(session)} ${presetName(session)} ${sourceLabel(session)}`).includes(search))
   const locked = props.disabled || Boolean(pendingPrimaryId) || renaming
   const slidingHover = useSlidingHover<HTMLDivElement>()
 
@@ -158,8 +162,9 @@ export function AgentSessionPicker(props: {
                   onClick={() => { props.onSelect?.(session.id); setOpen(false) }}>
                   <MessagesSquare size={16} aria-hidden="true" />
                   <span className={styles.choiceText}>
-                    <strong>{title(session)}</strong>
-                    <span>{presetName(session)} · {formatDateTime(session.updatedAt)}</span>
+                    <strong title={title(session)}>{title(session)}</strong>
+                    <span title={sourceLabel(session)}>{sourceLabel(session)}</span>
+                    <span title={presetName(session)}>{presetName(session)} · {formatDateTime(session.updatedAt)}</span>
                   </span>
                   {selected ? <Check size={15} aria-hidden="true" /> : null}
                 </button>}

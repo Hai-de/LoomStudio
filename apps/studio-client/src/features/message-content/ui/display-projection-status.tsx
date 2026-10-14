@@ -7,9 +7,8 @@ export function DisplayProjectionStatus(props: {
 }) {
   const projection = props.projection
   return <>
-    {projection?.warning ? <p role="status">Display: {projection.warning}</p> : null}
-    {projection?.error ? <div role="alert">
-      <span>Display: {projection.error}</span>
+    {projection?.error || projection?.warning ? <div role={projection.error ? "alert" : "status"}>
+      <span>Display: {projection.error ?? projection.warning}</span>
       <IconButton disabled={projection.refreshing} onClick={projection.retry} aria-label={props.retryLabel}>
         <RefreshCw size={16} aria-hidden="true" />
       </IconButton>

@@ -15,6 +15,25 @@ import {
 import { jsonInput, procedure } from '../context.js'
 
 export const timelineProcedures = {
+  'importNarrativeHistory': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['importNarrativeHistory']>[0] => {
+    if (!isRecord(params) || !Array.isArray(params.messages)) throw new Error('Expected history messages array')
+    return {
+      cardId: readString(params, 'cardId'), title: readOptionalString(params, 'title'),
+      messages: params.messages.map(message => {
+        const createdAt = readOptionalString(message, 'createdAt')
+        if (createdAt !== undefined && !Number.isFinite(Date.parse(createdAt))) throw new Error('Invalid history message timestamp')
+        return { content: readString(message, 'content'), ...(createdAt !== undefined ? { createdAt } : {}) }
+      }),
+    }
+  })).mutation(({ ctx, input }) => ctx.runtime.importNarrativeHistory(input, ctx.request)),
+  'replaceNarrativeOpening': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['replaceNarrativeOpening']>[0] => ({
+    timelineId: readString(params, 'timelineId'),
+    branchId: readString(params, 'branchId'),
+    expectedHeadNodeId: readNullableString(params, 'expectedHeadNodeId'),
+    expectedCardVersion: readOptionalNumber(params, 'expectedCardVersion'),
+    openingId: readOptionalString(params, 'openingId'),
+    openingContent: readOptionalString(params, 'openingContent'),
+  }))).mutation(({ ctx, input }) => ctx.runtime.replaceNarrativeOpening(input, ctx.request)),
   'previewTimelineExtensionStateInitialization': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['previewTimelineExtensionStateInitialization']>[0] => {
     return {
       timelineId: readString(params, 'timelineId'),
@@ -111,8 +130,8 @@ export const timelineProcedures = {
       cardId: readString(params, 'cardId'),
       expectedCardVersion: readOptionalNumber(params, 'expectedCardVersion'),
       title: readOptionalString(params, 'title'),
-      openingIndex: readOptionalNumber(params, 'openingIndex'),
-      openingNodes: readOpeningNodes(params),
+      openingId: readOptionalString(params, 'openingId'),
+      openingContent: readOptionalString(params, 'openingContent'),
     }
   })).mutation(({ ctx, input }) => ctx.runtime.createNarrativeTimeline(input, ctx.request)),
   'getNarrativeTimeline': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['getNarrativeTimeline']>[0] => {
@@ -180,19 +199,4 @@ function readContributionInstances(params: JsonValue | undefined): Array<{ contr
   return params.contributionInstances.map(item => ({
     contributionId: readString(item, 'contributionId'), instanceId: readString(item, 'instanceId'),
   }))
-}
-
-function readOpeningNodes(params: JsonValue | undefined): Array<{ content: string; createdAt?: string }> | undefined {
-  if (!params || typeof params !== 'object' || Array.isArray(params)) return undefined
-  const value = (params as Record<string, unknown>).openingNodes
-  if (value === undefined) return undefined
-  if (!Array.isArray(value)) throw new Error('Expected openingNodes array')
-  return value.map(item => {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('Expected opening node object')
-    const content = (item as Record<string, unknown>).content
-    if (typeof content !== 'string') throw new Error('Expected opening node content')
-    const createdAt = (item as Record<string, unknown>).createdAt
-    if (createdAt !== undefined && typeof createdAt !== 'string') throw new Error('Expected opening node createdAt string')
-    return { content, ...(createdAt !== undefined ? { createdAt } : {}) }
-  })
 }

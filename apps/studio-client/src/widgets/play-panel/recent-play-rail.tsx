@@ -1,5 +1,6 @@
 import type { CardSummary, NarrativeTimeline } from '../../entities/index.js'
 import { formatDate, formatDateTime, type Translator } from '../../shared/i18n/index.js'
+import { timelineCharacterName } from '../../entities/session-identification.js'
 import { cardMediaUrl, useCardMediaRevision } from '../../shared/lib/card-media.js'
 import { useSlidingHover } from '../../shared/hooks/use-sliding-hover.js'
 import styles from './recent-play-rail.module.scss'
@@ -30,6 +31,9 @@ export function RecentPlayRail(props: Props) {
         <small className={styles.date}>{group.key}</small>
         {group.items.map(timeline => {
         const card = timeline.createdFrom ? props.cards.find(item => item.id === timeline.createdFrom?.cardId) : undefined
+        const title = timeline.title || props.t('sessions.untitledTimeline')
+        const character = timelineCharacterName(timeline, props.cards, props.t)
+        const preview = timeline.latestPreview || timeline.openingPreview
         const avatarUrl = card?.media?.avatarAssetId
           ? cardMediaUrl(card.id, 'avatar', card.media.avatarAssetId, mediaRevision)
           : undefined
@@ -43,7 +47,9 @@ export function RecentPlayRail(props: Props) {
           >
             <span className={styles.avatar}>{avatarUrl ? <img src={avatarUrl} alt="" /> : card?.name?.slice(0, 1) ?? '·'}</span>
             <span className={styles.info}>
-              <strong>{card?.name ?? timeline.title ?? timeline.id}</strong>
+              <strong title={title}>{title}</strong>
+              <small title={character}>{character}</small>
+              {preview ? <small title={preview}>{preview}</small> : null}
               <small>{formatDateTime(timeline.updatedAt, undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</small>
             </span>
           </button>

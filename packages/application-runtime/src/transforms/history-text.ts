@@ -207,13 +207,16 @@ export function projectHistoryEntries<Source extends TextProjectionSource>(input
   rules: TextTransformRuleEntry[]
   preserveRuleOrder?: boolean
   traceEntryId?: string
+  entryIds?: readonly string[]
   budget?: Partial<HistoryProjectionBudget>
 }): HistoryProjectionSnapshot<Source> {
   const budget = { ...defaultHistoryProjectionBudget, ...input.budget }
   const diagnostics: TextTransformDiagnostic[] = []
-  const active = input.entries
+  const allActive = input.entries
     .filter(entry => !entry.archived)
     .sort((left, right) => left.sequence - right.sequence)
+  const selectedIds = input.entryIds === undefined ? undefined : new Set(input.entryIds)
+  const active = selectedIds ? allActive.filter(entry => selectedIds.has(entry.id)) : allActive
   if (active.length > budget.maxEntries) throw new Error(`History projection entry budget exceeded: ${active.length}`)
   const inputCharacters = active.reduce((total, entry) => total + entry.text.length, 0)
   if (inputCharacters > budget.maxInputCharacters) throw new Error(`History projection input budget exceeded: ${inputCharacters}`)
@@ -235,67 +238,76 @@ export function projectHistoryEntries<Source extends TextProjectionSource>(input
       return false
     }
   })
-  const newestSequence = [...active].sort((left, right) => right.sequence - left.sequence)
+  const newestSequence = [...allActive].sort((left, right) => right.sequence - left.sequence)
   const depthById = new Map(newestSequence.map((entry, depth) => [entry.id, depth]))
   const matches: TextMatchRecord[] = []
   let trace: TextPipelineEntryTrace | undefined
 
   const entries = active.map(entry => {
     const depth = depthById.get(entry.id) ?? 0
-    let text = entry.text
-    const entryMatches: TextMatchRecord[] = []
-    const appliedRuleIds: string[] = []
-    const promotedReasoning: PromotedReasoningPart[] = []
-    const traceSteps: TextPipelineTraceStep[] = []
-    for (const [stepIndex, rule] of applicableRules.entries()) {
-      if (!isDepthSelected(depth, rule.range)) continue
-      const regex = createGlobalRegex(rule.matcher.pattern, rule.matcher.flags)
-      const result = applyRule({
-        source: input.source,
-        phase: input.phase,
-        rule,
-        regex,
-        entryId: entry.id,
-        depth,
-        stepIndex,
-        text,
-        maxMatches: budget.maxMatchesPerRulePerEntry,
-      })
-      if (result.edits.length) updateDisplayRanges(entryMatches, result.edits)
-      entryMatches.push(...result.matches)
-      if (entry.id === input.traceEntryId) {
-        traceSteps.push({
-          ruleId: rule.id,
-          ruleVersion: rule.version,
+    try {
+      let text = entry.text
+      const entryMatches: TextMatchRecord[] = []
+      const appliedRuleIds: string[] = []
+      const promotedReasoning: PromotedReasoningPart[] = []
+      const traceSteps: TextPipelineTraceStep[] = []
+      for (const [stepIndex, rule] of applicableRules.entries()) {
+        if (!isDepthSelected(depth, rule.range)) continue
+        const regex = createGlobalRegex(rule.matcher.pattern, rule.matcher.flags)
+        const result = applyRule({
+          source: input.source,
+          phase: input.phase,
+          rule,
+          regex,
+          entryId: entry.id,
+          depth,
           stepIndex,
-          effect: rule.effect.kind,
-          matched: result.matched,
-          inputText: text,
-          outputText: result.text,
-          matchIds: result.matches.map(match => match.matchId),
+          text,
+          maxMatches: budget.maxMatchesPerRulePerEntry,
         })
+        if (result.edits.length) updateDisplayRanges(entryMatches, result.edits)
+        entryMatches.push(...result.matches)
+        if (entry.id === input.traceEntryId) {
+          traceSteps.push({
+            ruleId: rule.id,
+            ruleVersion: rule.version,
+            stepIndex,
+            effect: rule.effect.kind,
+            matched: result.matched,
+            inputText: text,
+            outputText: result.text,
+            matchIds: result.matches.map(match => match.matchId),
+          })
+        }
+        if (!result.matched) continue
+        text = result.text
+        appliedRuleIds.push(rule.id)
+        promotedReasoning.push(...result.promotedReasoning)
       }
-      if (!result.matched) continue
-      text = result.text
-      appliedRuleIds.push(rule.id)
-      promotedReasoning.push(...result.promotedReasoning)
-    }
-    matches.push(...entryMatches)
-    if (entry.id === input.traceEntryId) {
-      trace = {
-        entryId: entry.id,
-        canonicalText: entry.text,
-        finalText: text,
-        steps: traceSteps,
+      if (text.length > budget.maxOutputCharacters) throw new Error(`History projection entry output budget exceeded: ${entry.id}`)
+      matches.push(...entryMatches)
+      if (entry.id === input.traceEntryId) {
+        trace = {
+          entryId: entry.id,
+          canonicalText: entry.text,
+          finalText: text,
+          steps: traceSteps,
+        }
       }
-    }
-    return {
-      ...entry,
-      text,
-      depth,
-      originalText: entry.text,
-      appliedRuleIds,
-      promotedReasoning,
+      return {
+        ...entry,
+        text,
+        depth,
+        originalText: entry.text,
+        appliedRuleIds,
+        promotedReasoning,
+      }
+    } catch (error) {
+      // Display is independently recoverable per message; prompt/classify remain strict.
+      if (input.phase !== 'display') throw error
+      diagnostics.push({ code: 'text.entry.projection_failed', entryId: entry.id,
+        message: error instanceof Error ? error.message : String(error) })
+      return { ...entry, text: entry.text, originalText: entry.text, depth, appliedRuleIds: [], promotedReasoning: [] }
     }
   })
   const outputCharacters = entries.reduce((total, entry) => total + entry.text.length, 0)

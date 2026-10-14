@@ -4,12 +4,35 @@ import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { usePromptResourceState } from '../../../apps/studio-client/src/features/prompt-resources/model/use-prompt-resource-state.js'
 import type { StudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
-import type { PromptResource, LoreMount, PresetToolMount } from '../../../apps/studio-client/src/entities/index.js'
+import type { ListPromptResourcesResult, PromptResource, LoreMount, PresetToolMount } from '../../../apps/studio-client/src/entities/index.js'
 
 let activeClient: QueryClient | undefined
 afterEach(() => { activeClient?.clear() })
 
 describe('Prompt Resource mutation cache publication', () => {
+  it.each([false, true])('retains invalid resource diagnostics with cached healthy resources: %s', cached => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    activeClient = client
+    const key = ['prompt-resources', '/rpc-a', 'resources']
+    const invalidResources = [{ id: 'bad', resourceKind: 'lore', label: 'Broken', version: 1, error: 'Invalid JSON' }]
+    if (cached) client.setQueryData(key, { resources: [], invalidResources })
+    let state!: ReturnType<typeof usePromptResourceState>
+    function Consumer() {
+      state = usePromptResourceState({ api: {} as StudioApi, endpoint: '/rpc-a' })
+      return null
+    }
+    const render = () => renderToString(createElement(QueryClientProvider, { client }, createElement(Consumer)))
+    render()
+    if (!cached) {
+      expect(state.resourcesReady).toBe(false)
+      client.setQueryData(key, { resources: [], invalidResources })
+      render()
+    }
+    expect(state.resourcesReady).toBe(true)
+    expect(state.invalidPromptResources).toEqual(invalidResources)
+    state.setPromptResources(() => [])
+    expect(client.getQueryData<ListPromptResourcesResult>(key)?.invalidResources).toEqual(invalidResources)
+  })
   it.each(['unchanged', 'updated', 'deleted'] as const)('merges a targeted refresh into the current collection when the target is %s', async change => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     activeClient = client
@@ -26,8 +49,8 @@ describe('Prompt Resource mutation cache publication', () => {
     const api = { promptResources: { get: () => pending.promise } } as unknown as StudioApi
     const key = ['prompt-resources', '/rpc-a', 'resources']
     const otherKey = ['prompt-resources', '/rpc-b', 'resources']
-    client.setQueryData(key, [old, resource('other', 1)])
-    client.setQueryData(otherKey, [old])
+    client.setQueryData(key, { resources: [old, resource('other', 1)] })
+    client.setQueryData(otherKey, { resources: [old] })
     let state!: ReturnType<typeof usePromptResourceState>
     function Consumer() {
       state = usePromptResourceState({ api, endpoint: '/rpc-a' })
@@ -40,10 +63,10 @@ describe('Prompt Resource mutation cache publication', () => {
     ])
     pending.resolve({ resource: refreshed })
     expect(await request).toEqual(change === 'deleted' ? undefined : change === 'updated' ? newer : refreshed)
-    expect(client.getQueryData(key)).toEqual([
+    expect(client.getQueryData<ListPromptResourcesResult>(key)?.resources).toEqual([
       ...(change === 'deleted' ? [] : [change === 'updated' ? newer : refreshed]), other, added,
     ])
-    expect(client.getQueryData(otherKey)).toEqual([old])
+    expect(client.getQueryData<ListPromptResourcesResult>(otherKey)?.resources).toEqual([old])
   })
 
   it.each(['resources', 'lore-mounts', 'preset-tool-mounts'] as const)(
@@ -59,10 +82,11 @@ describe('Prompt Resource mutation cache publication', () => {
       } } as unknown as StudioApi
       const key = ['prompt-resources', '/rpc-a', area]
       const otherKey = ['prompt-resources', '/rpc-b', area]
+      const payload = (resources: unknown[]) => area === 'resources' ? { resources } : resources
       const old = [{ id: 'item', version: 1 }]
       const saved = [{ id: 'item', version: 2 }]
-      client.setQueryData(key, old)
-      client.setQueryData(otherKey, old)
+      client.setQueryData(key, payload(old))
+      client.setQueryData(otherKey, payload(old))
       let state!: ReturnType<typeof usePromptResourceState>
       function Consumer() {
         state = usePromptResourceState({ api, endpoint: '/rpc-a' })
@@ -71,7 +95,7 @@ describe('Prompt Resource mutation cache publication', () => {
       renderToString(createElement(QueryClientProvider, { client }, createElement(Consumer)))
       const pending = client.fetchQuery({ queryKey: key, queryFn: async () => {
         const response = await oldResponse as { resources?: unknown; mounts?: unknown }
-        return area === 'resources' ? response.resources : response.mounts
+        return area === 'resources' ? response : response.mounts
       } }).catch(error => error)
       const publish = (records: typeof saved) => {
         if (area === 'resources') state.setPromptResources(() => records as PromptResource[])
@@ -79,13 +103,13 @@ describe('Prompt Resource mutation cache publication', () => {
         else state.setPresetToolMounts(() => records as unknown as PresetToolMount[])
       }
       publish(saved)
-      expect(client.getQueryData(key)).toEqual(saved)
+      expect(client.getQueryData(key)).toEqual(payload(saved))
       resolveOld(area === 'resources' ? { resources: old } : { mounts: old })
       await oldResponse
       await pending
       await Promise.resolve()
-      expect(client.getQueryData(key)).toEqual(saved)
-      expect(client.getQueryData(otherKey)).toEqual(old)
+      expect(client.getQueryData(key)).toEqual(payload(saved))
+      expect(client.getQueryData(otherKey)).toEqual(payload(old))
 
       let resolveDeleted!: (value: unknown) => void
       const stale = new Promise(resolve => { resolveDeleted = resolve })
@@ -94,9 +118,9 @@ describe('Prompt Resource mutation cache publication', () => {
       resolveDeleted(saved)
       await stale
       await deletedPending
-      expect(client.getQueryData(key)).toEqual([])
-      await client.fetchQuery({ queryKey: key, queryFn: async () => saved })
-      expect(client.getQueryData(key)).toEqual(saved)
+      expect(client.getQueryData(key)).toEqual(payload([]))
+      await client.fetchQuery({ queryKey: key, queryFn: async () => payload(saved) })
+      expect(client.getQueryData(key)).toEqual(payload(saved))
     },
   )
 })

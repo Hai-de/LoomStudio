@@ -285,7 +285,7 @@ describe('Prompt Resource Store application runtime', () => {
       }
       const { card } = await runtime.createCard({ name: 'Updating card' })
       await runtime.updateCardPromptResources({ cardId: card.id, promptResourceIds: [settings[0]!] })
-      const { timeline, branch } = await runtime.createNarrativeTimeline({ cardId: card.id, openingNodes: [{ content: 'Keep original story' }] })
+      const { timeline, branch } = await runtime.createNarrativeTimeline({ cardId: card.id, openingContent: 'Keep original story' })
       const { resource: preset } = await runtime.createPromptResource({ resourceKind: 'preset', name: 'Reader' })
       const { providerProfile } = await runtime.createProviderProfile({
         providerExtensionId: 'official.fake', displayName: 'Test', config: {}, enabledModelIds: [officialFakeModelId],

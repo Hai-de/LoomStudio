@@ -20,13 +20,14 @@ import { collectPages } from '../foundation/pagination.js'
 import type { CardSourceContent, ExtensionInstallationContent } from '../types.js'
 
 type SearchContext = Pick<ApplicationRuntimeContext, 'documents' | 'promptResources' | 'agents' | 'narratives'>
-type ResourceHeader = Awaited<ReturnType<PromptResourceStore['listSearchResources']>>[number]
+type ResourceHeader = Exclude<Awaited<ReturnType<PromptResourceStore['listSearchResources']>>[number], { error: string }>
 type PromptHit = Awaited<ReturnType<PromptResourceStore['searchNodes']>>['hits'][number]
 type Installation = DocumentRecord<ExtensionInstallationContent>
 type SearchCatalog = {
   cards: Map<string, DocumentRecord<CardSourceContent>>
   installations: Map<string, Installation>
   resources: ResourceHeader[]
+  diagnostics?: SearchResourcesResult['diagnostics']
 }
 type Ranked<T> = { value: T; rank: number; key: string }
 
@@ -46,7 +47,7 @@ export function createSearchRuntimeMethods(ctx: SearchContext) {
       const limit = input.limit ?? 30
       const catalog = await readCatalog(ctx)
       const resources = await scopedResources(ctx, catalog, input.scope)
-      if (!query) return browseResources(ctx, catalog, resources, input)
+      if (!query) return { ...await browseResources(ctx, catalog, resources, input), ...(catalog.diagnostics ? { diagnostics: catalog.diagnostics } : {}) }
       const resourceIds = resources.map(resource => resource.id).sort()
       const fingerprint = hash(['resources', query, input.scope ?? null, input.kind ?? null, resourceIds])
       const cursor = readCursor(input.cursor, fingerprint)
@@ -98,6 +99,7 @@ export function createSearchRuntimeMethods(ctx: SearchContext) {
       const hasMore = metadata.length > consumedMetadata.length || !next.promptDone
       return {
         items: merged.map(item => item.value),
+        ...(catalog.diagnostics ? { diagnostics: catalog.diagnostics } : {}),
         ...(hasMore ? { nextCursor: encodeCursor(next) } : {}),
       }
     },
@@ -139,6 +141,7 @@ export function createSearchRuntimeMethods(ctx: SearchContext) {
       const items = matches.slice(0, limit)
       const last = items.at(-1)
       return {
+        ...(catalog.diagnostics ? { diagnostics: catalog.diagnostics } : {}),
         items: items.map(item => ({ ...item.value, ...(item.value.description
           ? { description: matchingSnippet(item.value.description, query) } : {}) })),
         ...(matches.length > limit && last ? {
@@ -205,10 +208,12 @@ async function readCatalog(ctx: SearchContext): Promise<SearchCatalog> {
     .filter(installation => installation.content.target.kind === 'global'
       || cardMap.has(installation.content.target.cardId))
     .map(installation => [installation.id, installation]))
+  const diagnostics = resources.flatMap(resource => 'error' in resource ? [{ resourceId: resource.id, message: `${resource.label}: ${resource.error}` }] : [])
   return {
+    ...(diagnostics.length ? { diagnostics } : {}),
     cards: cardMap,
     installations: installationMap,
-    resources: resources.filter(resource => {
+    resources: resources.filter((resource): resource is ResourceHeader => !('error' in resource)).filter(resource => {
       const origin = resource.metadata.origin
       if (!isRecord(origin) || origin.kind !== 'extension-package') return true
       return typeof origin.installationId === 'string'

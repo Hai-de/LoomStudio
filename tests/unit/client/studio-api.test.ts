@@ -5,6 +5,17 @@ import { describe, expect, it } from 'vitest'
 import { createStudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
 
 describe('studio client typed api', () => {
+  it('preserves explicit story and session names at creation', async () => {
+    const calls: Array<{ method: string; params?: ClientJsonValue }> = []
+    const api = createStudioApi(fakeBridge(calls, {}))
+    await api.narratives.create({ cardId: 'card', title: 'My story' })
+    await api.agentSessions.create({ agentPresetId: 'preset', title: 'My session' })
+    expect(calls).toEqual([
+      { method: 'application.createNarrativeTimeline', params: { cardId: 'card', title: 'My story' } },
+      { method: 'application.createAgentSession', params: { agentPresetId: 'preset', title: 'My session' } },
+    ])
+  })
+
   it('forwards directory and Display subsets while preserving omitted and empty IDs', async () => {
     const calls: Array<{ method: string; params?: ClientJsonValue }> = []
     const api = createStudioApi(fakeBridge(calls, {
@@ -294,11 +305,11 @@ describe('studio client typed api', () => {
       { method: 'application.getNarrativeTimeline', params: { timelineId: 'timeline-1' } },
       { method: 'application.getNarrativePage', params: { timelineId: 'timeline-1', branchId: 'branch-1' } },
       { method: 'application.getEffectiveNarrativePreview', params: { timelineId: 'timeline-1', branchId: 'branch-1' } },
-      { method: 'application.createNarrativeTimeline', params: { cardId: 'card-1' } },
+      { method: 'application.createNarrativeTimeline', params: { cardId: 'card-1', title: expect.stringMatching(/^故事 · /) } },
       { method: 'application.forkNarrativeBranch', params: { timelineId: 'timeline-1', fromBranchId: 'branch-1', fromNodeId: 'node-1' } },
       { method: 'application.switchNarrativeBranch', params: { timelineId: 'timeline-1', branchId: 'branch-2' } },
       { method: 'application.listAgentPresets', params: {} },
-      { method: 'application.createAgentSession', params: { agentPresetId: 'profile-1' } },
+      { method: 'application.createAgentSession', params: { agentPresetId: 'profile-1', title: expect.stringMatching(/^会话 · /) } },
       { method: 'application.invokeAgentTurn', params: { agentSessionId: 'agent-session-1', input: 'continue' } },
       { method: 'application.previewAgentTurn', params: { agentSessionId: 'agent-session-1', input: 'preview' } },
     ])

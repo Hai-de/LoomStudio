@@ -11,3 +11,5 @@
 - [`prompt-resource-diff-mode-v0.md`](prompt-resource-diff-mode-v0.md) — 提示词资源 Diff、Token 指标与 Revision 合同；
 - [`provider-account-health-plan.md`](provider-account-health-plan.md) — Provider Account 探测、状态聚合与通知行为；
 - [`provider-model-brand-icons-plan.md`](provider-model-brand-icons-plan.md) — Provider 与模型家族品牌图标、识别和依赖边界。
+
+- [`timeline-session-identification-plan.md`](../../../archive/plans/ui/timeline-session-identification-plan.md) — Implemented / 已归档：Studio 默认命名与来源信息已交付，保留人工视觉验收边界。

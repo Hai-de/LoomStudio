@@ -25,6 +25,26 @@ function fixture() {
   return { engine, documents, promptResources, narratives, agents, runtime, lore, now }
 }
 
+it('keeps Card searches and healthy Lore searchable when one resource metadata is corrupt', async () => {
+  const f = fixture()
+  try {
+    await f.runtime.createCard({ name: 'Healthy Card' })
+    await f.lore('good', 'Healthy Lore', 'needle')
+    await f.lore('bad', 'Broken Lore', 'needle')
+    f.engine.database.prepare('UPDATE prompt_resources SET metadata_json = ? WHERE id = ?').run('{broken', 'bad')
+    const cards = await f.runtime.searchResources({ query: 'Healthy', kind: 'card' })
+    expect(cards.items.map(item => item.title)).toContain('Healthy Card')
+    expect(cards.diagnostics).toEqual([expect.objectContaining({ resourceId: 'bad' })])
+    const lore = await f.runtime.searchResources({ query: 'needle', kind: 'lore' })
+    expect(lore.items.map(item => item.target.type === 'resource' && item.target.resourceId)).toEqual(['good'])
+    const scopes = await f.runtime.listGlobalSearchScopes({ query: '' })
+    expect(scopes.items.some(item => item.id === 'good')).toBe(true)
+    expect(scopes.items.some(item => item.id === 'bad')).toBe(false)
+    expect(scopes.diagnostics).toEqual(cards.diagnostics)
+    await expect(f.promptResources.getResource('bad')).rejects.toThrow('JSON')
+  } finally { await f.engine.close() }
+})
+
 async function collectResults(runtime: ReturnType<typeof fixture>['runtime'], input: SearchResourcesInput) {
   const items: GlobalSearchHit[] = []
   let cursor: string | undefined
@@ -169,7 +189,7 @@ describe('global resource search', () => {
       await f.lore('definition-body', '北境', '王都在北方。')
       const timeline = await f.narratives.createTimeline({ actor, title: '王都', stateRevisionId: 'revision-test',
         createdFrom: { cardId: card.id, cardVersion: card.version },
-        openingNodes: [{ body: { format: 'loom-markdown.v1', raw: '剧情秘密正文' } }] })
+        openingNode: { body: { format: 'loom-markdown.v1', raw: '剧情秘密正文' } } })
       const session = await f.agents.createSession({ actor, agentPresetId: 'preset-test', title: '王都会话' })
       await f.agents.appendEntries({ actor, agentSessionId: session.session.id, expectedEntryCount: 0,
         entries: [{ entry: { kind: 'message', role: 'user', content: '会话秘密正文' } }] })

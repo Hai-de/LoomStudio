@@ -33,7 +33,7 @@ it('publishes macro, node and model edits to the Preset projection and uses thei
       return { agentPreset: result.resource, mutation: result.mutation }
     }) },
   } as unknown as StudioApi
-  client.setQueryData(['prompt-resources', '/rpc', 'resources'], [saved])
+  client.setQueryData(['prompt-resources', '/rpc', 'resources'], { resources: [saved] })
   let state!: ReturnType<typeof usePromptResourceState>
   let presets!: ReturnType<typeof useAgentPresets>
   let commands!: ReturnType<typeof usePromptResourceCommands>

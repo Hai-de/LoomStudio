@@ -404,6 +404,7 @@ input[type='radio'][data-loom-ui-radio]:disabled {
 [data-loom-ui-status-indicator][data-tone='danger'] { background: var(--loom-color-danger); }
 
 [data-loom-ui-dialog] {
+  pointer-events: auto;
   width: min(30rem, calc(100vw - 32px));
   max-height: min(calc(var(--loom-viewport-height, 100dvh) - 32px), 40rem);
   margin: auto;

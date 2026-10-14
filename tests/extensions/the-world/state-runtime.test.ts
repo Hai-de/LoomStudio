@@ -67,7 +67,7 @@ function setup() {
           createdAt: nowIso(), updatedAt: nowIso() },
       })
     }
-    const { card } = await runtime.createCard({ name: 'World', opening: { entries: [{ role: 'assistant', content: 'Arrival' }] } })
+    const { card } = await runtime.createCard({ name: 'World', opening: { content: 'Arrival' } })
     if (adopt) await runtime.updateCard({ cardId: card.id, extensionAdoptions: [{ packageId, target: 'global' }] })
     const story = await runtime.createNarrativeTimeline({ cardId: card.id })
     return { story, target: { scope: 'timeline' as const, timelineId: story.timeline.id, branchId: story.branch.id } }

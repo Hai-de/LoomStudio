@@ -84,7 +84,7 @@ describe('Studio Server Extension data capabilities', () => {
 
       const createdCard = await callRpc<{ card: { id: string; version: number } }>(port, 'application.createCard', {
         name: 'Extension Data Card',
-        opening: { entries: [{ content: 'The story begins.' }] },
+        opening: { content: 'The story begins.' },
       })
       const otherPayload = await callRpc<{ payload: { id: string } }>(port, 'application.createPortableExtensionPayload', {
         artifactPayloadId: 'other-default',

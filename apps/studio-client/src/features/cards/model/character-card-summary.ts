@@ -6,6 +6,7 @@ export type CharacterCardSummary = {
   name: string
   userName?: string
   description?: string
+  validationError?: string
   media?: { avatarAssetId?: string; coverAssetId?: string }
   promptResourceIds?: string[]
   lore?: { entries: unknown[] }

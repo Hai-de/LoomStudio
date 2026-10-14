@@ -188,7 +188,7 @@
   flex: 1;
   min-width: 0;
   gap: 4px;
-  overflow-wrap: anywhere;
+  > strong, > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   strong {
     font-size: var(--loom-font-size-2);

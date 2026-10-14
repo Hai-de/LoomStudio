@@ -25,6 +25,7 @@ describe('Narrative primary Session lifecycle', () => {
       setItem: () => {}, removeItem: () => {},
     })
     const f = fixture()
+    await f.render().createTimelineFromCard()
     await f.render().createAgentSession('profile', true)
     const targetTimelineId = mode === 'standalone' ? undefined : 'other-timeline'
     const inspected = { ...f.result.agentSession, id: 'inspected', timelineId: targetTimelineId }
@@ -46,6 +47,7 @@ describe('Narrative primary Session lifecycle', () => {
 
   it('does not publish a Session when navigation changes while its transcript loads', async () => {
     const f = fixture()
+    await f.render().createTimelineFromCard()
     await f.render().createAgentSession('profile', true)
     const before = f.render().agentSession
     f.input.api.agentSessions.list = vi.fn(async () => ({ sessions: [f.result.agentSession] }))
@@ -63,6 +65,7 @@ describe('Narrative primary Session lifecycle', () => {
 
   it.each(['timeline', 'card', 'api'])('does not publish or navigate a late Session after %s changes', async change => {
     const f = fixture()
+    await f.render().createTimelineFromCard()
     await f.render().createAgentSession('profile', true)
     let resolve!: (value: Awaited<ReturnType<StudioApi['agentSessions']['create']>>) => void
     f.createSession.mockImplementationOnce(() => new Promise(accept => { resolve = accept }))
@@ -78,23 +81,33 @@ describe('Narrative primary Session lifecycle', () => {
     if (change !== 'api') expect(f.render().allAgentSessions.some(item => item.id === 'late')).toBe(true)
   })
 
-  it('keeps a committed Session without publishing when Card changes during first Timeline creation', async () => {
+  it('rejects primary Session creation in preview without creating a Timeline or Session', async () => {
+    const f = fixture()
+    await expect(f.render().createAgentSession('profile', true)).rejects.toThrow('请先点击“开始一个新故事”')
+    expect(f.createTimeline).not.toHaveBeenCalled()
+    expect(f.createSession).not.toHaveBeenCalled()
+    expect(f.render().timeline).toBeUndefined()
+    expect(f.render().primarySession).toBeUndefined()
+  })
+
+  it('does not publish or navigate first Timeline creation after the Card changes', async () => {
     const f = fixture()
     let resolve!: (value: typeof f.result.narrative) => void
     f.createTimeline.mockImplementationOnce(() => new Promise(accept => { resolve = accept }))
-    const pending = f.render().createAgentSession('profile', true)
+    const pending = f.render().createTimelineFromCard()
     f.input.selectedCardId = 'other'
     f.render()
     resolve(f.result.narrative)
     expect(await pending).toBeUndefined()
-    expect(f.createSession).toHaveBeenCalledOnce()
+    expect(f.createSession).not.toHaveBeenCalled()
     expect(f.render().timeline).toBeUndefined()
-    expect(f.render().allAgentSessions.map(item => item.id)).toContain('session')
+    expect(f.render().allAgentSessions).toEqual([])
   })
 
   it('isolates Session events and uses targeted reads only for scoped updates', async () => {
     vi.stubGlobal('EventSource', class {})
     const f = fixture()
+    await f.render().createTimelineFromCard()
     await f.render().createAgentSession('profile', true)
     const list = vi.fn(async () => ({ sessions: [f.result.agentSession] }))
     const get = vi.fn(async () => ({ session: { ...f.result.agentSession, title: 'updated' } }))
@@ -126,7 +139,7 @@ describe('Narrative primary Session lifecycle', () => {
     dispose?.()
   })
 
-  it('requires explicit primary creation before the first write, then binds it to the new Timeline', async () => {
+  it('requires explicit Timeline and primary creation before the first write', async () => {
     const storage = new Map<string, string>()
     vi.stubGlobal('localStorage', {
       getItem: (key: string) => storage.get(key) ?? null,
@@ -135,13 +148,17 @@ describe('Narrative primary Session lifecycle', () => {
     })
     const f = fixture()
     await f.render().submitTurn(f.event)
-    expect(f.reportFailure).toHaveBeenCalledWith(expect.objectContaining({ message: '请先新建并设置主写作对话' }))
+    expect(f.reportFailure).toHaveBeenCalledWith(expect.objectContaining({ message: '请先点击“开始一个新故事”' }))
     expect(f.createTimeline).not.toHaveBeenCalled()
     expect(f.appendInput).not.toHaveBeenCalled()
     expect(f.render().input).toBe('  Draft\n')
 
+    await f.render().createTimelineFromCard()
+    await f.render().submitTurn(f.event)
+    expect(f.reportFailure).toHaveBeenCalledWith(expect.objectContaining({ message: '请先新建并设置主写作对话' }))
+    expect(f.appendInput).not.toHaveBeenCalled()
     const primary = (await f.render().createAgentSession('profile', true))!
-    expect(f.createTimeline).toHaveBeenCalledExactlyOnceWith({ cardId: 'card' })
+    expect(f.createTimeline).toHaveBeenCalledExactlyOnceWith({ cardId: 'card', openingContent: '', expectedCardVersion: undefined })
     expect(f.createSession).toHaveBeenCalledExactlyOnceWith({ agentPresetId: 'profile', timelineId: 'timeline' })
     expect(primary.timelineId).toBe('timeline')
     expect(f.render().primarySession?.id).toBe(primary.id)
@@ -161,6 +178,7 @@ describe('Narrative primary Session lifecycle', () => {
       getItem: () => null, setItem: () => {}, removeItem: () => {},
     })
     const f = fixture()
+    await f.render().createTimelineFromCard()
     const primary = (await f.render().createAgentSession('profile', true))!
     const child = { ...primary, id: 'child', agentPresetId: childPresetId }
     f.input.api.agentSessions.list = vi.fn(async () => ({ sessions: [primary, child] }))
@@ -181,22 +199,25 @@ describe('Narrative primary Session lifecycle', () => {
     expect(f.render().agentSession?.id).toBe(child.id)
   })
 
-  it('returns to the deleted Timeline source card and requires explicit primary creation before sending', async () => {
+  it('returns to the deleted Timeline source card and requires explicit restart before sending', async () => {
     const f = fixture()
     f.result.narrative.timeline.createdFrom = { cardId: 'source-card', cardVersion: 1 }
     f.input.selectedCardId = 'another-card'
     f.input.onSelectCard = vi.fn(id => { f.input.selectedCardId = id })
+    const deletedTimeline = { ...f.result.narrative.timeline, id: 'deleted-timeline' }
+    const deletedBranch = { ...f.result.narrative.branch, timelineId: deletedTimeline.id }
     f.input.api.narratives.get = vi.fn(async () => ({
-      timeline: f.result.narrative.timeline, branches: [f.result.narrative.branch],
+      timeline: deletedTimeline, branches: [deletedBranch],
     }))
+    f.getPage.mockResolvedValueOnce({ timeline: deletedTimeline, branch: deletedBranch, nodes: [] })
     f.input.api.narratives.list = vi.fn(async () => ({ timelines: [] }))
     f.input.api.narratives.delete = vi.fn(async () => ({ deleted: true as const, mutation: { changesetId: 'deleted' } }))
     const listSessions = vi.fn(async () => ({ sessions: [] }))
     f.input.api.agentSessions.list = listSessions
-    await f.render().activateTimeline('timeline')
+    await f.render().activateTimeline(deletedTimeline.id)
     listSessions.mockClear()
 
-    await expect(f.render().deleteTimeline('timeline')).resolves.toBe(true)
+    await expect(f.render().deleteTimeline(deletedTimeline.id)).resolves.toBe(true)
     const preview = f.render()
     expect(f.input.onSelectCard).toHaveBeenCalledWith('source-card')
     expect(preview.timeline).toBeUndefined()
@@ -213,18 +234,22 @@ describe('Narrative primary Session lifecycle', () => {
     await expect(f.render().submitTurn(f.event)).resolves.toBeUndefined()
     expect(f.createTimeline).not.toHaveBeenCalled()
     expect(f.appendInput).not.toHaveBeenCalled()
+    await expect(f.render().createAgentSession('profile', true)).rejects.toThrow('请先点击“开始一个新故事”')
+    expect(f.createTimeline).not.toHaveBeenCalled()
+    await f.render().createTimelineFromCard()
     await f.render().createAgentSession('profile', true)
-    expect(f.createTimeline).toHaveBeenCalledExactlyOnceWith({ cardId: 'source-card' })
+    expect(f.createTimeline).toHaveBeenCalledExactlyOnceWith({ cardId: 'source-card', openingContent: '', expectedCardVersion: undefined })
     expect(f.render().input).toBe('Start again')
     expect(f.render().primarySession?.id).toBe('session')
     await f.render().submitTurn(f.event)
     expect(f.appendInput).toHaveBeenCalledWith(expect.objectContaining({ content: 'Start again' }))
     expect(f.createRun).toHaveBeenCalledOnce()
-    expect(f.reportFailure).toHaveBeenCalledWith(expect.objectContaining({ message: '请先新建并设置主写作对话' }))
+    expect(f.reportFailure).toHaveBeenCalledWith(expect.objectContaining({ message: '请先点击“开始一个新故事”' }))
   })
 
   it('retains the committed Timeline when primary Session creation fails and reuses it on explicit retry', async () => {
     const f = fixture()
+    await f.render().createTimelineFromCard()
     const failure = new Error('Session creation failed')
     f.createSession.mockRejectedValueOnce(failure)
     await expect(f.render().createAgentSession('profile', true)).rejects.toBe(failure)

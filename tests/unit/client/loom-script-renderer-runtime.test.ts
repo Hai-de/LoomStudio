@@ -36,6 +36,19 @@ function sandboxFixture(resolveInputs: Parameters<typeof createLoomScriptRendere
 }
 
 describe('Loom Script Renderer Runtime', () => {
+  it('revokes a renderer Timeline State call as soon as the host returns to preview', async () => {
+    const f = sandboxFixture(() => ({ matches: [], artifacts: [] }))
+    f.rendererHost.setScopeSnapshot({ workspace: 'workspace', timelineId: 'timeline', branchId: 'main' })
+    const handle = f.mount()
+    await vi.waitFor(() => expect(mountLoomSandboxRenderer).toHaveBeenCalledOnce())
+    const options = vi.mocked(mountLoomSandboxRenderer).mock.calls[0]![2]
+    await expect(options.stateRead({ scope: 'timeline', timelineId: 'timeline', branchId: 'main' })).resolves.toBeUndefined()
+    f.rendererHost.setScopeSnapshot({ workspace: 'workspace', cardId: 'card' })
+    await expect(options.stateRead({ scope: 'timeline', timelineId: 'timeline', branchId: 'main' })).rejects.toThrow('outside the mounted Renderer scope')
+    handle.dispose()
+    f.runtime.dispose()
+  })
+
   it('keeps instances separate, ignores superseded input results and revokes mounted instances on disposal', async () => {
     const slow = Promise.withResolvers<{ matches: []; artifacts: [] }>()
     const resolveInputs = vi.fn().mockReturnValueOnce(slow.promise).mockResolvedValue({ matches: [], artifacts: [] })

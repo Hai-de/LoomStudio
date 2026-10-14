@@ -31,6 +31,7 @@ export function GlobalSearchPreview() {
     results: scenario === 'empty' || scenario === 'loading' ? [] : resources.filter(item => (!state.kind || state.kind === item.kind) && `${item.title} ${item.snippet}`.includes(state.query)),
     scopes: scopes.filter(item => `${item.label} ${item.description}`.includes(state.candidateQuery)),
     types: findGlobalSearchTypes(state.candidateQuery, t), loading: scenario === 'loading', loadingMore: false, hasMore: false,
+    diagnostics: [],
     error: scenario === 'error' ? new Error('示例：该范围已被删除，请移除范围后重新搜索。') : null,
     setInputValue: (value: string) => dispatch({ type: 'input', value }),
     showScopes: () => dispatch({ type: 'mode', mode: 'scopes' }), showTypes: () => dispatch({ type: 'mode', mode: 'types' }), showResults: () => dispatch({ type: 'mode', mode: 'results' }),

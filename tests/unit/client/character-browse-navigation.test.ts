@@ -8,6 +8,8 @@ function fixture() {
     selectedCardId: 'playing-card',
     selectCardTimeline: vi.fn(),
     setSelectedCardId: vi.fn(),
+    resetToDraftTimeline: vi.fn(),
+    setOpeningChoice: vi.fn(),
     createTimelineFromCard: vi.fn(async () => ({ timelineId: 'new-timeline', branchId: 'new-branch' })),
     activateTimeline: vi.fn(async () => 'saved-branch'),
     refreshAllTimelines: vi.fn(async () => []),
@@ -19,6 +21,7 @@ function fixture() {
     searchParams: new URLSearchParams(),
     openPanel: vi.fn(),
     openNarrative: vi.fn(),
+    openCardPreview: vi.fn(),
     clearDeletedTimeline: vi.fn(),
     isCurrent: vi.fn(() => true),
     openUri: vi.fn(),
@@ -28,6 +31,7 @@ function fixture() {
   } as unknown as Parameters<typeof createStudioPanels>[0])
   const props = (panels.character(true) as ReactElement<{
     onSelectCard(id: string): void
+    onPreviewCard(id: string): void
     onCreateTimelineFromCard(id: string): Promise<void>
     onOpenTimeline(timeline: { id: string }, cardId: string): void
   }>).props
@@ -35,10 +39,73 @@ function fixture() {
     onDeleteTimeline(id: string): Promise<boolean>
     onArchiveImported(id: string): Promise<void>
   }>).props
-  return { props, sessionsProps, state, navigation }
+  const recentProps = (panels.recent(true) as ReactElement<{
+    onOpenCard(card: { id: string; validationError?: string }): void
+  }>).props
+  return { props, sessionsProps, recentProps, state, navigation }
 }
 
 describe('Character browsing versus playing', () => {
+  it('opens invalid recent cards in the error profile rather than starting or continuing a story', () => {
+    const { recentProps, state, navigation } = fixture()
+    recentProps.onOpenCard({ id: 'bad-card', validationError: 'Invalid opening' })
+    expect(navigation.openPanel).toHaveBeenCalledWith('character', { cardId: 'bad-card' })
+    expect(state.selectCardTimeline).not.toHaveBeenCalled()
+    expect(navigation.openCardPreview).not.toHaveBeenCalled()
+    expect(state.createTimelineFromCard).not.toHaveBeenCalled()
+  })
+  it('previews a recent card with no history without requesting creation', async () => {
+    const { recentProps, state, navigation } = fixture()
+    state.selectCardTimeline.mockResolvedValue(null)
+    recentProps.onOpenCard({ id: 'recent-card' })
+    await vi.waitFor(() => expect(navigation.openCardPreview).toHaveBeenCalledWith('recent-card'))
+    expect(state.selectCardTimeline).toHaveBeenCalledExactlyOnceWith('recent-card')
+    expect(state.setOpeningChoice).not.toHaveBeenCalled()
+    expect(state.createTimelineFromCard).not.toHaveBeenCalled()
+    expect(navigation.openNarrative).not.toHaveBeenCalled()
+  })
+
+  it('continues an existing recent-card story and ignores failed or superseded selections', async () => {
+    const { recentProps, state, navigation } = fixture()
+    state.selectCardTimeline.mockResolvedValueOnce({ timelineId: 'saved', branchId: 'branch' })
+    recentProps.onOpenCard({ id: 'recent-card' })
+    await vi.waitFor(() => expect(navigation.openNarrative).toHaveBeenCalledWith('saved', 'branch'))
+    state.selectCardTimeline.mockResolvedValueOnce(undefined)
+    recentProps.onOpenCard({ id: 'failed-card' })
+    await Promise.resolve()
+    expect(navigation.openCardPreview).not.toHaveBeenCalled()
+    state.selectCardTimeline.mockResolvedValueOnce(null)
+    recentProps.onOpenCard({ id: 'late-card' })
+    navigation.isCurrent.mockReturnValue(false)
+    await Promise.resolve()
+    expect(navigation.openCardPreview).not.toHaveBeenCalled()
+    expect(state.setOpeningChoice).not.toHaveBeenCalled()
+    expect(navigation.openNarrative).toHaveBeenCalledOnce()
+  })
+
+  it('resets the story and default opening before showing the requested card preview', () => {
+    const { props, state, navigation } = fixture()
+    props.onPreviewCard('preview-card')
+    expect(state.resetToDraftTimeline).toHaveBeenCalledOnce()
+    expect(state.setSelectedCardId).toHaveBeenCalledWith('preview-card')
+    expect(state.setOpeningChoice).not.toHaveBeenCalled()
+    expect(navigation.openCardPreview).toHaveBeenCalledWith('preview-card')
+    expect(state.createTimelineFromCard).not.toHaveBeenCalled()
+    expect(state.activateTimeline).not.toHaveBeenCalled()
+  })
+
+  it('does not overwrite newer navigation when creation, activation or deletion finishes', async () => {
+    const { props, sessionsProps, state, navigation } = fixture()
+    const creation = props.onCreateTimelineFromCard('external-card')
+    props.onOpenTimeline({ id: 'external-session' }, 'external-card')
+    const deletion = sessionsProps.onDeleteTimeline('playing-timeline')
+    navigation.isCurrent.mockReturnValue(false)
+    await creation
+    await deletion
+    expect(navigation.openNarrative).not.toHaveBeenCalled()
+    expect(navigation.clearDeletedTimeline).not.toHaveBeenCalled()
+    expect(state.setSelectedCardId).not.toHaveBeenCalled()
+  })
   it('routes a committed archive through target resolution and does not steal later navigation', async () => {
     const { sessionsProps, navigation, state } = fixture()
     await sessionsProps.onArchiveImported('imported')

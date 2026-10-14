@@ -32,7 +32,7 @@ export function initializeSearchFunctions(database: DatabaseSync): void {
     typeof value === 'string' ? value.toLowerCase() : '')
 }
 
-export function listSearchResources(database: DatabaseSync): PromptResourceSearchHeader[] {
+export function listSearchResources(database: DatabaseSync): Array<PromptResourceSearchHeader | { id: string; label: string; error: string }> {
   const rows = database.prepare(`
     SELECT id, resource_kind, label, root_node_id, metadata_json FROM prompt_resources
     WHERE tombstoned = 0 AND resource_kind IN ('lore', 'preset') ORDER BY id
@@ -43,13 +43,20 @@ export function listSearchResources(database: DatabaseSync): PromptResourceSearc
     root_node_id: string
     metadata_json: string
   }>
-  return rows.map(row => ({
-    id: row.id,
-    resourceKind: row.resource_kind,
-    label: row.label,
-    rootNodeId: row.root_node_id,
-    metadata: parseObject(row.metadata_json, 'metadata'),
-  }))
+  return rows.map(row => {
+    try {
+      return {
+        id: row.id,
+        resourceKind: row.resource_kind,
+        label: row.label,
+        rootNodeId: row.root_node_id,
+        metadata: parseObject(row.metadata_json, 'metadata'),
+      }
+    } catch (error) {
+      if (!(error instanceof PromptResourceStoreError) || error.code !== 'prompt_resource.json_invalid') throw error
+      return { id: row.id, label: row.label, error: error.message }
+    }
+  })
 }
 
 export function searchNodes(database: DatabaseSync, input: SearchPromptResourceNodesInput): PromptResourceSearchPage {

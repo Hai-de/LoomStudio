@@ -326,6 +326,8 @@ export type ApplicationRuntime = {
   buildExtensionPrompt(input: import('@loom-studio/extension-sdk').ExtensionPromptBuildInput, target: import('@loom-studio/extension-sdk').ExtensionInstallationTarget, packageId: string, lease?: TimelineExtensionLease): Promise<import('@loom-studio/extension-sdk').ExtensionPromptBuildResult>
   inspectMacros(input: InspectMacrosInput): Promise<InspectMacrosResult>
   createNarrativeTimeline(input: CreateNarrativeTimelineInput, context?: RuntimeRequestContext): Promise<CreateNarrativeTimelineResult>
+  importNarrativeHistory(input: ImportNarrativeHistoryInput, context?: RuntimeRequestContext): Promise<CreateNarrativeTimelineResult>
+  replaceNarrativeOpening(input: ReplaceNarrativeOpeningInput, context?: RuntimeRequestContext): Promise<CreateNarrativeTimelineResult>
   getNarrativeTimeline(input: GetNarrativeTimelineInput): Promise<GetNarrativeTimelineResult>
   exportTimelineArchive(input: { timelineId: string }): Promise<{ archive: TimelineArchive }>
   importTimelineArchive(input: { source: string }): Promise<{ timelineId: string; idMap: import('./archive/timeline-archive.js').TimelineArchiveIdMap; unknownParticipantNamespaces: string[]; participantFailures: Array<{ namespace: string; message: string }>; mutation: MutationReceipt }>
@@ -645,11 +647,8 @@ export type CreateNarrativeTimelineInput = {
   cardId: string
   expectedCardVersion?: number
   title?: string
-  openingIndex?: number
-  openingNodes?: Array<{
-    content: string
-    createdAt?: string
-  }>
+  openingId?: string
+  openingContent?: string
 }
 
 export type CreateNarrativeTimelineResult = {
@@ -657,6 +656,18 @@ export type CreateNarrativeTimelineResult = {
   branch: NarrativeBranch
   nodes: NarrativeNode[]
   mutation: MutationReceipt
+}
+
+export type ImportNarrativeHistoryInput = {
+  cardId: string
+  title?: string
+  messages: Array<{ content: string; createdAt?: string }>
+}
+
+export type ReplaceNarrativeOpeningInput = Pick<CreateNarrativeTimelineInput, 'expectedCardVersion' | 'openingId' | 'openingContent'> & {
+  timelineId: string
+  branchId: string
+  expectedHeadNodeId: string | null
 }
 
 export type GetNarrativeTimelineInput = {
@@ -1070,6 +1081,7 @@ export type CardSummary = {
   userName?: string
   description?: string
   openingPreview?: string
+  validationError?: string
   media?: CardMediaRefs
   createdAt: string
   updatedAt: string
@@ -1426,6 +1438,7 @@ export type ListPromptResourcesInput = {
 
 export type ListPromptResourcesResult = {
   resources: Array<PromptResourceContent & { id: string; version: number }>
+  invalidResources?: Array<{ id: string; resourceKind: PromptResourceKind; label: string; version: number; error: string }>
 }
 
 export type GetPromptResourceBindingsResult = {
@@ -1829,23 +1842,17 @@ export type CardPresetContent = {
 }
 
 export type OpeningChatInput = {
-  entries?: OpeningChatEntryInput[]
-  alternatives?: Array<{ entries: OpeningChatEntryInput[] }>
+  id?: string
+  title?: string
+  content: string
+  alternatives?: Array<{ id?: string; title?: string; content: string }>
 }
 
 export type OpeningChatContent = {
-  entries: OpeningChatEntryContent[]
-  alternatives?: Array<{ entries: OpeningChatEntryContent[] }>
-}
-
-export type OpeningChatEntryInput = {
-  role?: 'user' | 'assistant'
+  id: string
+  title?: string
   content: string
-}
-
-export type OpeningChatEntryContent = {
-  role: 'user' | 'assistant'
-  content: string
+  alternatives?: Array<{ id: string; title?: string; content: string }>
 }
 
 export type LoreInput = {

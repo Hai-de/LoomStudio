@@ -2,7 +2,7 @@ import { javascriptLanguage } from '@codemirror/lang-javascript'
 import { xmlLanguage } from '@codemirror/lang-xml'
 import { yamlLanguage } from '@codemirror/lang-yaml'
 import { classHighlighter, highlightTree } from '@lezer/highlight'
-import type { ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { readYamlScalarTokenClass } from '../../lib/yaml-scalar-highlight.js'
 
 export function highlightCode(code: string, language?: string): ReactNode[] {
@@ -82,4 +82,8 @@ function readLanguageParser(normalized?: string) {
   if (normalized === 'xml' || normalized === 'html') return xmlLanguage.parser
   if (normalized === 'json' || normalized === 'jsonc') return javascriptLanguage.parser
   return undefined
+}
+
+export default function CodeHighlight(props: { code: string; language?: string }) {
+  return useMemo(() => highlightCode(props.code, props.language), [props.code, props.language])
 }

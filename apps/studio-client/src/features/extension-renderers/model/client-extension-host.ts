@@ -651,6 +651,12 @@ function createActivationContext(input: {
     if (timelineTarget && (target.scope !== 'timeline' || target.timelineId !== timelineTarget.timelineId || target.branchId !== timelineTarget.branchId)) {
       throw new Error('Client extension State target does not match its Timeline context')
     }
+    if (target.scope === 'timeline') {
+      const current = input.rendererHost.scopeSnapshot()
+      if (current.timelineId !== target.timelineId || current.branchId !== target.branchId) {
+        throw new Error('Timeline State is unavailable outside the mounted story')
+      }
+    }
   }
   async function readState(target: ClientStateTarget) {
     target = structuredClone(target)

@@ -18,6 +18,7 @@ export function characterPanelProps(overrides: Partial<Props> = {}): Props {
     onDeleteCards: async () => {},
     onPreviewCardDeletion: async () => ({ timelines: [] }),
     onSelectCard: () => {},
+    onPreviewCard: () => {},
     onOpenTimeline: () => {},
     onUpdateCardMedia: async () => {},
     onUpdateCardProfile: async () => {},

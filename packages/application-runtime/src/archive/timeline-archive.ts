@@ -44,6 +44,15 @@ function validateTimelineArchive(value: unknown): asserts value is TimelineArchi
   timestamp(value.exportedAt)
   recordHeader(value.timeline)
   identifier(value.timeline.activeBranchId)
+  if (value.timeline.opening !== undefined) {
+    const opening = value.timeline.opening
+    if (!isRecord(opening) || typeof opening.locked !== 'boolean'
+      || (opening.custom !== undefined && typeof opening.custom !== 'boolean')) {
+      throw new Error('Invalid Timeline archive opening')
+    }
+    if (opening.id !== undefined) identifier(opening.id)
+    if (opening.nodeId !== undefined) identifier(opening.nodeId)
+  }
   if (value.timeline.title !== undefined) textValue(value.timeline.title)
   if (!Array.isArray(value.timeline.promptResourceIds)) throw new Error('Timeline archive resource references are invalid')
   value.timeline.promptResourceIds.forEach(identifier)
@@ -103,6 +112,7 @@ function validateTimelineArchive(value: unknown): asserts value is TimelineArchi
     throw new Error('Timeline archive active branch is missing')
   }
   const nodeIds = new Set(archive.nodes.map(node => node.id))
+  if (archive.timeline.opening?.nodeId && !nodeIds.has(archive.timeline.opening.nodeId)) throw new Error('Timeline archive opening node is missing')
   if (nodeIds.size !== archive.nodes.length) throw new Error('Timeline archive contains duplicate node IDs')
   for (const branch of archive.branches) {
     if (branch.timelineId !== archive.timeline.id) throw new Error('Timeline archive branch belongs to another timeline')

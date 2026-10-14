@@ -422,11 +422,12 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
       try {
         await secrets?.retryPendingCleanup({ actor: { kind: 'system', id: 'studio-server' }, reason: 'server.start.secret-cleanup' })
         await startupDirectoryScan
-        await resourceDirectories?.recoverDeletions(async id => {
+        const deletionRecoveryErrors = await resourceDirectories!.recoverDeletions(async id => {
           const document = await documents.get(id)
           return Boolean(document && !document.meta.tombstone)
         })
         const recoveryErrors = [
+          ...deletionRecoveryErrors,
           ...await directoryImporter.recoverImports(),
           ...await resourceDirectories!.recoverApplies(),
         ]

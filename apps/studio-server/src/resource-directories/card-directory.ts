@@ -25,11 +25,12 @@ export function createCardDirectoryService(options: {
   const directory = (id: string) => `characters/${names.get(id) ?? id}`
   const metadata = (id: string) => `.loom/card-directories/${id}`
 
-  async function exclusive<T>(id: string, action: () => Promise<T>): Promise<T> {
+  async function exclusive<T>(id: string, action: () => Promise<T>, recoveringDeletion = false): Promise<T> {
     assertCardId(id)
     if (busy.has(id)) throw new Error('Card directory operation is already running')
     busy.add(id)
     try {
+      if (!recoveringDeletion && await readOptional(root, `${metadata(id)}/delete.json`)) throw new Error('Card directory has an unfinished deletion; recovery is required')
       const binding = await readCardDirectoryBinding(root, id)
       if (binding) names.set(id, binding.directoryName)
       return await action()
@@ -337,32 +338,36 @@ export function createCardDirectoryService(options: {
     deleteCard: <T>(id: string, commit: () => Promise<T>) => deleteCards([id], commit),
     deleteCards,
     async recoverDeletions(cardExists: (id: string) => Promise<boolean>) {
-      try { await fs.stat(root) } catch (error) { if (isMissing(error)) return; throw error }
+      const errors: Array<{ cardId: string; error: string }> = []
+      try { await fs.stat(root) } catch (error) { if (isMissing(error)) return errors; throw error }
       const parent = await safePath(root, '.loom/card-directories')
       let entries: import('node:fs').Dirent[]
-      try { entries = await fs.readdir(parent, { withFileTypes: true }) } catch (error) { if (isMissing(error)) return; throw error }
+      try { entries = await fs.readdir(parent, { withFileTypes: true }) } catch (error) { if (isMissing(error)) return errors; throw error }
       for (const entry of entries) {
         if (!entry.isDirectory()) continue
         const id = entry.name
-        assertCardId(id)
-        const marker = `${metadata(id)}/delete.json`
-        const bytes = await readOptional(root, marker)
-        if (!bytes) continue
-        if (JSON.parse(bytes.toString('utf8')).cardId !== id) throw new Error('Invalid card deletion journal')
-        await exclusive(id, async () => {
-          if (await cardExists(id)) {
-            const source = await safePath(root, directory(id))
-            const staged = await safePath(root, `${metadata(id)}/deleted`)
-            let stagedExists = false
-            try { stagedExists = (await fs.stat(staged)).isDirectory() } catch (error) { if (!isMissing(error)) throw error }
-            if (stagedExists) {
-              try { await fs.lstat(source); throw new Error('Card deletion recovery conflicts with a new directory') } catch (error) { if (!isMissing(error)) throw error }
-              await fs.rename(staged, source)
-            }
-            await fs.rm(await safePath(root, marker))
-          } else await fs.rm(await safePath(root, metadata(id)), { recursive: true })
-        })
+        try {
+          assertCardId(id)
+          const marker = `${metadata(id)}/delete.json`
+          const bytes = await readOptional(root, marker)
+          if (!bytes) continue
+          if (JSON.parse(bytes.toString('utf8')).cardId !== id) throw new Error('Invalid card deletion journal')
+          await exclusive(id, async () => {
+            if (await cardExists(id)) {
+              const source = await safePath(root, directory(id))
+              const staged = await safePath(root, `${metadata(id)}/deleted`)
+              let stagedExists = false
+              try { stagedExists = (await fs.stat(staged)).isDirectory() } catch (error) { if (!isMissing(error)) throw error }
+              if (stagedExists) {
+                try { await fs.lstat(source); throw new Error('Card deletion recovery conflicts with a new directory') } catch (error) { if (!isMissing(error)) throw error }
+                await fs.rename(staged, source)
+              }
+              await fs.rm(await safePath(root, marker))
+            } else await fs.rm(await safePath(root, metadata(id)), { recursive: true })
+          }, true)
+        } catch (error) { errors.push({ cardId: id, error: error instanceof Error ? error.message : String(error) }) }
       }
+      return errors
     },
     previewCard: (id: string) => exclusive(id, async () => (await prepare(id)).preview),
     saveCard: (id: string, token: string) => exclusive(id, async (): Promise<CardDirectorySaveResult> => {

@@ -45,7 +45,9 @@ export function createPromptProcessorRegistry(): PromptProcessorRegistry {
       })
       // Own cleanup even if disposal races the async factory.
       if (signal.aborted) {
-        await session.dispose?.()
+        try { await session.dispose?.() } catch (cleanupError) {
+          throw Object.assign(new AggregateError([signal.reason, cleanupError], 'Prompt processor creation was aborted; cleanup also failed', { cause: signal.reason }), { name: 'AbortError' })
+        }
         signal.throwIfAborted()
       }
       return {

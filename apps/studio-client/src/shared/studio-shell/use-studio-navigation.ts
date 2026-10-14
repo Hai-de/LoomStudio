@@ -106,13 +106,29 @@ export function useStudioNavigation(input: { endpoint: string; api: StudioApi })
       ...current.current, panel: null, timelineId, branchId, resourceId: undefined,
       assetId: undefined, nodeId: undefined, targetUri: undefined, referenceUri: undefined, search: '',
     }, replace),
+    openCardPreview: (cardId: string) => publish({
+      ...current.current, panel: null, cardId, timelineId: undefined, branchId: undefined,
+      resourceId: undefined, assetId: undefined, nodeId: undefined,
+      targetUri: undefined, referenceUri: undefined, search: '',
+    }),
     updateNarrativeContext: (timelineId: string, branchId: string, cardId?: string) => publish({
       ...current.current, timelineId, branchId, cardId: cardId ?? current.current.cardId,
     }, true),
-    clearDeletedTimeline: (timelineId: string, cardId?: string) => {
-      if (current.current.timelineId !== timelineId || current.current.targetUri !== undefined) return
+    clearDeletedCard: (cardId: string, deletedTimelineIds: readonly string[]) => {
+      if (current.current !== workspace) return
+      const deletedTimeline = Boolean(current.current.timelineId && deletedTimelineIds.includes(current.current.timelineId))
       return publish({
-        ...current.current, timelineId: undefined, branchId: undefined, nodeId: undefined,
+        ...current.current,
+        cardId: current.current.cardId === cardId ? undefined : current.current.cardId,
+        ...(deletedTimeline ? { timelineId: undefined, branchId: undefined, nodeId: undefined } : {}),
+        panel: null, targetUri: undefined, referenceUri: undefined, resourceId: undefined, assetId: undefined, search: '',
+      }, true)
+    },
+    clearDeletedTimeline: (timelineId: string, cardId?: string) => {
+      if (current.current !== workspace || current.current.timelineId !== timelineId || current.current.targetUri !== undefined) return
+      return publish({
+        ...current.current, panel: null, timelineId: undefined, branchId: undefined, nodeId: undefined,
+        resourceId: undefined, assetId: undefined, targetUri: undefined, referenceUri: undefined, search: '',
         cardId: cardId ?? current.current.cardId,
       }, true)
     },

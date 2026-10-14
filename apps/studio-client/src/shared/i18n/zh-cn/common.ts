@@ -1,4 +1,21 @@
 export const messages = {
+  'timelineQuick.selectStory': '切换故事',
+  'timelineQuick.expand': '展开故事快捷操作',
+  'timelineQuick.collapse': '收起故事快捷操作',
+  'timelineQuick.opening': '尚未开始故事',
+  'timelineQuick.story': '当前故事',
+  'timelineQuick.new': '新开故事',
+  'timelineQuick.fork': '从当前进度分支',
+  'timelineQuick.deleteStory': '删除当前故事',
+  'timelineQuick.save': '保存',
+  'timelineQuick.failed': '操作未完成，请重试或查看错误详情。',
+
+  'selection.label': '选中文字操作',
+  'selection.copy': '复制',
+  'selection.copied': '已复制',
+  'selection.copyFailed': '复制失败',
+  'selection.quote': '引用到输入框',
+
   'navigation.targetUnavailable': '无法打开指定的 Timeline 或 Branch。原引用已保留，请检查目标是否存在。',
   'navigation.returnToWorkspace': '返回工作区',
   'navigation.copyResourceLink': '复制资源链接',

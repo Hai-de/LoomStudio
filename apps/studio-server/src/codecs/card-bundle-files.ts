@@ -12,7 +12,7 @@ type CardFile = {
   description?: string
   macros?: string
   preset?: { system?: string; macros?: string; macroOptions?: string }
-  opening?: { text: string } | Exclude<Card['opening'], string | undefined>
+  opening?: Exclude<Card['opening'], string | undefined>
   lore?: { entries?: Array<Record<string, unknown> & { content: string }> }
 }
 
@@ -71,16 +71,10 @@ export function projectCardFiles(artifact: CardBundleArtifact, files: Record<str
   }
   if (opening !== undefined) {
     card.opening = typeof opening === 'string'
-      ? { text: text('opening/0.md', opening) }
-      : { ...(opening.entries !== undefined ? {
-        entries: opening.entries.map(({ content, ...entry }, index) => ({
-          ...entry, content: text(`opening/${index}.md`, content),
-        })),
-      } : {}), ...(opening.alternatives !== undefined ? {
+      ? { content: text('opening/0.md', opening) }
+      : { ...opening, content: text('opening/0.md', opening.content), ...(opening.alternatives !== undefined ? {
         alternatives: opening.alternatives.map((alternative, candidateIndex) => ({
-          entries: alternative.entries.map(({ content, ...entry }, index) => ({
-            ...entry, content: text(`opening/alternatives/${candidateIndex}/${index}.md`, content),
-          })),
+          ...alternative, content: text(`opening/alternatives/${candidateIndex}.md`, alternative.content),
         })),
       } : {}) }
   }
@@ -169,13 +163,12 @@ export function restoreCardFiles(index: CardFilesIndex, files: Map<string, Uint8
     }
   }
   if (stored.opening !== undefined) {
-    card.opening = 'text' in stored.opening ? text(stored.opening.text) : {
-      ...(stored.opening.entries !== undefined ? {
-        entries: stored.opening.entries.map(entry => ({ ...entry, content: text(entry.content) })),
-      } : {}),
+    card.opening = {
+      ...stored.opening,
+      content: text(stored.opening.content),
       ...(stored.opening.alternatives !== undefined ? {
         alternatives: stored.opening.alternatives.map(alternative => ({
-          entries: alternative.entries.map(entry => ({ ...entry, content: text(entry.content) })),
+          ...alternative, content: text(alternative.content),
         })),
       } : {}),
     }
@@ -244,12 +237,9 @@ export async function loadCardResourceFiles(index: CardFilesIndex, load: (path: 
   if (card.preset?.macros !== undefined) await load(card.preset.macros)
   if (card.preset?.macroOptions !== undefined) await load(card.preset.macroOptions)
   if (card.opening !== undefined) {
-    if ('text' in card.opening) await load(card.opening.text)
-    else {
-      for (const entry of card.opening.entries ?? []) await load(entry.content)
-      for (const alternative of card.opening.alternatives ?? []) {
-        for (const entry of alternative.entries) await load(entry.content)
-      }
+    await load(card.opening.content)
+    for (const alternative of card.opening.alternatives ?? []) {
+      await load(alternative.content)
     }
   }
   for (const entry of card.lore?.entries ?? []) await load(entry.content)

@@ -1,4 +1,5 @@
-import { Check, Copy, GitBranch, Link, Pencil, RefreshCw, Trash2, X } from 'lucide-react'
+import { ContentErrorBoundary } from '../../shared/ui/content-error-boundary.js'
+import { Check, Copy, GitBranch, Link, Pencil, Play, RefreshCw, Trash2, X } from 'lucide-react'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useConversationViewport } from '../../shared/ui/conversation-viewport/use-conversation-viewport.js'
 import type { Translator } from '../../shared/i18n/index.js'
@@ -45,6 +46,7 @@ type NarrativeTimelineProps = {
   openingDraft?: { content: string; isPlaceholder: boolean }
   openingControls?: ReactNode
   openingDisplay?: OpeningDisplayProjection
+  onStartStory?(): void
   getNodeLink: (nodeId: string) => string
   hasOlder: boolean
   macroContext?: MacroRenderContext
@@ -92,9 +94,9 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
   const navigatorItems = useMemo<NarrativeTimelineNavigatorItem[]>(() => props.timeline.map((node, index) => ({
     id: node.id,
     meta: `#${index + 1} · ${formatConversationTimestamp(node.createdAt)}`,
-    preview: renderTemplateMacros(node.body.raw, props.macroContext),
+    preview: node.body.raw,
     role: props.t(readNarrativeNodeRole(props.timeline, index) === 'user' ? 'timeline.role.user' : 'timeline.role.assistant'),
-  })), [props.macroContext, props.t, props.timeline])
+  })), [props.t, props.timeline])
   const navigatorMarkers: NarrativeTimelineMarker[] = []
   const anchorStatus = useNarrativeAnchorNavigation({
     timelineId: props.timelineId,
@@ -244,6 +246,7 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
         </div>
         {props.timeline.length === 0 ? (
           props.openingDraft ? (
+            <ContentErrorBoundary resetKey={props.openingDraft.content} fallback={<pre role="alert">{props.openingDraft.content}</pre>}>
             <Suspense fallback={<div aria-busy="true" className={styles.renderingMessages} />}>
               <article
                 className={`${styles.message} ${styles.assistant} ${styles.openingDraft}`}
@@ -255,7 +258,6 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
                   className={styles.messageSurface}
                   data-loom-slot="message-content"
                 >
-                  {props.openingControls}
                   {props.openingDisplay?.pending ? <div aria-busy="true" className={styles.displayPending} />
                     : props.openingDisplay?.error ? <div role="alert">
                       <span>Display: {props.openingDisplay.error}</span>
@@ -271,14 +273,24 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
                   />
                   </>}
                 </div>
+                <ConversationMessageChrome index={0}
+                  metadata={<> · {props.t('character.preview')} · <TextTokenSummary
+                    text={props.openingDraft.isPlaceholder ? '' : props.openingDraft.content}
+                    scope="opening-preview" t={props.t} /></>}
+                  trailing={props.openingControls} />
               </article>
-            </Suspense>
+            </Suspense></ContentErrorBoundary>
           ) : props.busy ? (
             <div aria-busy="true" className={styles.timelineCenterLoading}>
               <LoadingText label={props.t('directory.loading')} />
             </div>
           ) : (
-            <div className={styles.empty}>{props.emptyTimelineText}</div>
+            <div className={`${styles.message} ${styles.assistant}`}>
+              <div className={styles.empty}>{props.emptyTimelineText}</div>
+              {props.openingControls ? <ConversationMessageChrome
+                metadata={<TextTokenSummary text="" scope="opening-empty" t={props.t} />}
+                trailing={props.openingControls} /> : null}
+            </div>
           )
         ) : (Boolean(props.displayProjection?.pending && props.displayProjection.entries.size === 0 && !props.displayProjection.error)) ? (
           <div aria-busy="true" className={styles.timelineCenterLoading}>
@@ -298,6 +310,7 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
                   className={styles.virtualRow}
                   style={{ top: `${item.start - scrollMargin}px` }}
                 >
+                <ContentErrorBoundary resetKey={entry.body.raw} fallback={<pre role="alert">{entry.body.raw}</pre>}>
                 <Suspense fallback={<div aria-busy="true" className={styles.messagePending} />}>
                 <article
                 className={`${styles.message} ${styles[role]}`}
@@ -365,6 +378,7 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
                 <ConversationMessageChrome
                   createdAt={entry.createdAt}
                   index={index}
+                  trailing={index === props.timeline.length - 1 ? props.openingControls : undefined}
                   metadata={editingId !== entry.id
                     ? <span> · <TokenSummary t={props.t} multiplier={tokenMultiplier} pending={nodeTokens.pending}
                         error={nodeTokens.error} textTokens={nodeTokens.counts
@@ -400,17 +414,22 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
                   )}
                 />
                 </article>
-                </Suspense>
+                </Suspense></ContentErrorBoundary>
                 </div>
               )
             })}
           </div>
         )}
+        {!props.timelineId && props.onStartStory ? <button className={styles.startStory} type="button"
+          disabled={props.busy} onClick={props.onStartStory}>
+          <Play size={16} aria-hidden="true" />{props.t('timeline.startStory')}
+        </button> : null}
         {props.tail ? <div className={styles.tail} data-loom-surface="narrative.timeline.tail">{props.tail}</div> : null}
       </div>
       <NarrativeTimelineNavigator
         activeId={activeEntryId}
         items={navigatorItems}
+        renderPreview={text => renderTemplateMacros(text, props.macroContext)}
         label={props.t('timeline.navigator')}
         markers={navigatorMarkers}
         onNavigate={navigateToEntry}

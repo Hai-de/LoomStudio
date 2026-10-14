@@ -1,13 +1,13 @@
-import type { Locale } from './index.js'
+import { type Locale, supportedLocales } from './index.js'
 
 export function resolveCurrentLocale(locale?: string): Locale {
-  if (locale === 'zh-CN' || locale === 'en-US') {
-    return locale
+  if (locale && (supportedLocales as string[]).includes(locale)) {
+    return locale as Locale
   }
   if (typeof document !== 'undefined') {
     const lang = document.documentElement.lang
-    if (lang === 'zh-CN' || lang === 'en-US') {
-      return lang
+    if ((supportedLocales as string[]).includes(lang)) {
+      return lang as Locale
     }
   }
   return 'zh-CN'

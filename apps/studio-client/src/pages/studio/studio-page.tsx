@@ -1,5 +1,6 @@
+import { useWallpaper } from './use-wallpaper.js'
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { AlignLeft, ArrowLeft, ArrowRight, ChevronDown, ImageOff, PanelLeft, PanelLeftClose, PanelRight, PanelRightClose, Search, X } from 'lucide-react'
+import { AlignLeft, ArrowLeft, ArrowRight, PanelLeft, PanelLeftClose, PanelRight, PanelRightClose, Search, X } from 'lucide-react'
 import type { Translator } from '../../shared/i18n/index.js'
 import { StudioPanelRight } from './studio-panel-right.js'
 import { DEFAULT_ASSET_VIEW_STATE, useStudioLayoutStore, type AssetLayoutId, type StudioPanelId } from '../../shared/studio-shell/studio-layout-store.js'
@@ -33,8 +34,7 @@ type StudioPageProps = {
   canRedo: boolean
   canUndo: boolean
   canvas: ReactNode
-  characterAvatarUrl?: string
-  characterName?: string
+  characterControl?: ReactNode
   customCss: string
   isPrimarySession?: boolean
   modelConfigured?: boolean
@@ -60,59 +60,7 @@ export function StudioPage(props: StudioPageProps) {
   const dockRef = useRef<HTMLElement>(null)
   const agentPanelToggleRef = useRef<HTMLButtonElement>(null)
   useStudioLayoutAnchors(stageRef)
-  const [currentWallpaper, setCurrentWallpaper] = useState<string | undefined>(props.wallpaperUrl)
-  const [previousWallpaper, setPreviousWallpaper] = useState<string | undefined>(undefined)
-  const wallpaperTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    return () => {
-      if (wallpaperTimerRef.current) clearTimeout(wallpaperTimerRef.current)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (props.wallpaperUrl === currentWallpaper) return
-
-    if (!props.wallpaperUrl) {
-      if (currentWallpaper) {
-        setPreviousWallpaper(currentWallpaper)
-        setCurrentWallpaper(undefined)
-        if (wallpaperTimerRef.current) clearTimeout(wallpaperTimerRef.current)
-        wallpaperTimerRef.current = setTimeout(() => {
-          setPreviousWallpaper(undefined)
-          wallpaperTimerRef.current = null
-        }, 1250)
-      }
-      return
-    }
-
-    const img = new Image()
-    img.src = props.wallpaperUrl
-    let active = true
-
-    const apply = () => {
-      if (!active) return
-      if (currentWallpaper && currentWallpaper !== props.wallpaperUrl) {
-        setPreviousWallpaper(currentWallpaper)
-        if (wallpaperTimerRef.current) clearTimeout(wallpaperTimerRef.current)
-        wallpaperTimerRef.current = setTimeout(() => {
-          setPreviousWallpaper(undefined)
-          wallpaperTimerRef.current = null
-        }, 1250)
-      }
-      setCurrentWallpaper(props.wallpaperUrl)
-    }
-
-    if (img.complete) {
-      apply()
-    } else {
-      img.onload = apply
-    }
-
-    return () => {
-      active = false
-    }
-  }, [props.wallpaperUrl, currentWallpaper])
+  const { currentWallpaper, previousWallpaper } = useWallpaper(props.wallpaperUrl)
 
   const activePanel = props.navigation.route.panel
   const effectiveMotion = useEffectiveMotion()
@@ -499,14 +447,14 @@ export function StudioPage(props: StudioPageProps) {
         <div className={styles.stageWallpaperBackdrop} aria-hidden="true">
           {previousWallpaper ? (
             <div
-              key={previousWallpaper}
+              key={`previous:${previousWallpaper}`}
               className={currentWallpaper ? styles.stageWallpaperPrevious : styles.stageWallpaperExit}
               style={{ backgroundImage: `url(${JSON.stringify(previousWallpaper)})` }}
             />
           ) : null}
           {currentWallpaper ? (
             <div
-              key={currentWallpaper}
+              key={`current:${currentWallpaper}`}
               className={styles.stageWallpaperLayer}
               style={{ backgroundImage: `url(${JSON.stringify(currentWallpaper)})` }}
             />
@@ -568,27 +516,7 @@ export function StudioPage(props: StudioPageProps) {
           </div>
 
           <div className={styles.stageHeaderCenter}>
-            {props.characterName ? (
-              <button
-                aria-label={`${props.characterName} - ${props.t('rail.character')}`}
-                className={[
-                  styles.stageCharacterCapsule,
-                  activePanel === 'character' ? styles.stageCharacterCapsuleActive : '',
-                ].filter(Boolean).join(' ')}
-                title={`${props.characterName} (${props.t('rail.character')})`}
-                type="button"
-                onFocus={() => props.preloadPanel?.('character')}
-                onMouseEnter={() => props.preloadPanel?.('character')}
-                onPointerDown={() => props.preloadPanel?.('character')}
-                onClick={() => togglePanel('character')}
-              >
-                <span aria-hidden="true" className={styles.stageCharacterCapsuleAvatar}>
-                  <StageCharacterAvatar avatarUrl={props.characterAvatarUrl} name={props.characterName} />
-                </span>
-                <span className={styles.stageCharacterCapsuleName}>{props.characterName}</span>
-                <ChevronDown aria-hidden="true" className={styles.stageCharacterCapsuleArrow} />
-              </button>
-            ) : null}
+            {props.characterControl}
           </div>
 
           <div className={styles.stageHeaderRight}>
@@ -698,23 +626,4 @@ function WindowResizeHandle(props: {
 function readPanelPlacement(panel: StudioPanelId): 'beside-narrative' | 'cover-narrative' {
   if (panel === 'model' || panel === 'agent' || panel === 'play' || panel === 'recent' || panel === 'sessions' || panel === 'character') return 'beside-narrative'
   return 'cover-narrative'
-}
-
-function StageCharacterAvatar(props: { avatarUrl?: string; name?: string }) {
-  const [loadError, setLoadError] = useState(false)
-
-  useEffect(() => {
-    setLoadError(false)
-  }, [props.avatarUrl])
-
-  if (props.avatarUrl && !loadError) {
-    return (
-      <img
-        alt=""
-        src={props.avatarUrl}
-        onError={() => setLoadError(true)}
-      />
-    )
-  }
-  return <ImageOff aria-hidden="true" className={styles.stageAvatarFallbackIcon} />
 }

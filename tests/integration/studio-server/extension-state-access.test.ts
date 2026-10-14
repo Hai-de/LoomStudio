@@ -64,8 +64,8 @@ describe('Server extension State installation access', () => {
       await runtime.initialize()
       const { card: a } = await runtime.createCard({ name: 'A' })
       const { card: b } = await runtime.createCard({ name: 'B' })
-      const timelineA = await runtime.createNarrativeTimeline({ cardId: a.id, openingNodes: [] })
-      const timelineB = await runtime.createNarrativeTimeline({ cardId: b.id, openingNodes: [] })
+      const timelineA = await runtime.createNarrativeTimeline({ cardId: a.id, openingContent: '' })
+      const timelineB = await runtime.createNarrativeTimeline({ cardId: b.id, openingContent: '' })
       const targetA = { scope: 'timeline' as const, timelineId: timelineA.timeline.id, branchId: timelineA.branch.id }
       const targetB = { scope: 'timeline' as const, timelineId: timelineB.timeline.id, branchId: timelineB.branch.id }
       const global = { scope: 'global' as const }

@@ -1,3 +1,6 @@
+import { ContentErrorBoundary } from '../shared/ui/content-error-boundary.js'
+import { StudioTimelineActions } from './studio-timeline-actions.js'
+import { SelectionToolbar, appendQuote } from '../shared/ui/selection-toolbar/selection-toolbar.js'
 import type { ResourceSearchReveal } from '../shared/lib/search-match.js'
 import { startupAreas } from './use-studio-startup.js'
 import type { Logger, MemoryLogSink } from '@loom-studio/logging'
@@ -58,6 +61,8 @@ function initializeAppearancePreview() {
 export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger; extensionLogger: Logger }) {
   initializeAppearancePreview()
   initializeMotionPreference()
+  const narrativeSelectionRef = useRef<HTMLDivElement>(null)
+  const narrativeInputRef = useRef<HTMLTextAreaElement>(null)
   const appearance = useAppearanceStore()
   const state = useStudioState(props.transportLogger)
   const queryClient = useQueryClient()
@@ -167,7 +172,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
   const toggleComposerPinned = useStudioLayoutStore(current => current.toggleComposerPinned)
   const derived = useStudioDerivedState(state, navigation.route)
   const { assetWorkspaceId, cardsBusy, providerBusy, agentPresetBusy, activePresetId,
-    narrativeCharacterName, sourceCardId, canOpenTimelineSource, narrativeCharacterAvatarUrl,
+    sourceCardId, canOpenTimelineSource,
     sessionBusy, agentChatBusy, mutationBusy } = derived
   const globalSearch = useGlobalSearch({ api: state.api, endpoint: state.endpoint, open: searchOpen, t: state.t, currentCardId: appearanceCardId, currentPresetId: activePresetId })
   const contextWorkspaceId = JSON.stringify([state.endpoint, assetWorkspaceId])
@@ -309,11 +314,27 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
   }, [state.startup.failures])
 
   useEffect(() => {
+    if (!state.invalidPromptResources.length) { notify.dismiss('prompt-resource-invalid'); return }
+    notify.warning(state.t('promptResource.invalidResourcesNotice'), { id: 'prompt-resource-invalid', duration: Infinity,
+      action: { label: state.t('rail.user'), onClick: () => navigation.openPanel('user') },
+    })
+  }, [state.invalidPromptResources, state.t])
+
+  useEffect(() => {
     if (!state.promptResourceError) { notify.dismiss('prompt-resource-query-error'); return }
     notify.error(state.promptResourceError.message, { id: 'prompt-resource-query-error', duration: Infinity,
       action: { label: state.t('appError.reload'), onClick: () => { void state.retryPromptResources().catch(() => undefined) } },
     })
   }, [state.promptResourceError])
+
+  useEffect(() => {
+    const warnings = state.promptBuildTrace?.diagnostics.filter(item => item && typeof item === 'object'
+      && 'code' in item && typeof item.code === 'string' && item.code.startsWith('prompt.processor_')) ?? []
+    if (!warnings.length) { notify.dismiss('prompt-processor-warning'); return }
+    notify.warning(state.t('promptResource.processingWarning'), { id: 'prompt-processor-warning', duration: Infinity,
+      action: { label: state.t('rail.inspector'), onClick: () => navigation.openPanel('inspector') },
+    })
+  }, [state.promptBuildTrace, state.t])
 
   useEffect(() => {
     rendererHost.setScopeSnapshot({
@@ -413,7 +434,8 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
       agentSession={state.agentChatSession}
       agentSessionsCount={state.agentChatSessions?.length}
       isPrimarySession={Boolean(state.agentChatSession && state.narrativeAgentSession?.id === state.agentChatSession.id)}
-      agentPanel={<AgentChatPanel
+      agentPanel={<ContentErrorBoundary resetKey={state.agentChatSession?.id} fallback={error => <p role="alert">{error.message}</p>}><AgentChatPanel
+        active={uiState.agentPanelOpen}
       busy={agentChatBusy}
       activeRun={state.agentActiveRun}
       runRecovery={state.runRecovery}
@@ -426,6 +448,8 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
       displayProjection={agentDisplay}
       session={state.agentChatSession}
       sessions={state.agentChatSessions}
+      cards={state.cards}
+      timelines={state.allTimelines}
       sessionReady={state.agentChatSessionReady}
       profiles={state.agentPresets}
       sessionTail={state.agentChatSession ? (
@@ -440,7 +464,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
       onSelectSession={id => { void openAgentSession(id) }}
       onNewSession={state.newAgentSession}
       onCreateSession={state.createAgentSession}
-      canMakePrimary={Boolean(state.narrativeTimeline || state.selectedCardId)}
+      canMakePrimary={Boolean(state.narrativeTimeline)}
       primarySessionId={state.narrativeAgentSession?.id}
       timelineId={state.narrativeTimeline?.id}
       onSetPrimary={state.setPrimaryAgentSession}
@@ -455,11 +479,14 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
       rendererHost={rendererHost}
       selectedProfileId={state.selectedAgentPresetId}
       t={state.t}
-      />}
+      /></ContentErrorBoundary>}
       agentPanelOpen={uiState.agentPanelOpen}
       canUndo={state.canUndoEdit}
-      characterAvatarUrl={narrativeCharacterAvatarUrl}
-      characterName={narrativeCharacterName}
+      characterControl={appearanceCardId ? <StudioTimelineActions
+        key={JSON.stringify([state.endpoint, appearanceCardId, state.narrativeTimeline?.id])}
+        state={state} navigation={navigation} cardId={appearanceCardId}
+        busy={sessionBusy || cardsBusy || mutationBusy || narrativeNavigating || Boolean(state.runRecovery)
+          || state.agentActiveRun?.status === 'running' || state.agentActiveRun?.status === 'suspended'} /> : undefined}
       customCss={state.customCss}
       onRedo={() => { void applyHistoryAction(state.redoEdit) }}
       onToggleAgentPanel={() => uiState.setAgentPanelOpen(prev => !prev)}
@@ -514,25 +541,42 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
       uiScale={uiScale}
       canvas={(
         <div
+          ref={narrativeSelectionRef}
           className={styles.canvasStack}
           style={{
             '--loom-composer-height': uiState.composerHeight ? `${uiState.composerHeight}px` : undefined,
             '--loom-composer-mask-depth': uiState.composerHeight ? `${Math.ceil(uiState.composerHeight / 2)}px` : undefined,
           } as CSSProperties}
         >
-          <NarrativeTimeline
+          <SelectionToolbar key={JSON.stringify(['selection-toolbar', state.endpoint, state.narrativeTimeline?.id, state.branch?.id])}
+            containerRef={narrativeSelectionRef} inputRef={narrativeInputRef} t={state.t}
+            onQuote={text => state.setInput(appendQuote(state.input, text))} />
+          <ContentErrorBoundary resetKey={state.branch?.id} fallback={error => <p role="alert">{error.message}</p>}><NarrativeTimeline
             displayProjection={narrativeDisplay}
-            key={JSON.stringify([state.endpoint, state.narrativeTimeline?.id, state.branch?.id])}
+            key={JSON.stringify(['narrative-timeline', state.endpoint, state.narrativeTimeline?.id, state.branch?.id])}
             anchorNodeId={navigation.nodeAnchorId}
             busy={sessionBusy || narrativeNavigating}
             composerHeight={uiState.composerHeight}
             emptyTimelineText={state.emptyTimelineText}
             openingDraft={!state.narrativeTimeline && state.selectedCardDetails?.id === state.selectedCardId ? state.openingDraft : undefined}
             openingDisplay={openingDisplay}
-            openingControls={!state.narrativeTimeline && state.selectedCardDetails && state.selectedCardDetails.id === state.selectedCardId
+            openingControls={(!state.narrativeTimeline || (state.narrativeTimeline.opening && !state.narrativeTimeline.opening.locked)) && state.selectedCardDetails
+              && state.selectedCardDetails.id === (state.narrativeTimeline?.createdFrom?.cardId ?? state.selectedCardId)
               ? <OpeningPicker opening={state.selectedCardDetails.opening} choice={state.openingChoice}
-                onChange={state.setOpeningChoice} disabled={sessionBusy || narrativeNavigating} t={state.t} />
+                onChange={choice => {
+                  state.setOpeningChoice(choice)
+                  if (state.narrativeTimeline && choice.kind !== 'custom') void state.replaceOpening(choice)
+                }}
+                onApply={state.narrativeTimeline ? () => { void state.replaceOpening() } : undefined}
+                disabled={sessionBusy || narrativeNavigating} t={state.t} />
               : undefined}
+            onStartStory={!state.narrativeTimeline && state.selectedCardDetails?.id === state.selectedCardId
+              ? () => {
+                const isCurrent = navigation.isCurrent
+                void state.createTimelineFromCard().then(activated => {
+                  if (activated && isCurrent()) navigation.openNarrative(activated.timelineId, activated.branchId)
+                })
+              } : undefined}
             getNodeLink={navigation.getNodeLink}
             hasOlder={state.hasOlderNarrativeNodes}
             onEditNode={state.editNarrativeNode}
@@ -555,8 +599,9 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
                 surface="narrative.timeline.tail"
               />
             ) : undefined}
-          />
+          /></ContentErrorBoundary>
           <AgentComposer
+            inputRef={narrativeInputRef}
             canRetryNarrativeInput={state.canRetryNarrativeInput && !narrativeNavigating}
             onRetryNarrativeInput={() => { void state.retryNarrativeInput() }}
             runRecovery={state.runRecovery}
@@ -592,8 +637,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
               void state.previewPrompt()
             }}
             onSubmitNarrative={async event => {
-              const activated = await state.submitTurn(event)
-              if (activated) navigation.openNarrative(activated.timelineId, activated.branchId)
+              await state.submitTurn(event)
             }}
             onToggleAgentPanel={() => uiState.setAgentPanelOpen(prev => !prev)}
           />

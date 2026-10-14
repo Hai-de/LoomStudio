@@ -149,6 +149,7 @@ export async function composeAgentTurnPrompt(input: {
         ...input.processing,
         renderText: content => renderVariableMacros(content, variables),
       }) : undefined
+  if (processed) diagnostics.push(...processed.diagnostics)
   if (input.resumeMessages && !input.resumeProcessingSnapshot && contributions.some(entry => entry.capabilities.processorId)) {
     throw new Error('Cannot restore processed Prompt context without its build snapshot')
   }

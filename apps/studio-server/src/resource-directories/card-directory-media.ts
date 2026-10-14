@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { watch as watchDirectory } from 'node:fs'
 import * as fs from 'node:fs/promises'
 import { basename, extname, resolve } from 'node:path'
@@ -13,8 +14,11 @@ const imageTypes: Record<string, string> = {
 
 export function createCardDirectoryMedia(options: { dataRoot: string; logger?: Logger }) {
   const root = resolve(options.dataRoot)
+  // Bounded preview cache; exports always read original bytes. Revalidate file identity
+  // after resolving the current binding/manifest so external edits remain visible.
+  const cache = new Map<string, { signature: string; bytes: Uint8Array; mediaType: string; etag: string }>()
   return {
-    async read(cardId: string, kind: 'avatar' | 'background', assetId?: string, forExport = false): Promise<{ bytes: Uint8Array; mediaType: string } | undefined> {
+    async read(cardId: string, kind: 'avatar' | 'background', assetId?: string, forExport = false): Promise<{ bytes: Uint8Array; mediaType: string; etag?: string } | undefined> {
       const binding = await readCardDirectoryBinding(root, cardId)
       const baselineBytes = await readOptional(root, `.loom/card-directories/${cardId}/baseline.json`)
       if (!baselineBytes) return undefined
@@ -36,10 +40,27 @@ export function createCardDirectoryMedia(options: { dataRoot: string; logger?: L
       const declaredType = readCardMediaType(path, manifest.mediaTypes?.[path])
       const mediaType = forExport ? declaredType : imageTypes[extname(path).toLowerCase()]
       if (!mediaType || (!forExport && mediaType !== declaredType)) throw new Error('Card directory media must be a raster image')
+      const file = await safePath(directory, path)
+      const stat = await fs.stat(file, { bigint: true }).catch(error => {
+        if (error.code === 'ENOENT') throw new Error(`Card directory media is missing: ${path}`, { cause: error })
+        throw error
+      })
+      const signature = `${file}:${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}:${mediaType}`
+      const cacheKey = `${cardId}:${kind}`
+      const previous = cache.get(cacheKey)
+      if (!forExport && previous?.signature === signature) return previous
       const bytes = await readOptional(directory, path)
       if (!bytes) throw new Error(`Card directory media is missing: ${path}`)
       if (!forExport && !matchesImageType(bytes, mediaType)) throw new Error('Card directory media content is not the declared raster image type')
-      return { bytes: mediaType === 'image/png' ? stripPngTextMetadata(bytes) : bytes, mediaType }
+      const clean = mediaType === 'image/png' ? stripPngTextMetadata(bytes) : bytes
+      if (forExport) return { bytes: clean, mediaType }
+      const result = { signature, bytes: clean, mediaType, etag: `"${createHash('sha256').update(clean).digest('hex')}"` }
+      cache.delete(cacheKey)
+      if (clean.byteLength <= 8 * 1024 * 1024) {
+        if (cache.size >= 8) cache.delete(cache.keys().next().value!)
+        cache.set(cacheKey, result)
+      }
+      return result
     },
     async watch(onChange: () => void): Promise<{ dispose(): void }> {
       await fs.mkdir(root, { recursive: true })

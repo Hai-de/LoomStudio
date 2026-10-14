@@ -1,32 +1,43 @@
 .picker {
-  display: grid;
-  gap: 8px;
   min-width: 0;
+  flex: 0 0 auto;
 }
 
-.toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+.choices {
+  display: grid;
+  gap: 4px;
+  max-height: 45vh;
+  overflow-y: auto;
+}
 
-  select {
-    flex: 1;
-    min-width: 120px;
-    max-width: 100%;
+.option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 8px;
+  cursor: pointer;
+
+  span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.custom {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+
+  textarea {
+    min-height: 160px;
   }
 
   button {
+    justify-self: end;
     display: grid;
     place-items: center;
-    width: 28px;
-    height: 28px;
-    flex: 0 0 28px;
+    width: 36px;
+    height: 36px;
   }
-}
-
-.counter {
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }

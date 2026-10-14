@@ -69,9 +69,7 @@ export type GetPromptResourceResult = {
   resource: PromptResource
 }
 
-export type ListPromptResourcesResult = {
-  resources: PromptResource[]
-}
+export type ListPromptResourcesResult = StudioRpcOutputs['application']['listPromptResources']
 
 export type GetPromptResourceBindingsResult = {
   resourceId: string

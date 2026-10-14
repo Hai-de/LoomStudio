@@ -1,9 +1,11 @@
 import { Check, Copy, WrapText, X } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { IconButton } from '@loom-studio/ui'
 import { useCopyFeedback } from '../../hooks/use-copy-feedback.js'
-import { highlightCode } from './code-highlight.js'
 import styles from './markdown-content.module.scss'
+import { ContentErrorBoundary } from '../content-error-boundary.js'
+
+const CodeHighlight = lazy(() => import('./code-highlight.js'))
 
 export type MarkdownCodeBlockLabels = {
   copied: string
@@ -21,7 +23,6 @@ export function MarkdownCodeBlock(props: {
   const { feedback, copy } = useCopyFeedback()
   const copyState = feedback?.status ?? 'idle'
   const [wrapped, setWrapped] = useState(false)
-  const content = useMemo(() => highlightCode(props.code, props.language), [props.code, props.language])
 
   const copyLabel = copyState === 'copied'
     ? props.labels.copied
@@ -48,7 +49,7 @@ export function MarkdownCodeBlock(props: {
           {copyState === 'copied' ? <Check aria-hidden="true" /> : copyState === 'failed' ? <X aria-hidden="true" /> : <Copy aria-hidden="true" />}
         </IconButton>
       </div>
-      <pre><code data-language={props.language}>{content}</code></pre>
+      <pre><code data-language={props.language}><ContentErrorBoundary fallback={props.code} resetKey={props.code}><Suspense fallback={props.code}><CodeHighlight code={props.code} language={props.language} /></Suspense></ContentErrorBoundary></code></pre>
     </div>
   )
 }

@@ -3,7 +3,7 @@ import type { JsonObject } from '@loom-studio/shared'
 import type { ApplicationRuntimeContext } from '../foundation/application-context.js'
 import { applicationDocumentTypes } from '../foundation/document-types.js'
 import { listDocuments, readDocument, writeDocument } from '../foundation/document-store.js'
-import { normalizeCardContent, readOpeningEntries } from '../cards/card.js'
+import { normalizeCardContent, readOpening } from '../cards/card.js'
 import { composeStateContributions, createCardStateContribution, materializeStateContribution } from '../state/state-contribution.js'
 import { expandTimelineStateBindings } from '../state/state-definition.js'
 import type { StateContributionSource } from '../state/state-contribution-registry.js'
@@ -17,7 +17,7 @@ import { timelineExtensionParticipationId } from '../extensions/timeline-partici
 import { timelineRuntimeContextId } from '../narrative/timeline-runtime-context.js'
 import { deleteTimelinePresetConfigs, listTimelinePresetConfigs, timelinePresetConfigId } from '../prompt/timeline-preset-config.js'
 import { normalizeMacroSelections } from '@loom-studio/shared'
-import type { NarrativePage } from '@loom-studio/application-data'
+import type { NarrativeNode, NarrativePage } from '@loom-studio/application-data'
 import { createNarrativeSampler } from '../narrative/sampling.js'
 import { parseTimelineArchive, timelineArchivePendingId, type TimelineArchive, type TimelineArchiveIdMap, type TimelineArchivePendingContent } from '../archive/timeline-archive.js'
 import type {
@@ -27,6 +27,8 @@ import type {
   MaterializedStateContribution,
   CreateNarrativeTimelineInput,
   CreateNarrativeTimelineResult,
+  ImportNarrativeHistoryInput,
+  ReplaceNarrativeOpeningInput,
   DeleteNarrativeTimelineInput,
   DeleteNarrativeTimelineResult,
   UpdateNarrativeTimelineInput,
@@ -63,6 +65,44 @@ export function createNarrativeRuntimeMethods(ctx: NarrativeRuntimeContext) {
   return {
     createNarrativeTimeline: (input: CreateNarrativeTimelineInput, requestContext?: RuntimeRequestContext): Promise<CreateNarrativeTimelineResult> =>
       createTimelineFromCard(ctx, input, requestContext, 'application.createNarrativeTimeline'),
+
+    importNarrativeHistory: (input: ImportNarrativeHistoryInput, requestContext?: RuntimeRequestContext): Promise<CreateNarrativeTimelineResult> =>
+      createTimelineFromCard(ctx, { cardId: input.cardId, title: input.title, openingContent: '' }, requestContext,
+        'application.importNarrativeHistory', input.messages),
+
+    replaceNarrativeOpening: async (input: ReplaceNarrativeOpeningInput, requestContext?: RuntimeRequestContext): Promise<CreateNarrativeTimelineResult> => {
+      if (input.openingId !== undefined && input.openingContent !== undefined)
+        throw new Error('Choose an opening ID or custom opening content, not both')
+      const narratives = requireNarratives(ctx)
+      const timeline = await narratives.getTimeline(input.timelineId)
+      if (!timeline?.opening || timeline.opening.locked || !timeline.createdFrom) throw new Error('Narrative opening is locked')
+      const branch = await narratives.getBranch(input.branchId)
+      if (!branch || branch.timelineId !== timeline.id) throw new Error('Narrative branch not found')
+      const card = await readDocument<CardSourceContent>(ctx.documents, timeline.createdFrom.cardId, applicationDocumentTypes.cardSource)
+      if (input.expectedCardVersion !== undefined && input.expectedCardVersion !== card.version)
+        throw new Error('Card changed while choosing an opening; reload the Card before starting')
+      const content = normalizeCardContent(card.content)
+      const revision = await ctx.states.getRevision(branch.stateHeadRevisionId)
+      if (!revision) throw new Error('Narrative State revision not found')
+      const variables = await readAgentTurnVariables(ctx, content.userName, revision.snapshot, content.name)
+      const selected = input.openingContent === undefined ? readOpening(content, variables, input.openingId) : undefined
+      const openingContent = input.openingContent ?? selected!.content
+      requestContext?.abortSignal?.throwIfAborted()
+      const result = await ctx.dataEngine.transact(
+        narrativeWriteContext(requestContext, 'application.replaceNarrativeOpening'),
+        async dataTx => requireDocumentParticipant(ctx).participateTransaction(dataTx, async documents => {
+          const currentCard = await readDocument<CardSourceContent>(documents, card.id, applicationDocumentTypes.cardSource)
+          if (currentCard.version !== card.version) throw new Error('Card changed while choosing an opening')
+          return narratives.transaction(dataTx).replaceOpening({
+            timelineId: input.timelineId, branchId: input.branchId, expectedHeadNodeId: input.expectedHeadNodeId,
+            expectedStateHeadRevisionId: branch.stateHeadRevisionId,
+            openingId: selected?.id,
+            openingNode: openingContent.trim() ? { body: { format: 'loom-markdown.v1', raw: openingContent } } : undefined,
+          })
+        }, { allowEmpty: true }),
+      )
+      return { ...result.value.value, mutation: { changesetId: result.commit.changesetId } }
+    },
 
     getNarrativeTimeline: async (input: GetNarrativeTimelineInput): Promise<GetNarrativeTimelineResult> => {
       const timeline = await requireNarratives(ctx).getTimeline(input.timelineId)
@@ -130,8 +170,11 @@ export function createNarrativeRuntimeMethods(ctx: NarrativeRuntimeContext) {
             snapshot: revision.snapshot, operations: revision.operations,
           })
           narrativeTx.createTimeline({
+            // Imported histories stay locked, even when the archive carries an opening window.
             id: timelineId, primaryBranchId: idMap.branchIds[root.id], title: archive.timeline.title,
             primaryBranchTitle: root.title, stateRevisionId: idMap.stateRevisionIds[root.stateHeadRevisionId]!,
+            opening: archive.timeline.opening ? { ...archive.timeline.opening, locked: true,
+              nodeId: archive.timeline.opening.nodeId ? idMap.nodeIds[archive.timeline.opening.nodeId] : undefined } : undefined,
           })
           narrativeTx.restoreArchivePaths({
             timelineId,
@@ -351,6 +394,7 @@ async function createTimelineFromCard(
   input: CreateNarrativeTimelineInput,
   requestContext: RuntimeRequestContext | undefined,
   reason: string,
+  history?: ImportNarrativeHistoryInput['messages'],
 ) {
   const narratives = requireNarratives(ctx)
   const card = await readDocument<CardSourceContent>(ctx.documents, input.cardId, applicationDocumentTypes.cardSource)
@@ -416,15 +460,15 @@ async function createTimelineFromCard(
       throw new Error(`State contribution does not match the installed extension version: ${source.contributionId}`)
     }
   }
-  if (input.openingIndex !== undefined && input.openingNodes !== undefined)
-    throw new Error('Choose an opening index or custom opening nodes, not both')
+  if (input.openingId !== undefined && input.openingContent !== undefined)
+    throw new Error('Choose an opening ID or custom opening content, not both')
   const baseContribution = createCardStateContribution(card.id, cardContent, templates)
   const baseState = materializeStateContribution(composeStateContributions(`initial:${card.id}`, [
     baseContribution, ...contributionSources.map(source => source.contribution),
   ])).snapshot
   const variables = await readAgentTurnVariables(ctx, cardContent.userName, baseState, cardContent.name)
-  const initialOpening = input.openingNodes?.map(entry => renderVariableMacros(entry.content, variables))
-    ?? readOpeningEntries(cardContent, variables, input.openingIndex).map(entry => entry.content)
+  const selectedOpening = input.openingContent === undefined ? readOpening(cardContent, variables, input.openingId) : undefined
+  const initialOpening = input.openingContent !== undefined ? renderVariableMacros(input.openingContent, variables) : selectedOpening!.content
   const initializationInstallations = new Map(await readAvailableExtensionInstallations(ctx.documents, card.id, null))
   for (const installation of adoptedInstallations) initializationInstallations.set(installation.id, installation.content.packageId)
   const initializationResources = contributionSources.length
@@ -436,6 +480,7 @@ async function createTimelineFromCard(
       cardId: card.id,
       characterName: cardContent.name,
       opening: initialOpening,
+      openingId: selectedOpening?.id,
       resources: initializationResources,
       signal: requestContext?.abortSignal ?? new AbortController().signal,
     }))
@@ -471,10 +516,7 @@ async function createTimelineFromCard(
     contributionSources,
   })
   const openingVariables = createVariableRenderContext({ ...variables.snapshot, timeline: initialState })
-  const openingEntries = input.openingNodes?.map(entry => ({
-    content: entry.content,
-    ...(entry.createdAt ? { createdAt: entry.createdAt } : {}),
-  })) ?? readOpeningEntries(cardContent, openingVariables, input.openingIndex)
+  const openingContent = input.openingContent ?? readOpening(cardContent, openingVariables, input.openingId).content
   requestContext?.abortSignal?.throwIfAborted()
   const transaction = await ctx.dataEngine.transact(
     narrativeWriteContext(requestContext, reason),
@@ -522,17 +564,28 @@ async function createTimelineFromCard(
         snapshot: initialState,
         operations: [],
       })
-      return narrativeTx.createTimeline({
+      const created = narrativeTx.createTimeline({
         id: timelineId,
         primaryBranchId: branchId,
         stateRevisionId,
         title: input.title ?? cardContent.name,
         createdFrom: { cardId: card.id, cardVersion: card.version },
         promptResourceIds: cardContent.promptResourceIds ?? [],
-        openingNodes: openingEntries.map(entry => ({
-          body: { format: 'loom-markdown.v1' as const, raw: entry.content },
-        })),
+        opening: { id: selectedOpening?.id, locked: history !== undefined },
+        openingNode: openingContent.trim() ? { body: { format: 'loom-markdown.v1', raw: openingContent } } : undefined,
       })
+      if (history === undefined) return created
+      const nodes: NarrativeNode[] = []
+      for (const message of history) {
+        nodes.push({
+          id: ctx.createId('node'), timelineId, parentNodeId: nodes.at(-1)?.id,
+          stateRevisionId, body: { format: 'loom-markdown.v1', raw: message.content },
+          createdAt: message.createdAt ?? ctx.now(),
+        })
+      }
+      const branch = { ...created.branch, headNodeId: nodes.at(-1)?.id }
+      narrativeTx.restoreArchivePaths({ timelineId, nodes, branches: [branch] })
+      return { timeline: narrativeTx.getTimeline(timelineId)!, nodes, branch }
     }),
   )
   return {

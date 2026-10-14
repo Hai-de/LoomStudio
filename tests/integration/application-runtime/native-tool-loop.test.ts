@@ -168,12 +168,16 @@ describe('Native Function Tool Loop', () => {
     })
     try {
       const { card } = await fixture.runtime.createCard({
-        name: 'Branch isolation', opening: { entries: [
-          { role: 'assistant', content: 'Original' },
-          ...(scenario === 'outside' ? [{ role: 'assistant' as const, content: 'Other branch only' }] : []),
-        ] },
+        name: 'Branch isolation', opening: { content: 'Original' },
       })
       const timeline = await fixture.runtime.createNarrativeTimeline({ cardId: card.id })
+      if (scenario === 'outside') {
+        const appended = await fixture.runtime.appendNarrativeInput({ timelineId: timeline.timeline.id, branchId: timeline.branch.id,
+          nodeId: 'other-branch-history', expectedHeadNodeId: timeline.branch.headNodeId!, content: 'Other branch only',
+        })
+        timeline.nodes.push(appended.node)
+        timeline.branch = appended.branch
+      }
       nodeId = (scenario === 'outside' ? timeline.nodes[1] : timeline.nodes[0])!.id
       const { branch } = await fixture.runtime.forkNarrativeBranch({
         timelineId: timeline.timeline.id, fromBranchId: timeline.branch.id, fromNodeId: timeline.nodes[0]!.id,

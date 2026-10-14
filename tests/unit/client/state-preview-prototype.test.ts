@@ -19,7 +19,7 @@ function preview(input: Record<string, unknown>) {
   const config = parseCardStateConfig(JSON.stringify(input))
   const card: Card = {
     ...config, id: 'card-1', version: 1, name: 'User Card',
-    opening: { entries: [] }, lore: { entries: [] }, createdAt: 'now', updatedAt: 'now',
+    opening: { id: 'root-opening', content: '' }, lore: { entries: [] }, createdAt: 'now', updatedAt: 'now',
   }
   vi.mocked(stateSnapshotToTreeNodes).mockClear()
   const html = renderToStaticMarkup(createElement(StateAuthoringPanel, {

@@ -52,6 +52,27 @@ function elements(value: unknown): Element[] {
 }
 
 describe('Narrative正文保存', () => {
+  it('shows an explicit start action only in preview, including an empty opening', () => {
+    const start = vi.fn()
+    const t = createTranslator('zh-CN')
+    const props: ComponentProps<typeof NarrativeTimeline> = {
+      busy: false, composerHeight: 120, emptyTimelineText: '', hasOlder: false,
+      getNodeLink: () => '', onEditNode: vi.fn(), onForkNode: vi.fn(), onLoadOlder: vi.fn(),
+      onNodeAnchorChange: vi.fn(), t, timeline: [], onStartStory: start,
+      openingDraft: { content: '', isPlaceholder: true },
+    }
+    const render = () => { hooks.cursor = 0; return elements(NarrativeTimeline(props)) }
+    const button = () => render().find(element => element.type === 'button' && element.props.onClick === start)
+    expect(button()?.props.disabled).toBe(false)
+    expect(button()?.props.children).toContain('开始一个新故事')
+    ;(button()!.props.onClick as () => void)()
+    expect(start).toHaveBeenCalledOnce()
+    props.busy = true
+    expect(button()?.props.disabled).toBe(true)
+    props.timelineId = 'started'
+    expect(button()).toBeUndefined()
+  })
+
   it('automatically supplies node raw text and updated drafts to live counting without a refresh button', () => {
     const t = createTranslator('en-US')
     const props: ComponentProps<typeof NarrativeTimeline> = {

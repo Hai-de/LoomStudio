@@ -18,6 +18,7 @@ import type {
   TextTransformPhase,
   TextTransformRuleDraft
 } from '../../entities/index.js'
+import { createDefaultTitle } from '../i18n/creation-title.js'
 import { createStudioTrpcClient, type StudioRpcInputs, type StudioRpcOutputs, type StudioTrpcClient } from './trpc-client.js'
 export type AgentMutationApproval = Pick<Extract<StudioRpcOutputs['application']['agent.run.subscribe']['events'][number], { type: 'mutation-approval-requested' }>, 'requestId' | 'preview'> & { action?: never } | Pick<Extract<StudioRpcOutputs['application']['agent.run.subscribe']['events'][number], { type: 'history-read-approval-requested' }>, 'requestId' | 'action'> & { preview?: never }
 
@@ -242,7 +243,9 @@ export function createStudioApi(trpc: StudioTrpcClient = createStudioTrpcClient(
       recoverDirectory: (cardId: string) => trpc.directories.recoverCard.mutate({ cardId }),
     },
     agentSessions: {
-      create: (input: CreateAgentSessionInput) => trpc.application['createAgentSession'].mutate(input),
+      create: (input: CreateAgentSessionInput) => trpc.application['createAgentSession'].mutate({
+        ...input, title: input.title ?? createDefaultTitle('session'),
+      }),
       list: (input?: { agentPresetId?: string; timelineId?: string; standalone?: boolean; cursor?: string; limit?: number }) => trpc.application['listAgentSessions'].query((input ?? {})),
       get: (agentSessionId: string) => trpc.application['getAgentSession'].query({ agentSessionId }),
       getTranscript: (input: { agentSessionId: string; cursor?: string; limit?: number }) => trpc.application['getAgentTranscriptPage'].query(input),
@@ -308,7 +311,11 @@ export function createStudioApi(trpc: StudioTrpcClient = createStudioTrpcClient(
       getEffectivePreview: (input: { timelineId: string; branchId: string }) => trpc.application['getEffectiveNarrativePreview'].query(input),
       appendInput: (input: { timelineId: string; branchId: string; nodeId: string; expectedHeadNodeId: string | null; content: string }) => trpc.application['appendNarrativeInput'].mutate(input),
       editNode: (input: { timelineId: string; branchId: string; nodeId: string; expectedHeadNodeId: string; expectedRaw: string; raw: string }) => trpc.application['editNarrativeNode'].mutate(input),
-      create: (input: CreateNarrativeTimelineInput) => trpc.application['createNarrativeTimeline'].mutate(input),
+      create: (input: CreateNarrativeTimelineInput) => trpc.application['createNarrativeTimeline'].mutate({
+        ...input, title: input.title ?? createDefaultTitle('timeline'),
+      }),
+      importHistory: (input: { cardId: string; title?: string; messages: Array<{ content: string; createdAt?: string }> }) => trpc.application['importNarrativeHistory'].mutate(input),
+      replaceOpening: (input: StudioRpcInputs['application']['replaceNarrativeOpening']) => trpc.application['replaceNarrativeOpening'].mutate(input),
       get: (timelineId: string) => trpc.application['getNarrativeTimeline'].query({ timelineId }),
       list: (input?: { createdFromCardId?: string; cursor?: string; limit?: number }) => trpc.application['listNarrativeTimelines'].query((input ?? {})),
       getPage: (input: { timelineId: string; branchId?: string; cursor?: string; limit?: number }) => trpc.application['getNarrativePage'].query(input),

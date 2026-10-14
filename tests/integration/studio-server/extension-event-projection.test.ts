@@ -154,7 +154,7 @@ describe('Card extension platform event projection', () => {
       const { card: cardB } = await runtime.createCard({ name: 'B' })
       const own = subscriber(cardA.id)
       const foreign = subscriber(cardB.id)
-      const timeline = await runtime.createNarrativeTimeline({ cardId: cardA.id, openingNodes: [{ content: 'Opening' }] })
+      const timeline = await runtime.createNarrativeTimeline({ cardId: cardA.id, openingContent: 'Opening' })
       const created = commits.find(commit => commit.changesetId === timeline.mutation.changesetId)!
       const creationEvent = event('data.changed', summarizeDataCommit(created))
       const projected = await projectExtensionEvent(stores, creationEvent, own)

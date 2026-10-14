@@ -27,8 +27,11 @@ describe('Studio Server text transform RPC', () => {
         .resolves.toMatchObject({ definitions: [{ id: 'subset-state' }] })
       await expect(callRpc(port, 'application.listStateDefinitions', { ids: [] })).resolves.toEqual({ definitions: [] })
       await expect(callRpc(port, 'application.listStateDefinitions', { ids: [1] })).rejects.toThrow()
-      const created = await callRpc<{ timeline: { id: string }; branch: { id: string } }>(port, 'application.createNarrativeTimeline', {
-        cardId: card.id, openingNodes: [{ content: 'raw first' }, { content: 'raw second' }],
+      const created = await callRpc<{ timeline: { id: string }; branch: { id: string; headNodeId: string } }>(port, 'application.createNarrativeTimeline', {
+        cardId: card.id, openingContent: 'raw first',
+      })
+      await callRpc(port, 'application.appendNarrativeInput', { timelineId: created.timeline.id, branchId: created.branch.id,
+        nodeId: 'raw-second', expectedHeadNodeId: created.branch.headNodeId, content: 'raw second',
       })
       const input = {
         source: { kind: 'narrative', timelineId: created.timeline.id, branchId: created.branch.id }, phase: 'display',

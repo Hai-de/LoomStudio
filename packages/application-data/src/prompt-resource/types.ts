@@ -111,6 +111,8 @@ export type ListPromptResourcesInput = {
   limit?: number
 }
 
+export type PromptResourceHeader = Pick<PromptResource, 'id' | 'resourceKind' | 'rootNodeId' | 'label' | 'version' | 'createdAt' | 'updatedAt' | 'tombstoned'>
+
 export type PromptResourcePage = {
   resources: PromptResource[]
   nextCursor?: string
@@ -226,7 +228,8 @@ export type PromptResourceStore = {
   getResource(id: string, options?: { includeTombstone?: boolean }): Promise<PromptResource | null>
   getResourceMetadataAtVersion(id: string, version: number): Promise<JsonObject | null>
   listResources(input?: ListPromptResourcesInput): Promise<PromptResourcePage>
-  listSearchResources(): Promise<PromptResourceSearchHeader[]>
+  listResourceHeaders(input?: ListPromptResourcesInput): Promise<{ resources: PromptResourceHeader[]; nextCursor?: string }>
+  listSearchResources(): Promise<Array<PromptResourceSearchHeader | { id: string; label: string; error: string }>>
   searchNodes(input: SearchPromptResourceNodesInput): Promise<PromptResourceSearchPage>
   listSearchNodes(input: { resourceId: string; limit?: number; cursor?: string }): Promise<PromptResourceSearchPage>
   listLoreMounts(input?: ListLoreMountsInput): Promise<LoreMount[]>

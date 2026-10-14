@@ -38,6 +38,20 @@ async function setup() {
 }
 
 describe('card directory media', () => {
+  it('reuses validated preview bytes and ETags but detects external file edits', async () => {
+    const { media, directory } = await setup()
+    const first = await media.read('card-1', 'avatar', 'asset-1')
+    const cached = await media.read('card-1', 'avatar', 'asset-1')
+    expect(cached?.bytes).toBe(first?.bytes)
+    expect(cached?.etag).toBe(first?.etag)
+    await fs.writeFile(join(directory, 'assets/avatar.png'), png('edited'))
+    const changed = await media.read('card-1', 'avatar', 'asset-1')
+    expect(changed?.etag).not.toBe(first?.etag)
+    expect(changed?.bytes).not.toBe(first?.bytes)
+    await fs.rm(join(directory, 'assets/avatar.png'))
+    await expect(media.read('card-1', 'avatar', 'asset-1')).rejects.toThrow()
+  })
+
   it('exports original non-raster MIME and bytes without expanding HTTP preview permissions', async () => {
     const { media, directory, manifest } = await setup()
     const bytes = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>')

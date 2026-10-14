@@ -39,7 +39,7 @@ export function useStudioDerivedValues(input: {
   }), [input.macroKey, input.macroPreview, hasTimeline, input.macroContextCard])
 
   const cardOpeningEntry = input.selectedCardDetails
-    ? openingChoiceText(input.selectedCardDetails.opening, input.openingChoice ?? { kind: 'card', index: 0 }).trim()
+    ? openingChoiceText(input.selectedCardDetails.opening, input.openingChoice ?? { kind: 'card', id: input.selectedCardDetails.opening.id }).trim()
     : undefined
   const rawOpeningContent = cardOpeningEntry && cardOpeningEntry.length > 0
     ? cardOpeningEntry

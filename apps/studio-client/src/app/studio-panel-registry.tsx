@@ -1,5 +1,6 @@
 import type { MemoryLogSink } from '@loom-studio/logging'
 import React, { type ReactNode } from 'react'
+import { ContentErrorBoundary } from '../shared/ui/content-error-boundary.js'
 import { formatEntityReference } from '@loom-studio/shared'
 import type { ClientRendererHost } from '../shared/extension-renderer-runtime/client-renderer-host.js'
 import type { StudioPanelId } from '../shared/studio-shell/studio-layout-store.js'
@@ -76,6 +77,8 @@ export function createStudioPanels(input: {
       api={state.textTransformsApi}
       endpoint={state.endpoint}
       resources={state.promptResourceDrafts}
+      invalidResources={state.invalidPromptResources}
+      onRefresh={state.retryPromptResources}
       t={state.t}
       onOpenResource={(resource, nodeId) => {
         void navigation.openResource(resource.resourceKind === 'preset' ? 'agent' : 'resource', resource.id, nodeId)
@@ -99,8 +102,16 @@ export function createStudioPanels(input: {
         agentSessions={state.allAgentSessions}
         agentPresets={state.agentPresets}
         onOpenCard={card => {
-          void state.selectCardTimeline(card.id, true).then(activated => {
+          if (card.validationError !== undefined) {
+            void navigation.openPanel('character', { cardId: card.id })
+            return
+          }
+          void state.selectCardTimeline(card.id).then(activated => {
+            if (!navigation.isCurrent()) return
             if (activated) navigation.openNarrative(activated.timelineId, activated.branchId)
+            else if (activated === null) {
+              void navigation.openCardPreview(card.id)
+            }
           })
         }}
         onOpenTimeline={timeline => {
@@ -134,7 +145,7 @@ export function createStudioPanels(input: {
           const timeline = state.narrativeTimeline?.id === timelineId
             ? state.narrativeTimeline : state.allTimelines.find(item => item.id === timelineId)
           const deleted = await state.deleteTimeline(timelineId)
-          if (deleted) navigation.clearDeletedTimeline(timelineId, timeline?.createdFrom?.cardId)
+          if (deleted && navigation.isCurrent()) navigation.clearDeletedTimeline(timelineId, timeline?.createdFrom?.cardId)
           return deleted
         }}
         onOpenAgentSessionInSidebar={session => {
@@ -168,13 +179,18 @@ export function createStudioPanels(input: {
         onCreateCard={state.createCard}
         onCreateTimelineFromCard={async (cardId, choice, cardVersion) => {
           const activated = await state.createTimelineFromCard(cardId, choice, cardVersion)
-          if (activated) {
+          if (activated && navigation.isCurrent()) {
             state.setSelectedCardId(cardId)
             navigation.openNarrative(activated.timelineId, activated.branchId)
           }
           return Boolean(activated)
         }}
         onDeleteCards={state.deleteCards}
+        onPreviewCard={cardId => {
+          state.resetToDraftTimeline()
+          state.setSelectedCardId(cardId)
+          void navigation.openCardPreview(cardId)
+        }}
         onPreviewCardDeletion={state.previewCardDeletion}
         onExportCard={state.exportCard}
         onForkCard={state.forkCard}
@@ -208,7 +224,7 @@ export function createStudioPanels(input: {
         }}
         onOpenTimeline={(timeline, cardId) => {
           void state.activateTimeline(timeline.id).then(branchId => {
-            if (branchId) {
+            if (branchId && navigation.isCurrent()) {
               state.setSelectedCardId(cardId)
               navigation.openNarrative(timeline.id, branchId)
             }
@@ -433,5 +449,15 @@ export function createStudioPanels(input: {
       />
     ),
   }
+  for (const id of Object.keys(panels) as StudioPanelId[]) {
+    const render = panels[id]
+    panels[id] = active => <ContentErrorBoundary resetKey={active} fallback={error => <div role="alert">
+      <p>{state.t('appError.title')}</p><p>{error.message}</p>
+    </div>}><PanelContent render={render} active={active} /></ContentErrorBoundary>
+  }
   return panels
+}
+
+function PanelContent(props: { render(active: boolean): ReactNode; active: boolean }) {
+  return props.render(props.active)
 }

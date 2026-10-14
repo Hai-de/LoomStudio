@@ -73,6 +73,7 @@ export function useGlobalSearch(input: { api: StudioApi; endpoint: string; open:
     loading: input.open && Boolean(activeQuery && (debouncing || activeQuery.isPending)),
     loadingMore: activeQuery?.isFetchingNextPage ?? false,
     error: activeQuery?.error ?? null,
+    diagnostics: activeQuery?.data?.pages[0]?.diagnostics ?? [],
     hasMore: activeQuery?.hasNextPage ?? false,
     setInputValue, showScopes, showTypes, showResults, selectScope, selectKind, removeScope, removeKind, clearFilters,
     loadMore: () => {

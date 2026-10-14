@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useRef, useState, type FormEvent, type ReactNode, type Ref } from 'react'
 import type { Translator } from '../../shared/i18n/index.js'
 import { ChatComposer, type ChatComposerQuickAction } from '../chat-composer/chat-composer.js'
 import styles from './agent-composer.module.scss'
@@ -7,6 +7,7 @@ import { RunRecoveryControls, type RunRecoveryControlsProps } from '../../featur
 const AGENT_EXPANSION_MIN_HEIGHT = 220
 
 export type AgentComposerProps = RunRecoveryControlsProps & {
+  inputRef?: Ref<HTMLTextAreaElement>
   canPreviewPrompt: boolean
   canSendNarrative: boolean
   canRetryNarrativeInput?: boolean
@@ -70,6 +71,7 @@ export function AgentComposer(props: AgentComposerProps) {
         onMouseLeave={handleMouseLeave}
       >
       <ChatComposer
+        inputRef={props.inputRef}
         canPreviewPrompt={props.canPreviewPrompt}
         canSend={props.canSendNarrative && !disconnected && !props.runRecoveryBusy}
         expanded={props.agentPanelOpen}

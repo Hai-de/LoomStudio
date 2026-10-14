@@ -5,7 +5,7 @@ import { buildCardResourceTree, classifyCardPromptResources, readCardLoreTarget 
 
 const card: Card = {
   id: 'card-a', version: 3, name: 'A', createdAt: '', updatedAt: '',
-  opening: { entries: [] }, lore: { entries: [{ title: 'Inline setting', content: 'text' }] },
+  opening: { id: 'root-opening', content: '' }, lore: { entries: [{ title: 'Inline setting', content: 'text' }] },
   promptResourceIds: ['owned', 'external', 'extension'],
   externalPromptResourceIds: ['external'],
 }

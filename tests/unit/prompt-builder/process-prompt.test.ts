@@ -125,3 +125,60 @@ describe('authored prompt processing', () => {
     expect(create).toHaveBeenCalledTimes(2)
   })
 })
+
+function loreOnly() {
+  const input = fixture()
+  input.contributions = input.contributions.filter(entry => entry.sourceRef.kind !== 'preset')
+  input.sourceNodes = input.sourceNodes.filter(node => node.id !== 'inline')
+  return input
+}
+
+it('skips a missing Lore processor group with resource diagnostics and never emits its templates', async () => {
+  const result = await processPrompt(loreOnly(), { registry: createPromptProcessorRegistry(), context: context() })
+  expect(result.projection.messages.map(message => message.content).join(' ')).not.toMatch(/EARLY|LATE|OFF/)
+  expect(result.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ resourceId: 'lore', entryId: 'late', processorId: 'test/ejs' })]))
+  expect(result.diagnostics).toHaveLength(2)
+})
+
+it('isolates render failures to selected Lore entries and reports disposal failures separately', async () => {
+  const registry = createPromptProcessorRegistry()
+  registry.register({ id: 'test/ejs', create: () => ({
+    prepare: () => [{ id: 'early', active: true }],
+    render: entry => { if (entry.id === 'late') throw new Error('bad template'); return 'GOOD' },
+    dispose: () => { throw new Error('cleanup failed') },
+  }) })
+  const result = await processPrompt(loreOnly(), { registry, context: context() })
+  expect(result.projection.messages.map(message => message.content).join(' ')).toContain('GOOD')
+  expect(result.projection.messages.map(message => message.content).join(' ')).not.toContain('LATE')
+  expect(result.diagnostics.map(item => item.code)).toEqual(['prompt.processor_entry_skipped', 'prompt.processor_cleanup_failed'])
+})
+
+it('keeps a Preset failure as the primary cause when cleanup also fails', async () => {
+  const registry = createPromptProcessorRegistry()
+  registry.register({ id: 'test/ejs', create: () => ({ render: () => { throw new Error('primary template error') }, dispose: () => { throw new Error('cleanup error') } }) })
+  await expect(processPrompt(fixture(), { registry, context: context() })).rejects.toMatchObject({
+    message: expect.stringContaining('primary template error'),
+    cause: expect.objectContaining({ message: expect.stringContaining('preset/inline') }),
+    errors: expect.arrayContaining([expect.objectContaining({ message: 'cleanup error' })]),
+  })
+})
+
+it.each([
+  Object.assign(new Error('denied'), { code: 'state.permission_denied' }),
+  new DOMException('cancelled', 'AbortError'),
+  new Error('Extension instance test was not granted assets.read'),
+])('does not downgrade permission or cancellation errors to optional Lore warnings', async error => {
+  const registry = createPromptProcessorRegistry()
+  registry.register({ id: 'test/ejs', create: () => { throw error } })
+  await expect(processPrompt(loreOnly(), { registry, context: context() })).rejects.toBe(error)
+})
+
+it('discards the whole Lore group when batch preparation returns a partially invalid result', async () => {
+  const registry = createPromptProcessorRegistry()
+  const render = vi.fn(() => 'must not render')
+  registry.register({ id: 'test/ejs', create: () => ({ prepare: () => [{ id: 'late', content: 'partial' }, { id: 'foreign', active: true }], render }) })
+  const result = await processPrompt(loreOnly(), { registry, context: context() })
+  expect(render).not.toHaveBeenCalled()
+  expect(result.diagnostics).toHaveLength(2)
+  expect(result.model.contributions.find(item => item.id === 'late')?.content).toBe('LATE')
+})

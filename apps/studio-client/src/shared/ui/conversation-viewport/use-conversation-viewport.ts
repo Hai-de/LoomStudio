@@ -7,6 +7,7 @@ export function isConversationNearBottom(element: Pick<HTMLElement, 'scrollHeigh
 
 export function useConversationViewport(options: {
   items: readonly { id: string }[]
+  active?: boolean
   scopeId?: string
   pinnedId?: string
   overscan?: number
@@ -14,16 +15,20 @@ export function useConversationViewport(options: {
   composerExpanded?: boolean
   followInitially?: boolean
 }) {
+  const active = options.active !== false
   const scrollRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const followsBottomRef = useRef(options.followInitially !== false)
+  const savedScrollOffsetRef = useRef(0)
   const motionActiveRef = useRef(false)
   const [scrollMargin, setScrollMargin] = useState(0)
   const pinnedIndex = options.items.findIndex(item => item.id === options.pinnedId)
   const virtualizer = useVirtualizer({
     count: options.items.length,
+    enabled: active,
+    initialOffset: () => savedScrollOffsetRef.current,
     getScrollElement: () => scrollRef.current,
     getItemKey: useCallback((index: number) => options.items[index].id, [options.items]),
     estimateSize: () => 280,
@@ -41,11 +46,13 @@ export function useConversationViewport(options: {
   })
 
   useLayoutEffect(() => {
+    savedScrollOffsetRef.current = 0
     followsBottomRef.current = options.followInitially !== false
-    if (followsBottomRef.current) virtualizer.scrollToEnd()
+    if (active && followsBottomRef.current) virtualizer.scrollToEnd()
   }, [options.scopeId])
 
   useLayoutEffect(() => {
+    if (!active) return
     const update = () => {
       const list = listRef.current
       const scroll = scrollRef.current
@@ -56,9 +63,10 @@ export function useConversationViewport(options: {
     if (headerRef.current) observer.observe(headerRef.current)
     if (scrollRef.current) observer.observe(scrollRef.current)
     return () => observer.disconnect()
-  }, [options.items.length > 0])
+  }, [options.items.length > 0, active])
 
   useLayoutEffect(() => {
+    if (!active) return
     const follow = () => {
       const element = scrollRef.current
       if (element && followsBottomRef.current) element.scrollTop = element.scrollHeight
@@ -69,10 +77,10 @@ export function useConversationViewport(options: {
     if (contentRef.current) observer.observe(contentRef.current)
     if (scrollRef.current) observer.observe(scrollRef.current)
     return () => observer.disconnect()
-  }, [options.items, options.composerHeight])
+  }, [options.items, options.composerHeight, active])
 
   useLayoutEffect(() => {
-    if (options.composerExpanded === undefined || !followsBottomRef.current) return
+    if (!active || options.composerExpanded === undefined || !followsBottomRef.current) return
     const element = scrollRef.current
     if (!element) return
     if (globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
@@ -92,10 +100,12 @@ export function useConversationViewport(options: {
       cancelAnimationFrame(frame)
       motionActiveRef.current = false
     }
-  }, [options.composerExpanded])
+  }, [options.composerExpanded, active])
 
   function onScroll() {
+    if (!active) return
     if (!motionActiveRef.current && scrollRef.current) {
+      savedScrollOffsetRef.current = scrollRef.current.scrollTop
       followsBottomRef.current = isConversationNearBottom(scrollRef.current)
     }
   }

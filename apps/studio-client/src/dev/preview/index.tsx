@@ -1,3 +1,4 @@
+import { TimelineQuickActionsPreview } from './timeline-quick-actions-preview.js'
 import { createRoot } from 'react-dom/client'
 import type { ReactElement } from 'react'
 import '../../styles/global.css'
@@ -11,7 +12,7 @@ import { PackageResourceDrilldownPreview } from './package-resource-drilldown/pa
 import { BackgroundsPreview } from './backgrounds-preview.js'
 import { GlobalSearchPreview } from './global-search-preview.js'
 
-const previews: Record<string, () => ReactElement> = { 'global-search': GlobalSearchPreview, 'backgrounds': BackgroundsPreview, 'agent-chat': AgentChatPreview, 'narrative-timeline': NarrativeTimelinePreview, 'long-text-editor': LongTextEditorPreview, 'markdown-content': MarkdownContentPreview, 'file-tree': FileTreePreview, 'resource-registry': ResourceRegistryPreview, 'package-resource-drilldown': PackageResourceDrilldownPreview }
+const previews: Record<string, () => ReactElement> = { 'timeline-quick-actions': TimelineQuickActionsPreview, 'global-search': GlobalSearchPreview, 'backgrounds': BackgroundsPreview, 'agent-chat': AgentChatPreview, 'narrative-timeline': NarrativeTimelinePreview, 'long-text-editor': LongTextEditorPreview, 'markdown-content': MarkdownContentPreview, 'file-tree': FileTreePreview, 'resource-registry': ResourceRegistryPreview, 'package-resource-drilldown': PackageResourceDrilldownPreview }
 
 export function renderComponentPreview(root: HTMLElement, previewId: string): void {
   const Preview = previews[previewId]

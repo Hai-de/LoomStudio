@@ -5,6 +5,7 @@ import {
   PromptResourceStoreError,
   type ListPromptResourcesInput,
   type PromptResource,
+  type PromptResourceHeader,
   type PromptResourcePage,
   type PromptResourceStore,
   type PromptResourceStoreOptions,
@@ -95,6 +96,7 @@ export function createPromptResourceStore(options: PromptResourceStoreOptions): 
     getResource: (id, readOptions) => engine.read(database => readResource(database, id, readOptions?.includeTombstone ?? false)),
     getResourceMetadataAtVersion: (id, version) => engine.read(database => readResourceMetadataAtVersion(database, id, version)),
     listResources: input => engine.read(database => listResources(database, input)),
+    listResourceHeaders: input => engine.read(database => listResourceHeaders(database, input)),
     listSearchResources: () => engine.read(database => listSearchResources(database)),
     searchNodes: input => engine.read(database => searchNodes(database, input)),
     listSearchNodes: input => engine.read(database => listSearchNodes(database, input)),
@@ -141,6 +143,11 @@ export function createPromptResourceStore(options: PromptResourceStoreOptions): 
 }
 
 function listResources(database: DatabaseSync, input: ListPromptResourcesInput = {}): PromptResourcePage {
+  const page = listResourceHeaders(database, input)
+  return { ...page, resources: page.resources.map(row => readResource(database, row.id, true)).filter((resource): resource is PromptResource => resource !== null) }
+}
+
+function listResourceHeaders(database: DatabaseSync, input: ListPromptResourcesInput = {}): { resources: PromptResourceHeader[]; nextCursor?: string } {
   const limit = input.limit ?? defaultPageLimit
   if (!Number.isInteger(limit) || limit < 1 || limit > maximumPageLimit) throw new PromptResourceStoreError('prompt_resource.limit_invalid', `Prompt resource list limit must be between 1 and ${maximumPageLimit}`)
   const order = input.order ?? 'updatedAt'
@@ -167,8 +174,12 @@ function listResources(database: DatabaseSync, input: ListPromptResourcesInput =
       values.push(cursor[2] as string, cursor[2] as string, cursor[1])
     }
   }
-  const rows = database.prepare(`SELECT id, updated_at FROM prompt_resources WHERE ${clauses.join(' AND ')} ORDER BY ${order === 'id' ? 'id DESC' : 'updated_at DESC, id DESC'} LIMIT ?`).all(...values, limit + 1) as Array<{ id: string; updated_at: string }>
-  const resources = rows.slice(0, limit).map(row => readResource(database, row.id, true)).filter((resource): resource is PromptResource => resource !== null)
+  const rows = database.prepare(`SELECT id, resource_kind, root_node_id, label, version, created_at, updated_at, tombstoned FROM prompt_resources WHERE ${clauses.join(' AND ')} ORDER BY ${order === 'id' ? 'id DESC' : 'updated_at DESC, id DESC'} LIMIT ?`).all(...values, limit + 1) as Array<{ id: string; resource_kind: string; root_node_id: string; label: string; version: number; created_at: string; updated_at: string; tombstoned: number }>
+  const resources = rows.slice(0, limit).map(row => ({
+    id: row.id, resourceKind: row.resource_kind, rootNodeId: row.root_node_id, label: row.label,
+    version: row.version, createdAt: row.created_at, updatedAt: row.updated_at,
+    ...(row.tombstoned ? { tombstoned: true } : {}),
+  }))
   const last = rows[limit - 1]
   return {
     resources,

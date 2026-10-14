@@ -7,7 +7,7 @@ import { isObject } from '../foundation/json.js'
 import { validateStateDefinitionDraft, validateTimelineStateBinding } from '../state/state-definition.js'
 import { parseStateArtifact } from '../state/state-contribution.js'
 import { parseLoomScriptSource } from '../scripts/loom-script-codec.js'
-import { parseCardExtensionAdoptions } from './card.js'
+import { normalizeOpening, parseCardExtensionAdoptions } from './card.js'
 import { validateTextExtractorDraft, validateTextTransformRuleDraft, type TextExtractorDraft, type TextTransformRuleDraft } from '../transforms/history-text.js'
 import type { StateDefinitionDraft, TimelineStateBinding } from '../types.js'
 import type {
@@ -48,7 +48,10 @@ export function normalizeCardBundleArtifact(artifact: CardBundleArtifact): CardB
     artifactId: artifact.artifactId,
     displayName: artifact.displayName,
     description: artifact.description,
-    card: artifact.card,
+    card: {
+      ...artifact.card,
+      ...(artifact.card.opening !== undefined ? { opening: normalizeOpening(artifact.card.opening) } : {}),
+    },
     contextAssets: artifact.contextAssets ?? [],
     extensionPayloads: structuredClone(artifact.extensionPayloads ?? []),
     extensionPackages: structuredClone(artifact.extensionPackages ?? []),
@@ -515,20 +518,16 @@ function assertCardBundleCard(value: unknown): asserts value is CardBundleArtifa
       throw new Error('Card bundle opening alternatives must be an array')
     }
     const openings = [value.opening, ...(value.opening.alternatives ?? [])]
+    const ids = new Set<string>()
     for (const opening of openings) {
-      if (!isObject(opening) || (opening !== value.opening && !Array.isArray(opening.entries))) {
-        throw new Error('Card bundle opening alternative must contain entries')
+      if (!isObject(opening) || typeof opening.content !== 'string' || 'entries' in opening || 'role' in opening) {
+        throw new Error('Card bundle opening must contain single string content')
       }
-      if (opening.entries !== undefined && !Array.isArray(opening.entries)) {
-        throw new Error('Card bundle card.opening.entries must be an array')
-      }
-      for (const [index, entry] of (opening.entries ?? []).entries()) {
-        if (!isObject(entry) || typeof entry.content !== 'string') {
-          throw new Error(`Card bundle opening entry must contain string content: ${index}`)
-        }
-        if (entry.role !== undefined && entry.role !== 'user' && entry.role !== 'assistant') {
-          throw new Error(`Card bundle opening entry role is invalid: ${index}`)
-        }
+      assertOptionalString(opening.title, 'Card bundle opening title')
+      if (opening.id !== undefined) {
+        if (typeof opening.id !== 'string' || !opening.id.trim()) throw new Error('Invalid opening ID')
+        if (ids.has(opening.id)) throw new Error(`Duplicate opening ID: ${opening.id}`)
+        ids.add(opening.id)
       }
     }
   }

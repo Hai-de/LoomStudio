@@ -54,46 +54,93 @@ export async function processPrompt(input: PromptDataModel, processing: {
   const sessions = new Map<string, ExtensionPromptProcessingSession>()
   const executions: PromptProcessingExecution[] = []
   const signal = processing.context.signal
+  const diagnostics: Array<{ severity: 'warning'; code: string; processorId: string; resourceId?: string; entryId?: string; message: string }> = []
+  const skipped = new Set<string>()
+  const skipOrThrow = (processorId: string, group: ExtensionPromptEntry[], stage: string, error: unknown) => {
+    signal.throwIfAborted()
+    const location = group.map(entry => `${entry.sourceId}/${entry.sourceNodeId}`).join(', ')
+    if (isBlockingProcessingError(error)) throw error
+    if (group.some(entry => entry.kind === 'preset')) {
+      throw new Error(`Prompt processor ${processorId} failed during ${stage} (${location}): ${error instanceof Error ? error.message : String(error)}`, { cause: error })
+    }
+    for (const entry of group) {
+      skipped.add(entry.id)
+      const selected = entries.get(entry.id)!
+      applyProcessedEntryPatch(selected, { active: false })
+      if (selected.node) selected.node.enabled = false
+      diagnostics.push({ severity: 'warning', code: 'prompt.processor_entry_skipped', processorId,
+        resourceId: entry.sourceId, entryId: entry.sourceNodeId,
+        message: `Skipped Lore ${entry.sourceId}/${entry.sourceNodeId}: ${processorId} ${stage} failed: ${error instanceof Error ? error.message : String(error)}` })
+    }
+  }
+  let failed = false
+  let primaryError: unknown
   try {
     for (const [processorId, group] of groups) {
       signal.throwIfAborted()
-      const session = await processing.registry.create(processorId, processing.context)
-      sessions.set(processorId, session)
-      if (!session.prepare) continue
-      const patches = await session.prepare(structuredClone(group))
-      signal.throwIfAborted()
-      if (!Array.isArray(patches)) throw new Error(`Invalid Prompt preparation result: ${processorId}`)
-      for (const patch of patches) {
-        if (!patch || entries.get(patch.id)?.processorId !== processorId
-          || (patch.content !== undefined && typeof patch.content !== 'string')
-          || (patch.active !== undefined && typeof patch.active !== 'boolean'))
-          throw new Error(`Invalid Prompt preparation patch: ${processorId}`)
-        applyProcessedEntryPatch(entries.get(patch.id)!, patch)
+      try {
+        const session = await processing.registry.create(processorId, processing.context)
+        sessions.set(processorId, session)
+        if (!session.prepare) continue
+        const patches = await session.prepare(structuredClone(group))
+        signal.throwIfAborted()
+        if (!Array.isArray(patches)) throw new Error(`Invalid Prompt preparation result: ${processorId}`)
+        for (const patch of patches) {
+          if (!patch || entries.get(patch.id)?.processorId !== processorId
+            || (patch.content !== undefined && typeof patch.content !== 'string')
+            || (patch.active !== undefined && typeof patch.active !== 'boolean'))
+            throw new Error(`Invalid Prompt preparation patch: ${processorId}`)
+        }
+        for (const patch of patches) applyProcessedEntryPatch(entries.get(patch.id)!, patch)
+        executions.push({ processorId, stage: 'prepare' })
+      } catch (error) {
+        skipOrThrow(processorId, group, 'prepare', error)
       }
-      executions.push({ processorId, stage: 'prepare' })
     }
     const blocks = planPromptBlocks(model)
     const rendered = new Map<string, string>()
     for (const fragment of blocks.flat()) {
       const selected = entries.get(fragment.id)
-      if (!selected) continue
+      if (!selected || skipped.has(fragment.id)) continue
       signal.throwIfAborted()
       let content = rendered.get(fragment.id)
       if (content === undefined) {
-        content = await sessions.get(selected.processorId)!.render(structuredClone(selected.entry))
-        signal.throwIfAborted()
-        if (typeof content !== 'string') throw new Error(`Prompt processor must return text: ${selected.processorId}`)
-        if (processing.renderText) content = processing.renderText(content)
-        rendered.set(fragment.id, content)
-        applyProcessedEntryPatch(selected, { content })
-        executions.push({ processorId: selected.processorId, stage: 'render', entryId: fragment.id })
+        try {
+          content = await sessions.get(selected.processorId)!.render(structuredClone(selected.entry))
+          signal.throwIfAborted()
+          if (typeof content !== 'string') throw new Error(`Prompt processor must return text: ${selected.processorId}`)
+          if (processing.renderText) content = processing.renderText(content)
+          rendered.set(fragment.id, content)
+          applyProcessedEntryPatch(selected, { content })
+          executions.push({ processorId: selected.processorId, stage: 'render', entryId: fragment.id })
+        } catch (error) {
+          skipOrThrow(selected.processorId, [selected.entry], 'render', error)
+          continue
+        }
       }
       fragment.content = content
     }
     signal.throwIfAborted()
-    return { projection: emitPromptBlocks(blocks), model, executions }
+    return { projection: emitPromptBlocks(blocks.map(block => block.filter(fragment => !skipped.has(fragment.id)))), model, executions, diagnostics }
+  } catch (error) {
+    failed = true
+    primaryError = error
+    throw error
   } finally {
-    await Promise.all([...sessions.values()].map(session => session.dispose?.()))
+    const owners = [...sessions.keys()]
+    const cleanup = await Promise.allSettled([...sessions.values()].map(async session => session.dispose?.()))
+    const errors = cleanup.flatMap((result, index) => {
+      if (result.status === 'fulfilled') return []
+      diagnostics.push({ severity: 'warning', code: 'prompt.processor_cleanup_failed', processorId: owners[index]!,
+        message: `Prompt processor cleanup failed: ${owners[index]}: ${String(result.reason)}` })
+      return [result.reason]
+    })
+    if (failed && errors.length) throw new AggregateError([primaryError, ...errors], primaryError instanceof Error ? primaryError.message : String(primaryError), { cause: primaryError })
+    if (!failed) {
+      signal.throwIfAborted()
+      const blocking = errors.find(isBlockingProcessingError)
+      if (blocking !== undefined) throw blocking
+    }
   }
 }
 
@@ -125,4 +172,15 @@ function applyProcessedEntryPatch(
       node.capabilities = { ...node.capabilities, activation: contribution.capabilities.activation }
     }
   }
+}
+
+function isBlockingProcessingError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const code = 'code' in error ? String(error.code) : ''
+  const name = 'name' in error ? String(error.name) : ''
+  if (/permission|denied|forbidden|unauthorized|cancel|abort/i.test(code)
+    || ['AbortError', 'NotAllowedError', 'SecurityError'].includes(name)) return true
+  // ponytail: Host access guards still include plain Errors; retain their fail-closed
+  // behavior until all host permission boundaries expose structured error codes.
+  return error instanceof Error && /permission|access denied|was not granted|outside .*scope|not authorized|not allowed|history read was denied|cannot (?:access|read|write|delete).*owned by|access validation is not available|execution checks are unavailable|must run inside ctx.timeline.run|Extension instance is stopping/i.test(error.message)
 }

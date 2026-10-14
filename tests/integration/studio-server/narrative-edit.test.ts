@@ -21,8 +21,15 @@ describe('branch-local Narrative text editing', () => {
       const actor = { kind: 'system' as const, id: 'test' }
       const created = await store.createTimeline({
         actor, stateRevisionId: 'state-initial',
-        openingNodes: ['First', 'Middle', 'Last'].map(raw => ({ body: { format: 'loom-markdown.v1', raw } })),
       })
+      for (const raw of ['First', 'Middle', 'Last']) {
+        const appended = await store.appendNode({ actor,
+          timelineId: created.timeline.id, branchId: created.branch.id, expectedHeadNodeId: created.branch.headNodeId ?? null,
+          stateRevisionId: 'state-initial', body: { format: 'loom-markdown.v1', raw },
+        })
+        created.nodes.push(appended.node)
+        created.branch = appended.branch
+      }
       const fork = await store.forkBranch({
         actor, timelineId: created.timeline.id, fromBranchId: created.branch.id,
         fromNodeId: created.nodes[2]!.id, stateRevisionId: 'state-sibling',

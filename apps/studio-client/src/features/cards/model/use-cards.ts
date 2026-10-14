@@ -91,10 +91,11 @@ export function useCards(input: UseCardsInput) {
   }, [selectedCardId, selectedCard?.id, selectedCard?.version, selectedCard?.name, selectedCard?.userName, selectedCard?.description, updateEditor])
 
   useEffect(() => {
-    if (!selectedCardId) {
+    if (!selectedCardId || selectedCard?.validationError !== undefined) {
       setSelectedCardDetails(undefined)
       return
     }
+    if (cardCollection?.source !== selectionSource) return
     let current = true
     void input.runAction(async () => {
       let result
@@ -113,7 +114,7 @@ export function useCards(input: UseCardsInput) {
       })
     }).catch(() => undefined)
     return () => { current = false }
-  }, [input.api, selectedCardId, selectedCard?.version])
+  }, [input.api, selectedCardId, selectedCard?.version, selectedCard?.validationError, cardCollection?.source])
 
   async function refreshCards(): Promise<CardSummary[]> {
     if (selectionSourceRef.current !== selectionSource || selectionSource.disposed) return []
@@ -159,6 +160,10 @@ export function useCards(input: UseCardsInput) {
   async function selectCard(cardId: string) {
     if (selectionSourceRef.current !== selectionSource || selectionSource.disposed) return
     const request = ++selectionSource.request
+    if (cards.find(card => card.id === cardId)?.validationError !== undefined) {
+      updateEditor(editor => ({ ...editor, selectedCardId: cardId, selectedCardDetails: undefined }))
+      return
+    }
     const pending = { source: selectionSource, request, cardId }
     pendingSelectionRef.current = pending
     try {

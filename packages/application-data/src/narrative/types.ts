@@ -18,6 +18,7 @@ export type NarrativeNodeSource = {
 
 export type NarrativeTimeline = {
   id: string
+  opening?: { id?: string; nodeId?: string; locked: boolean; custom?: boolean }
   title?: string
   openingPreview?: string
   latestPreview?: string
@@ -73,11 +74,22 @@ export type CreateNarrativeTimelineInput = NarrativeWriteContext & {
   primaryBranchId?: string
   primaryBranchTitle?: string
   stateRevisionId: string
-  openingNodes?: Array<{
+  openingNode?: {
     id?: string
     body: NarrativeBody
     source?: Omit<NarrativeNodeSource, 'changesetId'>
-  }>
+    createdAt?: string
+  }
+  opening?: NarrativeTimeline['opening']
+}
+
+export type ReplaceNarrativeOpeningInput = NarrativeWriteContext & {
+  timelineId: string
+  branchId: string
+  expectedHeadNodeId: string | null
+  expectedStateHeadRevisionId: string
+  openingId?: string
+  openingNode?: { body: NarrativeBody; createdAt?: string }
 }
 
 export type CreateNarrativeTimelineResult = {
@@ -183,6 +195,7 @@ export type EditNarrativeNodeResult = {
 }
 
 export type NarrativeTransaction = {
+  replaceOpening(input: Omit<ReplaceNarrativeOpeningInput, keyof NarrativeWriteContext>): CreateNarrativeTimelineResultWithoutCommit
   getTimeline(id: string): NarrativeTimeline | null
   restoreArchivePaths(input: { timelineId: string; nodes: NarrativeNode[]; branches: NarrativeBranch[] }): void
   editBranchNode(input: Omit<EditBranchNodeInput, keyof NarrativeWriteContext>): EditBranchNodeValue

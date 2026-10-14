@@ -1,6 +1,23 @@
 import type { messages as zhCN } from '../zh-cn/common.js'
 
 export const messages = {
+  'timelineQuick.selectStory': 'Switch story',
+  'timelineQuick.expand': 'Expand story actions',
+  'timelineQuick.collapse': 'Collapse story actions',
+  'timelineQuick.opening': 'Story not started',
+  'timelineQuick.story': 'Current story',
+  'timelineQuick.new': 'New story',
+  'timelineQuick.fork': 'Branch from current progress',
+  'timelineQuick.deleteStory': 'Delete current story',
+  'timelineQuick.save': 'Save',
+  'timelineQuick.failed': 'The operation did not complete. Retry or check the error details.',
+
+  'selection.label': 'Selected text actions',
+  'selection.copy': 'Copy',
+  'selection.copied': 'Copied',
+  'selection.copyFailed': 'Copy failed',
+  'selection.quote': 'Quote in input',
+
   'navigation.targetUnavailable': 'The requested Timeline or Branch could not be opened. The original reference has been retained.',
   'navigation.returnToWorkspace': 'Return to workspace',
   'navigation.copyResourceLink': 'Copy resource link',

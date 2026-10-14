@@ -1,3 +1,4 @@
+import { subscribeExtensionEvents } from '../../../shared/api/extension-events.js'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { queryExtensionLogs, type Logger, type MemoryLogSink } from '@loom-studio/logging'
 import { useAppearanceStore } from '../../../shared/studio-shell/appearance-store.js'
@@ -123,29 +124,34 @@ export function useClientExtensionRuntime(input: {
     if (!signal || signal.aborted) return []
     const sequence = ++requestSequence.current
     const cardId = input.rendererHost.scopeSnapshot().cardId
-    const target = contextKey(input.rendererHost)
-    const stale = () => signal.aborted || requestSequence.current !== sequence || contextKey(input.rendererHost) !== target
+    const stale = () => signal.aborted || requestSequence.current !== sequence
+      || input.rendererHost.scopeSnapshot().cardId !== cardId
     try {
-      const [result, privateResult, diagnostics] = await Promise.all([
+      const [result, privateResult] = await Promise.all([
         input.api.extensions.list(),
         cardId ? input.api.extensions.list({ kind: 'card', cardId }) : Promise.resolve({ items: [] }),
+      ])
+      if (stale()) return []
+      // Import badges and diagnostics do not grant Timeline participation.
+      const [rules, extractors, diagnostics] = await Promise.allSettled([
+        input.api.textTransforms.listRules(),
+        input.api.textTransforms.listExtractors(),
         input.api.extensions.diagnostics(),
       ])
       if (stale()) return []
-      const [rules, extractors] = await Promise.all([
-        input.api.textTransforms.listRules(),
-        input.api.textTransforms.listExtractors(),
-      ])
-      if (stale()) return []
-      const packagesWithImportState = mapPackageImportState(result.items, rules.rules, extractors.extractors)
-      const privatePackages = mapPackageImportState(privateResult.items, rules.rules, extractors.extractors)
+      const auxiliaryFailure = [rules, extractors, diagnostics].find(item => item.status === 'rejected')
+      const withImportState = (items: ManagedExtensionPackage[]) => rules.status === 'fulfilled' && extractors.status === 'fulfilled'
+        ? mapPackageImportState(items, rules.value.rules, extractors.value.extractors) : items
+      const packagesWithImportState = withImportState(result.items)
+      const privatePackages = withImportState(privateResult.items)
       globalPackages.current = packagesWithImportState
       currentPackages.current = [...packagesWithImportState, ...privatePackages]
       setPackages(packagesWithImportState)
       setCardPackages(privatePackages)
-      setServerDiagnostics(diagnostics.diagnostics)
+      if (diagnostics.status === 'fulfilled') setServerDiagnostics(diagnostics.value.diagnostics)
       if (!await refreshParticipation(currentPackages.current, reload) || stale()) return []
-      setError(undefined)
+      setError(auxiliaryFailure?.status === 'rejected'
+        ? new Error('Extension auxiliary catalog could not be refreshed', { cause: auxiliaryFailure.reason }) : undefined)
       setRefreshSequence(sequence => sequence + 1)
       return packagesWithImportState
     } catch (reason) {
@@ -163,20 +169,30 @@ export function useClientExtensionRuntime(input: {
     lifecycle.current = { host, signal: controller.signal }
     globalPackages.current = []
     currentPackages.current = []
+    let started = false
     let target = contextKey(input.rendererHost)
+    let catalogCardId = input.rendererHost.scopeSnapshot().cardId
     const unsubscribeScope = input.rendererHost.subscribe(() => {
       const nextTarget = contextKey(input.rendererHost)
       if (nextTarget === target) return
       target = nextTarget
       participationSequence.current += 1
+      const nextCardId = input.rendererHost.scopeSnapshot().cardId
+      if (nextCardId === catalogCardId) {
+        void host.reconcile(toClientPackages(currentPackages.current))
+        if (started) void refreshParticipation()
+        return
+      }
+      catalogCardId = nextCardId
       setCardPackages([])
       currentPackages.current = globalPackages.current
       void host.reconcile(toClientPackages(globalPackages.current))
-      void refresh()
+      if (started) void refresh()
     })
-    let events: EventSource | undefined
+    let unsubscribeEvents: (() => void) | undefined
     const connected = () => {
-      invalidateCardMedia()
+      if (started) invalidateCardMedia()
+      started = true
       void refresh().then(async () => {
         if (controller.signal.aborted) return
         input.rendererHost.invalidate()
@@ -184,33 +200,41 @@ export function useClientExtensionRuntime(input: {
         await Promise.all([host.notifyConfigsChanged(), host.notifyStateChanged()])
       })
     }
-    void refresh().then(() => {
-      if (controller.signal.aborted || typeof EventSource === 'undefined') return
-      events = new EventSource('/extensions/events')
-      events.addEventListener('open', connected)
-      events.addEventListener('directories.media.changed', invalidateCardMedia)
-      events.addEventListener('extensions.changed', () => { void refresh() })
-      events.addEventListener('extensions.data.changed', () => {
-        void refreshParticipation().then(async current => {
-          if (!current || controller.signal.aborted) return
-          input.rendererHost.invalidate()
-          setConfigRevision(revision => revision + 1)
-          await Promise.all([host.notifyConfigsChanged(), host.notifyStateChanged()])
-        })
+    if (typeof EventSource === 'undefined') {
+      started = true
+      void refresh()
+    } else {
+      unsubscribeEvents = subscribeExtensionEvents({
+        onConnected: connected,
+        events: {
+          'directories.media.changed': invalidateCardMedia,
+          'extensions.changed': () => { void refresh() },
+          'extensions.data.changed': () => {
+            void refreshParticipation().then(async current => {
+              if (!current || controller.signal.aborted) return
+              input.rendererHost.invalidate()
+              setConfigRevision(revision => revision + 1)
+              await Promise.all([host.notifyConfigsChanged(), host.notifyStateChanged()])
+            })
+          },
+        },
+        onError: () => {
+          requestSequence.current += 1
+          participationSequence.current += 1
+          void host.reconcile(toClientPackages(currentPackages.current))
+          setError(new Error('Extension event stream disconnected'))
+          // Keep the catalog usable if the initial SSE connection fails.
+          if (!started) {
+            started = true
+            void refresh()
+          }
+        },
       })
-      events.onerror = () => {
-        requestSequence.current += 1
-        participationSequence.current += 1
-        void host.reconcile(toClientPackages(currentPackages.current))
-        setError(new Error('Extension event stream disconnected'))
-      }
-    })
+    }
     return () => {
       controller.abort()
       unsubscribeScope()
-      events?.removeEventListener('open', connected)
-      events?.removeEventListener('directories.media.changed', invalidateCardMedia)
-      events?.close()
+      unsubscribeEvents?.()
       void host.dispose()
       sessionHost.dispose()
     }

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type FormEvent, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, type FormEvent, type ReactNode, type Ref } from 'react'
 import { ArrowUp, BringToFront, ChevronUp, Lock, Pause, Play, Plus, RotateCcw, Unlock } from 'lucide-react'
 import {
   DropdownMenu,
@@ -17,6 +17,7 @@ export type ChatComposerQuickAction = {
 }
 
 type ChatComposerProps = {
+  inputRef?: Ref<HTMLTextAreaElement>
   canPreviewPrompt: boolean
   canSend: boolean
   expanded?: boolean
@@ -88,6 +89,7 @@ export function ChatComposer(props: ChatComposerProps) {
           {props.sheet ? <div className={styles.sheet} data-loom-surface="composer.sheet">{props.sheet}</div> : null}
           <div ref={baseContentRef} className={styles.baseContent} data-loom-anchor="narrative-composer-base">
             <textarea
+              ref={props.inputRef}
               aria-label={props.textareaLabel}
               placeholder={props.placeholder}
               value={props.input}

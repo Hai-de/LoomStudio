@@ -2,6 +2,8 @@ import { readFileSync, readdirSync } from 'node:fs'
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import { enUS } from '../../../apps/studio-client/src/shared/i18n/en-us.js'
+import { jaJP } from '../../../apps/studio-client/src/shared/i18n/ja-jp.js'
+import { koKR } from '../../../apps/studio-client/src/shared/i18n/ko-kr.js'
 import { zhCN } from '../../../apps/studio-client/src/shared/i18n/zh-cn.js'
 import {
   createTranslator,
@@ -44,22 +46,26 @@ function placeholders(value: string) {
 describe('i18n dictionaries', () => {
   const chinese = readDomains('zh-cn')
   const english = readDomains('en-us')
+  const japanese = readDomains('ja-jp')
+  const korean = readDomains('ko-kr')
 
   it('keeps matching domains, keys and interpolation parameters', () => {
-    expect(Object.keys(english).sort()).toEqual(Object.keys(chinese).sort())
-    for (const [domain, entries] of Object.entries(chinese)) {
-      const translated = Object.fromEntries(english[domain]!)
-      expect(Object.keys(translated).sort(), domain).toEqual(entries.map(([key]) => key).sort())
-      for (const [key, value] of entries) {
-        expect(translated[key]?.trim(), key).toBeTruthy()
-        expect(value.trim(), key).toBeTruthy()
-        expect(placeholders(translated[key]!), key).toEqual(placeholders(value))
+    for (const [localeName, dict] of [['en-us', english], ['ja-jp', japanese], ['ko-kr', korean]] as const) {
+      expect(Object.keys(dict).sort(), localeName).toEqual(Object.keys(chinese).sort())
+      for (const [domain, entries] of Object.entries(chinese)) {
+        const translated = Object.fromEntries(dict[domain]!)
+        expect(Object.keys(translated).sort(), `${localeName}/${domain}`).toEqual(entries.map(([key]) => key).sort())
+        for (const [key, value] of entries) {
+          expect(translated[key]?.trim(), `${localeName}/${key}`).toBeTruthy()
+          expect(value.trim(), key).toBeTruthy()
+          expect(placeholders(translated[key]!), `${localeName}/${key}`).toEqual(placeholders(value))
+        }
       }
     }
   })
 
   it('has no duplicate keys and exports every domain without losing values', () => {
-    for (const [domains, exported] of [[chinese, zhCN], [english, enUS]] as const) {
+    for (const [domains, exported] of [[chinese, zhCN], [english, enUS], [japanese, jaJP], [korean, koKR]] as const) {
       const entries = Object.values(domains).flat()
       const keys = entries.map(([key]) => key)
       expect(keys.filter((key, index) => keys.indexOf(key) !== index)).toEqual([])
@@ -72,7 +78,13 @@ describe('i18n dictionaries', () => {
       .toBe(zhCN['sessions.selectTimelineNamed'].replace('{{name}}', 'Example'))
     expect(createTranslator('en-US')('sessions.selectTimelineNamed', { name: 42 }))
       .toBe(enUS['sessions.selectTimelineNamed'].replace('{{name}}', '42'))
+    expect(createTranslator('ja-JP')('sessions.selectTimelineNamed', { name: 'サクラ' }))
+      .toBe(jaJP['sessions.selectTimelineNamed'].replace('{{name}}', 'サクラ'))
+    expect(createTranslator('ko-KR')('sessions.selectTimelineNamed', { name: '테스트' }))
+      .toBe(koKR['sessions.selectTimelineNamed'].replace('{{name}}', '테스트'))
     expect(createTranslator('en-US')('sessions.character')).toBe(enUS['sessions.character'])
+    expect(createTranslator('ja-JP')('sessions.character')).toBe(jaJP['sessions.character'])
+    expect(createTranslator('ko-KR')('sessions.character')).toBe(koKR['sessions.character'])
   })
 })
 

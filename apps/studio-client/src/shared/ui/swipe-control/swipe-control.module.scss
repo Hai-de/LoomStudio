@@ -1,0 +1,23 @@
+.control {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2px;
+
+  button {
+    display: grid;
+    place-items: center;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 4px;
+    background: transparent;
+    border: 0;
+  }
+
+  .counter {
+    min-width: 48px;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+}

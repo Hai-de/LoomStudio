@@ -11,7 +11,7 @@ describe('Narrative edits across HTTP and SSE', () => {
       type Edit = Awaited<ReturnType<StudioApi['narratives']['editNode']>>
       const card = await callRpc<{ card: { id: string } }>(port, 'application.createCard', { name: 'Read/write ordering' })
       const created = await callRpc<Page>(port, 'application.createNarrativeTimeline', {
-        cardId: card.card.id, openingNodes: [{ content: 'Original' }],
+        cardId: card.card.id, openingContent: 'Original',
       })
       const stream = await authenticatedFetch(port, '/extensions/events')
       const reader = stream.body!.getReader()

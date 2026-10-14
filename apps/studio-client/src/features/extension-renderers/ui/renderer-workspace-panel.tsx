@@ -832,9 +832,9 @@ function PackageResourceDetail(props: {
   if (!resource) return <p className={styles.empty}>{props.t('renderer.resourceMissing')}</p>
 
   const imported = props.selection.resourceKind === 'rule'
-    ? props.extensionPackage.importedResources?.transformRuleContributionIds.includes(resource.id) ?? false
+    ? props.extensionPackage.importedResources?.transformRuleContributionIds.includes(resource.id)
     : props.selection.resourceKind === 'extractor'
-      ? props.extensionPackage.importedResources?.textExtractorContributionIds.includes(resource.id) ?? false
+      ? props.extensionPackage.importedResources?.textExtractorContributionIds.includes(resource.id)
       : undefined
   const kind = props.selection.resourceKind === 'prompt'
     ? props.t('renderer.promptResource')

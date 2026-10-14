@@ -472,6 +472,9 @@
   }
 
   small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 10.5px;
     color: var(--loom-color-text-subtle);
   }

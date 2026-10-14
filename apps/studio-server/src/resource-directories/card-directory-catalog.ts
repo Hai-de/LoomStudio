@@ -65,7 +65,7 @@ export function createCardDirectoryCatalog(options: {
               parseBaseline(JSON.parse(baseline.toString('utf8')), registeredId)
               if (binding ? binding.artifactId !== entry.artifactId : entry.sourceCardId !== registeredId) throw new Error('Saved directory identity differs from its registered Card')
               entry.registeredCardId = registeredId
-              for (const marker of ['import.json', 'apply.json', 'pending/journal.json']) {
+              for (const marker of ['delete.json', 'import.json', 'apply.json', 'pending/journal.json']) {
                 if (await readOptional(root, `.loom/card-directories/${registeredId}/${marker}`)) {
                   entry.error = 'Directory has an unfinished operation; recovery is required before further changes'
                   break

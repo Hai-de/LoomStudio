@@ -74,9 +74,16 @@ export function useDisplayProjection(input: {
         ...(input.consumerAgentSessionId ? { consumerAgentSessionId: input.consumerAgentSessionId } : {}),
       })
       const byId = new Map(snapshot.entries.map(entry => [entry.id, entry]))
-      const unmatched = input.entries.find(entry => byId.get(entry.id)?.originalText !== entry.text)
-      if (unmatched) throw new Error(`Display projection does not contain the current message: ${unmatched.id}`)
-      return snapshot
+      const unmatched = input.entries.filter(entry => byId.get(entry.id)?.originalText !== entry.text)
+      if (!unmatched.length) return snapshot
+      const invalidIds = new Set(unmatched.map(entry => entry.id))
+      return { ...snapshot,
+        entries: snapshot.entries.filter(entry => !invalidIds.has(entry.id)),
+        matches: snapshot.matches.filter(match => !invalidIds.has(match.entryId)),
+        diagnostics: [...snapshot.diagnostics, ...unmatched.map(entry => ({
+          code: 'display.entry.stale', entryId: entry.id, message: `Display projection does not contain the current message: ${entry.id}`,
+        }))],
+      }
     },
     enabled: Boolean(input.source),
     // Keep unchanged iframe instances during same-source recomputation. Never

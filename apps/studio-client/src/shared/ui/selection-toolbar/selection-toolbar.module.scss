@@ -1,0 +1,14 @@
+.toolbar {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: calc(100vw - 16px);
+  padding: 4px 8px;
+  border-radius: var(--loom-radius-popover);
+  background: var(--loom-color-surface-raised);
+  color: var(--loom-color-text);
+  font-size: var(--loom-font-size-3);
+  user-select: none;
+}

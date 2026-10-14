@@ -13,7 +13,6 @@ import type {
   CardSourceContent,
   CardExtensionAdoption,
   OpeningChatContent,
-  OpeningChatEntryContent,
   OpeningChatInput,
   LoreContent,
   LoreInput,
@@ -28,7 +27,24 @@ export function toCardSource(card: DocumentRecord<CardSourceContent>): CardSourc
 }
 
 export function toCardSummary(card: DocumentRecord<CardSourceContent>): CardSummary {
-  const content = normalizeCardContent(card.content)
+  let content: CardSourceContent
+  try {
+    content = normalizeCardContent(card.content)
+  } catch (error) {
+    const raw: JsonObject = isObject(card.content) ? card.content : {}
+    return {
+      id: card.id,
+      version: card.version,
+      artifactId: typeof raw.artifactId === 'string' ? raw.artifactId : '',
+      name: normalizeOptionalString(raw.name) ?? card.id,
+      userName: normalizeOptionalString(raw.userName),
+      description: typeof raw.description === 'string' ? raw.description : undefined,
+      media: normalizeCardMedia(raw.media),
+      createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : card.meta.createdAt,
+      updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : card.meta.updatedAt,
+      validationError: error instanceof Error ? error.message : String(error),
+    }
+  }
   return {
     id: card.id,
     artifactId: content.artifactId,
@@ -37,7 +53,7 @@ export function toCardSummary(card: DocumentRecord<CardSourceContent>): CardSumm
     name: content.name,
     userName: content.userName,
     description: content.description,
-    openingPreview: content.opening.entries[0]?.content?.slice(0, 240),
+    openingPreview: content.opening.content.slice(0, 240),
     media: content.media,
     createdAt: content.createdAt,
     updatedAt: content.updatedAt,
@@ -152,26 +168,27 @@ export function normalizeMacros(input: unknown, subject: string): Record<string,
 }
 
 export function normalizeOpening(input: OpeningChatInput | string | undefined): OpeningChatContent {
-  if (typeof input === 'string') {
-    return input.trim().length > 0
-      ? { entries: [{ role: 'assistant', content: input }] }
-      : { entries: [] }
+  const ids = new Set<string>()
+  function candidate(value: Omit<OpeningChatInput, 'alternatives'>): Omit<OpeningChatContent, 'alternatives'> {
+    if (!isObject(value) || typeof value.content !== 'string' || 'entries' in value || 'role' in value) {
+      throw new Error('Opening must contain a single string content')
+    }
+    if (value.id !== undefined && (typeof value.id !== 'string' || !value.id.trim())) throw new Error('Invalid opening ID')
+    if (value.title !== undefined && typeof value.title !== 'string') throw new Error('Invalid opening title')
+    const id = value.id ?? createId('opening')
+    if (ids.has(id)) throw new Error(`Duplicate opening ID: ${id}`)
+    ids.add(id)
+    return {
+      id,
+      ...(value.title !== undefined ? { title: value.title } : {}),
+      content: value.content,
+    }
   }
-
-  if (!isObject(input)) return { entries: [] }
-
+  const opening: OpeningChatInput = typeof input === 'string' ? { content: input } : input ?? { content: '' }
+  if (opening.alternatives !== undefined && !Array.isArray(opening.alternatives)) throw new Error('Opening alternatives must be an array')
   return {
-    entries: (Array.isArray(input.entries) ? input.entries : [])
-      .filter(entry => isObject(entry) && typeof entry.content === 'string' && entry.content.trim().length > 0)
-      .map(entry => ({
-        role: entry.role === 'user' || entry.role === 'assistant' ? entry.role : 'assistant',
-        content: entry.content,
-      })),
-    ...(input.alternatives?.length ? {
-      alternatives: input.alternatives.map(alternative => ({
-        entries: normalizeOpening({ entries: alternative.entries }).entries,
-      })),
-    } : {}),
+    ...candidate(opening),
+    ...(opening.alternatives?.length ? { alternatives: opening.alternatives.map(candidate) } : {}),
   }
 }
 
@@ -195,11 +212,11 @@ export function normalizeLore(input: LoreInput | undefined): LoreContent {
   return { entries: [] }
 }
 
-export function readOpeningEntries(
+export function readOpening(
   content: CardSourceContent,
   variables?: import('../prompt/variables.js').VariableRenderContext,
-  openingIndex = 0,
-): OpeningChatEntryContent[] {
+  openingId?: string,
+): { id: string; title?: string; content: string } {
   const renderContext = variables ?? createVariableRenderContext({
     global: {
       user: {
@@ -212,11 +229,12 @@ export function readOpeningEntries(
     },
   })
 
-  if (!Number.isInteger(openingIndex) || openingIndex < 0) throw new Error('Invalid opening index')
-  const opening = openingIndex === 0 ? content.opening : content.opening.alternatives?.[openingIndex - 1]
-  if (!opening) throw new Error(`Opening not found: ${openingIndex}`)
-  return opening.entries.map(entry => ({
-    role: entry.role,
-    content: renderVariableMacros(entry.content, renderContext),
-  }))
+  const opening = openingId === undefined || openingId === content.opening.id
+    ? content.opening : content.opening.alternatives?.find(candidate => candidate.id === openingId)
+  if (!opening) throw new Error(`Opening not found: ${openingId}`)
+  return {
+    id: opening.id,
+    ...(opening.title !== undefined ? { title: opening.title } : {}),
+    content: renderVariableMacros(opening.content, renderContext),
+  }
 }

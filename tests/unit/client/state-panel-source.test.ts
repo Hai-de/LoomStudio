@@ -239,7 +239,7 @@ describe('State panel source isolation', () => {
 describe('State authoring save ownership', () => {
   it('locks edits during saving, keeps failed drafts and isolates a new card', async () => {
     const card = {
-      id: 'card-a', version: 1, name: 'A', opening: { entries: [] }, lore: { entries: [] },
+      id: 'card-a', version: 1, name: 'A', opening: { id: 'root-opening', content: '' }, lore: { entries: [] },
       timelineStateBindings: [], createdAt: 'now', updatedAt: 'now',
     }
     const pending = Promise.withResolvers<typeof card>()

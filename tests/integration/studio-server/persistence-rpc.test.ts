@@ -28,7 +28,7 @@ describe('studio server persistence integration', () => {
       const first = await firstServer.listen(0)
       const card = await callRpc<{ card: { id: string } }>(first.port, 'application.createCard', {
         name: 'Persistent Narrative',
-        opening: { entries: [{ content: 'Opening node' }] },
+        opening: { content: 'Opening node' },
       })
       const created = await callRpc<{
         timeline: { id: string }

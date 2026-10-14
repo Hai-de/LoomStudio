@@ -32,10 +32,15 @@ describe('API history and directory subsets', () => {
       await f.runtime.upsertTextTransformRule({ ruleId: 'depth', rule })
       const created = await f.narratives.createTimeline({
         actor, stateRevisionId: 'state',
-        openingNodes: Array.from({ length: 220 }, (_, index) => ({
-          id: `node-${index}`, body: { format: 'loom-markdown.v1', raw: `raw ${index}` },
-        })),
       })
+      for (let index = 0; index < 220; index++) {
+        const appended = await f.narratives.appendNode({ actor,
+          timelineId: created.timeline.id, branchId: created.branch.id, expectedHeadNodeId: created.branch.headNodeId ?? null,
+          nodeId: `node-${index}`, stateRevisionId: 'state', body: { format: 'loom-markdown.v1', raw: `raw ${index}` },
+        })
+        created.nodes.push(appended.node)
+        created.branch = appended.branch
+      }
       const source: HistorySource = { kind: 'narrative', timelineId: created.timeline.id, branchId: created.branch.id }
       const full = (await f.runtime.projectHistory({ source, phase: 'display' })).snapshot
       const entryIds = ['node-219', 'node-217', 'node-0', 'node-217', 'missing']

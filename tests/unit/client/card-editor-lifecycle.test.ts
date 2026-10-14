@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useCards } from '../../../apps/studio-client/src/features/cards/model/use-cards.js'
+import { useCharacterProfileEditor } from '../../../apps/studio-client/src/features/cards/model/use-character-profile-editor.js'
 type Card = Awaited<ReturnType<StudioApi['cards']['get']>>['card']
 import type { StudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
 import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/index.js'
@@ -45,7 +46,7 @@ vi.mock('react', async importOriginal => ({
 
 function card(id: string, name: string, version = 1): Card {
   return {
-    id, name, version, artifactId: 'fixture-artifact', preset: {}, opening: { entries: [] }, lore: { entries: [] },
+    id, name, version, artifactId: 'fixture-artifact', preset: {}, opening: { id: 'root-opening', content: '' }, lore: { entries: [] },
     createdAt: '2026-09-23', updatedAt: '2026-09-23',
   }
 }
@@ -95,10 +96,47 @@ function fixture() {
 beforeEach(() => { hooks.cursor = 0; hooks.values = []; hooks.effects = []; hooks.dirty = false })
 
 describe('Card editor effect lifecycle', () => {
+  it('preserves candidate IDs when editing titles and content, adding and deleting alternatives', async () => {
+    let selected = { ...card('a', 'Original'), opening: {
+      id: 'root-opening', title: 'Root', content: 'Root content',
+      alternatives: [{ id: 'alternate-a', title: 'A', content: 'A content' }, { id: 'alternate-b', title: 'B', content: 'B content' }],
+    } }
+    const update = vi.fn(async (patch: Parameters<Parameters<typeof useCharacterProfileEditor>[0]['onUpdateCardProfile']>[0]) => {
+      selected = { ...selected, ...patch, version: selected.version + 1 } as typeof selected
+    })
+    const render = () => {
+      for (let attempt = 0; attempt < 10; attempt++) {
+        hooks.cursor = 0
+        hooks.dirty = false
+        const result = useCharacterProfileEditor({ selected, onUpdateCardProfile: update,
+          refreshDetail: async () => {}, onRefreshCards: async () => {} })
+        for (const effect of hooks.effects.splice(0)) effect()
+        if (!hooks.dirty) return result
+      }
+      throw new Error('Profile effects did not settle')
+    }
+    render().setOpeningTitleDraft('New root title')
+    await render().handleOpeningBlur('title')
+    expect(selected.opening).toMatchObject({ id: 'root-opening', title: 'New root title', content: 'Root content' })
+    render().setActiveOpeningIndex(1)
+    render().setOpeningDraft('Edited A')
+    await render().handleOpeningBlur()
+    expect(selected.opening.alternatives[0]).toEqual({ id: 'alternate-a', title: 'A', content: 'Edited A' })
+    await render().handleAddAlternative()
+    const added = selected.opening.alternatives[2]
+    expect(added.id).toMatch(/^[0-9a-f-]{36}$/)
+    expect(added.content).toBe('')
+    expect(render().activeOpening?.id).toBe(added.id)
+    render().setActiveOpeningIndex(1)
+    await render().handleDeleteAlternative()
+    expect(selected.opening.alternatives.map(candidate => candidate.id)).toEqual(['alternate-b', added.id])
+    expect(selected.opening.id).toBe('root-opening')
+  })
+
   it('saves opening messages through the profile editor with the original Card version', async () => {
     const f = fixture()
     await f.render().refreshCards()
-    const opening = { entries: [{ role: 'assistant' as const, content: 'Welcome, {{user}}.' }] }
+    const opening = { id: 'root-opening', content: 'Welcome, {{user}}.' }
     await f.render().updateCardProfile({
       cardId: 'a', expectedVersion: 1, name: 'Original', userName: '', description: '', opening,
     })

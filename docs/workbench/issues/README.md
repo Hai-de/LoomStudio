@@ -2,6 +2,7 @@
 
 本目录用于跟踪**当前开放或周期性滚动审查的质量发现**。
 
+
 - [`frontend-continuous-audit-2026-10-07.md`](./frontend-continuous-audit-2026-10-07.md) — **前端持续审查与修复**（当前保留 38 项，FE-035 确证复现并建账待实施；FE-028 完整 Renderer 映射、FE-031 旧路径统一反馈及全量语言/浏览器验收仍见台账）。
 - [`audit-playbook.md`](./audit-playbook.md) — **审查工作指南**（历史发现与实际修复经验、常见偏移、精简反证、最小验证及关闭/归档流程；新审查先读此文，不是新增施工清单）。
 - [持续代码审查](../../archive/issues/continuous-code-review-2026-10-02.md)已于 2026-10-06 归档：CR-001～013 与 QA/DOC 本机修复完成，F-06 经用户确认延期，见[延期验收](./audit-follow-ups.md#continuous-review-acceptance-2026-10-06)；不再作为进行中的审查。
@@ -33,3 +34,5 @@
 2026-09-12 全仓审查 SEP-001～009 已收口并删除原 Issue。部分删除、规则顺序/空文本投影、分支编辑隔离与依赖/查询职责裁定的证据见[修复实施计划](../../archive/plans/audit-issue-remediation-plan.md)；其他审查及浏览器验收不随之关闭。
 
 2026-09-14 架构审计已移至[历史审查](../../archive/issues/frontend-backend-architecture-and-client-duplication-audit-2026-09-14.md)，不再列为开放施工清单。后续状态、门禁、软引用与浏览器验证的实际交付及限制由修复计划承接，未因归档虚称所有验收通过。
+
+2026-10-14：[浏览器运行时诊断](../../archive/issues/browser-runtime-audit-2026-10-14.md)与[Prompt / 跨层原子故障隔离](../../archive/issues/prompt-resource-fault-isolation.md)已归档，已确认缺陷完成修复及定向验证；权限错误码、旧 Opening 样本、性能候选和真实环境 / 人工 UI 验收见[独立后续](./audit-follow-ups.md#fault-isolation-browser-follow-ups-2026-10-14)。

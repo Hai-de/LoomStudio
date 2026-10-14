@@ -21,9 +21,16 @@ async function fixture(count = 45) {
   const { card } = await setup.createCard({ name: 'Fixture' })
   const story = await setup.createNarrativeTimeline({
     cardId: card.id,
-    openingNodes: Array.from({ length: count }, (_, index) => ({ content: `FLOOR_${index + 1}` })),
+    openingContent: '',
   })
   const scope = { timelineId: story.timeline.id, branchId: story.branch.id }
+  for (let index = 0; index < count; index++) {
+    const appended = await setup.appendNarrativeInput({ ...scope,
+      nodeId: `floor-${index + 1}`, expectedHeadNodeId: story.branch.headNodeId ?? null, content: `FLOOR_${index + 1}`,
+    })
+    story.nodes.push(appended.node)
+    story.branch = appended.branch
+  }
   const context = createNarrativeContextRegistry()
   // Test producer only: these published boundaries do not implement a memory algorithm.
   let published: NarrativeContextProjection = {

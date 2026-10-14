@@ -11,6 +11,7 @@ describe('Narrative edit and read ordering', () => {
       body: { format: 'loom-markdown.v1' as const, raw: 'Original' }, createdAt: '' }
     const page = { ...f.result.narrative, branch: { ...f.result.narrative.branch, headNodeId: original.id }, nodes: [original] }
     f.createTimeline.mockResolvedValue(page)
+    await f.render().createTimelineFromCard()
     await f.render().createAgentSession('profile', true)
     if (readKind === 'older') {
       f.getPage.mockResolvedValueOnce({ ...page, nextCursor: 'older' })
@@ -47,6 +48,7 @@ describe('Narrative edit and read ordering', () => {
       body: { format: 'loom-markdown.v1' as const, raw: 'Original' }, createdAt: '' }
     const page = { ...f.result.narrative, branch: { ...f.result.narrative.branch, headNodeId: original.id }, nodes: [original] }
     f.createTimeline.mockResolvedValue(page)
+    await f.render().createTimelineFromCard()
     await f.render().createAgentSession('profile', true)
     const readResult = Promise.withResolvers<Awaited<ReturnType<StudioApi['narratives']['getPage']>>>()
     f.getPage.mockReturnValueOnce(readResult.promise)

@@ -6,6 +6,7 @@ describe('Narrative input persistence and delivery', () => {
   it('retains the loaded older boundary across latest-page events and terminal refresh', async () => {
     vi.stubGlobal('EventSource', class {})
     const f = fixture()
+    await f.render().createTimelineFromCard()
     await f.render().createAgentSession('profile', true)
     const node = (id: string) => ({ id, timelineId: 'timeline', stateRevisionId: 'state',
       body: { format: 'loom-markdown.v1' as const, raw: id }, createdAt: 'now' })

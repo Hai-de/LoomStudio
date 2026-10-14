@@ -23,7 +23,8 @@ describe('application narrative timeline lifecycle', () => {
   it('initializes adopted contributions from the selected opening without changing registrations or existing timelines', async () => {
     const registry = createStateContributionRegistry()
     const { engine, runtime } = createTestRuntime({ stateContributions: registry })
-    const calls: string[][] = []
+    const calls: string[] = []
+    const openingIds: Array<string | undefined> = []
     let foreignTemplate = false
     registry.register({
       packageId: 'example.dynamic', moduleId: 'server', instanceId: 'dynamic', packageVersion: '1',
@@ -33,7 +34,8 @@ describe('application narrative timeline lifecycle', () => {
         bindings: [{ path: 'dynamic', templateId: 'example.dynamic.data', templateVersion: 1 }],
       },
       initialize(context) {
-        calls.push([...context.opening])
+        calls.push(context.opening)
+        openingIds.push(context.openingId)
         return { [foreignTemplate ? 'foreign.template' : 'example.dynamic.data']: { hp: calls.length } }
       },
     })
@@ -41,10 +43,12 @@ describe('application narrative timeline lifecycle', () => {
       const { card } = await runtime.createCard({ name: 'Alice' })
       await runtime.updateCard({ cardId: card.id, stateContributionIds: ['example.dynamic.data'] })
       const first = await runtime.createNarrativeTimeline({
-        cardId: card.id, openingNodes: [{ content: 'Hello {{char}}' }],
+        cardId: card.id, openingContent: 'Hello {{char}}',
       })
-      expect(calls).toEqual([['Hello Alice']])
-      const second = await runtime.createNarrativeTimeline({ cardId: card.id, openingNodes: [] })
+      expect(calls).toEqual(['Hello Alice'])
+      const second = await runtime.createNarrativeTimeline({ cardId: card.id, openingContent: '' })
+      expect(calls).toEqual(['Hello Alice', ''])
+      expect(openingIds).toEqual([undefined, undefined])
       for (const [story, hp] of [[first, 1], [second, 2]] as const) {
         expect((await runtime.getStateSnapshot({
           target: { scope: 'timeline', timelineId: story.timeline.id, branchId: story.branch.id },
@@ -54,6 +58,7 @@ describe('application narrative timeline lifecycle', () => {
       foreignTemplate = true
       const before = await runtime.listNarrativeTimelines()
       await expect(runtime.createNarrativeTimeline({ cardId: card.id })).rejects.toThrow('another contribution')
+      expect(openingIds[2]).toBe(card.opening.id)
       expect(await runtime.listNarrativeTimelines()).toEqual(before)
     } finally { await engine.close() }
   })
@@ -66,12 +71,12 @@ describe('application narrative timeline lifecycle', () => {
       expect(empty.nodes).toEqual([])
       const updated = await runtime.updateCard({
         cardId: card.id, expectedVersion: card.version,
-        opening: { entries: [{ role: 'assistant', content: 'Original opening' }] },
+        opening: { content: 'Original opening' },
       })
       const story = await runtime.createNarrativeTimeline({ cardId: card.id })
       expect(story.nodes.map(node => node.body.raw)).toEqual(['Original opening'])
       await runtime.updateCard({
-        cardId: card.id, expectedVersion: updated.card.version, opening: { entries: [] },
+        cardId: card.id, expectedVersion: updated.card.version, opening: { content: '' },
       })
       const withoutOpening = await runtime.createNarrativeTimeline({ cardId: card.id })
       expect(withoutOpening.nodes).toEqual([])
@@ -105,7 +110,7 @@ describe('application narrative timeline lifecycle', () => {
       const timelines = []
       for (const [card, index] of [[a, 1], [b, 2]] as const) {
         await runtime.updateCard({ cardId: card.id, stateContributionIds: [ids[index]!] })
-        const timeline = await runtime.createNarrativeTimeline({ cardId: card.id, openingNodes: [] })
+        const timeline = await runtime.createNarrativeTimeline({ cardId: card.id, openingContent: '' })
         timelines.push(timeline)
         expect((await runtime.getStateSnapshot({
           target: { scope: 'timeline', timelineId: timeline.timeline.id, branchId: timeline.branch.id },
@@ -210,7 +215,7 @@ describe('application narrative timeline lifecycle', () => {
       schemaVersion: 4,
       artifactId: 'detached-card',
       displayName: 'Detached Card',
-      card: { name: 'Detached Card', opening: { entries: [{ content: 'Ready.' }] } },
+      card: { name: 'Detached Card', opening: { content: 'Ready.' } },
       contextAssets: [],
       stateTemplates: [{
         id: 'template.detached', templateVersion: 1,
@@ -455,10 +460,7 @@ describe('application narrative timeline lifecycle', () => {
         displayName: 'Stateful Card',
         card: {
           name: 'Alice',
-          opening: { entries: [
-            { content: 'Gold: {{timeline.characters.alice.gold}}' },
-            { content: 'The story begins.' },
-          ] },
+          opening: { content: 'Gold: {{timeline.characters.alice.gold}}' },
         },
         contextAssets: [],
         stateTemplates: [{
@@ -476,6 +478,9 @@ describe('application narrative timeline lifecycle', () => {
       },
     })
     const created = await runtime.createNarrativeTimeline({ cardId: imported.card.id })
+    const next = await runtime.appendNarrativeInput({ timelineId: created.timeline.id, branchId: created.branch.id,
+      nodeId: 'story-begins', expectedHeadNodeId: created.branch.headNodeId!, content: 'The story begins.',
+    })
     const initial = await runtime.getStateSnapshot({
       target: { scope: 'timeline', timelineId: created.timeline.id, branchId: created.branch.id },
     })
@@ -493,7 +498,7 @@ describe('application narrative timeline lifecycle', () => {
     const fork = await runtime.forkNarrativeBranch({
       timelineId: created.timeline.id,
       fromBranchId: created.branch.id,
-      fromNodeId: created.nodes.at(-1)!.id,
+      fromNodeId: next.node.id,
       title: 'After state-only mutation',
     })
     await expect(runtime.getStateSnapshot({
@@ -550,12 +555,7 @@ describe('application narrative timeline lifecycle', () => {
     const card = await runtime.createCard({
       name: 'Alice',
       userName: 'Player',
-      opening: {
-        entries: [
-          { role: 'user', content: '{{ User }} enters.' },
-          { role: 'assistant', content: 'Alice looks up.' },
-        ],
-      },
+      opening: { content: '{{ User }} enters.' },
     })
     await runtime.updateCardPromptResources({
       cardId: card.card.id,
@@ -566,6 +566,9 @@ describe('application narrative timeline lifecycle', () => {
       clientId: 'client-1',
       correlationId: 'corr-1',
       callId: 'call-1',
+    })
+    await runtime.appendNarrativeInput({ timelineId: created.timeline.id, branchId: created.branch.id,
+      nodeId: 'alice-looks-up', expectedHeadNodeId: created.branch.headNodeId!, content: 'Alice looks up.',
     })
     await runtime.updateCard({ cardId: card.card.id, name: 'Alice Changed' })
     const read = await runtime.getNarrativeTimeline({ timelineId: created.timeline.id })
@@ -592,9 +595,12 @@ describe('application narrative timeline lifecycle', () => {
     const { engine, runtime } = createTestRuntime()
     const card = await runtime.createCard({
       name: 'Story',
-      opening: { entries: [{ content: 'root' }, { content: 'main' }] },
+      opening: { content: 'root' },
     })
     const created = await runtime.createNarrativeTimeline({ cardId: card.card.id })
+    await runtime.appendNarrativeInput({ timelineId: created.timeline.id, branchId: created.branch.id,
+      nodeId: 'main-history', expectedHeadNodeId: created.branch.headNodeId!, content: 'main',
+    })
     const fork = await runtime.forkNarrativeBranch({
       timelineId: created.timeline.id,
       fromBranchId: created.branch.id,

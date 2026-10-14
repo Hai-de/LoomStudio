@@ -17,10 +17,15 @@ async function fixture(count = 3) {
   })
   const created = await narratives.createTimeline({
     actor: { kind: 'system', id: 'test' }, stateRevisionId: 'initial',
-    openingNodes: Array.from({ length: count }, (_, index) => ({
-      body: { format: 'loom-markdown.v1' as const, raw: `RAW ${index + 1} {{timeline.value}}` },
-    })),
   })
+  for (let index = 0; index < count; index++) {
+    const appended = await narratives.appendNode({ actor: { kind: 'system', id: 'test' },
+      timelineId: created.timeline.id, branchId: created.branch.id, expectedHeadNodeId: created.branch.headNodeId ?? null,
+      stateRevisionId: 'initial', body: { format: 'loom-markdown.v1', raw: `RAW ${index + 1} {{timeline.value}}` },
+    })
+    created.nodes.push(appended.node)
+    created.branch = appended.branch
+  }
   const { resource: preset } = await runtime.createPromptResource({ resourceKind: 'preset', name: 'Consumer' })
   return { engine, runtime, narratives, promptResources, preset, ...created }
 }
@@ -30,7 +35,7 @@ describe('shared Narrative projection', () => {
     const f = await fixture(1)
     try {
       const { card } = await f.runtime.createCard({ name: 'Live display' })
-      await f.runtime.updateCard({ cardId: card.id, opening: { entries: [{ content: 'RAW' }] } })
+      await f.runtime.updateCard({ cardId: card.id, opening: { content: 'RAW' } })
       const draft = {
         name: 'Card rule', owner: { kind: 'card' as const, cardId: card.id }, enabled: true, orderIndex: 0,
         matcher: { kind: 'regex' as const, pattern: 'RAW', flags: 'g' },
@@ -91,7 +96,7 @@ describe('shared Narrative projection', () => {
       }
       const { extractor } = await f.runtime.upsertTextExtractor({ extractorId: 'clothes', extractor: draft })
       const { timeline, branch } = await f.runtime.createNarrativeTimeline({
-        cardId: card.id, openingNodes: [{ content: '<clothes>color: blue</clothes>' }],
+        cardId: card.id, openingContent: '<clothes>color: blue</clothes>',
       })
       const inspect = () => f.runtime.inspectTextPipeline({
         source: { kind: 'narrative', timelineId: timeline.id, branchId: branch.id }, phase: 'display',

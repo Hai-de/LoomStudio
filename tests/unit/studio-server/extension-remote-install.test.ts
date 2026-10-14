@@ -61,7 +61,7 @@ function fixture(id: string, version = '1.0.0', dependencies?: ExtensionManifest
   return { kind: 'git' as const, url }
 }
 
-async function manager() {
+async function manager(configure?: (root: string) => Promise<Partial<Parameters<typeof createServerExtensionManager>[0]>>) {
   const root = await mkdtemp(join(tmpdir(), 'loom-remote-test-'))
   roots.push(root)
   await mkdir(join(root, 'data'))
@@ -74,15 +74,17 @@ async function manager() {
   const deleteData = vi.fn(async () => undefined)
   const importPackageResources = vi.fn(async (_input: Parameters<Parameters<typeof createServerExtensionManager>[0]['importPackageResources']>[0]) => ({ installationId: 'fixture-installation', promptResources: [], agentTools: [], transformRules: [], textExtractors: [] }))
   const listInstallations = vi.fn<Parameters<typeof createServerExtensionManager>[0]['listInstallations']>(async () => ({ installations: [] }))
+  const diagnostics = createInMemoryDiagnosticsRegistry()
   const runtime = createServerExtensionManager({
-    host, stateStore: state, diagnostics: createInMemoryDiagnosticsRegistry(),
+    host, stateStore: state, diagnostics,
     installedDirectory: join(root, 'app', 'extensions'), devLinksFile: join(root, 'data', 'dev-links.json'),
     officialSetupFile: join(root, 'data', 'setup.json'), deleteData,
     readCardPackage: async () => { throw new Error('Unused') }, listInstallations,
     importPackageResources, removePackageResources: async () => ({ packageId: 'fixture-package', promptResourceIds: [], agentToolIds: [], textTransformRuleIds: [], textExtractorIds: [], detachedReferences: { cards: 0, timelines: 0, presetToolMounts: 0 } }),
+    ...await configure?.(root),
   })
   await runtime.initialize()
-  return { root, runtime, host, state, deleteData, importPackageResources, listInstallations }
+  return { root, runtime, host, state, deleteData, importPackageResources, listInstallations, diagnostics }
 }
 
 async function install(runtime: Awaited<ReturnType<typeof manager>>['runtime'], source: ReturnType<typeof fixture>) {
@@ -376,4 +378,40 @@ describe('remote extension install lifecycle', () => {
     await runtime.uninstallPackage('test.root', '1.0.0', true)
     expect(deleteData).toHaveBeenCalledWith('test.root', [])
   })
+})
+
+
+it('isolates malformed bundled manifests and failed resource imports during initialization', async () => {
+  const imports = vi.fn(async (input: { packageId: string }) => {
+    if (input.packageId === 'test.bad-import') throw new Error('broken resource')
+    return { installationId: 'healthy', promptResources: [], agentTools: [], transformRules: [], textExtractors: [] }
+  })
+  const { runtime, diagnostics, root } = await manager(async root => {
+    const bundledDirectories: string[] = []
+    for (const id of ['bad-json', 'test.bad-import', 'test.healthy']) {
+      const directory = join(root, 'bundled', id)
+      bundledDirectories.push(directory)
+      await mkdir(directory, { recursive: true })
+      await writeFile(join(directory, 'manifest.json'), id === 'bad-json' ? '{broken' : JSON.stringify({
+        manifestVersion: 2, id, version: '1.0.0', displayName: id, engines: { studio: '*' },
+        modules: [{ id: 'server', runtime: 'server', entry: './index.mjs', capabilities: {} }],
+      }))
+      await writeFile(join(directory, 'index.mjs'), 'export function activate() {}')
+    }
+    const damagedSource = join(root, 'app/extensions/test.bad-source')
+    await mkdir(damagedSource, { recursive: true })
+    await writeFile(join(damagedSource, 'manifest.json'), JSON.stringify({
+      manifestVersion: 2, id: 'test.bad-source', version: '1.0.0', displayName: 'Bad source', engines: { studio: '*' },
+      modules: [{ id: 'server', runtime: 'server', entry: './index.mjs', capabilities: {} }],
+    }))
+    await writeFile(join(damagedSource, 'index.mjs'), 'export function activate() {}')
+    await writeFile(join(damagedSource, '.loom-source.json'), '{broken')
+    return { bundledDirectories, importPackageResources: imports }
+  })
+  expect(imports.mock.calls.map(([input]) => input.packageId)).toEqual(['test.bad-import', 'test.healthy'])
+  expect(runtime.listPackages().find(item => item.packageId === 'test.bad-import')?.available).toBe(false)
+  expect(runtime.listPackages().find(item => item.packageId === 'test.healthy')?.available).toBe(true)
+  expect(runtime.listPackages().find(item => item.packageId === 'test.bad-source')?.available).toBe(false)
+  expect(diagnostics.list().some(item => item.code === 'extension.bundled_setup_failed')).toBe(true)
+  expect(JSON.parse(await readFile(join(root, 'data/setup.json'), 'utf8')).bundled).toEqual(['test.healthy'])
 })

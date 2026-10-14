@@ -1,3 +1,4 @@
+import { CardDeleteConfirmation } from '../../features/cards/ui/card-delete-confirmation.js'
 import { ArrowDownUp, ArrowLeft, BookOpen, Check, ChevronLeft, ChevronRight, Circle, CloudDownload, Combine, Download, FileArchive, Folder, GitFork, Grid2X2, ImageDown, List, Pencil, Play, Plus, RefreshCw, Trash2, Upload, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type DragEvent, type FormEvent } from 'react'
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Dialog, SearchField, Toggle, type MenuAction } from '@loom-studio/ui'
@@ -7,15 +8,14 @@ import { useCharacterProfileNavigation } from './use-character-profile-navigatio
 import { MasterDetailWorkbench } from '../../shared/ui/master-detail-workbench/master-detail-workbench.js'
 import { PanelTabs } from '../../shared/ui/panel-tabs/index.js'
 import type { PromptResource } from '../../entities/index.js'
-import { renderTemplateMacros, type MacroRenderContext } from '../../features/state-variables/model/macro-renderer.js'
+import type { MacroRenderContext } from '../../features/state-variables/model/macro-renderer.js'
 import styles from './character-panel.module.scss'
 import { DirectoryDiscoveryNotice, type CardDirectoryApi } from './card-resource-overview.js'
 import { CardResourceDirectory } from './card-resource-directory.js'
 import { cardMediaUrl, useCardMediaRevision } from '../../shared/lib/card-media.js'
 import { normalizeSearchText } from '../../shared/lib/text.js'
 import { useQuery } from '@tanstack/react-query'
-import { OpeningPicker } from '../../features/cards/ui/opening-picker.js'
-import { openingChoiceText, type OpeningChoice } from '../../features/cards/model/opening-choice.js'
+import type { OpeningChoice } from '../../features/cards/model/opening-choice.js'
 import type { CharacterCardSummary } from '../../features/cards/model/character-card-summary.js'
 import { useCharacterProfileEditor } from '../../features/cards/model/use-character-profile-editor.js'
 import { useCardDirectoryDiscovery } from '../../features/cards/model/use-card-directory-discovery.js'
@@ -50,6 +50,7 @@ type CharacterPanelProps = {
   onDeleteCards(cardIds: string[], options?: { includePlayData?: boolean; includePromptResources?: boolean }): Promise<void>
   onPreviewCardDeletion(cardId: string): Promise<{ timelines: Array<{ id: string }> }>
   onSelectCard(cardId: string): void
+  onPreviewCard(cardId: string): void
   onOpenTimeline(timeline: NarrativeTimelineView, cardId: string): void
   resources?: PromptResource[]
   onUpdateCardMedia(cardId: string, target: MediaTarget, file: File): Promise<void>
@@ -67,8 +68,6 @@ const MAX_MEDIA_BYTES = 10 * 1024 * 1024
 const PAGE_TRANSITION_MS = 180
 
 export function CharacterPanel(props: CharacterPanelProps) {
-  const [startingCard, setStartingCard] = useState<CharacterCardSummary>()
-  const [startChoice, setStartChoice] = useState<OpeningChoice>({ kind: 'card', index: 0 })
   const mediaRevision = useCardMediaRevision()
   const mediaUrl = (card: CharacterCardSummary, target: MediaTarget) => cardMediaUrl(card.id, target, target === 'avatar' ? card.media?.avatarAssetId : card.media?.coverAssetId, mediaRevision) ?? (target === 'avatar' ? '/images/default-card.png' : undefined)
   const organization = useCharacterGalleryStore()
@@ -113,9 +112,12 @@ export function CharacterPanel(props: CharacterPanelProps) {
   }, [props.routeCardId])
 
   const targetCardId = activeCardId ?? props.selectedCard?.id ?? galleryCards[0]?.id
+  const targetSummary = galleryCards.find(card => card.id === targetCardId)
+    ?? (props.selectedCard?.id === targetCardId ? props.selectedCard : undefined)
+  const invalidCard = targetSummary?.validationError !== undefined
   const detail = useQuery({
     queryKey: ['character-browser', props.endpoint, targetCardId],
-    enabled: props.active && Boolean(targetCardId),
+    enabled: props.active && Boolean(targetSummary) && !invalidCard,
     queryFn: async () => {
       const { card } = await props.resourceApi.cards.get(targetCardId!)
       const timelines: NarrativeTimelineView[] = []
@@ -128,12 +130,12 @@ export function CharacterPanel(props: CharacterPanelProps) {
       return { card, timelines }
     },
   })
-  const selected = targetCardId
-    ? detail.data?.card ?? galleryCards.find(card => card.id === targetCardId)
+  const selected: CharacterCardSummary | undefined = targetCardId
+    ? invalidCard ? targetSummary : detail.data?.card ?? targetSummary
     : undefined
   const {
     nameDraft, setNameDraft, authorDraft, setAuthorDraft, descDraft, setDescDraft,
-    activeOpeningIndex, setActiveOpeningIndex, openingDraft, setOpeningDraft, totalOpenings,
+    activeOpeningIndex, setActiveOpeningIndex, activeOpening, openingTitleDraft, setOpeningTitleDraft, openingDraft, setOpeningDraft, totalOpenings,
     saveCardField, handleOpeningBlur, handleAddAlternative, handleDeleteAlternative
   } = useCharacterProfileEditor({ selected, onUpdateCardProfile: props.onUpdateCardProfile, refreshDetail: detail.refetch, onRefreshCards: props.onRefreshCards })
 
@@ -145,6 +147,7 @@ export function CharacterPanel(props: CharacterPanelProps) {
       return timelineSortOrder === 'desc' ? comparison : -comparison
     })
   }, [detail.data?.timelines, timelineSortOrder])
+  const latestTimeline = timelineSortOrder === 'desc' ? sortedTimelines[0] : sortedTimelines.at(-1)
 
   const groupedCards = useMemo(() => filterCardsByGroup(galleryCards, organization.assignments, organization.activeGroupId), [galleryCards, organization.activeGroupId, organization.assignments])
   const filteredCards = useMemo(() => {
@@ -358,23 +361,6 @@ export function CharacterPanel(props: CharacterPanelProps) {
           <ExportOption description={props.t('character.exportLoomCardDescription')} icon={<FileArchive aria-hidden="true" />} label={props.t('character.exportLoomCard')} onClick={() => exportCard && exportSelectedCard(exportCard, 'loomcard')} />
         </div>
       </Dialog>
-      <Dialog open={Boolean(startingCard)} title={props.t('character.chooseOpening')}
-        className={styles.exportDialog} onClose={() => setStartingCard(undefined)}
-        actions={<><button type="button" onClick={() => setStartingCard(undefined)}>{props.t('character.cancel')}</button>
-        <button type="button" disabled={props.busy} onClick={() => {
-          if (startingCard) void props.onCreateTimelineFromCard(startingCard.id, startChoice, startingCard.version)
-            .then(created => { if (created !== false) setStartingCard(undefined) })
-        }}>{props.t('character.startSession')}</button></>}>
-        {startingCard ? <>
-          <OpeningPicker opening={startingCard.opening ?? { entries: [] }} choice={startChoice}
-            onChange={setStartChoice} disabled={props.busy} t={props.t} />
-          <p className={styles.openingContentExpanded}>{startChoice.kind === 'custom' ? startChoice.content
-            : renderTemplateMacros(
-              openingChoiceText(startingCard.opening ?? { entries: [] }, startChoice),
-              { card: startingCard },
-            )}</p>
-        </> : null}
-      </Dialog>
       <Dialog
         actions={(
           <>
@@ -396,7 +382,7 @@ export function CharacterPanel(props: CharacterPanelProps) {
           {remoteImportError ? <p aria-live="polite" className={styles.remoteImportError}>{remoteImportError}</p> : null}
         </form>
       </Dialog>
-      <DeleteConfirmation
+      <CardDeleteConfirmation
         busy={props.busy}
         count={pendingDeleteIds?.length ?? 0}
         includePlayData={includePlayData}
@@ -526,7 +512,26 @@ export function CharacterPanel(props: CharacterPanelProps) {
           </div>
         )}
       >
-        {selected ? (
+        {selected?.validationError !== undefined ? (
+          <div className={styles.profilePane} data-loom-card-invalid>
+            <header className={styles.profileToolbar}>
+              <button aria-label={props.t('character.back')} className={`${styles.toolbarButton} ${styles.profileBackButton}`} title={props.t('character.back')} type="button" onClick={handleBack}><ArrowLeft aria-hidden="true" /></button>
+              <span>{props.t('character.title')}</span>
+              <div>
+                <button aria-label={props.t('character.delete')} className={`${styles.toolbarButton} ${styles.deleteButton}`} disabled={props.busy} title={props.t('character.delete')} type="button" onClick={() => setPendingDeleteIds([selected.id])}><Trash2 aria-hidden="true" /></button>
+              </div>
+            </header>
+            <section className={styles.profileIdentity}>
+              <div><h2>{selected.name}</h2><p>{props.t('character.invalidCard')}</p></div>
+              <div className={styles.startActions}>
+                <button disabled type="button"><Play aria-hidden="true" />{props.t('character.continueNarrative')}</button>
+                <button disabled type="button"><Plus aria-hidden="true" />{props.t('character.newNarrative')}</button>
+                <button disabled type="button"><BookOpen aria-hidden="true" />{props.t('character.preview')}</button>
+              </div>
+            </section>
+            <p role="alert" className={styles.invalidReason}>{selected.validationError}</p>
+          </div>
+        ) : selected ? (
           <div className={styles.profilePane}>
             <input ref={backgroundInputRef} accept="image/*" className={styles.mediaInput} type="file" onChange={event => selectMedia(selected, 'background', event)} />
             <input ref={avatarInputRef} accept="image/*" className={styles.mediaInput} type="file" onChange={event => selectMedia(selected, 'avatar', event)} />
@@ -621,10 +626,16 @@ export function CharacterPanel(props: CharacterPanelProps) {
                   }}
                 />
               </div>
-              <button disabled={props.busy} type="button" onClick={() => {
-                setStartChoice({ kind: 'card', index: 0 })
-                setStartingCard(selected)
-              }}>{props.t('character.startSession')}</button>
+              <div className={styles.startActions}>
+                <button disabled={props.busy || !latestTimeline} type="button" onClick={() => {
+                  if (latestTimeline) props.onOpenTimeline(latestTimeline, selected.id)
+                }}><Play aria-hidden="true" />{props.t('character.continueNarrative')}</button>
+                <button disabled={props.busy} type="button" onClick={() => {
+                  void props.onCreateTimelineFromCard(selected.id, selected.opening ? { kind: 'card', id: selected.opening.id } : { kind: 'empty' }, selected.version)
+                }}><Plus aria-hidden="true" />{props.t('character.newNarrative')}</button>
+                <button disabled={props.busy} type="button" onClick={() => props.onPreviewCard(selected.id)}>
+                  <BookOpen aria-hidden="true" />{props.t('character.preview')}</button>
+              </div>
             </section>
             {mediaNotice ? <p aria-live="polite" className={styles.mediaNotice}>{mediaNotice}</p> : null}
 
@@ -727,6 +738,25 @@ export function CharacterPanel(props: CharacterPanelProps) {
                       ) : null}
                     </div>
                   </header>
+                  <label>
+                    <span>{props.t('character.openingTitle')}</span>
+                    <input
+                      className={styles.inlineAuthorInput}
+                      disabled={props.busy}
+                      value={openingTitleDraft}
+                      onChange={event => setOpeningTitleDraft(event.target.value)}
+                      onBlur={() => void handleOpeningBlur('title')}
+                    />
+                  </label>
+                  <label>
+                    <span>{props.t('character.openingId')}</span>
+                    <input
+                      className={styles.inlineAuthorInput}
+                      readOnly
+                      value={activeOpening?.id ?? ''}
+                      onFocus={event => event.currentTarget.select()}
+                    />
+                  </label>
                   <textarea
                     aria-label={props.t('character.opening')}
                     className={styles.inlineOpeningTextarea}
@@ -827,22 +857,24 @@ function CharacterCard(props: {
     props.mode === 'grid' ? styles.gridCard : styles.listCard,
     props.selected ? styles.cardSelected : '',
     props.active ? styles.cardActive : '',
+    props.card.validationError !== undefined ? styles.cardInvalid : '',
   ].filter(Boolean).join(' ')
   return (
     <ContextMenu>
-      <div className={className}>
+      <div className={className} data-loom-card-invalid={props.card.validationError !== undefined ? '' : undefined}>
         <ContextMenuTrigger asChild>
           <button
             aria-current={props.active ? 'page' : undefined}
             aria-pressed={props.selectionMode ? props.selected : undefined}
             className={styles.cardOpen}
+            title={props.card.validationError}
             type="button"
             onClick={props.onOpenProfile}
           >
             <div className={styles.cardCover}>
               {props.loadMedia && props.mediaUrl ? <img alt="" src={props.mediaUrl} /> : null}
             </div>
-            <span><strong>{props.card.name}</strong><small>{props.card.userName || props.t('character.authorUnknown')}</small></span>
+            <span><strong>{props.card.name}</strong><small>{props.card.validationError !== undefined ? props.t('character.invalidCard') : props.card.userName || props.t('character.authorUnknown')}</small></span>
           </button>
         </ContextMenuTrigger>
         {props.selectionMode ? <Toggle checked={props.selected} className={styles.selectionToggle} label={props.selected ? props.t('character.deselect') : props.t('character.select')} onChange={props.onToggleSelection} /> : null}
@@ -916,57 +948,6 @@ function CharacterGroupDialog(props: {
   )
 }
 
-function DeleteConfirmation(props: {
-  busy: boolean
-  count: number
-  includePlayData: boolean
-  includePromptResources: boolean
-  onCancel(): void
-  onConfirm(): void
-  onIncludePlayDataChange(value: boolean): void
-  onIncludePromptResourcesChange(value: boolean): void
-  open: boolean
-  timelineCount: number
-  previewReady: boolean
-  previewError?: string
-  onRetryPreview(): void
-  t: Translator
-}) {
-  return (
-    <Dialog
-      actions={(
-        <>
-          <button disabled={props.busy} type="button" onClick={props.onCancel}>{props.t('character.cancel')}</button>
-          <button className={styles.deleteButton} disabled={props.busy || props.count === 0 || !props.previewReady} type="button" onClick={props.onConfirm}>{props.t('character.confirmDelete')}</button>
-        </>
-      )}
-      closeOnBackdrop
-      description={props.t('character.deleteConfirmBody', { count: props.count })}
-      dismissible={!props.busy}
-      open={props.open}
-      role="alertdialog"
-      title={props.t('character.deleteConfirmTitle')}
-      onClose={props.onCancel}
-    >
-      {!props.previewReady ? props.previewError ? (
-        <div role="alert">
-          <p>{props.t('character.deletePreviewFailed')}: {props.previewError}</p>
-          <button disabled={props.busy} type="button" onClick={props.onRetryPreview}>{props.t('character.deletePreviewRetry')}</button>
-        </div>
-      ) : <p role="status">{props.t('character.deletePreviewLoading')}</p> : null}
-      {props.previewReady && props.timelineCount > 0 ? (
-        <label className={styles.deletePlayDataOption}>
-          <input checked={props.includePlayData} disabled={props.busy} type="checkbox" onChange={event => props.onIncludePlayDataChange(event.target.checked)} />
-          <span>{props.t('character.deletePlayData', { count: props.timelineCount })}</span>
-        </label>
-      ) : null}
-      <label className={styles.deletePlayDataOption}>
-        <input checked={props.includePromptResources} disabled={props.busy} type="checkbox" onChange={event => props.onIncludePromptResourcesChange(event.target.checked)} />
-        <span>{props.t('character.deletePromptResources')}</span>
-      </label>
-    </Dialog>
-  )
-}
 
 function filterCardsByGroup(cards: CharacterCardSummary[], assignments: Record<string, string | undefined>, activeGroupId: CharacterGroupFilter): CharacterCardSummary[] {
   if (!activeGroupId) return cards

@@ -67,7 +67,7 @@ describe('global definition resource search', () => {
     try {
       await store.createTimeline({
         actor, id: 'story', title: '剧情名称', createdFrom: { cardId: 'card', cardVersion: 2 }, stateRevisionId: 'state-1',
-        openingNodes: [{ body: { format: 'loom-markdown.v1', raw: '不属于全局搜索的剧情正文' } }],
+        openingNode: { body: { format: 'loom-markdown.v1', raw: '不属于全局搜索的剧情正文' } },
       })
       expect(await store.listSearchTimelines()).toEqual([{ id: 'story', title: '剧情名称', createdFrom: { cardId: 'card', cardVersion: 2 } }])
       await store.deleteTimeline({ actor, timelineId: 'story' })

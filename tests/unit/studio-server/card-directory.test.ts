@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { join, relative } from 'node:path'
 import { tmpdir } from 'node:os'
+import { createMemoryLogSink, createRootLogger } from '@loom-studio/logging'
 import * as fs from 'node:fs/promises'
 import { createCardDirectoryService } from '../../../apps/studio-server/src/resource-directories/card-directory.js'
 import { decodeCardBundleFiles, type CardBundleFilesInput } from '../../../apps/studio-server/src/codecs/card-bundle-zip.js'
@@ -39,7 +40,7 @@ async function setup() {
     artifact: {
       schemaVersion: 4, artifactId: 'source', displayName: 'Card',
       card: {
-        name: 'Card', description: 'Description', opening: 'Opening', macros: { user: 'Player' },
+        name: 'Card', description: 'Description', opening: { id: 'opening-1', content: 'Opening' }, macros: { user: 'Player' },
         preset: { macroOptions: { tone: [{ id: 'quiet', label: 'Quiet', value: 'soft' }, { id: 'loud', label: 'Loud', value: 'bold' }] } },
       },
       contextAssets: [{
@@ -65,9 +66,11 @@ async function setup() {
     },
     avatar: { bytes: Buffer.from('image'), mediaType: 'image/png' },
   }
-  const service = createCardDirectoryService({ dataRoot: root, readCard: async () => bundle })
+  const logs = createMemoryLogSink({ capacity: 20 })
+  const logger = createRootLogger({ service: 'test', instanceId: 'directory-test', sinks: [logs] }).child('card.directory')
+  const service = createCardDirectoryService({ dataRoot: root, readCard: async () => bundle, logger })
   const save = async () => service.saveCard('card-1', (await service.previewCard('card-1')).token)
-  return { root, bundle, service, save, directory: join(root, 'characters/card-1') }
+  return { root, bundle, service, save, logs, directory: join(root, 'characters/card-1') }
 }
 
 async function fileMap(root: string) {
@@ -84,14 +87,31 @@ async function fileMap(root: string) {
 }
 
 describe('card resource directories', () => {
-  it('does not restore a deleted card directory if post-commit cleanup fails', async () => {
-    const { root, directory, service, save } = await setup()
+  it('retains a bad deletion journal while recovering unrelated cards and blocking its directory writes', async () => {
+    const { root, service, save } = await setup()
     await save()
-    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const broken = join(root, '.loom/card-directories/card-1/delete.json')
+    await fs.writeFile(broken, '{broken')
+    const other = join(root, '.loom/card-directories/card-2')
+    await fs.mkdir(other, { recursive: true })
+    await fs.writeFile(join(other, 'delete.json'), JSON.stringify({ cardId: 'card-2' }))
+    const errors = await service.recoverDeletions(async () => false)
+    expect(errors).toEqual([expect.objectContaining({ cardId: 'card-1' })])
+    expect(await fs.readFile(broken, 'utf8')).toBe('{broken')
+    await expect(fs.stat(other)).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(service.recoverCard('card-1')).rejects.toThrow('unfinished deletion')
+    await expect(service.previewApply('card-1')).rejects.toThrow('unfinished deletion')
+    const commit = vi.fn()
+    await expect(service.deleteCard('card-1', commit)).rejects.toThrow('unfinished deletion')
+    expect(commit).not.toHaveBeenCalled()
+  })
+  it('does not restore a deleted card directory if post-commit cleanup fails', async () => {
+    const { root, directory, service, save, logs } = await setup()
+    await save()
     fault.cleanup = true
     await expect(service.deleteCard('card-1', async () => 'committed')).resolves.toBe('committed')
     await expect(fs.stat(directory)).rejects.toMatchObject({ code: 'ENOENT' })
-    expect(log).toHaveBeenCalled()
+    expect(logs.list().some(entry => entry.event === 'card.directory.cleanup_failed')).toBe(true)
     await service.recoverDeletions(async () => false)
     await expect(fs.stat(join(root, '.loom/card-directories/card-1'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
@@ -106,7 +126,11 @@ describe('card resource directories', () => {
     })).rejects.toThrow('directory recovery required')
     expect(await fs.readFile(join(directory, 'new.txt'), 'utf8')).toBe('external')
     await expect(fs.stat(join(root, '.loom/card-directories/card-1/deleted/manifest.json'))).resolves.toBeTruthy()
-    await expect(service.recoverDeletions(async () => true)).rejects.toThrow('conflicts')
+    await expect(service.recoverDeletions(async () => true)).resolves.toEqual([
+      { cardId: 'card-1', error: expect.stringContaining('conflicts') },
+    ])
+    await expect(service.recoverCard('card-1')).rejects.toThrow('unfinished deletion')
+    await expect(service.previewCard('card-1')).rejects.toThrow('unfinished deletion')
   })
 
   it('deletes the saved directory including author files only after committing card deletion', async () => {
@@ -219,7 +243,7 @@ describe('card resource directories', () => {
     await save()
     const before = await fileMap(directory)
     bundle.artifact.card.description = 'Changed'
-    bundle.artifact.card.opening = 'Changed opening'
+    bundle.artifact.card.opening = { id: 'opening-1', content: 'Changed opening' }
     bundle.artifact.card.macros = { user: 'Changed player' }
     fault.remaining = 2
     await expect(save()).rejects.toThrow('simulated interruption')
@@ -234,7 +258,7 @@ describe('card resource directories', () => {
     const { service, save, bundle, directory } = await setup()
     await save()
     bundle.artifact.card.description = 'Changed'
-    bundle.artifact.card.opening = 'Changed opening'
+    bundle.artifact.card.opening = { id: 'opening-1', content: 'Changed opening' }
     fault.remaining = 1
     await expect(save()).rejects.toThrow('simulated interruption')
     await fs.writeFile(join(directory, 'card/description.md'), 'New IDE content')

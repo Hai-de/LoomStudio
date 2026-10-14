@@ -4,7 +4,8 @@ export type ExtensionStateInitializationContext = {
   cardId: string
   characterName: string
   /** Selected opening with ordinary macros expanded; empty when adopting into an existing Timeline. */
-  opening: readonly string[]
+  opening: string
+  openingId?: string
   resources: ReadonlyArray<{
     id: string
     name: string

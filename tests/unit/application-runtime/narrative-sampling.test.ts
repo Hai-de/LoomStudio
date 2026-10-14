@@ -24,7 +24,7 @@ async function createTimeline(count = 5) {
   const created = await fixture.narratives.createTimeline({
     actor: fixture.actor,
     stateRevisionId: 'state-0',
-    openingNodes: [{ body: { format: 'loom-markdown.v1', raw: 'floor 1' } }],
+    openingNode: { body: { format: 'loom-markdown.v1', raw: 'floor 1' } },
   })
   let head = created.branch.headNodeId ?? null
   const nodes = [...created.nodes]

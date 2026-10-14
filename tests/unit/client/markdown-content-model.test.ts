@@ -1,7 +1,8 @@
+import { highlightCode } from '../../../apps/studio-client/src/shared/ui/markdown-content/code-highlight.js'
 import { createElement, isValidElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { highlightCode, MarkdownContent } from '../../../apps/studio-client/src/shared/ui/markdown-content/markdown-content.js'
+import { MarkdownContent } from '../../../apps/studio-client/src/shared/ui/markdown-content/markdown-content.js'
 import { prepareLoomMarkdown, readLoomToken } from '../../../apps/studio-client/src/shared/ui/markdown-content/markdown-content-model.js'
 
 const codeBlockLabels = { copied: 'Copied', copy: 'Copy', copyFailed: 'Failed', disableWrap: 'Unwrap', enableWrap: 'Wrap' }

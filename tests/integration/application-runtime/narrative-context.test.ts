@@ -109,7 +109,7 @@ describe('Published Narrative context', () => {
       const sessions = []
       const timelines = []
       for (const card of [a, b, c]) {
-        const created = await f.runtime.createNarrativeTimeline({ cardId: card.id, openingNodes: [] })
+        const created = await f.runtime.createNarrativeTimeline({ cardId: card.id, openingContent: '' })
         timelines.push(created.timeline.id)
         const { session } = await f.runtime.createAgentSession({ agentPresetId: agentPreset.id, timelineId: created.timeline.id })
         sessions.push(session)
@@ -144,7 +144,7 @@ describe('Published Narrative context', () => {
         name: 'Writer', agentPresetId: preset.id, expectedVersion: (await f.runtime.getPromptResource({ resourceId: preset.id })).resource.version, model: { providerProfileId: providerProfile.id, modelId: 'test-model' },
       })
       const { card } = await f.runtime.createCard({ name: 'Story', opening: '' })
-      const created = await f.runtime.createNarrativeTimeline({ cardId: card.id, openingNodes: [] })
+      const created = await f.runtime.createNarrativeTimeline({ cardId: card.id, openingContent: '' })
       const scope = { timelineId: created.timeline.id, branchId: created.branch.id }
       await f.publish(scope, empty)
       const { session } = await f.runtime.createAgentSession({ agentPresetId: agentPreset.id, timelineId: scope.timelineId })
@@ -245,7 +245,12 @@ describe('Published Narrative context', () => {
         name: 'Writer', agentPresetId: preset.id, expectedVersion: (await f.runtime.getPromptResource({ resourceId: preset.id })).resource.version, model: { providerProfileId: providerProfile.id, modelId: 'test-model' },
       })
       const { card } = await f.runtime.createCard({ name: 'Story' })
-      const created = await f.runtime.createNarrativeTimeline({ cardId: card.id, openingNodes: [{ content: 'FIRST' }, { content: 'SECOND' }] })
+      const created = await f.runtime.createNarrativeTimeline({ cardId: card.id, openingContent: 'FIRST' })
+      const second = await f.runtime.appendNarrativeInput({ timelineId: created.timeline.id, branchId: created.branch.id,
+        nodeId: 'second-history', expectedHeadNodeId: created.branch.headNodeId!, content: 'SECOND',
+      })
+      created.nodes.push(second.node)
+      created.branch = second.branch
       const scope = { timelineId: created.timeline.id, branchId: created.branch.id }
       const { session } = await f.runtime.createAgentSession({ agentPresetId: agentPreset.id, timelineId: scope.timelineId })
       const preview = () => f.runtime.previewAgentTurn({ agentSessionId: session.id, input: 'NEXT' })
@@ -290,7 +295,7 @@ describe('Published Narrative context', () => {
     const f = await fixture()
     try {
       const { card } = await f.runtime.createCard({ name: 'Story' })
-      const created = await f.runtime.createNarrativeTimeline({ cardId: card.id, openingNodes: [] })
+      const created = await f.runtime.createNarrativeTimeline({ cardId: card.id, openingContent: '' })
       const scope = { timelineId: created.timeline.id, branchId: created.branch.id }
       await f.publish(scope, empty)
       const { session } = await f.agents.createSession({ actor, agentPresetId: 'profile', timelineId: scope.timelineId })

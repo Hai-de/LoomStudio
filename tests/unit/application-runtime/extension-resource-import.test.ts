@@ -294,7 +294,7 @@ describe('Extension prompt resource import', () => {
       await runtime.replacePresetToolMounts({
         presetId: agentPreset.id, mounts: [{ toolId, orderIndex: 0, defaultEnabled: true }],
       })
-      const timeline = await runtime.createNarrativeTimeline({ cardId: a.id, openingNodes: [] })
+      const timeline = await runtime.createNarrativeTimeline({ cardId: a.id, openingContent: '' })
       for (const timelineId of [timeline.timeline.id, undefined]) {
         const { session } = await runtime.createAgentSession({ agentPresetId: agentPreset.id, timelineId })
         await expect(runtime.previewAgentTurn({ agentSessionId: session.id, input: 'Continue' }))
@@ -389,7 +389,7 @@ describe('Extension prompt resource import', () => {
       const presetId = global.promptResources[0]!.resourceId
       const ctx = { ...f, now: nowIso }
       for (const [card, own] of [[a, installedA], [b, installedB]] as const) {
-        const timeline = await runtime.createNarrativeTimeline({ cardId: card.id, openingNodes: [] })
+        const timeline = await runtime.createNarrativeTimeline({ cardId: card.id, openingContent: '' })
         const { session } = await runtime.createAgentSession({ agentPresetId: presetId, timelineId: timeline.timeline.id })
         for (const source of [
           { kind: 'agent-session' as const, sessionId: session.id },
@@ -479,8 +479,8 @@ describe('Extension prompt resource import', () => {
         agentPresetId: id, expectedVersion: agentPreset.version,
         model: { providerProfileId: providerProfile.id, modelId: officialFakeModelId },
       })
-      const timelineA = await runtime.createNarrativeTimeline({ cardId: a.id, openingNodes: [] })
-      const timelineB = await runtime.createNarrativeTimeline({ cardId: b.id, openingNodes: [] })
+      const timelineA = await runtime.createNarrativeTimeline({ cardId: a.id, openingContent: '' })
+      const timelineB = await runtime.createNarrativeTimeline({ cardId: b.id, openingContent: '' })
       const { session: allowed } = await runtime.createAgentSession({
         agentPresetId: id, timelineId: timelineA.timeline.id,
       })

@@ -29,7 +29,7 @@ manifest.json
 card.json
 card/description.md
 opening/0.md
-opening/alternatives/0/0.md
+opening/alternatives/0.md
 preset/system.md
 macros/card.json
 macros/preset.json
@@ -55,7 +55,7 @@ assets/background.webp
 - `mediaTypes` 按媒体相对路径记录原 MIME。已知媒体使用对应后缀，未知 MIME 使用 `.bin` 而不是伪装成 PNG；未声明 MIME 的已有标准图片路径仍可按后缀读取。GIF、APNG、SVG 和视频等内部素材不改变 ZIP/PNG 外层协议，保存媒体不等于已提供播放器或允许执行内容。
 - `resources.metadata` 保存 Artifact 版本、身份和包说明，不嵌入 Card 主体或正文树。
 - `card.json` 的 `config` 保存名字、用户名字和其他 Card 配置；description、宏、preset system、opening 与旧 lore 正文保存文件引用。
-- `opening.entries` 是默认开场的连续内容，`opening.alternatives[].entries` 是其他可选开场的内容序列。默认正文继续存于 `opening/<entry>.md`，备选正文存于 `opening/alternatives/<candidate>/<entry>.md`。旧包不含 alternatives 时仍只有默认开场；候选只在创建 Timeline 时选择，不导出运行时 Swipe 状态。
+- `opening` 与 `opening.alternatives[]` 各包含一个 `content` 正文，以及稳定的 `id` 和可选 `title`。默认正文存于 `opening/0.md`，备选正文存于 `opening/alternatives/<candidate>.md`；文件下标仅用于路径，不是运行时身份。写入归一化为缺失 ID 生成并保存标识，同卡显式重复 ID 被拒绝，读取不重生有效 ID。不支持旧 `entries` 或 `role` 格式；单字符串可作为创建简写。候选在创建 Timeline 及尚未锁定的初始化窗口内选择，不导出运行时 Swipe 状态。窗口合同见 [Narrative 数据生命周期](../data/README.md)。
 - 每个 Prompt 根拥有一个 `index.json`。节点的 `metadata` 保存原有 ID、kind、label、capabilities、orderList 等；`body` 为 Markdown 路径，`children` 数组保留树结构与顺序。普通条目直接生成 `<名称>.md`；真正的 module / folder / 非空子树才使用目录，其自有正文为 `_content.md`。空正文与缺失正文区分，虚拟节点不强制生成正文文件。旧 `body.md` 路径仍按索引读取。
 - 旧 Card 内联 `lore` 有独立内容时写入 `lore/<名称>.md`，不再生成 `lore/legacy`；与资源树同 ID、同正文时复用同一个 Markdown 文件，仍保留双方元数据，不静默修改已有数据库内容。
 - `state/index.json` 的 `artifact` 保存 State Artifact 头，`contribution` 保存贡献 ID 及实体类型、模板、实体、挂载、绑定的有序文件引用。读取时恢复并验证完整 `loom.state` Artifact；索引文件本身不是可单独导入的 State Artifact。

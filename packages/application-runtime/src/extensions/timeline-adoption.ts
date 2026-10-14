@@ -133,7 +133,7 @@ export function createTimelineExtensionAdoptionMethods(ctx: Context) {
       for (const source of sources) {
         contributions.push(await ctx.stateContributions.initialize(source.contributionId, {
           cardId: runtime.content.sourceCardId, characterName: runtime.content.cardName ?? '',
-          opening: [], resources, signal,
+          opening: '', openingId: timeline.opening?.id, resources, signal,
         }))
       }
       const addition = materializeAddition(runtime.content, state.value, contributions)

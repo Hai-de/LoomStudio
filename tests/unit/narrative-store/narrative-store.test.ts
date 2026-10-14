@@ -18,6 +18,96 @@ function createTestContext() {
 }
 
 describe('narrative store', () => {
+  it('rejects stale State and locks opening replacement after path mutations', async () => {
+    const { engine, store, actor } = createTestContext()
+    try {
+      const create = () => store.createTimeline({
+        actor, stateRevisionId: 'initial', opening: { id: 'default', locked: false },
+        openingNode: { body: { format: 'loom-markdown.v1', raw: 'Opening' } },
+      })
+      const created = await create()
+      const target = { timelineId: created.timeline.id, branchId: created.branch.id }
+      const replace = (input: Parameters<ReturnType<typeof store.transaction>['replaceOpening']>[0]) =>
+        engine.transact({ actor }, tx => store.transaction(tx).replaceOpening(input))
+      await store.setBranchStateHead({ ...target, actor, expectedStateHeadRevisionId: 'initial', stateRevisionId: 'configured' })
+      await expect(replace({ ...target, expectedHeadNodeId: created.branch.headNodeId!, expectedStateHeadRevisionId: 'initial', openingNode: undefined }))
+        .rejects.toMatchObject({ code: 'narrative.state_head_conflict' })
+      expect((await store.getTimeline(target.timelineId))?.opening).toBeDefined()
+      expect((await store.getPage(target)).nodes[0]?.body.raw).toBe('Opening')
+      await expect(engine.transact({ actor }, tx => {
+        store.transaction(tx).appendNode({
+          ...target, expectedHeadNodeId: created.branch.headNodeId!, stateRevisionId: 'configured',
+          body: { format: 'loom-markdown.v1', raw: 'rolled back' },
+        })
+        throw new Error('abort input')
+      })).rejects.toThrow('abort input')
+      expect((await store.getTimeline(target.timelineId))?.opening).toBeDefined()
+      const old = await store.createTimeline({ actor, stateRevisionId: 'initial' })
+      await expect(replace({ timelineId: old.timeline.id, branchId: old.branch.id, expectedHeadNodeId: null, expectedStateHeadRevisionId: 'initial', openingNode: undefined }))
+        .rejects.toMatchObject({ code: 'narrative.opening_locked' })
+      for (const mutation of ['append', 'fork'] as const) {
+        const story = await create()
+        const ids = { timelineId: story.timeline.id, branchId: story.branch.id }
+        const node = story.nodes[0]!
+        const body = { format: 'loom-markdown.v1' as const, raw: 'Keep this content' }
+        if (mutation === 'append') await store.appendNode({ ...ids, actor, expectedHeadNodeId: node.id, stateRevisionId: 'initial', body })
+        if (mutation === 'fork') await store.forkBranch({ timelineId: story.timeline.id, actor, fromBranchId: story.branch.id, fromNodeId: node.id, stateRevisionId: 'initial' })
+        const page = await store.getPage(ids)
+        expect(page.timeline.opening).toEqual({ id: 'default', nodeId: node.id, locked: true })
+        await expect(replace({ ...ids, expectedHeadNodeId: page.branch.headNodeId!, expectedStateHeadRevisionId: 'initial', openingNode: undefined }))
+          .rejects.toMatchObject({ code: 'narrative.opening_locked' })
+        expect((await store.getPage(ids)).nodes).toEqual(page.nodes)
+        const edited = await store.editNode({ ...ids, actor, nodeId: node.id, body })
+        expect(edited.timeline.opening).toEqual(page.timeline.opening)
+        const branchEdited = await store.editBranchNode({ ...ids, actor, nodeId: node.id, expectedHeadNodeId: page.branch.headNodeId!, expectedBody: body, body })
+        expect(branchEdited.timeline.opening).toEqual(page.timeline.opening)
+        expect(await store.getNode(node.id)).not.toBeNull()
+      }
+    } finally {
+      engine.close()
+    }
+  })
+
+  it('keeps an edited single initialization opening replaceable with its identity', async () => {
+    const { engine, store, actor } = createTestContext()
+    try {
+      const created = await store.createTimeline({
+        actor, stateRevisionId: 'initial', opening: { id: 'alternative', locked: false },
+        openingNode: { body: { format: 'loom-markdown.v1', raw: 'First' } },
+      })
+      const target = { timelineId: created.timeline.id, branchId: created.branch.id }
+      await store.setBranchStateHead({ ...target, actor, expectedStateHeadRevisionId: 'initial', stateRevisionId: 'configured' })
+      const body = { format: 'loom-markdown.v1' as const, raw: 'Edited opening' }
+      const direct = await store.editNode({ ...target, actor, nodeId: created.nodes[0]!.id, body })
+      expect(direct.timeline.opening).toEqual({ id: 'alternative', nodeId: created.nodes[0]!.id, locked: false, custom: true })
+      await expect(store.editBranchNode({
+        ...target, actor, nodeId: created.nodes[0]!.id, expectedHeadNodeId: created.branch.headNodeId!,
+        expectedBody: created.nodes[0]!.body, body,
+      })).rejects.toMatchObject({ code: 'narrative.body_conflict' })
+      const edited = await store.editBranchNode({
+        ...target, actor, nodeId: created.nodes[0]!.id, expectedHeadNodeId: created.branch.headNodeId!,
+        expectedBody: body, body: { ...body, raw: 'Edited again' },
+      })
+      const nodeId = edited.replacements[0]!.node.id
+      expect(edited.timeline.opening).toEqual({ id: 'alternative', nodeId, locked: false, custom: true })
+      expect(edited.branch.stateHeadRevisionId).toBe('configured')
+      expect(edited.replacements.every(item => item.node.stateRevisionId === 'initial')).toBe(true)
+      expect((await store.getPage(target)).nodes.map(node => node.body.raw)).toEqual(['Edited again'])
+      expect(await store.getNode(created.nodes[0]!.id)).toBeNull()
+      await expect(store.editBranchNode({
+        ...target, actor, nodeId, expectedHeadNodeId: created.branch.headNodeId!,
+        expectedBody: body, body,
+      })).rejects.toMatchObject({ code: 'narrative.head_conflict' })
+      const replaced = await engine.transact({ actor }, tx => store.transaction(tx).replaceOpening({
+        ...target, expectedHeadNodeId: edited.branch.headNodeId!, expectedStateHeadRevisionId: 'configured', openingNode: undefined,
+      }))
+      expect(replaced.value.timeline.opening).toEqual({ locked: false })
+      expect(await store.listNodes(target.timelineId)).toEqual([])
+    } finally {
+      engine.close()
+    }
+  })
+
   it('creates a timeline, opening path, branch, and one commit without Document rows', async () => {
     const { engine, store, actor } = createTestContext()
     const observed = vi.fn()
@@ -29,10 +119,7 @@ describe('narrative store', () => {
       title: 'Test Story',
       createdFrom: { cardId: 'card-1', cardVersion: 3 },
       promptResourceIds: ['setting-1', 'setting-1', 'preset-1'],
-      openingNodes: [
-        { body: { format: 'loom-markdown.v1', raw: 'Opening one' } },
-        { body: { format: 'loom-markdown.v1', raw: 'Opening two' }, source: { runId: 'run-opening' } },
-      ],
+      openingNode: { id: 'opening-node', createdAt: '2026-08-12T00:00:00.000Z', body: { format: 'loom-markdown.v1', raw: 'Opening one' }, source: { runId: 'run-opening' } },
     })
 
     expect(created.timeline).toMatchObject({
@@ -40,19 +127,19 @@ describe('narrative store', () => {
       promptResourceIds: ['setting-1', 'preset-1'],
       activeBranchId: created.branch.id,
     })
-    expect(created.nodes).toHaveLength(2)
-    expect(created.nodes[1]).toMatchObject({
-      parentNodeId: created.nodes[0]?.id,
+    expect(created.nodes).toHaveLength(1)
+    expect(created.nodes[0]).toMatchObject({
+      id: 'opening-node', createdAt: '2026-08-12T00:00:00.000Z',
       source: { runId: 'run-opening', changesetId: created.commit.changesetId },
     })
-    expect(created.branch.headNodeId).toBe(created.nodes[1]?.id)
+    expect(created.branch.headNodeId).toBe(created.nodes[0]?.id)
+    expect(created.nodes[0]?.parentNodeId).toBeUndefined()
     const listed = await store.listTimelines({ createdFromCardId: 'card-1' })
     expect(listed.timelines[0]?.openingPreview).toBe('Opening one')
-    expect(listed.timelines[0]?.latestPreview).toBe('Opening two')
+    expect(listed.timelines[0]?.latestPreview).toBe('Opening one')
     expect(created.commit.operations.map(operation => operation.entityType)).toEqual([
       'narrative.timeline',
       'narrative.branch',
-      'narrative.node',
       'narrative.node',
     ])
     expect(observed).toHaveBeenCalledOnce()
@@ -65,7 +152,7 @@ describe('narrative store', () => {
     const created = await store.createTimeline({
       actor,
       stateRevisionId: 'state-one',
-      openingNodes: [{ body: { format: 'loom-markdown.v1', raw: 'one' } }],
+      openingNode: { body: { format: 'loom-markdown.v1', raw: 'one' } },
     })
     const second = await store.appendNode({
       actor,
@@ -132,12 +219,12 @@ describe('narrative store', () => {
     const first = await store.createTimeline({
       actor,
       stateRevisionId: 'state-first',
-      openingNodes: [{ body: { format: 'loom-markdown.v1', raw: 'first' } }],
+      openingNode: { body: { format: 'loom-markdown.v1', raw: 'first' } },
     })
     const second = await store.createTimeline({
       actor,
       stateRevisionId: 'state-second',
-      openingNodes: [{ body: { format: 'loom-markdown.v1', raw: 'second' } }],
+      openingNode: { body: { format: 'loom-markdown.v1', raw: 'second' } },
     })
 
     expect(() => engine.database
@@ -160,7 +247,7 @@ describe('narrative store', () => {
     const created = await store.createTimeline({
       actor,
       stateRevisionId: 'state-stable',
-      openingNodes: [{ body: { format: 'loom-markdown.v1', raw: 'stable head' } }],
+      openingNode: { body: { format: 'loom-markdown.v1', raw: 'stable head' } },
     })
     const originalHead = created.branch.headNodeId
     const commitCountBefore = engine.database.prepare('SELECT COUNT(*) AS count FROM changesets').get() as { count: number }
@@ -188,10 +275,11 @@ describe('narrative store', () => {
     const created = await store.createTimeline({
       actor,
       stateRevisionId: 'state-main',
-      openingNodes: [
-        { body: { format: 'loom-markdown.v1', raw: 'root' } },
-        { body: { format: 'loom-markdown.v1', raw: 'main' } },
-      ],
+      openingNode: { body: { format: 'loom-markdown.v1', raw: 'root' } },
+    })
+    await store.appendNode({ actor, timelineId: created.timeline.id, branchId: created.branch.id,
+      expectedHeadNodeId: created.branch.headNodeId!, stateRevisionId: 'state-main',
+      body: { format: 'loom-markdown.v1', raw: 'main' },
     })
     const fork = await store.forkBranch({
       actor,
@@ -248,7 +336,7 @@ describe('narrative store', () => {
       stateRevisionId: 'state-newer',
       createdFrom: { cardId: 'card-1', cardVersion: 2 },
       title: 'Newer',
-      openingNodes: [{ body: { format: 'loom-markdown.v1', raw: 'opening' } }],
+      openingNode: { body: { format: 'loom-markdown.v1', raw: 'opening' } },
     })
     await store.createTimeline({
       actor,
@@ -282,7 +370,7 @@ describe('narrative store', () => {
       const narrative = store.transaction(dataTx)
       const created = narrative.createTimeline({
         stateRevisionId: 'state-cross-domain',
-        openingNodes: [{ body: { format: 'loom-markdown.v1', raw: 'created together' } }],
+        openingNode: { body: { format: 'loom-markdown.v1', raw: 'created together' } },
       })
       dataTx.database.exec('CREATE TABLE test_state (id TEXT PRIMARY KEY)')
       dataTx.database.prepare('INSERT INTO test_state (id) VALUES (?)').run('state-1')
@@ -324,7 +412,7 @@ describe('narrative store', () => {
       const created = await firstStore.createTimeline({
         actor: { kind: 'system', id: 'test' },
         stateRevisionId: 'state-persistent',
-        openingNodes: [{ body: { format: 'loom-markdown.v1', raw: 'persistent' } }],
+        openingNode: { body: { format: 'loom-markdown.v1', raw: 'persistent' } },
       })
       firstEngine.close()
 
@@ -341,7 +429,7 @@ describe('narrative store', () => {
         .get('application.narrative')
       const changesets = database.prepare('SELECT COUNT(*) AS count FROM changesets').get()
       database.close()
-      expect(migration).toEqual({ version: 3 })
+      expect(migration).toEqual({ version: 4 })
       expect(changesets).toEqual({ count: 1 })
     } finally {
       await rm(directory, { recursive: true, force: true })
