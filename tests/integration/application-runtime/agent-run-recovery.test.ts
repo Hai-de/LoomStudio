@@ -51,6 +51,37 @@ async function setup(runtime: ReturnType<typeof open>['runtime']) {
 }
 
 describe('durable Agent Run recovery', () => {
+  it('does not strand a running marker when a provider emits only whitespace before failure', async () => {
+    const fixture = open(':memory:', async input => {
+      input.onEvent?.({ type: 'text-delta', runId: 'provider-run', delta: ' ' })
+      throw new Error('Provider failed')
+    })
+    try {
+      const { session } = await setup(fixture.runtime)
+      await expect(fixture.runtime.invokeAgentTurn({ agentSessionId: session.id, input: 'Work.' })).rejects.toThrow('Provider failed')
+      const page = await fixture.agents.getEntryPage({ agentSessionId: session.id, limit: 100 })
+      expect(page.entries.findLast(entry => entry.entry.kind === 'run-state')?.entry).toMatchObject({ state: 'failed' })
+      expect(page.entries.some(entry => entry.entry.kind === 'message' && entry.entry.role === 'assistant')).toBe(false)
+      await expect(fixture.runtime.invokeAgentTurn({ agentSessionId: session.id, input: 'Retry.' })).rejects.toThrow('Provider failed')
+    } finally { fixture.engine.close() }
+  })
+
+  it('records a minimal terminal state if recovery persistence fails', async () => {
+    const fixture = open(':memory:', async () => { throw new Error('Provider failed') })
+    try {
+      const { session } = await setup(fixture.runtime)
+      const append = fixture.agents.appendEntries.bind(fixture.agents)
+      vi.spyOn(fixture.agents, 'appendEntries').mockImplementation(input => {
+        if (input.entries.some(item => item.entry.kind === 'run-state' && item.entry.state === 'failed' && item.entry.recovery))
+          throw new Error('Recovery persistence rejected')
+        return append(input)
+      })
+      await expect(fixture.runtime.invokeAgentTurn({ agentSessionId: session.id, input: 'Work.' })).rejects.toThrow('Provider failed')
+      const page = await fixture.agents.getEntryPage({ agentSessionId: session.id, limit: 100 })
+      expect(page.entries.findLast(entry => entry.entry.kind === 'run-state')?.entry).toMatchObject({ state: 'failed' })
+      await expect(fixture.runtime.invokeAgentTurn({ agentSessionId: session.id, input: 'Retry.' })).rejects.toThrow('Provider failed')
+    } finally { fixture.engine.close() }
+  })
   it('persists processed sources and resumes without executing an unloaded processor', async () => {
     let calls = 0
     const fixture = open(':memory:', async input => {

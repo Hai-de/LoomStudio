@@ -12,6 +12,7 @@ export type AgentComposerProps = RunRecoveryControlsProps & {
   canSendNarrative: boolean
   canRetryNarrativeInput?: boolean
   onRetryNarrativeInput?(): void
+  taskCard?: ReactNode
   composerSheet?: ReactNode
   narrativeInput: string
   narrativeTextareaDisabled: boolean
@@ -70,6 +71,8 @@ export function AgentComposer(props: AgentComposerProps) {
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
+      {props.taskCard ? <div className={styles.taskCard}>{props.taskCard}</div> : null}
+      <div className={styles.foreground}>
       <ChatComposer
         inputRef={props.inputRef}
         canPreviewPrompt={props.canPreviewPrompt}
@@ -81,7 +84,7 @@ export function AgentComposer(props: AgentComposerProps) {
         pinned={props.pinned}
         previewLabel={props.t('composer.preview')}
         quickActions={props.quickActions}
-        retryLabel={props.t('composer.resendNarrativeInput')}
+        retryLabel={props.t('swipe.reset')}
         canRetry={props.canRetryNarrativeInput && !disconnected && !props.runRecoveryBusy}
         onRetry={props.onRetryNarrativeInput}
         sheet={recovery ? <><RunRecoveryControls {...props} runRecovery={recovery} />{props.composerSheet}</> : props.composerSheet}
@@ -102,6 +105,7 @@ export function AgentComposer(props: AgentComposerProps) {
         onToggleExpanded={props.onToggleAgentPanel}
         onTogglePinned={props.onTogglePinned}
       />
+      </div>
       </div>
     </>
   )

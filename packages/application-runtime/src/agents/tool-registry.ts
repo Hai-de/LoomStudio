@@ -133,6 +133,9 @@ export type ToolContextItem = {
 }
 
 export type ToolExecutionScope = {
+  narrativeSource?: import('../runtime/swipe-runtime.js').NarrativeExecutionSource
+  assertNarrativeSource?: () => Promise<void>
+  withNarrativeWrite?: <T>(work: () => T) => T
   requestHistoryApproval?: ApproveNarrativeHistory
   vfs?: readonly VfsEntry[]
   resourceVfs?: ResourceVfs

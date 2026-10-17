@@ -230,6 +230,25 @@ describe('Text Transform rule saving', () => {
     return f
   }
 
+  it('uses each selected rule version and reports partial deletion failure', async () => {
+    const f = await editing()
+    const second = { ...rule, id: 'second', name: 'Second', version: 4 }
+    f.listRules.mockResolvedValue({ rules: [rule, second] })
+    await f.render().refresh()
+    const upsert = vi.fn().mockResolvedValue({})
+    f.props.api.upsertRule = upsert
+    await f.render().batchEditTextResources([`rule:${rule.id}`, 'rule:second'], 'disable')
+    expect(upsert.mock.calls.map(([input]) => [input.ruleId, input.expectedVersion, input.rule.enabled])).toEqual([
+      [rule.id, 1, false], ['second', 4, false],
+    ])
+    const remove = vi.fn().mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('Version conflict'))
+    f.props.api.deleteRule = remove
+    const result = await f.render().batchEditTextResources([`rule:${rule.id}`, 'rule:second'], 'delete')
+    expect(remove.mock.calls.map(([input]) => [input.ruleId, input.expectedVersion])).toEqual([[rule.id, 1], ['second', 4]])
+    expect(result.failedIds).toEqual(['rule:second'])
+    expect(result.error).toContain('Second: Version conflict')
+  })
+
   it('publishes saved replacement once and retains committed version when refresh fails', async () => {
     const f = await editing()
     const pending = Promise.withResolvers<Awaited<ReturnType<TextTransformProps['api']['upsertRule']>>>()

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/index.js'
-import { parseProviderError, formatProviderErrorMessage } from '../../../apps/studio-client/src/shared/notifications/provider-error.js'
+import { parseProviderError, formatProviderErrorMessage, isProviderOperationError } from '../../../apps/studio-client/src/shared/notifications/provider-error.js'
 
 describe('Provider Error Parser', () => {
   const tZh = createTranslator('zh-CN')
@@ -80,5 +80,18 @@ describe('Provider Error Parser', () => {
 
     const streamErr = new Error('Provider stream ended before completion')
     expect(parseProviderError(streamErr).messageKey).toBe('notify.provider.streamInterrupted')
+  })
+})
+
+describe('Operation notification routing', () => {
+  it('does not label a truncated RPC response or ordinary fetch failure as a model call', () => {
+    const jsonError = "Failed to execute 'json' on 'Response': Unexpected end of JSON input"
+    expect(isProviderOperationError('provider-settings', jsonError)).toBe(false)
+    expect(isProviderOperationError('agent-chat', jsonError)).toBe(false)
+    expect(isProviderOperationError('resources', 'Failed to fetch')).toBe(false)
+  })
+  it('keeps specific provider failures actionable', () => {
+    expect(isProviderOperationError('agent-chat', 'Provider request failed (401): invalid api key')).toBe(true)
+    expect(isProviderOperationError('provider-settings', 'HTTP 429 rate limit')).toBe(true)
   })
 })

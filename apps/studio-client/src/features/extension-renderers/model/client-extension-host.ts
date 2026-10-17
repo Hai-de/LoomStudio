@@ -32,6 +32,7 @@ import type { RendererSessionHost } from './renderer-session.js'
 import { rendererContributionKey } from '../../../shared/extension-renderer-runtime/renderer-registry.js'
 import { clientCommandKey, clientModuleKey as moduleKey, matchesClientActionCondition } from './client-actions.js'
 import { readClientNotification } from '../../../shared/extension-renderer-runtime/renderer-notifications.js'
+import { styleKey, styleRegistry } from '../../themes/model/style-registry.js'
 
 export type { ManagedClientExtensionPackage } from '../../../entities/index.js'
 
@@ -678,6 +679,19 @@ function createActivationContext(input: {
   }
   return {
     timeline: { ...(timelineTarget ? { target: Object.freeze(structuredClone(timelineTarget)) } : {}) },
+    styles: {
+      register: (contributionId, factory) => {
+        assertActive()
+        const definition = [...(input.extensionPackage.resources?.themes ?? []), ...(input.extensionPackage.resources?.styles ?? [])]
+          .find(item => item.id === contributionId && item.moduleId === input.module.moduleId)
+        if (!definition || installationTarget.kind !== 'global' || input.extensionPackage.participation === 'timeline') {
+          throw new Error(`Style contribution is not declared for this global Client Module: ${contributionId}`)
+        }
+        const handle = styleRegistry.register(styleKey(input.extensionPackage.packageId, contributionId), factory, signal)
+        input.record.handles.push(handle)
+        return handle
+      },
+    },
     notifications,
     extension: {
       packageId: input.extensionPackage.packageId,

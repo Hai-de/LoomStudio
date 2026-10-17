@@ -6,7 +6,7 @@ import type { Logger } from '@loom-studio/logging'
 import type { NarrativeStore } from '@loom-studio/application-data'
 import type { PromptResourceStore } from '@loom-studio/application-data'
 import { createId as createSharedId, nowIso } from '@loom-studio/shared'
-import { createStateStore, type StateStore } from '@loom-studio/application-data'
+import { createStateStore, createNarrativeSwipeStore, type StateStore, type NarrativeSwipeStore } from '@loom-studio/application-data'
 import { createDocumentBackedAiGateway } from '../providers/gateway.js'
 import { createAgentToolRegistry, type AgentToolRegistry } from '../agents/tool-registry.js'
 import type { AiGateway, ApplicationRuntimeOptions, BlobStorage, MediaAssetLookup, SourceArtifactStorage } from '../types.js'
@@ -31,6 +31,7 @@ export type ApplicationRuntimeContext = {
   narrativeContext: NarrativeContextRegistry
   promptResources: PromptResourceStore
   states: StateStore
+  swipes: NarrativeSwipeStore
   sourceArtifacts?: SourceArtifactStorage
   mediaAssets?: MediaAssetLookup
   secrets: ApplicationRuntimeOptions['secrets']
@@ -74,6 +75,7 @@ export function createApplicationRuntimeContext(options: ApplicationRuntimeOptio
       createId: runtimeCreateId,
       now: runtimeNow,
     }),
+    swipes: createNarrativeSwipeStore({ engine: options.dataEngine, createId: runtimeCreateId, now: runtimeNow }),
     sourceArtifacts: options.sourceArtifacts,
     mediaAssets: options.mediaAssets,
     secrets: options.secrets,

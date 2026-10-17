@@ -64,6 +64,7 @@ export function useClientExtensionRuntime(input: {
   const [packages, setPackages] = useState<ManagedExtensionPackage[]>([])
   const [cardPackages, setCardPackages] = useState<ManagedExtensionPackage[]>([])
   const [error, setError] = useState<Error>()
+  const [connectionError, setConnectionError] = useState<Error>()
   const [serverDiagnostics, setServerDiagnostics] = useState<ClientJsonValue[]>([])
   const [refreshSequence, setRefreshSequence] = useState(0)
   const [configRevision, setConfigRevision] = useState(0)
@@ -170,6 +171,34 @@ export function useClientExtensionRuntime(input: {
     globalPackages.current = []
     currentPackages.current = []
     let started = false
+    let disconnectNotice: ReturnType<typeof setTimeout> | undefined
+    let disconnected = false
+    let pageHidden = false
+    let connectionReported = false
+    const clearDisconnectNotice = () => {
+      clearTimeout(disconnectNotice)
+      disconnectNotice = undefined
+    }
+    const scheduleDisconnectNotice = () => {
+      clearDisconnectNotice()
+      if (!disconnected || connectionReported || pageHidden || controller.signal.aborted
+        || (typeof document !== 'undefined' && document.visibilityState === 'hidden')) return
+      disconnectNotice = setTimeout(() => {
+        disconnectNotice = undefined
+        if (controller.signal.aborted || !disconnected || pageHidden
+          || (typeof document !== 'undefined' && document.visibilityState === 'hidden')) return
+        connectionReported = true
+        setConnectionError(new Error('Extension event stream disconnected'))
+      }, 30_000)
+    }
+    const pageHide = () => { pageHidden = true; clearDisconnectNotice() }
+    const pageShow = () => { pageHidden = false; scheduleDisconnectNotice() }
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', scheduleDisconnectNotice)
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pagehide', pageHide)
+      window.addEventListener('pageshow', pageShow)
+    }
+    if (connectionError) setConnectionError(undefined)
     let target = contextKey(input.rendererHost)
     let catalogCardId = input.rendererHost.scopeSnapshot().cardId
     const unsubscribeScope = input.rendererHost.subscribe(() => {
@@ -191,6 +220,10 @@ export function useClientExtensionRuntime(input: {
     })
     let unsubscribeEvents: (() => void) | undefined
     const connected = () => {
+      disconnected = false
+      connectionReported = false
+      clearDisconnectNotice()
+      setConnectionError(undefined)
       if (started) invalidateCardMedia()
       started = true
       void refresh().then(async () => {
@@ -222,7 +255,9 @@ export function useClientExtensionRuntime(input: {
           requestSequence.current += 1
           participationSequence.current += 1
           void host.reconcile(toClientPackages(currentPackages.current))
-          setError(new Error('Extension event stream disconnected'))
+          // Native EventSource owns retries; report only a sustained foreground outage.
+          disconnected = true
+          if (!disconnectNotice) scheduleDisconnectNotice()
           // Keep the catalog usable if the initial SSE connection fails.
           if (!started) {
             started = true
@@ -232,7 +267,13 @@ export function useClientExtensionRuntime(input: {
       })
     }
     return () => {
+      clearTimeout(disconnectNotice)
       controller.abort()
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', scheduleDisconnectNotice)
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('pagehide', pageHide)
+        window.removeEventListener('pageshow', pageShow)
+      }
       unsubscribeScope()
       unsubscribeEvents?.()
       void host.dispose()
@@ -246,6 +287,7 @@ export function useClientExtensionRuntime(input: {
     packages,
     cardPackages,
     error,
+    connectionError,
     serverDiagnostics,
     refreshSequence,
     configRevision,

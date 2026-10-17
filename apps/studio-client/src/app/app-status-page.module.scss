@@ -5,18 +5,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 32px;
+  overflow: auto;
   color: var(--loom-color-text);
   background: var(--loom-color-background);
 }
 
 .panel {
-  width: min(100%, 520px);
+  width: min(100%, 760px);
   margin: auto;
   display: flex;
-  flex-direction: column;
+  gap: clamp(32px, 6vw, 72px);
   align-items: center;
-  text-align: center;
+  text-align: left;
 }
 
 .eyebrow,
@@ -59,7 +60,7 @@
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 24px;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .actions a,
@@ -100,4 +101,12 @@
   .page {
     padding: 16px;
   }
+}
+
+.logo { width: clamp(100px, 16vw, 168px); height: auto; flex: none; }
+.content { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.actions a:focus-visible, .actions button:focus-visible { outline: 2px solid var(--loom-color-accent); outline-offset: 4px; }
+@media (max-width: 560px) {
+  .panel { flex-direction: column; align-items: flex-start; gap: 28px; max-width: 380px; }
+  .logo { width: 88px; }
 }

@@ -1,3 +1,4 @@
+import { readStudioLocale, saveStudioLocale } from '../features/onboarding/model/onboarding-preferences.js'
 import { createStudioTrpcClient } from '../shared/api/trpc-client.js'
 import type { Logger } from '@loom-studio/logging'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -21,6 +22,7 @@ import { usePromptResourceState } from '../features/prompt-resources/model/use-p
 import type { ContextAssetNode, PromptResource } from '../entities/index.js'
 import { useStudioStartup } from './use-studio-startup.js'
 import { useStudioDerivedValues } from './use-studio-derived-values.js'
+import { useThemeStore } from '../features/themes/model/theme-store.js'
 
 export type HistoryAssetTarget = {
   assetId: string
@@ -28,12 +30,14 @@ export type HistoryAssetTarget = {
 }
 
 export function useStudioState(transportLogger: Logger) {
-  const [locale, setLocale] = useState<Locale>('zh-CN')
+  const [locale, updateLocale] = useState<Locale>(readStudioLocale)
+  function setLocale(next: Locale) { saveStudioLocale(next); updateLocale(next) }
   const t = useMemo(() => createTranslator(locale), [locale])
   const [transportEndpoint, setEndpoint] = useState('/trpc')
   // ponytail: Preserve persisted workspace/draft keys during the transport change; remove when workspace identity has its own storage migration.
   const endpoint = transportEndpoint.replace(/\/trpc$/, '/rpc')
-  const [customCss, setCustomCss] = useState('')
+  const customCss = useThemeStore(state => state.customCss)
+  const setCustomCss = useThemeStore(state => state.setCustomCss)
   const [networkSettings, setNetworkSettings] = useState<NetworkSettings>({
     proxyMode: 'system',
     systemProxyDetected: false,
@@ -352,7 +356,12 @@ export function useStudioState(transportLogger: Logger) {
     cardTimelines: narrativeRuntime.cardTimelines,
     allTimelines: narrativeRuntime.allTimelines,
     refreshAllTimelines: narrativeRuntime.refreshAllTimelines,
-    narrativeNodes: narrativeRuntime.nodes,
+    narrativeNodes: narrativeRuntime.displayNodes,
+    displayOnlyNarrativeNodeId: narrativeRuntime.displayOnlyNodeId,
+    narrativeSwipe: narrativeRuntime.swipe,
+    narrativeSwipeBusy: narrativeRuntime.swipeBusy,
+    selectNarrativeSwipe: narrativeRuntime.selectSwipe,
+    generateNarrativeSwipe: narrativeRuntime.generateSwipe,
     editNarrativeNode: narrativeRuntime.editNarrativeNode,
     hasOlderNarrativeNodes: Boolean(narrativeRuntime.olderCursor),
     // agent
@@ -367,6 +376,9 @@ export function useStudioState(transportLogger: Logger) {
     runRecoveryBusy: narrativeRuntime.runRecoveryBusy,
     canRestoreRunInput: narrativeRuntime.canRestoreRunInput,
     reconnectAgentRun: narrativeRuntime.reconnectAgentRun,
+    observeTaskRun: narrativeRuntime.observeTaskRun,
+    refreshTaskSession: narrativeRuntime.refreshTaskSession,
+    abandonAgentRun: narrativeRuntime.abandonAgentRun,
     restoreRunInput: narrativeRuntime.restoreRunInput,
     retryNarrativeInput: narrativeRuntime.retryNarrativeInput,
     canRetryNarrativeInput: narrativeRuntime.canRetryNarrativeInput,

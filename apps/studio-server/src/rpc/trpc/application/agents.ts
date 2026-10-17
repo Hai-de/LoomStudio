@@ -87,7 +87,7 @@ export const agentsProcedures = {
       agentSessionId: readString(params, 'agentSessionId'),
     }
   })).query(({ ctx, input }) => ctx.runtime.getAgentSession(input)),
-  'getAgentTranscriptPage': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['getAgentTranscriptPage']>[0] => ({ agentSessionId: readString(params, 'agentSessionId'), cursor: readOptionalString(params, 'cursor'), limit: readOptionalNumber(params, 'limit') }))).query(async ({ ctx, input }) => {
+  'getAgentTranscriptPage': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['getAgentTranscriptPage']>[0] => ({ agentSessionId: readString(params, 'agentSessionId'), cursor: readOptionalString(params, 'cursor'), limit: readOptionalNumber(params, 'limit'), selectedCandidates: readOptionalBoolean(params, 'selectedCandidates') }))).query(async ({ ctx, input }) => {
     const result = await ctx.runtime.getAgentTranscriptPage(input)
     return { ...result, entries: result.entries.map(agentTranscriptEntryDto) }
   }),
@@ -113,6 +113,7 @@ export const agentsProcedures = {
   'invokeAgentTurn': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['invokeAgentTurn']>[0] => {
     return readAgentTurnInput(params)
   })).mutation(({ ctx, input }) => ctx.runtime.invokeAgentTurn(input, ctx.request)),
+  'agent.run.list': procedure.input(jsonInput((params: JsonValue | undefined): { timelineId?: string } => ({ timelineId: readOptionalString(params, 'timelineId') }))).query(({ ctx, input }) => getAgentRunService(ctx.runtime).list(input)),
   'agent.run.create': procedure.input(jsonInput(readAgentTurnInput)).mutation(({ ctx, input }) => getAgentRunService(ctx.runtime).create(input, ctx.request)),
   'agent.run.subscribe': procedure.input(jsonInput((params: JsonValue | undefined): { runId: string; cursor?: number; agentSessionId?: string } => ({ runId: readString(params, 'runId'), cursor: readOptionalNumber(params, 'cursor'), agentSessionId: readOptionalString(params, 'agentSessionId') }))).query(({ ctx, input }) => getAgentRunService(ctx.runtime).subscribe(input.runId, input.cursor, input.agentSessionId)),
   'agent.run.acknowledge-completion': procedure.input(jsonInput((params: JsonValue | undefined) => ({ runId: readString(params, 'runId') }))).mutation(({ ctx, input }) => getAgentRunService(ctx.runtime).acknowledgeCompletion(input.runId)),
@@ -120,9 +121,9 @@ export const agentsProcedures = {
   'agent.run.pause': procedure.input(jsonInput((params: JsonValue | undefined) => ({ runId: readString(params, 'runId') }))).mutation(({ ctx, input }) => getAgentRunService(ctx.runtime).cancel(input.runId, 'user-pause')),
   'agent.run.history-read-approval': procedure.input(jsonInput((params: JsonValue | undefined): { runId: string; requestId: string; allow: boolean; reason?: string } => ({ runId: readString(params, 'runId'), requestId: readString(params, 'requestId'), allow: readBoolean(params, 'allow'), reason: readOptionalString(params, 'reason') }))).mutation(({ ctx, input }) => getAgentRunService(ctx.runtime).approve(input.runId, input.requestId, 'history-read', input.allow, input.reason)),
   'agent.run.mutation-approval': procedure.input(jsonInput((params: JsonValue | undefined): { runId: string; requestId: string; allow: boolean; reason?: string } => ({ runId: readString(params, 'runId'), requestId: readString(params, 'requestId'), allow: readBoolean(params, 'allow'), reason: readOptionalString(params, 'reason') }))).mutation(({ ctx, input }) => getAgentRunService(ctx.runtime).approve(input.runId, input.requestId, 'mutation', input.allow, input.reason)),
-  'agent.run.abandon': procedure.input(jsonInput((params: JsonValue | undefined) => ({ runId: readString(params, 'runId') }))).mutation(({ ctx, input }) => getAgentRunService(ctx.runtime).abandon(input.runId, ctx.request)),
+  'agent.run.abandon': procedure.input(jsonInput((params: JsonValue | undefined) => ({ runId: readString(params, 'runId'), agentSessionId: readOptionalString(params, 'agentSessionId') }))).mutation(({ ctx, input }) => getAgentRunService(ctx.runtime).abandon(input.runId, ctx.request, input.agentSessionId)),
   'agent.run.resume': procedure.input(jsonInput((params: JsonValue | undefined): { runId?: string; agentSessionId?: string } => ({ runId: readOptionalString(params, 'runId'), agentSessionId: readOptionalString(params, 'agentSessionId') }))).mutation(({ ctx, input }) => getAgentRunService(ctx.runtime).resume(input, ctx.request)),
-  'agent.run.state': procedure.input(jsonInput((params: JsonValue | undefined) => ({ runId: readString(params, 'runId') }))).query(({ ctx, input }) => getAgentRunService(ctx.runtime).state(input.runId)),
+  'agent.run.state': procedure.input(jsonInput((params: JsonValue | undefined) => ({ runId: readString(params, 'runId'), agentSessionId: readOptionalString(params, 'agentSessionId') }))).query(({ ctx, input }) => getAgentRunService(ctx.runtime).state(input.runId, input.agentSessionId)),
   'previewAgentTurn': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['previewAgentTurn']>[0] => {
     return readAgentTurnInput(params)
   })).query(({ ctx, input }) => ctx.runtime.previewAgentTurn(input, ctx.request)),
@@ -197,11 +198,7 @@ function readOptionalHistoryPolicy(params: JsonValue | undefined): 'persistent' 
   return params.historyPolicy
 }
 
-function readOptionalNarrativeTarget(params: JsonValue | undefined): {
-  timelineId: string
-  branchId?: string
-  inputNodeId?: string
-} | undefined {
+function readOptionalNarrativeTarget(params: JsonValue | undefined): InvokeAgentTurnInput['narrativeTarget'] {
   const value = readOptionalObject(params, 'narrativeTarget')
   if (value === undefined) return undefined
   if (typeof value.timelineId !== 'string') throw new Error('Expected string param: narrativeTarget.timelineId')
@@ -211,10 +208,30 @@ function readOptionalNarrativeTarget(params: JsonValue | undefined): {
   if (value.inputNodeId !== undefined && typeof value.inputNodeId !== 'string') {
     throw new Error('Expected optional string param: narrativeTarget.inputNodeId')
   }
+  const sourceNodeId = readOptionalString(value, 'sourceNodeId')
+  const swipeValue = readOptionalObject(value, 'swipe')
+  let swipe: NonNullable<InvokeAgentTurnInput['narrativeTarget']>['swipe']
+  if (swipeValue !== undefined) {
+    const mode = readString(swipeValue, 'mode')
+    if (mode !== 'swipe' && mode !== 'regenerate' && mode !== 'retry') {
+      throw new Error('Expected narrativeTarget.swipe.mode: swipe, regenerate or retry')
+    }
+    const expectedRevision = readNumber(swipeValue, 'expectedRevision')
+    if (!Number.isInteger(expectedRevision)) throw new Error('Expected integer param: narrativeTarget.swipe.expectedRevision')
+    swipe = {
+      groupId: readString(swipeValue, 'groupId'),
+      mode,
+      expectedRevision,
+      allowSessionChange: readOptionalBoolean(swipeValue, 'allowSessionChange'),
+      input: readOptionalString(swipeValue, 'input'),
+    }
+  }
   return {
     timelineId: value.timelineId,
     ...(typeof value.branchId === 'string' ? { branchId: value.branchId } : {}),
     ...(typeof value.inputNodeId === 'string' ? { inputNodeId: value.inputNodeId } : {}),
+    ...(sourceNodeId !== undefined ? { sourceNodeId } : {}),
+    ...(swipe !== undefined ? { swipe } : {}),
   }
 }
 

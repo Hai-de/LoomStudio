@@ -6,6 +6,7 @@ import type { ClientRendererHost } from '../shared/extension-renderer-runtime/cl
 import type { StudioPanelId } from '../shared/studio-shell/studio-layout-store.js'
 import { useClientExtensionRuntime } from '../features/extension-renderers/model/use-client-extension-runtime.js'
 import type { RegisteredClientBackground } from '@loom-studio/extension-sdk'
+import type { ThemeController } from '../features/themes/model/theme-controller.js'
 import { clientModuleKey } from '../features/extension-renderers/model/client-actions.js'
 import type { useStudioState } from './use-studio-state.js'
 import type { useStudioUiState } from './use-studio-ui-state.js'
@@ -36,6 +37,7 @@ export function createStudioPanels(input: {
   navigation: StudioNavigation
   rendererHost: ClientRendererHost
   clientExtensions: ReturnType<typeof useClientExtensionRuntime>
+  themeController: ThemeController
   clientLogs: MemoryLogSink
   resourcePanels: Record<'preset' | 'resource', (active: boolean) => ReactNode>
   assetWorkspaceId: string
@@ -243,7 +245,7 @@ export function createStudioPanels(input: {
       variableView={uiState.variableView}
       card={!state.narrativeTimeline || state.selectedCardDetails?.id === sourceCardId ? state.selectedCardDetails : undefined}
       statesApi={state.statesApi}
-      refreshToken={state.lastRun?.runId}
+      refreshToken={`${state.lastRun?.runId ?? ''}:${state.branch?.stateHeadRevisionId ?? ''}`}
       sourceRefreshToken={`${clientExtensions.configRevision}:${clientExtensions.refreshSequence}`}
       timelineTarget={state.narrativeTimeline && state.branch?.timelineId === state.narrativeTimeline.id
         ? { scope: 'timeline', timelineId: state.narrativeTimeline.id, branchId: state.branch.id } : undefined}
@@ -431,6 +433,7 @@ export function createStudioPanels(input: {
     ),
     settings: () => (
       <LazySettingsPanel
+        themeController={input.themeController}
         busy={!state.startup.ready('network') || state.operationPending.settings.pendingCount > 0}
         customCss={state.customCss}
         locale={state.locale}

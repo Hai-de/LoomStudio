@@ -52,4 +52,3 @@ NarrativeTimeline 使用 TanStack Virtual 动态测量消息高度，消息以�
 - [异步操作边界](../../../../apps/studio-client/src/shared/hooks/use-async-operations.ts)
 - [Narrative提交与恢复](../../../../apps/studio-client/src/features/narrative-runtime/model/use-narrative-runtime.ts)，[失败与重投递测试](../../../../tests/unit/client/narrative-submit-failure.test.ts)
 - [正文窗口与编辑](../../../../apps/studio-client/src/widgets/narrative-timeline/narrative-timeline.tsx)，[缓冲偏好](../../../../apps/studio-client/src/shared/studio-shell/appearance-store.ts)
-- [独立千条消息预览](../../../../apps/studio-client/src/dev/preview/narrative-timeline-preview.tsx)

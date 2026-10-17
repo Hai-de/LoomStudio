@@ -1,4 +1,7 @@
 import { ContentErrorBoundary } from '../../shared/ui/content-error-boundary.js'
+import { NarrativeInputSwipePicker } from '../../features/narrative-runtime/ui/narrative-input-swipe-picker.js'
+import type { NarrativeSwipeView } from '../../features/narrative-runtime/model/use-narrative-runtime.js'
+import { ConversationMarkdown as StaticMarkdown } from '../../shared/ui/conversation-markdown/conversation-markdown.js'
 import { Check, Copy, GitBranch, Link, Pencil, Play, RefreshCw, Trash2, X } from 'lucide-react'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useConversationViewport } from '../../shared/ui/conversation-viewport/use-conversation-viewport.js'
@@ -38,6 +41,7 @@ type NarrativeNodeView = NarrativeNode
 
 type NarrativeTimelineProps = {
   displayProjection?: DisplayProjection
+  displayOnlyNodeId?: string
   anchorNodeId?: string
   busy: boolean
   composerExpanded?: boolean
@@ -45,6 +49,8 @@ type NarrativeTimelineProps = {
   emptyTimelineText: string
   openingDraft?: { content: string; isPlaceholder: boolean }
   openingControls?: ReactNode
+  swipeControls?: { nodeId?: string; content: ReactNode }
+  inputSwipe?: { swipe: NarrativeSwipeView; disabled: boolean; onSelect(candidateId: string): void; onGenerate(input: string): Promise<void> }
   openingDisplay?: OpeningDisplayProjection
   onStartStory?(): void
   getNodeLink: (nodeId: string) => string
@@ -69,6 +75,7 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
     JSON.stringify([tokenScope, ...props.timeline.map(node => node.id)]))
   const storedOverscan = useAppearanceStore(state => state.narrativeOverscan)
   const [editingId, setEditingId] = useState<string>()
+  const [editingInputSwipe, setEditingInputSwipe] = useState(false)
   const [draft, setDraft] = useState('')
   const [editorMinHeight, setEditorMinHeight] = useState(0)
   const [messageMotion, setMessageMotion] = useState<{ id: string; direction: 'to-edit' | 'to-read' }>()
@@ -134,9 +141,10 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
     setActiveEntryId(props.timeline[0]?.id)
   }, [activeEntryId, props.timeline, props.anchorNodeId, anchorStatus])
 
-  function beginEdit(node: NarrativeNodeView) {
+  function beginEdit(node: NarrativeNodeView, inputSwipe = false) {
     if (savingRef.current) return
-    saveCallbackRef.current = props.onEditNode
+    saveCallbackRef.current = inputSwipe ? (_nodeId, raw) => props.inputSwipe!.onGenerate(raw) : props.onEditNode
+    setEditingInputSwipe(inputSwipe)
     setSaveError(undefined)
     const messageBody = messageSurfaceRefs.current
       .get(node.id)
@@ -151,6 +159,7 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
     if (savingRef.current) return
     if (editingId) setMessageMotion({ id: editingId, direction: 'to-read' })
     setEditingId(undefined)
+    setEditingInputSwipe(false)
     setDraft('')
   }
 
@@ -165,6 +174,11 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
 
   async function saveValue(rawValue: string) {
     if (!editingId || !rawValue.trim() || savingRef.current) return
+    if (editingInputSwipe && (!props.inputSwipe || props.inputSwipe.disabled || !props.inputSwipe.swipe.canGenerate
+      || props.inputSwipe.swipe.active || props.inputSwipe.swipe.suspended || props.inputSwipe.swipe.inputNodeId !== editingId)) {
+      setSaveError(props.t('swipe.inputUnavailable'))
+      return
+    }
     savingRef.current = true
     setSaving(true)
     setSaveError(undefined)
@@ -313,6 +327,8 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
                 <ContentErrorBoundary resetKey={entry.body.raw} fallback={<pre role="alert">{entry.body.raw}</pre>}>
                 <Suspense fallback={<div aria-busy="true" className={styles.messagePending} />}>
                 <article
+                inert={entry.id === props.displayOnlyNodeId || undefined}
+                aria-busy={entry.id === props.displayOnlyNodeId || undefined}
                 className={`${styles.message} ${styles[role]}`}
                 data-loom-component="chat-message"
                 data-loom-role="narrative"
@@ -337,7 +353,9 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
                     else messageSurfaceRefs.current.delete(entry.id)
                   }}
                 >
-                  {editingId === entry.id ? (
+                  {entry.id === props.displayOnlyNodeId ? (
+                    <StaticMarkdown value={entry.body.raw} role={role} codeBlockLabels={messageCodeBlockLabels(props.t)} />
+                  ) : editingId === entry.id ? (
                     <LongTextEditor
                       autoFocus
                       clearLabel={props.t('longTextEditor.clear')}
@@ -346,7 +364,7 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
                       copiedLabel={props.t('longTextEditor.copied')}
                       copyFailedLabel={props.t('longTextEditor.copyFailed')}
                       copyLabel={props.t('longTextEditor.copy')}
-                      label={props.t('timeline.editLocal')}
+                      label={props.t(editingInputSwipe ? 'swipe.editInput' : 'timeline.editLocal')}
                       headerExtra={<TextTokenSummary text={draft} scope={`${tokenScope}:${entry.id}`} t={props.t} />}
                       disabled={saving}
                       minHeight={editorMinHeight || undefined}
@@ -378,16 +396,23 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
                 <ConversationMessageChrome
                   createdAt={entry.createdAt}
                   index={index}
-                  trailing={index === props.timeline.length - 1 ? props.openingControls : undefined}
+                  trailing={entry.id === props.inputSwipe?.swipe.inputNodeId && editingId !== entry.id
+                    ? <NarrativeInputSwipePicker swipe={props.inputSwipe.swipe} disabled={props.inputSwipe.disabled || saving}
+                        onEdit={() => beginEdit(entry, true)} onSelect={props.inputSwipe.onSelect} t={props.t} />
+                    : index === props.timeline.length - 1
+                    ? props.swipeControls?.nodeId === entry.id ? props.swipeControls.content : props.openingControls
+                    : undefined}
                   metadata={editingId !== entry.id
-                    ? <span> · <TokenSummary t={props.t} multiplier={tokenMultiplier} pending={nodeTokens.pending}
-                        error={nodeTokens.error} textTokens={nodeTokens.counts
-                          ? applyTokenMultiplier(nodeTokens.counts[index]!, tokenMultiplier).estimatedTokens : undefined} /></span> : undefined}
-                  actions={editingId === entry.id ? (
+                    ? <span> · <TokenSummary t={props.t} multiplier={tokenMultiplier} pending={nodeTokens.currentCounts[index] === undefined}
+                        error={nodeTokens.currentCounts[index] === undefined ? nodeTokens.error : undefined}
+                        textTokens={nodeTokens.currentCounts[index] !== undefined
+                          ? applyTokenMultiplier(nodeTokens.currentCounts[index]!, tokenMultiplier).estimatedTokens : undefined} /></span> : undefined}
+                  actions={entry.id === props.displayOnlyNodeId ? undefined : editingId === entry.id ? (
                     <>
                       {saveError ? <span role="alert">{saveError}</span> : null}
                       <ConversationMessageAction disabled={saving} label={props.t('timeline.cancelEdit')} onClick={cancelEdit}><X aria-hidden="true" /></ConversationMessageAction>
-                      <ConversationMessageAction disabled={saving || !draft.trim()} label={props.t('timeline.saveEdit')} onClick={saveEdit}><Check aria-hidden="true" /></ConversationMessageAction>
+                      <ConversationMessageAction disabled={saving || !draft.trim() || (editingInputSwipe && props.inputSwipe?.disabled)}
+                        label={props.t(editingInputSwipe ? 'swipe.submitInput' : 'timeline.saveEdit')} onClick={saveEdit}><Check aria-hidden="true" /></ConversationMessageAction>
                     </>
                   ) : (
                     <>
@@ -424,6 +449,9 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
           disabled={props.busy} onClick={props.onStartStory}>
           <Play size={16} aria-hidden="true" />{props.t('timeline.startStory')}
         </button> : null}
+        {props.swipeControls && !props.swipeControls.nodeId ? <div className={styles.swipeStatus}>
+          <ConversationMessageChrome trailing={props.swipeControls.content} />
+        </div> : null}
         {props.tail ? <div className={styles.tail} data-loom-surface="narrative.timeline.tail">{props.tail}</div> : null}
       </div>
       <NarrativeTimelineNavigator

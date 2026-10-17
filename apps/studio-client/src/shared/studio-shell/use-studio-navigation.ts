@@ -141,6 +141,14 @@ export function useStudioNavigation(input: { endpoint: string; api: StudioApi })
         ...before, cardId, timelineId: activated?.timelineId, branchId: activated?.branchId, nodeId: undefined,
       })
     },
+    clearResourceTarget: (resourceId: string) => {
+      const latest = current.current
+      if (latest.resourceId !== resourceId) return
+      return publish({
+        ...latest, resourceId: undefined, assetId: undefined,
+        referenceUri: undefined, targetUri: undefined,
+      }, true)
+    },
     openResource: (panel: 'resource' | 'preset' | 'agent', resourceId: string, nodeId: string, replace = false) => publish({
       ...current.current, panel: panel === 'preset' ? 'agent' : panel, resourceId, assetId: nodeId, referenceUri: undefined, targetUri: undefined,
     }, replace),

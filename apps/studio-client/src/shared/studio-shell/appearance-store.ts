@@ -4,10 +4,11 @@ import { safeLocalStorage } from '../browser/safe-local-storage.js'
 
 type AppearanceBackground = { id: string; image: string }
 type AppearanceMaterial = { mode: 'solid' | 'translucent' | 'glass'; blur: number; opacity: number; glassPanels?: boolean }
-type AppearanceState = {
+export type AppearanceState = {
   background: AppearanceBackground | null
   scopedBackground: (AppearanceBackground & { cardId: string; ownerKey: string }) | null
   canvasWidth: number
+  explicitOverrides: { canvasWidth?: true; blur?: true; opacity?: true }
   narrativeOverscan: number
   followAI: boolean
   material: AppearanceMaterial
@@ -15,26 +16,53 @@ type AppearanceState = {
   setScopedBackground(background: NonNullable<AppearanceState['scopedBackground']>): void
   clearScopedBackground(ownerKey: string, backgroundId?: string): void
   setCanvasWidth(width: number): void
+  resetCanvasWidth(): void
+  resetMaterial(): void
+  setMaterialParameter(parameter: 'blur' | 'opacity', value: number | undefined): void
   setNarrativeOverscan(count: number): void
   setFollowAI(value: boolean): void
   setMaterial(value: AppearanceMaterial): void
 }
 
+export const APPEARANCE_DEFAULTS = {
+  canvasWidth: 720,
+  material: { mode: 'glass', blur: 18, opacity: 62, glassPanels: true } satisfies AppearanceMaterial,
+}
+
 export const useAppearanceStore = create<AppearanceState>()(persist((set) => ({
   background: null,
   scopedBackground: null,
-  canvasWidth: 720,
+  canvasWidth: APPEARANCE_DEFAULTS.canvasWidth,
+  explicitOverrides: {},
   narrativeOverscan: 5,
   followAI: true,
-  material: { mode: 'glass', blur: 18, opacity: 62, glassPanels: true },
+  material: { ...APPEARANCE_DEFAULTS.material },
   setBackground: background => set({ background, scopedBackground: null }),
   setScopedBackground: scopedBackground => set({ scopedBackground }),
   clearScopedBackground: (ownerKey, backgroundId) => set(state => state.scopedBackground?.ownerKey === ownerKey
     && (backgroundId === undefined || state.scopedBackground.id === backgroundId) ? { scopedBackground: null } : state),
-  setCanvasWidth: canvasWidth => set({ canvasWidth }),
+  setCanvasWidth: canvasWidth => set(state => ({ canvasWidth, explicitOverrides: { ...state.explicitOverrides, canvasWidth: true } })),
+  resetCanvasWidth: () => set(state => ({
+    canvasWidth: APPEARANCE_DEFAULTS.canvasWidth,
+    explicitOverrides: { blur: state.explicitOverrides.blur, opacity: state.explicitOverrides.opacity },
+  })),
+  resetMaterial: () => set(state => ({
+    material: { ...APPEARANCE_DEFAULTS.material },
+    explicitOverrides: { ...(state.explicitOverrides.canvasWidth ? { canvasWidth: true as const } : {}) },
+  })),
+  setMaterialParameter: (parameter, value) => set(state => {
+    const explicitOverrides = { ...state.explicitOverrides }
+    if (value === undefined) delete explicitOverrides[parameter]
+    else explicitOverrides[parameter] = true
+    return { material: { ...state.material, [parameter]: value ?? APPEARANCE_DEFAULTS.material[parameter] }, explicitOverrides }
+  }),
   setNarrativeOverscan: narrativeOverscan => set({ narrativeOverscan }),
   setFollowAI: followAI => set({ followAI }),
-  setMaterial: material => set({ material }),
+  setMaterial: material => set(state => ({ material, explicitOverrides: {
+    ...state.explicitOverrides,
+    ...(material.blur !== state.material.blur ? { blur: true as const } : {}),
+    ...(material.opacity !== state.material.opacity ? { opacity: true as const } : {}),
+  } })),
 }), {
   name: 'loom-studio-appearance',
   storage: createJSONStorage(() => safeLocalStorage),
@@ -45,7 +73,7 @@ export const useAppearanceStore = create<AppearanceState>()(persist((set) => ({
       ? saved.material as Record<string, unknown> : {}
     const background = saved.background && typeof saved.background === 'object'
       ? saved.background as Record<string, unknown> : undefined
-    return {
+    const restored: AppearanceState = {
       ...current,
       background: saved.background === null ? null
         : background && typeof background.id === 'string' && typeof background.image === 'string'
@@ -64,10 +92,28 @@ export const useAppearanceStore = create<AppearanceState>()(persist((set) => ({
         glassPanels: typeof material.glassPanels === 'boolean' ? material.glassPanels : (current.material.glassPanels ?? true),
       },
     }
+    const overrides = saved.explicitOverrides
+    if (overrides && typeof overrides === 'object' && !Array.isArray(overrides)) {
+      const flags = overrides as Record<string, unknown>
+      restored.explicitOverrides = {
+        ...(flags.canvasWidth === true ? { canvasWidth: true as const } : {}),
+        ...(flags.blur === true || flags.material === true ? { blur: true as const } : {}),
+        ...(flags.opacity === true || flags.material === true ? { opacity: true as const } : {}),
+      }
+    } else {
+      // ponytail: Legacy storage persisted defaults automatically; explicit choices equal to defaults cannot be recovered.
+      restored.explicitOverrides = {
+        ...(restored.canvasWidth !== APPEARANCE_DEFAULTS.canvasWidth ? { canvasWidth: true as const } : {}),
+        ...(restored.material.blur !== APPEARANCE_DEFAULTS.material.blur ? { blur: true as const } : {}),
+        ...(restored.material.opacity !== APPEARANCE_DEFAULTS.material.opacity ? { opacity: true as const } : {}),
+      }
+    }
+    return restored
   },
   partialize: state => ({
     background: state.background,
     canvasWidth: state.canvasWidth,
+    explicitOverrides: state.explicitOverrides,
     narrativeOverscan: state.narrativeOverscan,
     followAI: state.followAI,
     material: state.material,

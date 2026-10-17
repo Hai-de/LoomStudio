@@ -192,8 +192,16 @@ export function TextTransformExplorer({ controller }: { controller: TextTransfor
       </div>
     ) : null}
     <FileTree
+      key={JSON.stringify(controller.owner)}
       ariaLabel={t('textTransform.navigation')}
       nodes={nodes}
+      batchDisabled={controller.busy}
+      canBatchSelect={node => controller.finalOrder.some(rule => `rule:${rule.id}` === node.id) || controller.visibleExtractors.some(item => `extractor:${item.id}` === node.id)}
+      getBatchActions={() => [
+        { id: 'enable', label: t('common.batchEnable'), icon: <ToggleRight size={14} />, run: nodes => controller.batchEditTextResources(nodes.map(node => node.id), 'enable') },
+        { id: 'disable', label: t('common.batchDisable'), icon: <ToggleLeft size={14} />, run: nodes => controller.batchEditTextResources(nodes.map(node => node.id), 'disable') },
+        { id: 'delete', label: t('common.batchDelete'), icon: <Trash2 size={14} />, tone: 'danger', confirm: true, run: nodes => controller.batchEditTextResources(nodes.map(node => node.id), 'delete') },
+      ]}
       selectedId={selectedId}
       expandedIds={expandedIds}
       onExpandedIdsChange={setExpandedIds}

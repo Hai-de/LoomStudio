@@ -92,6 +92,35 @@ describe('local Extension Package installer', () => {
     await expect(readFile(join(installed.directory, 'assets/icon.txt'), 'utf8')).resolves.toBe('icon')
   })
 
+  it('installs a GitHub archive with a single wrapper directory regardless of entry order', async () => {
+    const root = await temporaryRoot()
+    const source = await writePackage(root, 'source', 'example.github-zip', '1.0.0')
+    const installed = await installExtensionPackageFromZip({
+      source: zipSync({
+        'repo-main/dist/index.js': await readFile(join(source, 'dist/index.js')),
+        'repo-main/': new Uint8Array(),
+        'repo-main/dist/': new Uint8Array(),
+        'repo-main/manifest.json': await readFile(join(source, 'manifest.json')),
+      }),
+      installedDirectory: join(root, 'installed'),
+    })
+    await expect(readFile(join(installed.directory, 'dist/index.js'), 'utf8')).resolves.toContain('activate')
+    await expect(readdir(installed.directory)).resolves.toEqual(['dist', 'manifest.json'])
+  })
+
+  it('rejects ambiguous or deeply nested package roots with an actionable error', async () => {
+    const root = await temporaryRoot()
+    for (const files of [
+      { 'one/manifest.json': new Uint8Array(), 'two/manifest.json': new Uint8Array() },
+      { 'one/two/manifest.json': new Uint8Array() },
+    ]) {
+      await expect(installExtensionPackageFromZip({
+        source: zipSync(files),
+        installedDirectory: join(root, 'installed'),
+      })).rejects.toThrow('唯一的第一层目录')
+    }
+  })
+
   it('rejects ZIP paths that escape the temporary package root', async () => {
     const root = await temporaryRoot()
     const manifest = JSON.stringify({

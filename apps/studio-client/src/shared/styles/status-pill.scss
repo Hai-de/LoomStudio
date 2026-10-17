@@ -1,0 +1,13 @@
+@mixin surface {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  max-width: calc(100% - 32px);
+  padding: 10px 20px;
+  border: 1px solid var(--loom-color-accent);
+  border-radius: 999px;
+  background: var(--loom-color-surface);
+  color: var(--loom-color-text);
+}

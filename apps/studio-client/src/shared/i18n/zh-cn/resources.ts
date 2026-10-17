@@ -10,7 +10,7 @@ export const messages = {
   'reference.invalidRange': '引用行范围无效 · 未定位',
   'reference.loading': '正在读取…',
   'reference.open': '打开',
-  'promptResource.referenceUnavailable': '引用的资源或节点当前不可用：{{id}}',
+  'promptResource.referenceUnavailable': '此资源或内容已不可用，请从资源列表中重新选择。',
   'promptResource.temporaryOpen': '临时打开',
   'context.draftConflict': '资源已在其他位置修改。草稿已保留；放弃本地修改前可以先复制内容。',
   'context.discardDraft': '放弃本地修改',

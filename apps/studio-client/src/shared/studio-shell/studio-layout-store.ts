@@ -45,6 +45,7 @@ type StudioLayoutData = {
   railWidth: number
   textEditorMode: LongTextEditorMode
   uiScale: number
+  uiScaleOverridden: boolean
 }
 
 export type WorkbenchNavigation = {
@@ -71,6 +72,7 @@ type StudioLayoutStore = StudioLayoutData & {
   setRailWidth(width: number): void
   setTextEditorMode(mode: LongTextEditorMode): void
   setUiScale(scale: number): void
+  resetUiScale(): void
   toggleDock(): void
   toggleDockPinned(): void
   toggleComposerPinned(): void
@@ -140,6 +142,7 @@ export function createDefaultStudioLayout(): StudioLayoutData {
     railWidth: DEFAULT_RAIL_WIDTH,
     textEditorMode: 'source',
     uiScale: UI_SCALE_DEFAULT,
+    uiScaleOverridden: false,
     playTab: 'character',
     playCalendarOpen: false,
     playSelectedDate: undefined,
@@ -173,6 +176,9 @@ export function sanitizeStudioLayout(value: unknown): StudioLayoutData {
     railWidth: readRailWidth(value.railWidth),
     textEditorMode: value.textEditorMode === 'preview' ? 'preview' : defaults.textEditorMode,
     uiScale: readUiScale(value.uiScale),
+    // ponytail: Legacy storage cannot distinguish an explicit default from an automatically saved default.
+    uiScaleOverridden: typeof value.uiScaleOverridden === 'boolean'
+      ? value.uiScaleOverridden : readUiScale(value.uiScale) !== UI_SCALE_DEFAULT,
     playTab: value.playTab === 'sessions' ? 'sessions' : defaults.playTab,
     playCalendarOpen: value.playCalendarOpen === true,
     playSelectedDate: typeof value.playSelectedDate === 'string' ? value.playSelectedDate : undefined,
@@ -245,7 +251,8 @@ export const useStudioLayoutStore = create<StudioLayoutStore>()(
       setPlayRecentSessionsOpen: playRecentSessionsOpen => set({ playRecentSessionsOpen }),
       setRailWidth: railWidth => set({ railWidth: readRailWidth(railWidth) }),
       setTextEditorMode: textEditorMode => set({ textEditorMode }),
-      setUiScale: uiScale => set({ uiScale: readUiScale(uiScale) }),
+      setUiScale: uiScale => set({ uiScale: readUiScale(uiScale), uiScaleOverridden: true }),
+      resetUiScale: () => set({ uiScale: UI_SCALE_DEFAULT, uiScaleOverridden: false }),
       toggleDock: () => set(state => ({ dockOpen: !state.dockOpen })),
       toggleDockPinned: () => set(state => ({ dockPinned: !state.dockPinned })),
       toggleComposerPinned: () => set(state => ({ composerPinned: !state.composerPinned })),
@@ -272,6 +279,7 @@ export const useStudioLayoutStore = create<StudioLayoutStore>()(
         railWidth: state.railWidth,
         textEditorMode: state.textEditorMode,
         uiScale: state.uiScale,
+        uiScaleOverridden: state.uiScaleOverridden,
       }),
     },
   ),

@@ -1,3 +1,4 @@
+import { ResourceUnavailable } from '../../shared/ui/resource-unavailable/resource-unavailable.js'
 import type { ResourceSearchReveal } from '../../shared/lib/search-match.js'
 import type { ClientJsonValue } from '@loom-studio/client-bridge'
 import { BookOpen, Braces, Copy, Download, Folder, FolderOpen, Package, Regex, Star, ToggleLeft, ToggleRight, Trash2, Wrench } from 'lucide-react'
@@ -83,6 +84,7 @@ type PresetWorkbenchProps = {
   onRetryDraft(resourceId: string): Promise<void>
   onRenameNode(id: string, label: string): Promise<void>
   onCommitNode: (id: string, partial: Partial<ContextAssetNode>) => void
+  onBatchToggleEnabled?: (ids: string[], enabled: boolean) => Promise<{ failedIds: string[]; error?: string }>
   onChangeNodes: (updates: ContextAssetUpdate[]) => void
   onMoveNode: (draggedId: string, targetId: string, position: 'before' | 'inside' | 'after') => void
   onAddNode: (parentId: string) => Promise<string | undefined>
@@ -296,6 +298,11 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
     openAssetDetail('preset', props.workspaceId, id)
   }
 
+  async function handleDeleteResource(resourceId: string) {
+    await props.onDeleteResource(resourceId)
+    setInternalSelectedResourceId(current => current === resourceId ? undefined : current)
+  }
+
   const handleRenameNode = async (id: string, label: string) => {
     const matchedPreset = presetResources.find(p => p.id === id || p.rootNode.id === id)
     const targetId = matchedPreset ? matchedPreset.rootNode.id : id
@@ -303,7 +310,7 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
   }
 
   if ((selectedResourceId || props.routeAssetId) && (!selectedResource || (props.routeAssetId && !findContextNode([selectedResource.rootNode], props.routeAssetId)))) {
-    return <p role="alert">{props.t('promptResource.referenceUnavailable', { id: props.routeResourceId ?? props.routeAssetId ?? selectedResourceId! })}</p>
+    return <ResourceUnavailable message={props.t('promptResource.referenceUnavailable')} />
   }
 
   return (
@@ -328,7 +335,7 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
           draftResourceIds={props.draftResourceIds}
           onDiscardDraft={props.onDiscardDraft}
           onRetryDraft={props.onRetryDraft}
-          onDelete={props.onDeleteResource}
+          onDelete={handleDeleteResource}
           onDuplicate={props.onDuplicateResource}
           onExport={props.onExportResource}
           onExportZip={props.onExportResourceZip}
@@ -389,6 +396,7 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
           onAddAnchorNode={props.onAddAnchorNode}
           onAddMessageBlockNode={props.onAddMessageBlockNode}
           onDeleteNode={props.onDeleteNode}
+            onBatchToggleEnabled={props.onBatchToggleEnabled}
           onDuplicateNode={props.onDuplicateNode}
           onRenameNode={handleRenameNode}
           onExpandedIdsChange={expandedIds => setAssetExpandedIds('preset', props.workspaceId, expandedIds)}
@@ -441,7 +449,7 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
           onReplaceMounts={replaceToolMounts}
           onReplaceLoreMounts={props.onReplaceLoreMounts}
           onDuplicate={() => props.onDuplicateResource(selectedResource.id).then(() => {})}
-          onDelete={() => props.onDeleteResource(selectedResource.id)}
+          onDelete={() => handleDeleteResource(selectedResource.id)}
           onExport={() => props.onExportResource(selectedResource.id)}
           onOpenLore={props.onOpenLore}
         />
@@ -721,7 +729,7 @@ export function AgentPresetOverview(props: {
         />
       </section>
 
-      <PresetTextUses preset={props.preset} api={props.textTransformsApi}
+      <PresetTextUses preset={props.preset} api={props.textTransformsApi} t={props.t}
         onSave={props.onSaveModel} onOpen={props.onOpenTextUse}
         loreContent={useCardLore => {
           const nodes = loreNodes(useCardLore)
@@ -732,7 +740,23 @@ export function AgentPresetOverview(props: {
           clearLabel="清除搜索" value={loreQuery} onClear={() => setLoreQuery('')}
           onChange={event => { setLoreQuery(event.target.value); setCollapsedLoreSources([]) }} />
         {loreError ? <p role="alert">{loreError}</p> : null}
-        <FileTree ariaLabel="Lore 来源目录" nodes={nodes}
+        <FileTree key={props.preset.id} ariaLabel="Lore 来源目录" nodes={nodes}
+          batchDisabled={loreBusy}
+          canBatchSelect={node => node.kind !== 'folder' && !(isCardLore(node.id) && useCardLore)}
+          getBatchActions={selected => [
+            { id: 'enable', label: props.t('common.batchEnable'), disabled: selected.some(node => !loreRowsById.get(node.id)?.resource), run: async selected => {
+              const mounts: Array<{ id: string } | { loreResourceId: string }> = currentLoreMounts()
+              for (const node of selected) {
+                const row = loreRowsById.get(node.id)
+                if (row?.resource && !row.mount) mounts.push({ loreResourceId: row.resource.id })
+              }
+              await props.onReplaceLoreMounts({ kind: 'preset', id: props.preset.id }, mounts)
+            } },
+            { id: 'remove', label: props.t('common.batchRemove'), run: async selected => {
+              const ids = new Set(selected.map(node => loreRowsById.get(node.id)?.mount?.id))
+              await props.onReplaceLoreMounts({ kind: 'preset', id: props.preset.id }, currentLoreMounts().filter(mount => !ids.has(mount.id)))
+            } },
+          ]}
           expandedIds={nodes.filter(node => !collapsedLoreSources.includes(node.id)).map(node => node.id)}
           onExpandedIdsChange={ids => setCollapsedLoreSources(nodes.filter(node => !ids.includes(node.id)).map(node => node.id))}
           getDisclosureLabel={(node, expanded) => `${expanded ? '收起' : '展开'}${node.label}`}
@@ -775,7 +799,30 @@ export function AgentPresetOverview(props: {
           clearLabel="清除搜索" value={toolQuery} onClear={() => setToolQuery('')}
           onChange={event => { setToolQuery(event.target.value); setCollapsedToolSources([]) }} />
         {toolError ? <p className={styles.toolError} role="alert">{toolError}</p> : null}
-        <FileTree ariaLabel="工具来源目录" nodes={toolNodes} expandedIds={expandedToolIds}
+        <FileTree key={props.preset.id} ariaLabel="工具来源目录" nodes={toolNodes} expandedIds={expandedToolIds}
+          batchDisabled={Boolean(pendingToolId)}
+          canBatchSelect={node => node.kind !== 'folder'}
+          getBatchActions={selected => [
+            ...([true, false] as const).map(enabled => ({
+              id: enabled ? 'enable' : 'disable', label: props.t(enabled ? 'common.batchEnable' : 'common.batchDisable'),
+              disabled: selected.some(node => !toolsByNodeId.has(node.id)),
+              run: async (nodes: FileTreeNode[]) => {
+                const mounts = presetMounts.map(toPresetToolMountInput)
+                for (const node of nodes) {
+                  const tool = toolsByNodeId.get(node.id)
+                  if (!tool) continue
+                  const mount = mounts.find(item => item.toolId === tool.id)
+                  if (mount) mount.defaultEnabled = enabled
+                  else if (enabled) mounts.push(createDefaultPresetToolMountInput(tool, Math.max(-1, ...mounts.map(item => item.orderIndex)) + 1))
+                }
+                await props.onReplaceMounts(props.preset.id, mounts)
+              },
+            })),
+            { id: 'remove', label: props.t('common.batchRemove'), run: async nodes => {
+              const ids = new Set(nodes.map(node => toolsByNodeId.get(node.id)?.id ?? unavailableToolsByNodeId.get(node.id)?.toolId))
+              await props.onReplaceMounts(props.preset.id, presetMounts.filter(mount => !ids.has(mount.toolId)).map(toPresetToolMountInput))
+            } },
+          ]}
           onExpandedIdsChange={ids => {
             setCollapsedToolSources(toolNodes.filter(node => !ids.includes(node.id)).map(node => node.id))
             setExpandedToolDetails(ids.filter(id => toolsByNodeId.has(id)))
@@ -816,6 +863,7 @@ export function AgentPresetOverview(props: {
 }
 
 export function PresetTextUses(props: {
+  t: Translator
   preset: PromptResource
   api: StudioApi['textTransforms']
   onSave(input: Parameters<StudioApi['agentPresets']['update']>[0]): Promise<PromptResource>
@@ -936,7 +984,31 @@ export function PresetTextUses(props: {
       <SearchField aria-label="搜索正则与提取器" placeholder="搜索名称或来源"
         clearLabel="清除搜索" value={textQuery} onClear={() => setTextQuery('')}
         onChange={event => { setTextQuery(event.target.value); setCollapsedTextSources([]) }} />
-      <FileTree ariaLabel="正则与提取器来源目录" nodes={textNodes}
+      <FileTree key={props.preset.id} ariaLabel="正则与提取器来源目录" nodes={textNodes}
+        batchDisabled={busy}
+        canBatchSelect={node => node.kind !== 'folder'}
+        getBatchActions={selected => [
+          ...([true, false] as const).map(enabled => ({
+            id: enabled ? 'enable' : 'disable', label: props.t(enabled ? 'common.batchEnable' : 'common.batchDisable'),
+            disabled: selected.some(node => !candidatesById.has(node.id)),
+            run: (nodes: FileTreeNode[]) => setDraft(current => {
+              const ids = new Set(nodes.map(node => node.id))
+              const textUses = current.textUses.filter(use => !ids.has(`${use.kind}:${use.id}`))
+              for (const node of nodes) {
+                const item = candidatesById.get(node.id)
+                if (item && enabled !== item.enabled) {
+                  const previous = current.textUses.find(use => use.kind === item.kind && use.id === item.id)
+                  textUses.push({ ...previous, kind: item.kind, id: item.id, enabled })
+                }
+              }
+              return { ...current, textUses }
+            }),
+          })),
+          { id: 'reset', label: props.t('common.batchReset'), run: nodes => {
+            const ids = new Set(nodes.map(node => node.id))
+            setDraft(current => ({ ...current, textUses: current.textUses.filter(use => !ids.has(`${use.kind}:${use.id}`)) }))
+          } },
+        ]}
         expandedIds={textNodes.filter(node => !collapsedTextSources.includes(node.id)).map(node => node.id)}
         onExpandedIdsChange={ids => setCollapsedTextSources(textNodes.filter(node => !ids.includes(node.id)).map(node => node.id))}
         getDisclosureLabel={(node, expanded) => `${expanded ? '收起' : '展开'}${node.label}`}

@@ -1,4 +1,4 @@
-import { useCallback, useReducer, useRef } from 'react'
+import { useCallback, useEffect, useReducer, useRef } from 'react'
 import {
   createAsyncOperationState,
   readLatestOperationError,
@@ -12,18 +12,25 @@ export type LatestOperationContext = {
 
 export function useAsyncOperations() {
   const [pending, dispatch] = useReducer(reduceAsyncOperationState, undefined, createAsyncOperationState)
+  const lifecycle = useRef({ active: true })
+  useEffect(() => {
+    if (!lifecycle.current.active) lifecycle.current = { active: true }
+    const generation = lifecycle.current
+    return () => { generation.active = false }
+  }, [])
   const sequenceRef = useRef(0)
   const latestByScopeRef = useRef(new Map<AsyncOperationScope, number>())
 
   const run = useCallback(async <T,>(scope: AsyncOperationScope, action: () => Promise<T>): Promise<T> => {
     const sequence = ++sequenceRef.current
+    const generation = lifecycle.current
     dispatch({ scope, type: 'start' })
     try {
       const result = await action()
-      dispatch({ scope, sequence, type: 'finish', recordError: true })
+      dispatch({ scope, sequence, type: 'finish', recordError: generation.active })
       return result
     } catch (caught) {
-      dispatch({ scope, sequence, type: 'finish', recordError: true, error: readErrorMessage(caught) })
+      dispatch({ scope, sequence, type: 'finish', recordError: generation.active, error: readErrorMessage(caught) })
       throw caught
     }
   }, [])
@@ -40,7 +47,8 @@ export function useAsyncOperations() {
   const runLatest = useCallback(async <T,>(scope: AsyncOperationScope, action: (context: LatestOperationContext) => Promise<T>): Promise<T | undefined> => {
     const sequence = ++sequenceRef.current
     latestByScopeRef.current.set(scope, sequence)
-    const context = { isCurrent: () => latestByScopeRef.current.get(scope) === sequence }
+    const generation = lifecycle.current
+    const context = { isCurrent: () => generation.active && latestByScopeRef.current.get(scope) === sequence }
     dispatch({ scope, type: 'start' })
     try {
       const result = await action(context)

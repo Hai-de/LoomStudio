@@ -154,17 +154,18 @@ export function createContext(
       current.signal.throwIfAborted()
       if (!options.assertTimelineWork) throw new Error('Timeline execution checks are unavailable')
       await options.assertTimelineWork(current.lease)
-      return work({ target: current.target, signal: current.signal })
+      return work({ target: current.target, signal: current.signal, narrativeSource: current.narrativeSource })
     }
     if (!options.runTimelineWork) throw new Error('Timeline execution is unavailable')
     const frozenTarget = Object.freeze(structuredClone(target))
     return instance.scope.run(() => options.runTimelineWork!({
       timelineId: frozenTarget.timelineId,
+      branchId: frozenTarget.branchId,
       installationId: extensionInstallationId(packageManifest.id, record.target),
       packageVersion: packageManifest.version,
       signal: signal ? AbortSignal.any([signal, instance.scope.signal]) : instance.scope.signal,
     }, execution => timelineWork.run({ ...execution, target: frozenTarget }, () =>
-      work({ target: frozenTarget, signal: execution.signal }))))
+      work({ target: frozenTarget, signal: execution.signal, narrativeSource: execution.narrativeSource }))))
   }
   const isTimelineAvailable = async (timelineId?: string): Promise<boolean> => {
     if (!timelineId) return false

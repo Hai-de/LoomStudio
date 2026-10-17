@@ -40,6 +40,23 @@ export default defineConfig({
     },
   },
   css: {
+    postcss: {
+      plugins: [{
+        postcssPlugin: 'loom-native-layer',
+        OnceExit(root, { postcss }) {
+          const native = postcss.atRule({ name: 'layer', params: 'loom-native' })
+          for (const node of [...root.nodes]) {
+            // These directives belong to the stylesheet, not a layer block.
+            if (node.type === 'atrule' && (['charset', 'namespace'].includes(node.name) || (node.name === 'layer' && !node.nodes))) continue
+            if (node.type === 'atrule' && node.name === 'import') {
+              throw node.error('Native CSS imports must resolve during bundling before applying loom-native.')
+            }
+            native.append(node)
+          }
+          if (native.nodes?.length) root.append(native)
+        },
+      }],
+    },
     modules: {
       generateScopedName: 'airp__[name]__[local]',
     },

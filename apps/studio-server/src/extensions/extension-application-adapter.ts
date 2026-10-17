@@ -9,7 +9,10 @@ import {
   type createStateContentRegistry,
   type createNarrativeContextRegistry,
   type createStateContributionRegistry,
+  type ToolExecutionScope,
+  type StateTarget,
 } from '@loom-studio/application-runtime'
+import { AsyncLocalStorage } from 'node:async_hooks'
 import type { createAiGatewayCapabilityRegistry } from '@loom-studio/ai-gateway'
 import type { createAgentStore, createNarrativeStore, createStateStore, PromptResourceStore } from '@loom-studio/application-data'
 import type { AssetStore } from '@loom-studio/asset-store'
@@ -77,6 +80,34 @@ export function createExtensionApplicationAdapter({
   aiCapabilities, profiledAiGateway, gateway, agentTools, macroProviders, promptProcessors,
   stateContent, narrativeContext, stateContributions,
 }: Dependencies): ApplicationAdapter {
+  const toolScopes = new AsyncLocalStorage<ToolExecutionScope>()
+  const timelineScopes = new AsyncLocalStorage<Pick<ToolExecutionScope, 'narrativeSource' | 'assertNarrativeSource' | 'withNarrativeWrite'> & { target: StateTarget }>()
+
+  function timelineToolScope(target: StateTarget): Pick<ToolExecutionScope, 'narrativeSource' | 'assertNarrativeSource' | 'withNarrativeWrite'> | undefined {
+    const scope = toolScopes.getStore()
+    if (target.scope === 'global') return undefined
+    if (!scope) {
+      const current = timelineScopes.getStore()
+      if (!current) return undefined
+      if (current.target.scope !== 'timeline' || target.timelineId !== current.target.timelineId || target.branchId !== current.target.branchId)
+        throw new Error('State target is outside the Timeline execution Narrative target')
+      return current
+    }
+    const allowed = scope.state?.defaultTarget
+    if (allowed?.scope !== 'timeline' || target.timelineId !== allowed.timelineId || target.branchId !== allowed.branchId
+      || !scope.state?.canAccess(target)) {
+      throw new Error('State target is outside the Agent Tool execution Narrative target')
+    }
+    return scope
+  }
+
+  function sourceMetadata(source: ToolExecutionScope['narrativeSource']) {
+    return source ? Object.freeze({
+      timelineId: source.timelineId, branchId: source.branchId, nodeId: source.nodeId,
+      groupId: source.groupId, candidateId: source.candidateId, generation: source.generation,
+    }) : undefined
+  }
+
   return {
     assets: assets
       ? {
@@ -212,22 +243,39 @@ export function createExtensionApplicationAdapter({
       packageVersion: owner.packageVersion,
       target: owner.target,
     }),
-    runTimelineWork: (input, work) => applicationRuntime.runTimelineExtensionWork(input, work),
+    runTimelineWork: async (input, work) => {
+      const target = { scope: 'timeline' as const, timelineId: input.timelineId, branchId: input.branchId }
+      const inherited = timelineToolScope(target)
+      await inherited?.assertNarrativeSource?.()
+      return applicationRuntime.runTimelineExtensionWork(input, async execution => {
+        const bound = inherited?.narrativeSource ? inherited : execution
+        await bound.assertNarrativeSource?.()
+        return timelineScopes.run({ ...bound, target }, () => work({
+          lease: execution.lease, signal: execution.signal, narrativeSource: sourceMetadata(bound.narrativeSource),
+        }))
+      })
+    },
     beginTimelineWork: input => applicationRuntime.beginTimelineExtensionWork(input),
     assertTimelineWork: lease => applicationRuntime.assertTimelineExtensionWork(lease),
     canRunTimelineWork: input => applicationRuntime.isTimelineExtensionActive(input),
     listTimelineTargets: input => applicationRuntime.listTimelineExtensionTargets(input),
     subscribeTimelineTargets: (input, listener) => applicationRuntime.subscribeTimelineExtensionTargets(input, listener),
     readState: async (target, owner) => {
+      const scope = timelineToolScope(target)
       if (owner.lease) await applicationRuntime.assertTimelineExtensionWork(owner.lease)
-      return (await applicationRuntime.getStateSnapshot({ target })).snapshot
+      await scope?.assertNarrativeSource?.()
+      const snapshot = (await applicationRuntime.getStateSnapshot({ target })).snapshot
+      await scope?.assertNarrativeSource?.()
+      return snapshot
     },
     canAccessState: (target, installation) => canAccessExtensionState(narratives, installation, target),
     writeState: async (input, owner) => {
-      const result = await applicationRuntime.applyStateMutation(input, {
+      const scope = timelineToolScope(input.target)
+      const write = () => applicationRuntime.applyStateMutation(input, {
         actor: { kind: 'extension', id: owner.packageId },
         ...(owner.lease ? { extensionLeases: [owner.lease] } : {}),
       })
+      const result = await (scope?.withNarrativeWrite ? scope.withNarrativeWrite(write) : write())
       return { snapshot: result.snapshot, changesetId: result.mutation.changesetId }
     },
     registerAgentToolHandler: (toolId, _ownerPackageId, _ownerModuleId, _ownerInstanceId, handler) => agentTools.registerRuntime({
@@ -237,11 +285,15 @@ export function createExtensionApplicationAdapter({
         const narrativeTarget = target?.scope === 'timeline' && scope?.state?.canAccess(target)
           ? Object.freeze({ ...target })
           : undefined
-        const output = await handler({
+        const narrativeSource = sourceMetadata(scope?.narrativeSource)
+        const executeHandler = () => handler({
           ...(invocation.arguments ? { arguments: structuredClone(invocation.arguments) } : {}),
           ...(invocation.rawInput !== undefined ? { rawInput: invocation.rawInput } : {}),
           ...(invocation.transport ? { transport: invocation.transport } : {}),
-        }, { signal, invocationId: invocation.id, ...(narrativeTarget ? { narrativeTarget } : {}) })
+        }, { signal, invocationId: invocation.id,
+          ...(narrativeTarget ? { narrativeTarget } : {}), ...(narrativeSource ? { narrativeSource } : {}),
+        })
+        const output = await (scope ? toolScopes.run(scope, executeHandler) : toolScopes.exit(executeHandler))
         return {
           invocationId: invocation.id,
           toolId: invocation.toolId,

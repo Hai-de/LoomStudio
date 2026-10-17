@@ -1,0 +1,11 @@
+/* Later enhancement layers can replace the native-motion suppression layer. */
+[data-loom-component='utility-rail'] button {
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-loom-component='utility-rail'] button { transition: none; }
+}
+html[data-loom-motion='reduce'] [data-loom-component='utility-rail'] button {
+  transition: none;
+}

@@ -1,3 +1,12 @@
+import { StartupReady } from './startup-curtain.js'
+import { useRecentCharacters } from '../features/recent-characters/model/use-recent-characters.js'
+import type { RecentCharacter } from '../features/recent-characters/model/recent-characters.js'
+import { Button } from '@loom-studio/ui'
+import { StudioOnboarding } from '../features/onboarding/ui/studio-onboarding.js'
+import { assistantPresetId, completeOnboarding, readOnboardingComplete } from '../features/onboarding/model/onboarding-preferences.js'
+import { onboardingCopy } from '../features/onboarding/model/onboarding-copy.js'
+import onboardingStyles from '../features/onboarding/ui/studio-onboarding.module.scss'
+import { AppStatusPage } from './app-status-page.js'
 import { ContentErrorBoundary } from '../shared/ui/content-error-boundary.js'
 import { StudioTimelineActions } from './studio-timeline-actions.js'
 import { SelectionToolbar, appendQuote } from '../shared/ui/selection-toolbar/selection-toolbar.js'
@@ -12,6 +21,8 @@ import { ContextWorkbenchHeader } from '../widgets/context-workbench/context-wor
 import { AgentComposer } from '../widgets/agent-composer/agent-composer.js'
 import { AgentChatPanel } from '../widgets/agent-chat-panel/agent-chat-panel.js'
 import { NarrativeTimeline } from '../widgets/narrative-timeline/narrative-timeline.js'
+import { NarrativeSwipePicker } from '../features/narrative-runtime/ui/narrative-swipe-picker.js'
+import { AgentTaskMenu } from '../features/narrative-runtime/ui/agent-task-menu.js'
 import { CharacterPanelHeader } from '../widgets/character-panel/character-panel-header.js'
 import { createClientRendererHost } from '../shared/extension-renderer-runtime/client-renderer-host.js'
 import { RendererFocusSurface } from '../features/extension-renderers/ui/renderer-focus-surface.js'
@@ -42,19 +53,20 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { isTransientAgentEntryId, useDisplayProjection, useOpeningDisplayProjection } from '../features/message-content/model/use-display-projection.js'
 import styles from './app.module.scss'
 import '../styles/global.css'
+import { isProviderOperationError } from '../shared/notifications/provider-error.js'
 import { useAppearanceStore } from '../shared/studio-shell/appearance-store.js'
 import { formatEntityReference, type GlobalSearchHit } from '@loom-studio/shared'
 import { useGlobalSearch } from '../features/global-search/model/use-global-search.js'
 import { GlobalSearchDialog } from '../widgets/global-search/global-search-dialog.js'
 import { findNodeById } from '../shared/ui/file-tree/file-tree-model.js'
 import { applyEffectiveMotion, initializeMotionPreference, useEffectiveMotion } from '../shared/hooks/use-motion-preference.js'
+import { useThemeRuntime } from '../features/themes/model/use-theme-runtime.js'
+import { createAppearanceCss } from '../features/themes/model/appearance-parameters.js'
 
 function initializeAppearancePreview() {
   const root = document.documentElement
   if (!root.dataset.loomMaterialPreview) {
     root.dataset.loomMaterialPreview = 'glass'
-    root.style.setProperty('--loom-preview-blur', '18px')
-    root.style.setProperty('--loom-preview-opacity', '62%')
   }
 }
 
@@ -65,6 +77,8 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
   const narrativeInputRef = useRef<HTMLTextAreaElement>(null)
   const appearance = useAppearanceStore()
   const state = useStudioState(props.transportLogger)
+  const [onboardingComplete, setOnboardingComplete] = useState(readOnboardingComplete)
+  const [assistantGuide, setAssistantGuide] = useState(false)
   const queryClient = useQueryClient()
   useEffect(() => {
     document.documentElement.lang = state.locale
@@ -77,7 +91,18 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
     notify[input.level ?? 'info'](input.message, { description: owner, duration: 4000 })
   }), [])
   const clientExtensions = useClientExtensionRuntime({ api: state.clientExtensionApi, rendererHost, logger: props.extensionLogger, clientLogs: props.clientLogs, notify: notifications.show })
+  const themeController = useThemeRuntime({ packages: clientExtensions.packages, ready: clientExtensions.refreshSequence > 0 || !!clientExtensions.error, authorize: clientExtensions.enable })
   const reportedExtensionError = useRef<string | undefined>(undefined)
+  const extensionConnectionError = clientExtensions.connectionError?.message
+  useEffect(() => {
+    const id = 'extension-events-unavailable'
+    if (!extensionConnectionError) { notify.dismiss(id); return }
+    props.extensionLogger.warn('Extension event connection remains unavailable; automatic reconnect is active', {
+      event: 'extension.connection.unavailable', error: extensionConnectionError,
+    })
+    notify.warning(state.t('renderer.connectionUnavailable'), { id })
+    return () => { notify.dismiss(id) }
+  }, [extensionConnectionError, props.extensionLogger, state.t])
   const extensionError = clientExtensions.error?.message
   useEffect(() => {
     if (reportedExtensionError.current === extensionError) return
@@ -104,9 +129,6 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
     } else {
       delete root.dataset.loomGlassPanels
     }
-    root.style.setProperty('--loom-preview-blur', `${appearance.material.blur}px`)
-    root.style.setProperty('--loom-preview-opacity', `${appearance.material.opacity}%`)
-    root.style.setProperty('--loom-canvas-width', `${appearance.canvasWidth || 720}px`)
     if (appearanceBackground) {
       root.dataset.loomPreviewBackground = appearanceBackground.key
       root.style.setProperty('--loom-preview-wallpaper', `url(${JSON.stringify(appearanceBackground.image)})`)
@@ -167,6 +189,14 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
   const [navigationFailure, setNavigationFailure] = useState<{ target: string; message: string }>()
   const narrativeTarget = JSON.stringify([state.endpoint, navigation.route.timelineId, navigation.route.branchId])
   const uiScale = useStudioLayoutStore(current => current.uiScale)
+  const uiScaleOverridden = useStudioLayoutStore(current => current.uiScaleOverridden)
+  useEffect(() => {
+    const sheet = document.createElement('style')
+    sheet.textContent = createAppearanceCss(appearance, uiScale, uiScaleOverridden)
+    document.head.append(sheet)
+    document.dispatchEvent(new Event('loom:theme-changed'))
+    return () => { sheet.remove() }
+  }, [appearance.canvasWidth, appearance.material, appearance.explicitOverrides, uiScale, uiScaleOverridden])
   const setUiScale = useStudioLayoutStore(current => current.setUiScale)
   const composerPinned = useStudioLayoutStore(current => current.composerPinned)
   const toggleComposerPinned = useStudioLayoutStore(current => current.toggleComposerPinned)
@@ -209,6 +239,39 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
   const narrativeNavigating = navigation.targetPending
     || navigation.route.timelineId !== state.narrativeTimeline?.id
     || Boolean(navigation.route.branchId && navigation.route.branchId !== state.branch?.id)
+  const visitedCardId = onboardingComplete && !narrativeNavigating && !navigation.route.panel && !navigation.route.targetUri
+    ? state.narrativeTimeline?.createdFrom?.cardId
+      ?? (navigation.route.cardId === state.selectedCardDetails?.id ? navigation.route.cardId : undefined)
+    : undefined
+  const recentCharacters = useRecentCharacters(state.endpoint, visitedCardId,
+    visitedCardId ? state.narrativeTimeline?.id : undefined,
+    visitedCardId ? state.branch?.id : undefined)
+  const recentNavigationRequest = useRef(0)
+  async function openRecentCharacter(visit: RecentCharacter) {
+    const request = ++recentNavigationRequest.current
+    try {
+      const card = state.cards.find(item => item.id === visit.cardId)
+      if (!card) return
+      if (card.validationError !== undefined) { void navigation.openPanel('character', { cardId: card.id }); return }
+      const timelines = await state.refreshCardTimelines(card.id)
+      if (request !== recentNavigationRequest.current || !navigation.isCurrent()) return
+      const timeline = timelines.find(item => item.id === visit.timelineId)
+      if (timeline) {
+        const details = await state.api.narratives.get(timeline.id)
+        if (request !== recentNavigationRequest.current || !navigation.isCurrent()) return
+        if (visit.branchId && details.branches.some(branch => branch.id === visit.branchId)) {
+          void navigation.openNarrative(timeline.id, visit.branchId)
+          return
+        }
+      }
+      state.setSelectedCardId(card.id)
+      state.resetToDraftTimeline()
+      void navigation.openCardPreview(card.id)
+      if (visit.timelineId) notify.info(state.t('recentCharacters.unavailable'))
+    } catch (error) {
+      if (request === recentNavigationRequest.current && navigation.isCurrent()) notify.error(error instanceof Error ? error.message : String(error))
+    }
+  }
   const composerCommandContext = {
     sourceSurface: 'composer.quick-actions' as const,
     workspaceId: 'workspace',
@@ -285,11 +348,11 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
     navigation.openPanel('state')
   }
 
+  const reportedOperationSequence = useRef<number | undefined>(undefined)
   useEffect(() => {
-    if (!state.operationError) return
-    const isProvider = state.operationError.scope === 'provider-settings'
-      || state.operationError.scope === 'agent-chat'
-      || /(?:HTTP\s*|failed\s*\(|Provider|timeout|fetch)/i.test(state.operationError.message)
+    if (!state.operationError || reportedOperationSequence.current === state.operationError.sequence) return
+    reportedOperationSequence.current = state.operationError.sequence
+    const isProvider = isProviderOperationError(state.operationError.scope, state.operationError.message)
     if (isProvider) {
       notify.providerError(state.operationError.message, state.t, {
         id: `operation-error-${state.operationError.sequence}`,
@@ -404,7 +467,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
     globalSearchQuery: globalSearch.query,
     searchMatch: !globalSearch.query.trim() ? undefined : searchMatch?.query === globalSearch.query ? searchMatch
       : navigation.route.resourceId && navigation.route.assetId ? { resourceId: navigation.route.resourceId, nodeId: navigation.route.assetId, query: globalSearch.query, requestId: 0 } : undefined })
-  const panels = createStudioPanels({ state, uiState, navigation, rendererHost, clientExtensions, clientLogs: props.clientLogs, resourcePanels, assetWorkspaceId, cardsBusy, providerBusy, agentPresetBusy, activePresetId, sourceCardId, sessionBusy, openStateSource, openAgentSession, onTextTransformsChanged, uiScale, setUiScale, backgrounds: clientExtensions.host.backgrounds() })
+  const panels = createStudioPanels({ state, uiState, navigation, rendererHost, clientExtensions, themeController, clientLogs: props.clientLogs, resourcePanels, assetWorkspaceId, cardsBusy, providerBusy, agentPresetBusy, activePresetId, sourceCardId, sessionBusy, openStateSource, openAgentSession, onTextTransformsChanged, uiScale, setUiScale, backgrounds: clientExtensions.host.backgrounds() })
 
   const studio = (
     <StudioPage
@@ -429,17 +492,18 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
       modelConfigured={state.providerAccountsLoaded ? hasCompleteProviderAccount(state.providerAccounts) : undefined}
       busy={mutationBusy}
       canRedo={state.canRedoEdit}
-      agentActiveRun={state.agentActiveRun}
-      agentMessages={state.agentChatMessages}
       agentSession={state.agentChatSession}
       agentSessionsCount={state.agentChatSessions?.length}
       isPrimarySession={Boolean(state.agentChatSession && state.narrativeAgentSession?.id === state.agentChatSession.id)}
       agentPanel={<ContentErrorBoundary resetKey={state.agentChatSession?.id} fallback={error => <p role="alert">{error.message}</p>}><AgentChatPanel
+        onboardingHint={assistantGuide ? <aside className={onboardingStyles.guide} role="status"><p>{onboardingCopy[state.locale].guide}</p><Button onClick={() => setAssistantGuide(false)}>{onboardingCopy[state.locale].dismiss}</Button></aside> : null}
+        initialCreatePresetId={assistantGuide ? assistantPresetId : undefined}
         active={uiState.agentPanelOpen}
       busy={agentChatBusy}
       activeRun={state.agentActiveRun}
       runRecovery={state.runRecovery}
       runRecoveryBusy={state.runRecoveryBusy}
+      abandonAgentRun={state.abandonAgentRun}
       canRestoreRunInput={state.canRestoreRunInput}
       reconnectAgentRun={state.reconnectAgentRun}
       restoreRunInput={state.restoreRunInput}
@@ -463,7 +527,11 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
       onSelectProfile={state.selectAgentPreset}
       onSelectSession={id => { void openAgentSession(id) }}
       onNewSession={state.newAgentSession}
-      onCreateSession={state.createAgentSession}
+      onCreateSession={async (presetId, makeMain) => {
+        const session = await state.createAgentSession(presetId, makeMain)
+        if (session) setAssistantGuide(false)
+        return session
+      }}
       canMakePrimary={Boolean(state.narrativeTimeline)}
       primarySessionId={state.narrativeAgentSession?.id}
       timelineId={state.narrativeTimeline?.id}
@@ -487,7 +555,6 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
         state={state} navigation={navigation} cardId={appearanceCardId}
         busy={sessionBusy || cardsBusy || mutationBusy || narrativeNavigating || Boolean(state.runRecovery)
           || state.agentActiveRun?.status === 'running' || state.agentActiveRun?.status === 'suspended'} /> : undefined}
-      customCss={state.customCss}
       onRedo={() => { void applyHistoryAction(state.redoEdit) }}
       onToggleAgentPanel={() => uiState.setAgentPanelOpen(prev => !prev)}
       onUndo={() => {
@@ -528,17 +595,13 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
           cards={state.cards}
           timelines={state.allTimelines.length > 0 ? state.allTimelines : state.cardTimelines}
           t={state.t}
-          onOpenTimeline={timeline => {
-            void state.activateTimeline(timeline.id).then(branchId => {
-              if (branchId) navigation.openNarrative(timeline.id, branchId)
-            })
-          }}
+          recent={recentCharacters}
+          onOpenCharacter={visit => { void openRecentCharacter(visit) }}
         />
       )}
       panels={panels}
       preloadPanel={preloadStudioPanel}
       t={state.t}
-      uiScale={uiScale}
       canvas={(
         <div
           ref={narrativeSelectionRef}
@@ -553,6 +616,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
             onQuote={text => state.setInput(appendQuote(state.input, text))} />
           <ContentErrorBoundary resetKey={state.branch?.id} fallback={error => <p role="alert">{error.message}</p>}><NarrativeTimeline
             displayProjection={narrativeDisplay}
+            displayOnlyNodeId={state.displayOnlyNarrativeNodeId}
             key={JSON.stringify(['narrative-timeline', state.endpoint, state.narrativeTimeline?.id, state.branch?.id])}
             anchorNodeId={navigation.nodeAnchorId}
             busy={sessionBusy || narrativeNavigating}
@@ -560,6 +624,23 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
             emptyTimelineText={state.emptyTimelineText}
             openingDraft={!state.narrativeTimeline && state.selectedCardDetails?.id === state.selectedCardId ? state.openingDraft : undefined}
             openingDisplay={openingDisplay}
+            inputSwipe={state.narrativeSwipe ? {
+              swipe: state.narrativeSwipe,
+              disabled: state.narrativeSwipeBusy || narrativeNavigating || !state.narrativeAgentSession,
+              onSelect: id => { void state.selectNarrativeSwipe(id) },
+              onGenerate: async input => {
+                if (!await state.generateNarrativeSwipe('swipe', false, input)) throw new Error(state.t('swipe.inputUnavailable'))
+              },
+            } : undefined}
+            swipeControls={state.narrativeSwipe ? {
+              nodeId: state.narrativeSwipe.candidates.find(candidate => candidate.id === state.narrativeSwipe?.selectedCandidateId)?.nodeId,
+              content: <NarrativeSwipePicker key={state.narrativeSwipe.id} swipe={state.narrativeSwipe}
+                busy={state.narrativeSwipeBusy || narrativeNavigating}
+                primarySessionId={state.narrativeAgentSession?.id} t={state.t}
+                onSelect={id => { void state.selectNarrativeSwipe(id) }}
+                onOpenSession={() => { const swipe = state.narrativeSwipe; if (swipe) void openAgentSession(swipe.selectedAgentSessionId ?? swipe.sourceAgentSessionId) }}
+                onGenerate={(mode, allowSessionChange) => { void state.generateNarrativeSwipe(mode, allowSessionChange) }} />,
+            } : undefined}
             openingControls={(!state.narrativeTimeline || (state.narrativeTimeline.opening && !state.narrativeTimeline.opening.locked)) && state.selectedCardDetails
               && state.selectedCardDetails.id === (state.narrativeTimeline?.createdFrom?.cardId ?? state.selectedCardId)
               ? <OpeningPicker opening={state.selectedCardDetails.opening} choice={state.openingChoice}
@@ -606,12 +687,20 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
             onRetryNarrativeInput={() => { void state.retryNarrativeInput() }}
             runRecovery={state.runRecovery}
             runRecoveryBusy={state.runRecoveryBusy}
+            abandonAgentRun={state.abandonAgentRun}
             canRestoreRunInput={state.canRestoreRunInput}
             reconnectAgentRun={state.reconnectAgentRun}
             restoreRunInput={state.restoreRunInput}
             agentPanelOpen={uiState.agentPanelOpen}
             canPreviewPrompt={state.canPreviewPrompt}
             canSendNarrative={state.canSend && !narrativeNavigating}
+            taskCard={(
+              <AgentTaskMenu key={JSON.stringify([state.endpoint, state.narrativeTimeline?.id])}
+                activeRun={state.agentActiveRun} messages={state.agentChatMessages}
+                api={state.api} endpoint={state.endpoint} timelineId={state.narrativeTimeline?.id} t={state.t}
+                onOpen={async (sessionId, runId) => { await openAgentSession(sessionId); if (runId) state.observeTaskRun(sessionId, runId) }}
+                onResumed={state.observeTaskRun} onAbandoned={state.refreshTaskSession} />
+            )}
             composerSheet={(
               <RendererSurfaceHost
                 host={rendererHost}
@@ -646,21 +735,34 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
     />
   )
 
+  if (!onboardingComplete) return <StudioOnboarding api={state.api} locale={state.locale} onLocale={state.setLocale}
+    accounts={state.providerAccounts} accountsLoaded={state.providerAccountsLoaded}
+    assistant={state.agentPresets.find(preset => preset.id === assistantPresetId)}
+    onRefresh={async () => { await Promise.all([state.refreshProviderAccounts(), state.refreshResourceConsumers()]) }}
+    onFinish={guided => {
+      completeOnboarding()
+      setOnboardingComplete(true)
+      if (guided) {
+        setAssistantGuide(true)
+        uiState.setAgentPanelOpen(true)
+      }
+    }} />
+
   return (
     <>
-      <OfficialExtensionSetup api={state.api.extensions} ready={state.startup.ready('cards')} t={state.t}
+      {themeController.startupReady ? <StartupReady /> : null}
+      <OfficialExtensionSetup api={state.api.extensions} ready={!assistantGuide && state.startup.ready('cards')} t={state.t}
         onInstalled={async () => {
           await Promise.all([clientExtensions.refresh(), state.refreshResourceConsumers()])
         }} />
       {navigation.targetError || navigationFailure?.target === narrativeTarget ? (
-        <section role="alert">
-          <p>{navigation.targetError ?? navigationFailure?.message}</p>
+        <AppStatusPage eyebrow="LOOM STUDIO" title={state.t('pageError.title')} description={navigation.targetError ?? navigationFailure?.message ?? ""} actions={<>
           {navigationFailure?.target === narrativeTarget ? <button type="button" onClick={() => setNavigationRetry(value => value + 1)}>{state.t('appError.reload')}</button> : null}
           <button type="button" onClick={() => {
             setNavigationFailure(undefined)
             void navigation.openNarrative()
           }}>{state.t('navigation.returnToWorkspace')}</button>
-        </section>
+        </>} />
       ) : studio}
       <ResourceReferenceDialog t={state.t} api={state.api} uri={navigation.referenceUri}
         onClose={() => { void navigation.closeReference() }}

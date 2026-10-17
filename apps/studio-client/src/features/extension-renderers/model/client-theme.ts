@@ -28,12 +28,14 @@ export function subscribeClientTheme(listener: (snapshot: ClientThemeSnapshot) =
     if (!frame) frame = requestAnimationFrame(emit)
   }
   const observer = new MutationObserver(schedule)
+  document.addEventListener('loom:theme-changed', schedule)
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] })
   observer.observe(document.head, { attributes: true, characterData: true, childList: true, subtree: true })
   const colorScheme = globalThis.matchMedia?.('(prefers-color-scheme: light)')
   colorScheme?.addEventListener('change', schedule)
   return () => {
     observer.disconnect()
+    document.removeEventListener('loom:theme-changed', schedule)
     colorScheme?.removeEventListener('change', schedule)
     if (frame) cancelAnimationFrame(frame)
   }

@@ -193,6 +193,8 @@ Renderer Adapter 使用同一组公共 `--loom-*` Token，但传递方式不同�
 
 IFrame 只能接收 `publicThemeTokenNames` 声明的颜色、排版、圆角、动效与基础缩放 Token。Host 不发送整段 Custom CSS、壁纸 URL、页面布局变量或全部内部 `--loom-*`；Extension 可使用 `applyClientThemeSnapshot()` 将快照应用到自身 Document Root。当前快照反映主题、Custom CSS 与 UI Scale 计算后的最终值。
 
-## 8. 不属于当前合同的内容
+## 8. Extension 主题与边界
 
-当前仍没有主题包 manifest、任意第三方主题加载或 CSS Token 跨版本协商。公共 Token Snapshot 已有版本字段，但版本 `1` 只承诺白名单中的变量，不应把现有 DOM 和全部 `--loom-*` 视为永久 SDK。
+Extension Manifest v2 已支持 `contributes.themes` 与 `contributes.styles`，复用包内 CSS/assets 分发。一个主主题可叠加多个样式增强；用户外观参数和个人 Custom CSS 在最终覆盖层。原生样式由构建管线放入 `loom-native` 层，主题加载与 JS 采用生命周期见 [Extension 主题与样式增强](extension-themes.md)。
+
+当前没有 CSS Token 跨版本协商。公共 Token Snapshot 已有版本字段，但版本 `1` 只承诺白名单中的变量，不应把现有 DOM 和全部 `--loom-*` 视为永久 SDK。直接操作宿主 DOM 的主题 JS 沿 Client Module 信任边界执行，不属于 iframe 安全沙箱。

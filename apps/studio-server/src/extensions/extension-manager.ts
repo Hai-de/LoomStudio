@@ -1166,6 +1166,8 @@ function toManagedPackage(
       promptResources: record.manifest.contributes?.promptResources ?? [],
       agentTools: record.manifest.contributes?.agentTools ?? [],
       settings: record.manifest.contributes?.settings ?? [],
+      themes: record.manifest.contributes?.themes ?? [],
+      styles: record.manifest.contributes?.styles ?? [],
     },
   }
 }
@@ -1247,6 +1249,10 @@ function packageFileMediaType(filename: string): string {
     case '.mjs': return 'text/javascript; charset=utf-8'
     case '.json': return 'application/json; charset=utf-8'
     case '.css': return 'text/css; charset=utf-8'
+    case '.woff': return 'font/woff'
+    case '.woff2': return 'font/woff2'
+    case '.ttf': return 'font/ttf'
+    case '.otf': return 'font/otf'
     case '.wasm': return 'application/wasm'
     case '.svg': return 'image/svg+xml'
     default: return iconMediaType(filename)

@@ -1,4 +1,4 @@
-import { RefreshCw, Undo2 } from 'lucide-react'
+import { CircleX, RefreshCw, Undo2 } from 'lucide-react'
 import { IconButton } from '@loom-studio/ui'
 import type { RunRecovery } from '../model/use-narrative-runtime.js'
 import type { Translator } from '../../../shared/i18n/index.js'
@@ -10,6 +10,7 @@ export type RunRecoveryControlsProps = {
   canRestoreRunInput: boolean
   reconnectAgentRun(): Promise<void>
   restoreRunInput(): void
+  abandonAgentRun?(): Promise<void>
   t: Translator
 }
 
@@ -34,6 +35,12 @@ export function RunRecoveryControls(props: RunRecoveryControlsProps) {
           onClick={() => { void props.reconnectAgentRun().catch(() => { /* Failure is reported by the runtime. */ }) }}
         >
           <RefreshCw aria-hidden="true" />
+        </IconButton>
+      ) : null}
+      {recovery.status === 'suspended' && props.abandonAgentRun ? (
+        <IconButton aria-label={props.t('runRecovery.abandon')} title={props.t('runRecovery.abandon')}
+          disabled={props.runRecoveryBusy} onClick={() => { void props.abandonAgentRun?.() }}>
+          <CircleX aria-hidden="true" />
         </IconButton>
       ) : null}
       {!disconnected && recovery.input !== undefined ? (

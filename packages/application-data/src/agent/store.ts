@@ -8,6 +8,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import type {
   AgentSession,
   AgentSessionPage,
+  AgentSessionRunSummary,
   AgentStore,
   AgentTransaction,
   AgentTranscriptEntry,
@@ -267,6 +268,33 @@ export function createAgentStore(options: CreateAgentStoreOptions): AgentStore {
     getSession: (id) => engine.read((database) => readSession(database, id)),
     listSessions: (input) =>
       engine.read((database) => readSessions(database, input)),
+    listRunStates: () => engine.read(database => {
+      const rows = database.prepare(`
+        SELECT s.id AS session_id, s.title, s.timeline_id, s.updated_at AS session_updated_at,
+          e.run_id, e.created_at AS run_updated_at,
+          json_extract(e.entry_json, '$.state') AS state,
+          json_extract(e.entry_json, '$.reason') AS reason
+        FROM agent_sessions s
+        LEFT JOIN agent_transcript_entries e ON e.id = (
+          SELECT latest.id FROM agent_transcript_entries latest
+          WHERE latest.agent_session_id = s.id AND latest.run_id IS NOT NULL
+            AND json_extract(latest.entry_json, '$.kind') = 'run-state'
+          ORDER BY latest.sequence DESC LIMIT 1
+        )
+        WHERE s.tombstoned = 0
+      `).all()
+      return rows.map((row): AgentSessionRunSummary => ({
+        agentSessionId: String(row.session_id),
+        ...(row.title === null ? {} : { title: String(row.title) }),
+        ...(row.timeline_id === null ? {} : { timelineId: String(row.timeline_id) }),
+        updatedAt: String(row.session_updated_at),
+        ...(row.run_id === null ? {} : { run: {
+          runId: String(row.run_id), state: row.state as NonNullable<AgentSessionRunSummary['run']>['state'],
+          updatedAt: String(row.run_updated_at),
+          ...(row.reason === null ? {} : { reason: String(row.reason) }),
+        } }),
+      }))
+    }),
     getEntry: (id) => engine.read((database) => readEntry(database, id)),
     getLatestWorkSummary: (agentSessionId) => engine.read((database) => {
       requireSession(database, agentSessionId)

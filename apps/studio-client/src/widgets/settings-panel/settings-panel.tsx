@@ -1,3 +1,6 @@
+import { useStudioLayoutStore } from '../../shared/studio-shell/studio-layout-store.js'
+import { ThemeSettings } from '../../features/themes/ui/theme-settings.js'
+import type { ThemeController } from '../../features/themes/model/theme-controller.js'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Columns3, ExternalLink, Globe, Info, Layers, Network, Palette, Save, ZoomIn } from 'lucide-react'
 import { Button, Slider } from '@loom-studio/ui'
@@ -24,6 +27,7 @@ export function resolveNetworkSettingsPayload(
 }
 
 export function SettingsPanel(props: {
+  themeController?: ThemeController
   busy: boolean
   customCss: string
   locale: Locale
@@ -46,17 +50,51 @@ export function SettingsPanel(props: {
   const previewBackgroundId = useAppearanceStore(state => state.scopedBackground && state.scopedBackground.cardId === props.backgroundCardId
     ? state.scopedBackground.id : state.background?.id ?? null)
   const previewFollowState = useAppearanceStore(state => state.followAI)
+  const explicitOverrides = useAppearanceStore(state => state.explicitOverrides)
+  const resetCanvasWidth = useAppearanceStore(state => state.resetCanvasWidth)
+  const resetMaterial = useAppearanceStore(state => state.resetMaterial)
+  const uiScaleOverridden = useStudioLayoutStore(state => state.uiScaleOverridden)
+  const resetUiScale = useStudioLayoutStore(state => state.resetUiScale)
   const previewMaterial = useAppearanceStore(state => state.material)
   const previewCanvasWidth = useAppearanceStore(state => state.canvasWidth ?? 720)
   const setPreviewBackground = useAppearanceStore(state => state.setBackground)
   const setScopedBackground = useAppearanceStore(state => state.setScopedBackground)
   const setPreviewFollowState = useAppearanceStore(state => state.setFollowAI)
+  const setMaterialParameter = useAppearanceStore(state => state.setMaterialParameter)
   const setPreviewMaterial = useAppearanceStore(state => state.setMaterial)
   const setPreviewCanvasWidth = useAppearanceStore(state => state.setCanvasWidth)
   const narrativeOverscan = useAppearanceStore(state => state.narrativeOverscan)
   const setNarrativeOverscan = useAppearanceStore(state => state.setNarrativeOverscan)
   const motionPreference = useMotionPreferenceStore(state => state.preference)
   const setMotionPreference = useMotionPreferenceStore(state => state.setPreference)
+  const [computedAppearance, setComputedAppearance] = useState({ uiScale: props.uiScale, canvasWidth: previewCanvasWidth, blur: previewMaterial.blur, opacity: previewMaterial.opacity })
+  useEffect(() => {
+    let frame = 0
+    const refresh = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        const css = getComputedStyle(document.documentElement)
+        const read = (name: string, fallback: number) => {
+          const value = Number.parseFloat(css.getPropertyValue(name))
+          return Number.isFinite(value) ? value : fallback
+        }
+        setComputedAppearance({
+          uiScale: read('--loom-ui-scale', props.uiScale / 100) * 100,
+          canvasWidth: read('--loom-canvas-width', previewCanvasWidth),
+          blur: read('--loom-preview-blur', previewMaterial.blur),
+          opacity: read('--loom-preview-opacity', previewMaterial.opacity),
+        })
+      })
+    }
+    refresh()
+    document.addEventListener('loom:theme-changed', refresh)
+    return () => { cancelAnimationFrame(frame); document.removeEventListener('loom:theme-changed', refresh) }
+  }, [category, explicitOverrides, previewMaterial, previewCanvasWidth, props.uiScale, uiScaleOverridden, props.customCss])
+  const effectiveMaterial = {
+    ...previewMaterial,
+    blur: explicitOverrides.blur ? previewMaterial.blur : computedAppearance.blur,
+    opacity: explicitOverrides.opacity ? previewMaterial.opacity : computedAppearance.opacity,
+  }
   const backgrounds = props.backgrounds ?? []
   const categories = [
     { id: 'general', label: props.t('settings.general'), icon: Globe },
@@ -156,10 +194,11 @@ export function SettingsPanel(props: {
               t={props.t}
               backgrounds={backgrounds}
               followState={previewFollowState}
-              material={previewMaterial}
+              material={effectiveMaterial}
               selectedId={previewBackgroundId}
               general={(
                 <div className={styles.generalSettings}>
+                  {props.themeController ? <ThemeSettings controller={props.themeController} t={props.t} /> : null}
                   <section className={styles.settingSection}>
                     <Slider
                       icon={<ZoomIn size={14} />}
@@ -167,10 +206,11 @@ export function SettingsPanel(props: {
                       min={80}
                       max={125}
                       step={5}
-                      value={props.uiScale}
+                      value={uiScaleOverridden ? props.uiScale : computedAppearance.uiScale}
                       formatValue={v => `${v}%`}
                       onValueChange={val => props.onChangeUiScale(val)}
                     />
+                    <Button type="button" disabled={!uiScaleOverridden} onClick={resetUiScale}>{props.t('settings.themeRestoreParameter')}</Button>
                   </section>
                   <section className={styles.settingSection}>
                     <Slider
@@ -179,10 +219,14 @@ export function SettingsPanel(props: {
                       min={540}
                       max={1120}
                       step={20}
-                      value={previewCanvasWidth}
+                      value={explicitOverrides.canvasWidth ? previewCanvasWidth : computedAppearance.canvasWidth}
                       formatValue={v => `${v}px`}
                       onValueChange={val => setPreviewCanvasWidth(val)}
                     />
+                    <Button type="button" disabled={!explicitOverrides.canvasWidth} onClick={resetCanvasWidth}>{props.t('settings.themeRestoreParameter')}</Button>
+                  </section>
+                  <section className={styles.settingSection}>
+                    <Button type="button" onClick={resetMaterial}>{props.t('settings.themeRestoreParameter')} · {props.t('appearance.surfaceMode')}</Button>
                   </section>
                   <section className={styles.settingSection}>
                     <Slider
@@ -216,7 +260,11 @@ export function SettingsPanel(props: {
                 </div>
               )}
               onFollowStateChange={setPreviewFollowState}
-              onMaterialChange={setPreviewMaterial}
+              onMaterialChange={material => {
+                setPreviewMaterial({ ...material, blur: previewMaterial.blur, opacity: previewMaterial.opacity })
+                if (material.blur !== effectiveMaterial.blur) setMaterialParameter('blur', material.blur)
+                if (material.opacity !== effectiveMaterial.opacity) setMaterialParameter('opacity', material.opacity)
+              }}
               onSelect={id => {
                 const background = backgrounds.find(item => item.id === id)
                 if (background?.scope) {

@@ -1,3 +1,4 @@
+import { sharedStyleParameterDefinitions } from '@loom-studio/extension-sdk'
 import { existsSync, readFileSync } from 'node:fs'
 import { isAbsolute, resolve } from 'node:path'
 import type {
@@ -122,6 +123,7 @@ function validateManifest(manifest: Partial<ExtensionManifest>): void {
   validateTextResourceContributions(manifest.contributes?.transformRules, 'Text Transform Rule')
   validateTextResourceContributions(manifest.contributes?.textExtractors, 'Text Extractor')
   validateSettingContributions(manifest.contributes?.settings)
+  validateStyleContributions(manifest)
   const scripts = new Set<string>()
   for (const script of manifest.contributes?.loomScripts ?? []) {
     if (!script.id || !extensionStorageTokenPattern.test(script.id) || scripts.has(script.id)) throw new Error(`Manifest Loom Script id is invalid or duplicated: ${script.id}`)
@@ -291,6 +293,99 @@ function validateManifest(manifest: Partial<ExtensionManifest>): void {
         throw new Error(`Module capabilities.${capability} must be a boolean: ${moduleManifest.id}`)
       }
     }
+  }
+}
+
+function validateStyleContributions(manifest: Partial<ExtensionManifest>): void {
+  const ids = new Set<string>()
+  for (const kind of ['themes', 'styles'] as const) {
+    const contributions = manifest.contributes?.[kind]
+    if (contributions === undefined) continue
+    if (!Array.isArray(contributions)) throw new Error(`Manifest ${kind} must be an array`)
+    if (contributions.length && manifest.participation === 'timeline') throw new Error('Timeline packages cannot contribute global styles')
+    for (const contribution of contributions) {
+      if (!isRecord(contribution) || typeof contribution.id !== 'string' || !extensionStorageTokenPattern.test(contribution.id) || ids.has(contribution.id)) {
+        throw new Error('Manifest style id is invalid or duplicated')
+      }
+      ids.add(contribution.id)
+      if (typeof contribution.label !== 'string') throw new Error('Manifest style label is required')
+      assertOptionalManifestText(contribution.label, 'style label', 255)
+      assertOptionalManifestText(contribution.description, 'style description', 2_048)
+      const css = contribution.css
+      if (typeof css !== 'string' || css !== css.trim() || !css.endsWith('.css') || isAbsolute(css)
+        || /[\\:%?#\x00-\x1f]/.test(css) || css.split('/').some(part => part === '..' || part === '')) {
+        throw new Error('Manifest style css must be a package-relative CSS file without traversal, query or hash')
+      }
+      if (contribution.moduleId !== undefined && (typeof contribution.moduleId !== 'string'
+        || !manifest.modules?.some(module => module.id === contribution.moduleId && module.runtime === 'client'))) {
+        throw new Error('Manifest style moduleId must reference a client module')
+      }
+      if (contribution.supportsCssOnly !== undefined && (typeof contribution.supportsCssOnly !== 'boolean' || contribution.moduleId === undefined)) {
+        throw new Error('Manifest style supportsCssOnly requires moduleId and a boolean value')
+      }
+      if (contribution.nativeMotion !== undefined && contribution.nativeMotion !== 'retain' && contribution.nativeMotion !== 'disable') {
+        throw new Error('Manifest style nativeMotion is invalid')
+      }
+      if (contribution.parameters === undefined) continue
+      if (!Array.isArray(contribution.parameters)) throw new Error('Manifest style parameters must be an array')
+      const parameterIds = new Set<string>()
+      const variables = new Set<string>()
+      for (const parameter of contribution.parameters) {
+        if (!isRecord(parameter) || typeof parameter.id !== 'string' || !extensionStorageTokenPattern.test(parameter.id) || parameterIds.has(parameter.id)) {
+          throw new Error('Manifest style parameter id is invalid or duplicated')
+        }
+        parameterIds.add(parameter.id)
+        if (typeof parameter.label !== 'string') throw new Error('Manifest style parameter label is required')
+        assertOptionalManifestText(parameter.label, 'style parameter label', 255)
+        const variable = parameter.variable
+        if (typeof variable !== 'string' || !/^--(?:loom|extension)-[A-Za-z0-9_-]+$/.test(variable)
+          || /^--loom-.*(?:anchor|viewport|keyboard|scroll|drag|virtual)/i.test(variable) || variables.has(variable)) {
+          throw new Error('Manifest style parameter variable is invalid, internal or duplicated')
+        }
+        variables.add(variable)
+        const shared = sharedStyleParameterDefinitions[variable]
+        if (shared && (parameter.type !== 'number' || (parameter.unit ?? '') !== shared.unit
+          || typeof parameter.min !== 'number' || parameter.min < shared.min
+          || typeof parameter.max !== 'number' || parameter.max > shared.max)) {
+          throw new Error(`Manifest shared style parameter must use the host numeric unit and range: ${variable}`)
+        }
+        if (parameter.type === 'number') {
+          if (typeof parameter.default !== 'number' || !Number.isFinite(parameter.default)
+            || typeof parameter.min !== 'number' || !Number.isFinite(parameter.min)
+            || typeof parameter.max !== 'number' || !Number.isFinite(parameter.max)
+            || parameter.min > parameter.max || parameter.default < parameter.min || parameter.default > parameter.max
+            || (parameter.step !== undefined && (typeof parameter.step !== 'number' || !Number.isFinite(parameter.step) || parameter.step <= 0))
+            || (parameter.unit !== undefined && (typeof parameter.unit !== 'string' || !['', 'px', '%', 'rem', 'ms'].includes(parameter.unit)))) {
+            throw new Error('Manifest style number parameter range, default, step or unit is invalid')
+          }
+        } else if (parameter.type === 'color') {
+          assertStyleCssValue(parameter.default)
+        } else if (parameter.type === 'select') {
+          if (!Array.isArray(parameter.options) || !parameter.options.length) throw new Error('Manifest style select parameter requires options')
+          const values = new Set<string>()
+          for (const option of parameter.options) {
+            if (!isRecord(option) || typeof option.label !== 'string') throw new Error('Manifest style option label is required')
+            assertOptionalManifestText(option.label, 'style option label', 255)
+            assertStyleCssValue(option.value)
+            if (values.has(option.value)) throw new Error('Manifest style option value is duplicated')
+            values.add(option.value)
+          }
+          if (typeof parameter.default !== 'string' || !values.has(parameter.default)) throw new Error('Manifest style default must reference an option')
+        } else if (parameter.type === 'boolean') {
+          if (typeof parameter.default !== 'boolean') throw new Error('Manifest style boolean default is invalid')
+          assertStyleCssValue(parameter.trueValue)
+          assertStyleCssValue(parameter.falseValue)
+        } else {
+          throw new Error('Manifest style parameter type is invalid')
+        }
+      }
+    }
+  }
+}
+
+function assertStyleCssValue(value: unknown): asserts value is string {
+  if (typeof value !== 'string' || !value.trim() || value.length > 1_024 || /[;{}@\\\x00-\x1f]/.test(value)) {
+    throw new Error('Manifest style parameter CSS value is invalid')
   }
 }
 

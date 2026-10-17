@@ -224,6 +224,8 @@ export function buildRenderItems(entries: AgentTranscriptEntryEntity[]): RenderI
 
 export type AgentChatPanelProps = RunRecoveryControlsProps & {
   active?: boolean
+  onboardingHint?: ReactNode
+  initialCreatePresetId?: string
   displayProjection?: DisplayProjection
   busy: boolean
   activeRun?: ActiveAgentRun
@@ -320,10 +322,11 @@ export const AgentChatPanel = memo(function AgentChatPanel(props: AgentChatPanel
           </button>
         </div>
       </header>
+      {props.onboardingHint}
       {createOpen && props.onCreateSession ? <AgentSessionCreateDialog
         t={props.t}
         presets={props.profiles}
-        initialPresetId={props.selectedProfileId}
+        initialPresetId={props.initialCreatePresetId ?? props.selectedProfileId}
         canMakePrimary={props.canMakePrimary === true}
         onCreate={props.onCreateSession}
         onCreated={session => props.onSelectSession?.(session.id)}

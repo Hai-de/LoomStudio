@@ -15,6 +15,7 @@ const hooks = vi.hoisted(() => ({
   sessionCommit: undefined as ((operations: DataOperation[]) => void) | undefined,
   connected: undefined as (() => void) | undefined,
   subscribingSessions: false,
+  mountEffects: [] as Array<() => void>,
 }))
 export { hooks }
 vi.mock('../../../apps/studio-client/src/shared/api/data-commit-events.js', () => ({
@@ -32,6 +33,7 @@ vi.mock('../../../apps/studio-client/src/shared/api/data-commit-events.js', () =
 vi.mock('react', async importOriginal => ({
   ...await importOriginal<typeof import('react')>(),
   useEffect: (effect: () => void, deps?: unknown[]) => {
+    if (deps?.length === 0) hooks.mountEffects.push(effect)
     if (deps?.length === 3 && typeof deps[1] === 'string' && typeof deps[2] === 'string') hooks.commitEffect = effect
     if (deps?.length === 2 && deps[1] === 'timeline') hooks.sessionEffect = effect
   },
@@ -111,6 +113,7 @@ export function fixture() {
     api: {
       narratives: {
         create: createTimeline, appendInput, getPage,
+        getSwipes: vi.fn<StudioApi['narratives']['getSwipes']>(async () => ({})),
         list: vi.fn<StudioApi['narratives']['list']>(async () => ({ timelines: [] })),
       },
       agentSessions: {
@@ -126,7 +129,7 @@ export function fixture() {
     },
     runLatestAction: action => action({ isCurrent: () => true } as never),
   }
-  const render = () => { hooks.cursor = 0; return useNarrativeRuntime(input) }
+  const render = () => { hooks.cursor = 0; hooks.mountEffects = []; return useNarrativeRuntime(input) }
   const event = { preventDefault: vi.fn() } as unknown as FormEvent
   return { render, event, input, result, appendInput, createTimeline, createSession, createRun, subscribeRun, getTranscript, getPage, resumeRun, acknowledgeRunCompletion, reportFailure }
 }

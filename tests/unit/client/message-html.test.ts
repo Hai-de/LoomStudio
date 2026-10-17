@@ -7,7 +7,7 @@ import { MarkdownContent } from '../../../apps/studio-client/src/shared/ui/markd
 import { MessageContent } from '../../../apps/studio-client/src/features/message-content/ui/message-content.js'
 import { displayText } from '../../../apps/studio-client/src/features/message-content/model/use-display-projection.js'
 import { projectHistoryEntries } from '@loom-studio/application-runtime'
-import { messageHtmlExamples, nextPreviewStreamOffset } from '../../../apps/studio-client/src/dev/archive/message-html/message-html-examples.js'
+import { messageHtmlExamples, nextPreviewStreamOffset } from '../../fixtures/client/message-html-examples.js'
 
 const labels = { copy: 'Copy', copied: 'Copied', copyFailed: 'Failed', enableWrap: 'Wrap', disableWrap: 'Unwrap' }
 const html = (value: string, safeHtml = true) => renderToStaticMarkup(createElement(MarkdownContent, { value, safeHtml, codeBlockLabels: labels }))

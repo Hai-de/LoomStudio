@@ -58,10 +58,7 @@
 | VFS 是 ID/版本绑定的目录投影，不要求整包 JSON 存储 | [资源 VFS](../../../packages/application-runtime/src/vfs/resource-filesystem.ts) |
 
 已确认草稿：
-[工作台](../../../apps/studio-client/src/dev/preview/resource-registry/resource-registry-workbench.tsx)、
-[样例](../../../apps/studio-client/src/dev/preview/resource-registry/resource-registry-preview.tsx)、
-[预设详情](../../../apps/studio-client/src/dev/preview/resource-registry/agent-preset-detail.tsx)。
-地址：`http://localhost:5173/dev/preview/resource-registry`。
+历史资源工作台预览已于 2026-10-15 清理；此处设计记录保留，旧预览地址不再可用。
 只继承本计划列出的交互，不照搬旧草稿中的外部只读、公共挂载操作或所有布局。
 草稿的主预设星标和临时对话入口已被最新 Session 方案替代，不能按旧草稿直接接业务。
 草稿中的“预设专属”目录和标签也已撤回，正式 UI 应显示“此预设使用的资源”，不是所有权子目录。

@@ -1,15 +1,30 @@
-import { ChevronDown, ChevronRight, GripVertical, MoreHorizontal } from 'lucide-react'
+import { ChevronDown, ChevronRight, GripVertical, MoreHorizontal, X } from 'lucide-react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type ElementType } from 'react'
-import { ContextMenu, ContextMenuCheckboxItem, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, type MenuAction } from '@loom-studio/ui'
+import { Button, Dialog, ContextMenu, ContextMenuCheckboxItem, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, type MenuAction } from '@loom-studio/ui'
 import { useEffectiveMotion } from '../../hooks/use-motion-preference.js'
 import { useSlidingHover } from '../../hooks/use-sliding-hover.js'
 import { readDragTopScrollSpeed, readDropPosition, readFileTreeKeyboardTarget, readVisibleFileTreeNodes, type FileTreeNode } from './file-tree-model.js'
+import { createTranslator, resolveCurrentLocale } from '../../i18n/index.js'
+import { useListSelection } from './use-list-selection.js'
 import styles from './file-tree.module.scss'
 
 export type { FileTreeNode } from './file-tree-model.js'
 
+export type FileTreeBatchAction = {
+  id: string
+  label: string
+  icon?: ReactNode
+  disabled?: boolean
+  tone?: 'default' | 'danger'
+  confirm?: boolean
+  run(nodes: FileTreeNode[]): void | Promise<void | { failedIds: string[]; error?: string }>
+}
+
 type FileTreeProps = {
+  getBatchActions?: (nodes: FileTreeNode[]) => FileTreeBatchAction[]
+  canBatchSelect?: (node: FileTreeNode) => boolean
+  batchDisabled?: boolean
   active?: boolean
   highlightMessages?: boolean
   ariaLabel: string
@@ -43,6 +58,7 @@ type FileTreeProps = {
 }
 
 export function FileTree(props: FileTreeProps) {
+  const [contextOpen, setContextOpen] = useState(false)
   const [contextActions, setContextActions] = useState<MenuAction[]>([])
   const [focusedId, setFocusedId] = useState<string>()
   const draggedIdRef = useRef<string | undefined>(undefined)
@@ -69,6 +85,64 @@ export function FileTree(props: FileTreeProps) {
   }, [slidingHover.containerRef])
   const expandedIds = useMemo(() => new Set(props.expandedIds), [props.expandedIds])
   const visibleNodes = useMemo(() => readVisibleFileTreeNodes(props.nodes, expandedIds), [expandedIds, props.nodes])
+  const batchNodes = visibleNodes.map(item => item.node).filter(node => props.canBatchSelect?.(node) ?? node.kind !== 'folder')
+  const selection = useListSelection(batchNodes.map(node => node.id))
+  const [batchBusy, setBatchBusy] = useState(false)
+  const [batchError, setBatchError] = useState('')
+  const [confirmation, setConfirmation] = useState<{ action: FileTreeBatchAction; nodes: FileTreeNode[] }>()
+  const t = createTranslator(resolveCurrentLocale())
+  const selectedNodes = batchNodes.filter(node => selection.selected.has(node.id))
+  const batchActions = props.getBatchActions?.(selectedNodes) ?? []
+  const batchLocked = batchBusy || props.batchDisabled
+  async function runBatch(action: FileTreeBatchAction, nodes: FileTreeNode[]) {
+    setBatchBusy(true)
+    setBatchError('')
+    try {
+      const result = await action.run(nodes)
+      selection.setSelected(new Set(result?.failedIds ?? []))
+      setBatchError(result?.error ?? '')
+      setConfirmation(undefined)
+    } catch (cause) {
+      setBatchError(cause instanceof Error ? cause.message : String(cause))
+    } finally { setBatchBusy(false) }
+  }
+  function requestBatch(action: FileTreeBatchAction, nodes: FileTreeNode[]) {
+    if (action.disabled || batchLocked) return
+    if (action.confirm) setConfirmation({ action, nodes })
+    else void runBatch(action, nodes)
+  }
+  function eventNode(target: EventTarget | null) {
+    const id = target instanceof Element ? target.closest<HTMLElement>('[data-file-tree-node-id]')?.dataset.fileTreeNodeId : undefined
+    return batchNodes.find(node => node.id === id)
+  }
+  const selectionEnterRef = useRef(selection.enter)
+  selectionEnterRef.current = selection.enter
+  useEffect(() => {
+    if (!selection.selecting) return
+    const scroll = props.getVirtualScrollElement?.() ?? treeRef.current
+    if (!scroll) return
+    let pointer: { x: number; y: number } | undefined
+    let frame = 0
+    const onMove = (event: globalThis.PointerEvent) => { pointer = { x: event.clientX, y: event.clientY } }
+    const tick = () => {
+      if (pointer) {
+        const rect = scroll.getBoundingClientRect()
+        if (pointer.x >= rect.left && pointer.x <= rect.right) {
+          const speed = pointer.y < rect.top + 28 ? -8 : pointer.y > rect.bottom - 28 ? 8 : 0
+          if (speed) {
+            scroll.scrollTop += speed
+            const target = document.elementFromPoint(pointer.x, Math.max(rect.top + 2, Math.min(rect.bottom - 2, pointer.y)))
+            const id = target?.closest<HTMLElement>('[data-file-tree-node-id]')?.dataset.fileTreeNodeId
+            if (id && treeRef.current?.contains(target) && batchNodes.some(node => node.id === id)) selectionEnterRef.current(id)
+          }
+        }
+      }
+      frame = requestAnimationFrame(tick)
+    }
+    window.addEventListener('pointermove', onMove)
+    frame = requestAnimationFrame(tick)
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('pointermove', onMove) }
+  }, [selection.selecting, props.getVirtualScrollElement])
   const rovingId = visibleNodes.some(item => item.node.id === focusedId)
     ? focusedId
     : visibleNodes.some(item => item.node.id === props.selectedId)
@@ -150,6 +224,18 @@ export function FileTree(props: FileTreeProps) {
   }
 
   function handleTreeItemKeyDown(event: KeyboardEvent<HTMLDivElement>, node: FileTreeNode) {
+    if (props.getBatchActions && !batchLocked && event.key === ' ' && (event.ctrlKey || event.metaKey || event.shiftKey)) {
+      event.preventDefault()
+      selection.begin(node.id, event.shiftKey, event.ctrlKey || event.metaKey, props.selectedId)
+      selection.finishKeyboard()
+      return
+    }
+    if (props.getBatchActions && !batchLocked && event.shiftKey && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+      event.preventDefault()
+      const target = readFileTreeKeyboardTarget({ expandedIds, key: event.key, nodeId: node.id, visibleNodes })
+      if (target.focusId) { selection.selectRange(target.focusId, event.ctrlKey || event.metaKey, node.id); focusNode(target.focusId) }
+      return
+    }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
       props.onSelect(node)
@@ -270,7 +356,14 @@ export function FileTree(props: FileTreeProps) {
       ? event.target.closest<HTMLElement>('[data-file-tree-node-id]')?.dataset.fileTreeNodeId
       : undefined
     const node = visibleNodes.find(item => item.node.id === id)?.node
-    const actions = node ? props.getActions?.(node) ?? [] : []
+    const singleActions = node ? props.getActions?.(node) ?? [] : []
+    const batch = node && props.getBatchActions && batchNodes.some(item => item.id === node.id)
+      ? (selection.selected.has(node.id) ? selectedNodes : singleActions.length ? [] : [node]) : []
+    if (batch.length && node && !selection.selected.has(node.id)) selection.setSelected(new Set([node.id]))
+    const actions: MenuAction[] = batch.length ? (props.getBatchActions?.(batch) ?? []).map(action => ({
+      id: action.id, label: action.label, icon: action.icon, tone: action.tone,
+      disabled: action.disabled || batchLocked, onSelect: () => requestBatch(action, batch),
+    })) : singleActions
     if (actions.length === 0) {
       event.preventDefault()
       return
@@ -315,6 +408,7 @@ export function FileTree(props: FileTreeProps) {
         renderExpandedRow={props.renderExpandedRow}
         rovingId={rovingId}
         selectedId={props.selectedId}
+        batchSelectedIds={props.getBatchActions ? selection.selected : undefined}
         setTreeItemRef={(id, element) => {
           if (element) treeItemRefs.current.set(id, element)
           else treeItemRefs.current.delete(id)
@@ -335,10 +429,12 @@ export function FileTree(props: FileTreeProps) {
   )
 
   return (
+    <>
     <ContextMenu onOpenChange={open => {
+      setContextOpen(open)
       if (!open) setContextActions([])
     }}>
-      <ContextMenuTrigger asChild disabled={!props.getActions}>
+      <ContextMenuTrigger asChild disabled={!props.getActions && !props.getBatchActions}>
         <div
           ref={setTreeContainerRef}
           className={[
@@ -349,10 +445,48 @@ export function FileTree(props: FileTreeProps) {
           role="tree"
           aria-label={props.ariaLabel}
           data-loom-component="file-tree"
+          aria-busy={batchBusy || undefined}
+          data-selecting={selection.selecting ? true : undefined}
+          aria-multiselectable={props.getBatchActions ? true : undefined}
+          onPointerDownCapture={event => {
+            if (batchLocked && eventNode(event.target)) { event.preventDefault(); event.stopPropagation(); return }
+            if (!props.getBatchActions || batchLocked || event.button !== 0 || !(event.ctrlKey || event.metaKey || event.shiftKey)) return
+            if (event.target instanceof Element && event.target.closest('button, input, textarea, select, a')) return
+            const node = eventNode(event.target)
+            if (!node) return
+            event.preventDefault()
+            treeItemRefs.current.get(node.id)?.focus()
+            selection.begin(node.id, event.shiftKey, event.ctrlKey || event.metaKey, props.selectedId)
+          }}
+          onPointerMove={event => {
+            if (!selection.selecting || batchLocked) return
+            const node = eventNode(event.target)
+            if (node) selection.enter(node.id)
+          }}
+          onClickCapture={event => {
+            if (batchLocked && eventNode(event.target)) { event.preventDefault(); event.stopPropagation(); return }
+            if (selection.consumeClick()) { event.preventDefault(); event.stopPropagation(); return }
+            if (props.getBatchActions && event.target instanceof Element && !event.target.closest('button, input, textarea, select, a')) selection.clear()
+          }}
+          onKeyDownCapture={event => {
+            if (batchLocked && eventNode(event.target)) { event.preventDefault(); event.stopPropagation(); return }
+            if (!props.getBatchActions || batchLocked || (event.target instanceof Element && event.target.closest('input, textarea, select'))) return
+            if (event.key === 'Escape' && selection.selected.size) { event.preventDefault(); event.stopPropagation(); selection.clear() }
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') { event.preventDefault(); event.stopPropagation(); selection.setSelected(new Set(batchNodes.map(node => node.id))) }
+          }}
           onContextMenu={handleContextMenu}
           onPointerOver={slidingHover.onPointerOver}
           onPointerLeave={slidingHover.onPointerLeave}
         >
+          {props.getBatchActions && selectedNodes.length > 0 && !selection.selecting && !contextOpen ? <div className={styles.batchAnchor}>
+            <div className={styles.batchBar} role="toolbar" aria-label={t('common.batchSelected', { count: selectedNodes.length })}>
+              <span>{t('common.batchSelected', { count: selectedNodes.length })}</span>
+              {batchActions.map(action => <Button key={action.id} size="small" variant={action.tone === 'danger' ? 'danger' : 'secondary'} disabled={batchLocked || action.disabled}
+                onClick={() => requestBatch(action, selectedNodes)}>{action.icon}{action.label}</Button>)}
+              <Button size="small" disabled={batchLocked} aria-label={t('common.clearSelection')} onClick={selection.clear}><X size={14} aria-hidden="true" /></Button>
+            </div>
+          </div> : null}
+          {batchError ? <p className={styles.batchError} role="alert">{batchError}</p> : null}
           {hoverIndicatorElement}
           {props.virtualized ? (
             <div
@@ -391,6 +525,12 @@ export function FileTree(props: FileTreeProps) {
         </ContextMenuContent>
       ) : null}
     </ContextMenu>
+    {confirmation ? <Dialog open title={confirmation.action.label} onClose={() => { if (!batchBusy) setConfirmation(undefined) }} dismissible={!batchBusy}
+      actions={<><Button disabled={batchBusy} onClick={() => setConfirmation(undefined)}>{t('promptResource.cancel')}</Button><Button variant="danger" disabled={batchBusy} onClick={() => void runBatch(confirmation.action, confirmation.nodes)}>{confirmation.action.label}</Button></>}>
+      <p>{t('common.batchConfirm', { count: confirmation.nodes.length })}</p>
+      {batchError ? <p role="alert">{batchError}</p> : null}
+    </Dialog> : null}
+    </>
   )
 }
 
@@ -428,6 +568,7 @@ function FileTreeRow(props: {
   renderExpandedRow?: (node: FileTreeNode) => ReactNode
   rovingId?: string
   selectedId?: string
+  batchSelectedIds?: Set<string>
   setTreeItemRef: (id: string, element: HTMLDivElement | null) => void
   variant?: 'tree' | 'flat'
   onFocusNode: (id: string) => void
@@ -435,7 +576,7 @@ function FileTreeRow(props: {
 }) {
   const hasChildren = Boolean(props.node.children)
   const expanded = props.node.isSection || (hasChildren && props.expandedIds.has(props.node.id))
-  const selected = props.node.id === props.selectedId
+  const selected = props.batchSelectedIds?.size ? props.batchSelectedIds.has(props.node.id) : props.node.id === props.selectedId
   const [actionsOpen, setActionsOpen] = useState(false)
   const actions = actionsOpen ? props.getActions?.(props.node) ?? [] : []
   const metaLeading = props.renderMetaLeading?.(props.node)
@@ -660,6 +801,7 @@ function FileTreeRow(props: {
       renderExpandedRow={props.renderExpandedRow}
       rovingId={props.rovingId}
       selectedId={props.selectedId}
+      batchSelectedIds={props.batchSelectedIds}
       setTreeItemRef={props.setTreeItemRef}
       variant={props.variant}
       onFocusNode={props.onFocusNode}

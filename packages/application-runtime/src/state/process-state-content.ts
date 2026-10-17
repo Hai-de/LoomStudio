@@ -10,6 +10,7 @@ export async function prepareStateContent(
   input: {
     text: string; operationId: string; signal: AbortSignal
     target?: { timelineId: string; branchId: string }
+    assertSource?: () => Promise<void>
   },
 ): Promise<{ mutation?: ApplyStateMutationInput; diagnostics: string[]; extensionLeases: TimelineExtensionLease[] }> {
   if (!input.target) return { diagnostics: [], extensionLeases: [] }
@@ -27,7 +28,9 @@ export async function prepareStateContent(
     }
   }
   const target = { scope: 'timeline' as const, ...input.target }
+  await input.assertSource?.()
   const snapshot = await getApplicationStateSnapshot(ctx, target)
+  await input.assertSource?.()
   const result = await ctx.stateContent.process({
     text: input.text, value: snapshot.value, contributionIds: sources.map(source => source.contributionId), target,
     cardId: context?.sourceCardId, signal: input.signal,

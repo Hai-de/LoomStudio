@@ -1,7 +1,10 @@
-import type { ApplicationRuntime, AgentRunEvent, RuntimeRequestContext, InvokeAgentTurnInput, VfsMutationDecision } from '@loom-studio/application-runtime'
+import type { ApplicationRuntime, AgentRunEvent, AgentRunTask, RuntimeRequestContext, InvokeAgentTurnInput, VfsMutationDecision } from '@loom-studio/application-runtime'
 
 type AgentRun = {
   id: string
+  createdAt: string
+  updatedAt: string
+  reason?: string
   controller?: AbortController
   events: AgentRunEvent[]
   eventSizes: number[]
@@ -47,6 +50,57 @@ const completedReplayMs = 2 * 60_000
 // Run ownership stays in the server; the RPC adapter only translates requests.
 export function getAgentRunService(runtime: ApplicationRuntime) {
   return {
+    async list(input?: { timelineId?: string }): Promise<{ tasks: AgentRunTask[] }> {
+      const summaries = await runtime.listAgentRunStates()
+      const runs = getRunStore(runtime)
+      const latestLive = new Map<string, { run: AgentRun; failedContinuation?: AgentRun }>()
+      for (const run of runs.values()) {
+        if (run.continuationRunId) continue
+        const source = run.sourceRunId ? runs.get(run.sourceRunId) : undefined
+        const retainedSource = run.state === 'failed' && source?.state === 'suspended'
+          && !source.continuationRunId && (source.abandoned || source.checkpoint && source.request)
+        latestLive.set(run.sessionId, retainedSource ? { run: source, failedContinuation: run } : { run })
+      }
+      const tasks: AgentRunTask[] = []
+      for (const summary of summaries) {
+        if (input?.timelineId !== undefined && summary.timelineId !== input.timelineId) continue
+        const saved = summary.run
+        const entry = latestLive.get(summary.agentSessionId)
+        const live = entry?.run
+        const retainedColdCheckpoint = live?.state === 'failed' && saved && live.checkpoint?.sourceRunId === saved.runId
+        const current = live && !retainedColdCheckpoint && (!saved || live.id === saved.runId || entry?.failedContinuation?.id === saved.runId
+          || live.createdAt >= saved.updatedAt) ? live : undefined
+        if (!current && !saved) continue
+        const state: AgentRunTask['state'] = current
+          ? current.abandoned || (saved?.runId === current.id && saved.state === 'discarded') ? 'discarded' : current.state
+          : saved!.state === 'running' || saved!.state === 'created' ? 'interrupted'
+            : saved!.state === 'aborted' ? 'cancelled' : saved!.state
+        const canResume = current
+          ? !current.abandoned && !current.continuationRunId && state !== 'discarded'
+            && Boolean(current.checkpoint && current.request)
+          : state === 'suspended' || state === 'interrupted'
+        const reason = current ? entry?.failedContinuation?.reason ?? current.reason
+          ?? (saved?.runId === current.id ? saved.reason : undefined) : saved?.reason
+        tasks.push({
+          runId: current?.id ?? saved!.runId, agentSessionId: summary.agentSessionId,
+          ...(summary.title === undefined ? {} : { title: summary.title }),
+          ...(summary.timelineId === undefined ? {} : { timelineId: summary.timelineId }),
+          state, updatedAt: current ? entry?.failedContinuation?.updatedAt ?? current.updatedAt : saved!.updatedAt,
+          ...(reason === undefined ? {} : { reason }),
+          canPause: Boolean(current?.controller && state === 'running'),
+          canResume: state !== 'running' && state !== 'completed' && state !== 'cancelled' && canResume,
+          canAbandon: current ? state === 'suspended' && !current.continuationRunId
+            : state === 'suspended' || state === 'interrupted',
+        })
+      }
+      tasks.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.runId.localeCompare(right.runId))
+      let ended = 0
+      return { tasks: tasks.filter(task => {
+        if (task.state === 'running' || task.state === 'suspended' || task.state === 'interrupted') return true
+        ended += 1
+        return ended <= 30
+      }) }
+    },
     create(request: InvokeAgentTurnInput, context?: RuntimeRequestContext) {
       const runs = getRunStore(runtime)
       const run = startAgentRun(runtime, context, request)
@@ -119,8 +173,19 @@ export function getAgentRunService(runtime: ApplicationRuntime) {
         : { decision: 'deny', ...(reason ? { reason } : {}) })
       return { runId: run.id, requestId, accepted: true }
     },
-    async abandon(runId: string, context?: RuntimeRequestContext) {
-      const run = requireAgentRun(getRunStore(runtime), runId)
+    async abandon(runId: string, context?: RuntimeRequestContext, agentSessionId?: string) {
+      const run = getRunStore(runtime).get(runId)
+      if (!run) {
+        if (!agentSessionId) throw new Error(`Agent run not found: ${runId}`)
+        const recovered = await runtime.prepareAgentRunRecovery({ agentSessionId, runId })
+        if (!recovered) throw new Error(`Agent run has no recoverable checkpoint: ${runId}`)
+        await runtime.appendAgentTranscriptEntries({
+          agentSessionId,
+          expectedEntryCount: recovered.continuation.expectedEntryCount,
+          entries: [{ runId, entry: { kind: 'run-state', state: 'discarded' } }],
+        }, context)
+        return { runId, accepted: true, state: 'suspended' as const }
+      }
       if (run.state === 'running') throw new Error('Cannot change the main receiver while an Agent run is generating')
       if (run.state !== 'suspended' || run.abandoned || run.continuationRunId) {
         return { runId: run.id, accepted: false, state: run.state }
@@ -180,9 +245,14 @@ export function getAgentRunService(runtime: ApplicationRuntime) {
 
       return { runId: input.runId ?? '', accepted: false }
     },
-    state(runId: string) {
-      const run = requireAgentRun(getRunStore(runtime), runId)
-      return { runId: run.id, state: run.state }
+    state(runId: string, agentSessionId?: string) {
+      const run = getRunStore(runtime).get(runId)
+      if (run) return { runId: run.id, state: run.state }
+      if (!agentSessionId) throw new Error(`Agent run not found: ${runId}`)
+      return runtime.prepareAgentRunRecovery({ agentSessionId, runId }).then(recovered => {
+        if (!recovered) throw new Error(`Agent run has no recoverable checkpoint: ${runId}`)
+        return { runId, state: 'suspended' as const }
+      })
     },
   }
 }
@@ -199,8 +269,9 @@ function startAgentRun(
     throw Object.assign(new Error('Agent Session already has an executing Run'), { code: 'agent.session_busy' })
   const id = `agent-run-${crypto.randomUUID()}`
   const controller = new AbortController()
+  const timestamp = new Date().toISOString()
   const run: AgentRun = {
-    id, controller, request, sourceRunId, sessionId: request.agentSessionId,
+    id, createdAt: timestamp, updatedAt: timestamp, controller, request, sourceRunId, sessionId: request.agentSessionId,
     ...(continuation ? { checkpoint: continuation } : {}),
     events: [], eventSizes: [], eventBytes: 0, firstCursor: 0, nextCursor: 0, partialText: '',
     state: 'running', promise: Promise.resolve(), mutationApprovals: new Map(),
@@ -212,6 +283,9 @@ function startAgentRun(
     source.request = undefined
   }
   const emit = (event: AgentRunEvent) => {
+    run.updatedAt = new Date().toISOString()
+    if (event.type === 'failed') run.reason = event.error.message
+    if (event.type === 'suspended' || event.type === 'cancelled') run.reason = event.reason
     if (event.type === 'text-delta') run.partialText += event.delta
     if (event.type === 'transcript-appended' && event.entries.some(entry =>
       entry.entry.kind === 'message' && entry.entry.role === 'assistant' || entry.entry.kind === 'tool-invocation',

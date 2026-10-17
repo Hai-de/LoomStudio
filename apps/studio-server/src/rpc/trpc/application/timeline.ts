@@ -160,6 +160,23 @@ export const timelineProcedures = {
       limit: readOptionalNumber(params, 'limit'),
     }
   })).query(({ ctx, input }) => ctx.runtime.getNarrativePage(input)),
+  'getNarrativeSwipes': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['getNarrativeSwipes']>[0] => ({
+    timelineId: readString(params, 'timelineId'),
+    branchId: readString(params, 'branchId'),
+  }))).query(({ ctx, input }) => ctx.runtime.getNarrativeSwipes(input)),
+  'selectNarrativeSwipe': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['selectNarrativeSwipe']>[0] => {
+    const expectedRevision = readNumber(params, 'expectedRevision')
+    if (!Number.isInteger(expectedRevision)) throw new Error('Expected integer param: expectedRevision')
+    if (!isRecord(params) || params.expectedHeadNodeId === undefined) throw new Error('Expected nullable string param: expectedHeadNodeId')
+    return {
+      timelineId: readString(params, 'timelineId'),
+      branchId: readString(params, 'branchId'),
+      groupId: readString(params, 'groupId'),
+      candidateId: readString(params, 'candidateId'),
+      expectedRevision,
+      expectedHeadNodeId: readNullableString(params, 'expectedHeadNodeId'),
+    }
+  })).mutation(({ ctx, input }) => ctx.runtime.selectNarrativeSwipe(input, ctx.request)),
   'getEffectiveNarrativePreview': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['getEffectiveNarrativePreview']>[0] => {
     return {
       timelineId: readString(params, 'timelineId'),

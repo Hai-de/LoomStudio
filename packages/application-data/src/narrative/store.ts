@@ -1,6 +1,7 @@
 import type { DataCommitOperation, SqliteDataEngine, SqliteDataTransaction } from '@loom-studio/data-engine'
 import { createId, nowIso, optionalString } from '@loom-studio/shared'
 import type { DatabaseSync } from 'node:sqlite'
+import { createNarrativeSwipeStore } from './swipes.js'
 import type {
   AppendNarrativeUserInputResult,
   CreateNarrativeTimelineInput,
@@ -49,11 +50,36 @@ export function createNarrativeStore(options: CreateNarrativeStoreOptions): Narr
     ],
   })
   assertNarrativeSchema(engine.database)
+  const swipes = createNarrativeSwipeStore(options)
 
   function transaction(tx: SqliteDataTransaction): NarrativeTransaction {
     const { database } = tx
 
     return {
+      getBranch: id => readBranch(database, id),
+      getNode: id => readNode(database, id),
+      restoreBranch: input => {
+        const timeline = requireTimeline(database, input.timelineId)
+        const branch = requireBranch(database, input.branchId)
+        assertBranchTimeline(branch, timeline.id)
+        if ((branch.headNodeId ?? null) !== input.expectedHeadNodeId) {
+          throw new NarrativeStoreError('narrative.head_conflict', `Narrative branch head conflict: ${branch.id}`)
+        }
+        if (branch.stateHeadRevisionId !== input.expectedStateHeadRevisionId) {
+          throw new NarrativeStoreError('narrative.state_head_conflict', `Narrative branch state head conflict: ${branch.id}`)
+        }
+        const node = input.headNodeId === null ? undefined : requireNode(database, input.headNodeId)
+        if (node && node.timelineId !== timeline.id) throw new NarrativeStoreError('narrative.timeline_mismatch', 'Restore node timeline mismatch')
+        const revision = database.prepare(`SELECT r.id FROM state_revisions r JOIN state_scopes s ON s.id = r.scope_id
+          WHERE r.id = ? AND s.kind = 'timeline' AND s.owner_id = ? AND s.deleted_at IS NULL`).get(input.stateRevisionId, timeline.id)
+        if (!revision) throw new NarrativeStoreError('narrative.state_scope_mismatch', 'Restore State revision must belong to the timeline scope')
+        const timestamp = now()
+        database.prepare('UPDATE narrative_branches SET head_node_id = ?, state_head_revision_id = ?, updated_at = ? WHERE id = ?')
+          .run(node?.id ?? null, input.stateRevisionId, timestamp, branch.id)
+        database.prepare('UPDATE narrative_timelines SET updated_at = ? WHERE id = ?').run(timestamp, timeline.id)
+        tx.recordOperations([operation('update', branch.id, 'narrative.branch'), operation('update', timeline.id, 'narrative.timeline')])
+        return requireBranch(database, branch.id)
+      },
       replaceOpening: input => {
         const timeline = requireTimeline(database, input.timelineId)
         const branch = requireBranch(database, input.branchId)
@@ -373,6 +399,7 @@ export function createNarrativeStore(options: CreateNarrativeStoreOptions): Narr
 
       deleteTimeline: input => {
         const timeline = requireTimeline(database, input.timelineId)
+        swipes.transaction(tx).deleteTimeline(timeline.id)
         const deletedAt = now()
         database.prepare(`
           UPDATE narrative_timelines
@@ -488,6 +515,13 @@ export function createNarrativeStore(options: CreateNarrativeStoreOptions): Narr
             throw alreadyCommitted
           }
           const branch = requireBranch(database, input.branchId)
+          const swipeTx = swipes.transaction(dataTx)
+          const group = swipeTx.getLatest(branch.id)
+          const active = group?.candidates.find(candidate => candidate.id === group.activeCandidateId)
+          if (group?.activeRunId && active && (active.status === 'running' || active.status === 'suspended')) {
+            throw new NarrativeStoreError('narrative.swipe_active', 'Active Swipe execution must finish or be abandoned before new input')
+          }
+          swipeTx.closeLatest(branch.id)
           return transaction(dataTx).appendNode({
             ...input,
             stateRevisionId: branch.stateHeadRevisionId,

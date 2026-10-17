@@ -13,6 +13,7 @@ import { applicationActor } from './context.js'
 import { createCardsRuntimeMethods } from './cards-runtime.js'
 import { createCardDirectoryRuntimeMethods } from './card-directory-sync.js'
 import { createNarrativeRuntimeMethods } from './narrative-runtime.js'
+import { createSwipeRuntimeMethods } from './swipe-runtime.js'
 import {
   createAgentsRuntimeMethods,
   refreshAgentToolRegistry,
@@ -94,6 +95,7 @@ export function createApplicationRuntime(options: ApplicationRuntimeOptions): Ap
     ...createCardsRuntimeMethods(ctx),
     ...createCardDirectoryRuntimeMethods(ctx),
     ...createNarrativeRuntimeMethods(ctx),
+    ...createSwipeRuntimeMethods(ctx),
     ...createAgentsRuntimeMethods(ctx),
     buildExtensionPrompt: async (input, target, packageId, lease) => {
       if (lease) {

@@ -14,6 +14,7 @@ import type {
   UpdateTimelineExtensionParticipationInput,
 } from '../types.js'
 import { recordPromptExtensionDependency } from './prompt-dependencies.js'
+import { captureNarrativeExecutionSource, assertNarrativeExecutionSource, guardNarrativeWrite } from '../runtime/swipe-runtime.js'
 
 type Context = Pick<ApplicationRuntimeContext, 'documents' | 'narratives' | 'createId' | 'dataEngine'>
 type TimelineReader = {
@@ -233,13 +234,26 @@ export async function beginTimelineExtensionWork(
 }
 
 export async function runTimelineExtensionWork<T>(
-  ctx: Pick<Context, 'documents' | 'narratives' | 'dataEngine'>,
-  input: { timelineId: string; installationId: string; packageVersion?: string; signal?: AbortSignal },
-  work: (execution: { lease: TimelineExtensionLease; signal: AbortSignal }) => Promise<T>,
+  ctx: Pick<ApplicationRuntimeContext, 'documents' | 'narratives' | 'dataEngine' | 'swipes'>,
+  input: { timelineId: string; branchId?: string; installationId: string; packageVersion?: string; signal?: AbortSignal },
+  work: (execution: { lease: TimelineExtensionLease; signal: AbortSignal;
+    narrativeSource: NonNullable<import('@loom-studio/extension-sdk').ExtensionTimelineExecution['narrativeSource']>;
+    assertNarrativeSource(): Promise<void>; withNarrativeWrite<TValue>(work: () => TValue): TValue }) => Promise<T>,
 ): Promise<T> {
+  const branchId = input.branchId ?? (await ctx.narratives?.getTimeline(input.timelineId))?.activeBranchId
+  if (!branchId) throw new Error('Timeline work requires an existing Narrative Branch')
+  const source = await captureNarrativeExecutionSource(ctx, { timelineId: input.timelineId, branchId })
+  const narrativeSource = Object.freeze({
+    timelineId: source.timelineId, branchId: source.branchId, nodeId: source.nodeId,
+    groupId: source.groupId, candidateId: source.candidateId, generation: source.generation,
+  })
   const scope = await beginTimelineExtensionWork(ctx, input)
   try {
-    const result = await scope.run(() => work(scope))
+    const result = await scope.run(() => work({
+      lease: scope.lease, signal: scope.signal, narrativeSource,
+      assertNarrativeSource: () => assertNarrativeExecutionSource(ctx, source),
+      withNarrativeWrite: callback => guardNarrativeWrite(ctx, source, callback),
+    }))
     scope.signal.throwIfAborted()
     await assertTimelineExtensionLease(ctx, ctx.documents, scope.lease)
     return result

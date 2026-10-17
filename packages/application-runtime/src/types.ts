@@ -8,6 +8,7 @@ import type {
   AgentTranscriptPage,
   AgentSession,
   AgentStore,
+  AgentSessionRunSummary,
 } from '@loom-studio/application-data'
 export type {
   AgentTranscriptEntry,
@@ -31,6 +32,8 @@ import type {
 export type { ExtensionConfigEntry, ExtensionEntityRef, ExtensionRecordEntry, ExtensionStorageScope } from '@loom-studio/extension-sdk'
 import type { Logger } from '@loom-studio/logging'
 import type { VfsMutationDecision, VfsMutationPreview } from './vfs/types.js'
+import type { NarrativeSwipeView } from './narrative/swipe-types.js'
+export type { NarrativeSwipeView } from './narrative/swipe-types.js'
 import type {
   NarrativeBranch,
   NarrativeNode,
@@ -254,8 +257,10 @@ export type ApplicationRuntime = {
     input: { timelineId: string; installationId: string; packageVersion?: string; signal?: AbortSignal },
   ): Promise<{ lease: TimelineExtensionLease; signal: AbortSignal; dispose(): void; run<T>(work: () => T): T }>
   runTimelineExtensionWork<T>(
-    input: { timelineId: string; installationId: string; packageVersion?: string; signal?: AbortSignal },
-    work: (execution: { lease: TimelineExtensionLease; signal: AbortSignal }) => Promise<T>,
+    input: { timelineId: string; branchId?: string; installationId: string; packageVersion?: string; signal?: AbortSignal },
+    work: (execution: { lease: TimelineExtensionLease; signal: AbortSignal;
+      narrativeSource: NonNullable<import('@loom-studio/extension-sdk').ExtensionTimelineExecution['narrativeSource']>;
+      assertNarrativeSource(): Promise<void>; withNarrativeWrite<TValue>(work: () => TValue): TValue }) => Promise<T>,
   ): Promise<T>
   assertTimelineExtensionWork(lease: TimelineExtensionLease): Promise<void>
   isTimelineExtensionActive(input: { timelineId: string; installationId: string }): Promise<boolean>
@@ -314,6 +319,7 @@ export type ApplicationRuntime = {
   deleteAgentPreset(input: { agentPresetId: string }, context?: RuntimeRequestContext): Promise<DeletePromptResourceResult>
   createAgentSession(input: CreateAgentSessionInput, context?: RuntimeRequestContext): Promise<CreateAgentSessionResult>
   listAgentSessions(input?: ListAgentSessionsInput): Promise<ListAgentSessionsResult>
+  listAgentRunStates(): Promise<AgentSessionRunSummary[]>
   getAgentSession(input: GetAgentSessionInput): Promise<GetAgentSessionResult>
   getAgentTranscriptPage(input: GetAgentTranscriptPageInput): Promise<AgentTranscriptPage>
   appendAgentTranscriptEntries(input: AppendAgentTranscriptEntriesInput, context?: RuntimeRequestContext): Promise<AppendAgentTranscriptEntriesResult>
@@ -333,6 +339,8 @@ export type ApplicationRuntime = {
   importTimelineArchive(input: { source: string }): Promise<{ timelineId: string; idMap: import('./archive/timeline-archive.js').TimelineArchiveIdMap; unknownParticipantNamespaces: string[]; participantFailures: Array<{ namespace: string; message: string }>; mutation: MutationReceipt }>
   listNarrativeTimelines(input?: ListNarrativeTimelinesInput): Promise<ListNarrativeTimelinesResult>
   getNarrativePage(input: GetNarrativePageInput): Promise<NarrativePage>
+  getNarrativeSwipes(input: { timelineId: string; branchId: string }): Promise<{ swipe?: NarrativeSwipeView }>
+  selectNarrativeSwipe(input: { timelineId: string; branchId: string; groupId: string; candidateId: string; expectedRevision: number; expectedHeadNodeId: string | null }, context?: RuntimeRequestContext): Promise<{ page: NarrativePage; swipe: NarrativeSwipeView }>
   appendNarrativeInput(input: AppendNarrativeInput, context?: RuntimeRequestContext): Promise<AppendNarrativeInputResult>
   editNarrativeNode(input: { timelineId: string; branchId: string; nodeId: string; expectedHeadNodeId: string; expectedRaw: string; raw: string }, context?: RuntimeRequestContext): Promise<{ timeline: NarrativeTimeline; branch: NarrativeBranch; replacements: Array<{ previousNodeId: string; node: NarrativeNode }>; mutation: MutationReceipt }>
   forkNarrativeBranch(input: ForkNarrativeBranchInput, context?: RuntimeRequestContext): Promise<ForkNarrativeBranchResult>
@@ -395,6 +403,19 @@ export type RuntimeRequestContext = {
     ) => Promise<VfsMutationDecision>
     onHistoryReadApproval?: import('./narrative/access.js').ApproveNarrativeHistory
   }
+}
+
+export type AgentRunTask = {
+  runId: string
+  agentSessionId: string
+  title?: string
+  timelineId?: string
+  state: 'running' | 'suspended' | 'interrupted' | 'completed' | 'failed' | 'cancelled' | 'discarded'
+  reason?: string
+  updatedAt: string
+  canPause: boolean
+  canResume: boolean
+  canAbandon: boolean
 }
 
 export type AgentRunEvent =
@@ -775,6 +796,7 @@ export type GetAgentTranscriptPageInput = {
   agentSessionId: string
   cursor?: string
   limit?: number
+  selectedCandidates?: boolean
 }
 
 export type AppendAgentTranscriptEntriesInput = {
@@ -832,6 +854,14 @@ export type InvokeAgentTurnInput = {
     timelineId: string
     branchId?: string
     inputNodeId?: string
+    sourceNodeId?: string
+    swipe?: {
+      groupId: string
+      mode: 'swipe' | 'regenerate' | 'retry'
+      input?: string
+      expectedRevision: number
+      allowSessionChange?: boolean
+    }
   }
   macroSelections?: MacroSelectionMap
   promptAddition?: ExtensionPromptAddition

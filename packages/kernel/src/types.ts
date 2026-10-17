@@ -1,3 +1,4 @@
+import type { ExtensionStyleContribution } from '@loom-studio/extension-sdk'
 import type { ExtensionTextTransformRuleContribution, ExtensionTextExtractorContribution, ExtensionPromptResourceContribution, ExtensionAgentToolContribution, ExtensionSettingContribution } from '@loom-studio/extension-sdk'
 import type { DiagnosticsRegistry } from '@loom-studio/diagnostics'
 import type {
@@ -125,6 +126,8 @@ export type ManagedExtensionPackage = {
   sourceKinds: string[]
   modules: ManagedExtensionModule[]
   resources?: {
+    themes?: ExtensionStyleContribution[]
+    styles?: ExtensionStyleContribution[]
     transformRules?: ExtensionTextTransformRuleContribution[]
     textExtractors?: ExtensionTextExtractorContribution[]
     promptResources?: ExtensionPromptResourceContribution[]

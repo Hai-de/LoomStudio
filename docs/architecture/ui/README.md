@@ -17,6 +17,7 @@ Architecture / Application / UI:
 - [`navigation-and-routing.md`](navigation-and-routing.md)：URL、History、Router 与 Zustand 的状态边界。
 - [`visual-language.md`](visual-language.md)：默认暗色视觉语言、层级、排版与交互反馈。
 - [`css-and-theming.md`](css-and-theming.md)：SCSS Modules、`--loom-*` token、自定义 CSS 公共边界。
+- [`extension-themes.md`](extension-themes.md)：Extension 主题与样式增强、外观参数、授权及面板动画接管。
 - [`localization-and-accessibility.md`](localization-and-accessibility.md)：当前 I18N 实现与基础无障碍 contract。
 - [`iframe-runtime.md`](iframe-runtime.md)：消息 HTML、Loom Script 与 Extension iframe 的共享基建、受控 ctx 和通知授权边界。
 

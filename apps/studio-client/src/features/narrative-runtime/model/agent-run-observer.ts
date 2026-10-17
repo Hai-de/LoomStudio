@@ -5,7 +5,7 @@ export type AgentRunStatus = 'running' | 'suspended' | 'completed' | 'cancelled'
 export type ActiveAgentRun = { runId: string; status: AgentRunStatus; approval?: AgentMutationApproval }
 export type RunRecovery = {
   target: 'narrative' | 'agent'
-  status: 'disconnected' | 'failed' | 'cancelled' | 'refresh-failed'
+  status: 'disconnected' | 'failed' | 'cancelled' | 'refresh-failed' | 'suspended'
   error?: string
   refreshFailed?: boolean
   input?: string
@@ -56,12 +56,12 @@ export function inspectSessionRunStatus(entries: AgentTranscriptEntry[]): { runI
   return { status: 'idle' }
 }
 
-export async function loadTranscript(api: StudioApi, agentSessionId: string) {
+export async function loadTranscript(api: StudioApi, agentSessionId: string, selectedCandidates = false) {
   const entries: AgentTranscriptEntry[] = []
   let cursor: string | undefined
   let session: AgentSession | undefined
   do {
-    const page = await api.agentSessions.getTranscript({ agentSessionId, cursor, limit: 100 })
+    const page = await api.agentSessions.getTranscript({ agentSessionId, cursor, limit: 100, ...(selectedCandidates ? { selectedCandidates: true } : {}) })
     session = page.session
     entries.unshift(...page.entries)
     cursor = page.nextCursor
@@ -96,7 +96,7 @@ export async function runAgentTurn(
     const pendingApprovals = replayExpired ? batch.pendingApprovals ?? [] : []
     if (batch.replayExpired) {
       const snapshot = batch
-      const transcript = await loadTranscript(api, run.sessionId)
+      const transcript = await loadTranscript(api, run.sessionId, true)
       if (!isCurrent()) return undefined
       if (!snapshot.done) {
         batch = await subscribeAgentRunWithRetry(api, runId, snapshot.nextCursor, run.sessionId)

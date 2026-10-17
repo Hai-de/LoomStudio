@@ -1,3 +1,5 @@
+import type { ClientStyleFactory, ExtensionStyleContribution } from './styles.js'
+export * from './styles.js'
 import type { TextTokenCounter } from '@loom-studio/tokenizer/contracts'
 import type {
   AiGatewayInvokeInput,
@@ -536,6 +538,7 @@ export type RegisteredClientBackground = ClientBackgroundDefinition & {
 }
 
 export type ClientExtensionActivationContext = {
+  styles: { register(contributionId: string, activate: ClientStyleFactory): ExtensionRegistrationHandle }
   /** Fixed for a Timeline-participating instance; changing Branch cancels the old instance. */
   timeline: { readonly target?: Readonly<import('./timeline.js').ExtensionTimelineTarget> }
   notifications: { show(input: import('./iframe-context.js').ClientNotification): Promise<void> }
@@ -706,6 +709,8 @@ export type ExtensionTextExtractorContribution = {
 }
 
 export type ExtensionPackageContributions = {
+  themes?: ExtensionStyleContribution[]
+  styles?: ExtensionStyleContribution[]
   loomScripts?: Array<{ id: string; source: string }>
   transformRules?: ExtensionTextTransformRuleContribution[]
   textExtractors?: ExtensionTextExtractorContribution[]
@@ -1130,6 +1135,15 @@ export type ExtensionAgentToolHandlerContext = {
   invocationId: string
   /** Authorized Narrative target for this Turn; absent for unbound Sessions. */
   narrativeTarget?: Readonly<{ scope: 'timeline'; timelineId: string; branchId: string }>
+  /** Immutable origin for generated artifacts; not a live Narrative write cursor. */
+  readonly narrativeSource?: Readonly<{
+    timelineId: string
+    branchId: string
+    nodeId?: string
+    groupId?: string
+    candidateId?: string
+    generation?: number
+  }>
 }
 
 export type ExtensionAgentToolHandler = (

@@ -1,6 +1,23 @@
 import type { messages as zhCN } from '../zh-cn/settings.js'
 
 export const messages = {
+  'settings.themes': "テーマとスタイル",
+  'settings.themeMain': "メインテーマ",
+  'settings.themeDefault': "標準テーマ",
+  'settings.themeUnavailable': "テーマを利用できません",
+  'settings.themeEnhancements': "スタイル拡張",
+  'settings.themeEnhancementsEmpty': "スタイル拡張はインストールされていません",
+  'settings.themeAuthorizeJs': "JavaScript を許可",
+  'settings.themeJsAuthorized': "JavaScript 許可済み",
+  'settings.themeCssOnly': "CSS のみ使用",
+  'settings.themeMoveUp': "上へ",
+  'settings.themeMoveDown': "下へ",
+  'settings.themeApply': "外観を適用",
+  'settings.themeApplying': "適用中…",
+  'settings.themeParameters': "外観パラメーター",
+  'settings.themeRestoreParameter': "既定値に戻す",
+  'settings.themeReset': "テーマ・拡張・カスタム CSS をリセット",
+  'settings.themeRecoveryHint': "操作できなくなった場合は Ctrl+Alt+Shift+T でテーマ・拡張・カスタム CSS を無効にできます。テーマと拡張の変更は即座に適用されます。JavaScript は別途許可が必要です。",
   'appearance.background': '背景',
   'appearance.material': 'マテリアル',
   'appearance.general': '拡大縮小と CSS',

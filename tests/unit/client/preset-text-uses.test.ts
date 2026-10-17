@@ -1,5 +1,6 @@
 import { isValidElement, type ReactElement } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/index.js'
 import { PresetTextUses } from '../../../apps/studio-client/src/widgets/preset-workbench/preset-workbench.js'
 import type { PromptResource } from '../../../apps/studio-client/src/entities/index.js'
 import type { StudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
@@ -47,7 +48,7 @@ describe('Preset text use draft', () => {
         textUses: [{ id: 'public-rule', kind: 'rule', enabled: false }] })
     const onOpen = vi.fn()
     const loreContent = vi.fn(() => null)
-    const render = () => { hooks.cursor = 0; return elements(PresetTextUses({ preset, api, onSave, onOpen, loreContent })) }
+    const render = () => { hooks.cursor = 0; return elements(PresetTextUses({ preset, api, onSave, onOpen, loreContent, t: createTranslator('zh-CN') })) }
     render()
     for (const effect of hooks.effects.splice(0)) effect()
     const control = (label: string) => render().find(element => element.props['aria-label'] === label)!
@@ -104,5 +105,15 @@ describe('Preset text use draft', () => {
     save()
     await vi.waitFor(() => expect(onSave).toHaveBeenCalledTimes(2))
     expect(onSave.mock.calls[1]).toEqual(onSave.mock.calls[0])
+    const all = (directory().props.nodes as FileTreeNode[]).flatMap(folder => folder.children ?? [])
+    const actions = (directory().props.getBatchActions as (nodes: FileTreeNode[]) => import('../../../apps/studio-client/src/shared/ui/file-tree/file-tree.js').FileTreeBatchAction[])(all)
+    await actions.find(action => action.id === 'enable')!.run(all)
+    expect(control('启用规则：Public').props['aria-pressed']).toBe(true)
+    expect(control('启用提取器：Extract').props['aria-pressed']).toBe(true)
+    await actions.find(action => action.id === 'reset')!.run(all)
+    expect(control('启用规则：Public').props['aria-pressed']).toBe(true)
+    expect(control('启用提取器：Extract').props['aria-pressed']).toBe(false)
+    expect(preset.textUses).toEqual([])
+
   })
 })

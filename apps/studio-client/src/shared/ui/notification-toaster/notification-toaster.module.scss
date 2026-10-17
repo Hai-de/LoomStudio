@@ -142,3 +142,10 @@
   border-color: transparent;
   box-shadow: none;
 }
+
+// Sonner only hides stacked children for styled toasts; our unstyled surface owns this rule.
+.toast[data-expanded='false'][data-front='false'] > * {
+  opacity: 0;
+  pointer-events: none;
+  transition: none;
+}

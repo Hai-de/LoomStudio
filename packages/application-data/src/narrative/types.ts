@@ -195,6 +195,9 @@ export type EditNarrativeNodeResult = {
 }
 
 export type NarrativeTransaction = {
+  getBranch(id: string): NarrativeBranch | null
+  getNode(id: string): NarrativeNode | null
+  restoreBranch(input: { timelineId: string; branchId: string; expectedHeadNodeId: string | null; expectedStateHeadRevisionId: string; headNodeId: string | null; stateRevisionId: string }): NarrativeBranch
   replaceOpening(input: Omit<ReplaceNarrativeOpeningInput, keyof NarrativeWriteContext>): CreateNarrativeTimelineResultWithoutCommit
   getTimeline(id: string): NarrativeTimeline | null
   restoreArchivePaths(input: { timelineId: string; nodes: NarrativeNode[]; branches: NarrativeBranch[] }): void
@@ -208,6 +211,49 @@ export type NarrativeTransaction = {
   deleteTimeline(input: Omit<DeleteNarrativeTimelineInput, keyof NarrativeWriteContext>): NarrativeTimeline
   updateTimeline(input: Omit<UpdateNarrativeTimelineInput, keyof NarrativeWriteContext>): NarrativeTimeline
   updatePromptResources(input: Omit<UpdateNarrativePromptResourcesInput, keyof NarrativeWriteContext>): NarrativeTimeline
+}
+
+export type NarrativeSwipeCandidate = {
+  id: string
+  inputNodeId?: string
+  agentSessionId: string
+  runIds: string[]
+  editBaseRunCount?: number
+  headNodeId?: string
+  stateRevisionId: string
+  status: 'running' | 'suspended' | 'completed' | 'failed' | 'discarded'
+  mode: 'initial' | 'swipe' | 'regenerate' | 'retry' | 'edit'
+  replacesCandidateId?: string
+  createdAt: string
+}
+
+export type NarrativeSwipeStore = ReturnType<typeof import('./swipes.js').createNarrativeSwipeStore>
+
+export type NarrativeSwipeGroup = {
+  id: string
+  timelineId: string
+  branchId: string
+  inputNodeId: string
+  input: string
+  baselineStateRevisionId: string
+  agentSessionId: string
+  baseEntryCount: number
+  candidates: NarrativeSwipeCandidate[]
+  inputs?: Array<{
+    nodeId: string
+    input: string
+    baselineStateRevisionId: string
+    selectedCandidateId?: string
+  }>
+  selectedCandidateId?: string
+  activeCandidateId?: string
+  activeRunId?: string
+  excludedRunIds?: string[]
+  generation: number
+  revision: number
+  closed: boolean
+  createdAt: string
+  updatedAt: string
 }
 
 export type CreateNarrativeTimelineResultWithoutCommit = Omit<CreateNarrativeTimelineResult, 'commit'>

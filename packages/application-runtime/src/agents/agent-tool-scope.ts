@@ -10,10 +10,11 @@ import { isExtensionResourceAvailable } from '../runtime/extension-resource-acce
 import { createPromptRuntimeMethods } from '../runtime/prompt-runtime.js'
 import { narrativeWriteContext, promptResourceWriteContext } from '../runtime/context.js'
 import { getApplicationStateSnapshot, applyApplicationStateMutation } from '../state/state.js'
+import { assertNarrativeExecutionSource, guardNarrativeWrite, type NarrativeExecutionSource } from '../runtime/swipe-runtime.js'
 
 type AgentToolScopeContext = Pick<ApplicationRuntimeContext,
   'agentTools' | 'blobs' | 'createId' | 'dataEngine' | 'documents' | 'narratives'
-  | 'narrativeContext' | 'now' | 'promptResources' | 'states'
+  | 'narrativeContext' | 'now' | 'promptResources' | 'states' | 'swipes'
 >
 
 /** Bind tool I/O to the prepared turn without making PromptBuild own mutation implementations. */
@@ -23,11 +24,20 @@ export function createAgentToolScope(ctx: AgentToolScopeContext, input: {
   sessionId: string
   runId: string
   narrative?: { page: NarrativePage; rules: TextTransformRuleEntry[] }
+  narrativeSource?: NarrativeExecutionSource
   requestContext?: RuntimeRequestContext
 }): ToolExecutionScope {
   const { presetId, sessionId, runId, narrative, requestContext } = input
   const narratives = ctx.narratives
   const scope: ToolExecutionScope = { ...input.base }
+  scope.narrativeSource = input.narrativeSource
+  const assertSource = async () => {
+    if (input.narrativeSource) await assertNarrativeExecutionSource(ctx, input.narrativeSource)
+  }
+  const writeSource = <T>(work: () => T): T => input.narrativeSource
+    ? guardNarrativeWrite(ctx, input.narrativeSource, work) : work()
+  scope.assertNarrativeSource = assertSource
+  scope.withNarrativeWrite = writeSource
   scope.vfsAttachments = () => listPresetScriptAttachments(ctx, presetId, scope.availableExtensionInstallations)
   if (requestContext?.agentRun?.onMutationApproval)
     scope.approveMutation = requestContext.agentRun.onMutationApproval
@@ -43,27 +53,29 @@ export function createAgentToolScope(ctx: AgentToolScopeContext, input: {
         && target.timelineId === allowedTimelineTarget.timelineId
         && target.branchId === allowedTimelineTarget.branchId),
     read: async target => {
+      if (target.scope === 'timeline') await assertSource()
       const snapshot = await getApplicationStateSnapshot(ctx, target)
+      if (target.scope === 'timeline') await assertSource()
       return { revisionId: snapshot.revisionId, value: snapshot.value }
     },
     update: async stateInput => {
-      const result = await applyApplicationStateMutation(ctx, {
+      const result = await writeSource(() => applyApplicationStateMutation(ctx, {
         target: stateInput.target,
         expectedRevisionId: stateInput.expectedRevisionId,
         operations: stateInput.operations as unknown as StateMutationOperation[],
         idempotencyKey: stateInput.idempotencyKey,
-      }, requestContext)
+      }, requestContext))
       return { revisionId: result.snapshot.revisionId }
     },
     write: async stateInput => {
       if (!stateInput.pointer)
         throw Object.assign(new Error('Write a State property under /state/data, not the complete State snapshot.'), { code: 'vfs.write_unsupported' })
-      const result = await applyApplicationStateMutation(ctx, {
+      const result = await writeSource(() => applyApplicationStateMutation(ctx, {
         target: stateInput.target,
         expectedRevisionId: stateInput.expectedRevisionId,
         operations: [{ op: 'set', path: stateInput.pointer, value: stateInput.value }],
         idempotencyKey: stateInput.idempotencyKey,
-      }, requestContext)
+      }, requestContext))
       return {
         revisionId: result.snapshot.revisionId,
         changesetId: result.mutation.changesetId,
@@ -259,14 +271,17 @@ export function createAgentToolScope(ctx: AgentToolScopeContext, input: {
       timelineId: narrative.page.timeline.id,
       branchId: narrative.page.branch.id,
       sample: async (input, signal, approveHistory) => {
+        await assertSource()
         const sample = await narrativeReader.sample(input, signal, approveHistory)
+        await assertSource()
         if (input.view !== 'prompt') return sample
         return projectNarrativeSample(sample, {
           phase: 'prompt', rules: narrative.rules,
           maxNodes: input.maxNodes, maxCharacters: input.maxCharacters,
         })
       },
-      appendNode: async ({ content }) => {
+      appendNode: async ({ content }) => writeSource(async () => {
+        await assertSource()
         const currentBranch = await narratives.getBranch(narrative.page.branch.id)
         if (!currentBranch) throw new Error(`Narrative branch not found: ${narrative.page.branch.id}`)
         const result = await narratives.appendNode({
@@ -281,9 +296,11 @@ export function createAgentToolScope(ctx: AgentToolScopeContext, input: {
             runId,
           },
         })
+        if (input.narrativeSource) input.narrativeSource.cursorNodeId = result.node.id
         return { nodeId: result.node.id }
-      },
-      editNode: async ({ nodeId, content, expectedRaw }) => {
+      }),
+      editNode: async ({ nodeId, content, expectedRaw }) => writeSource(async () => {
+        await assertSource()
         const branch = await narratives.getBranch(narrative.page.branch.id)
         const target = await narratives.getNode(nodeId)
         if (!branch?.headNodeId || !target || target.timelineId !== narrative.page.timeline.id) {
@@ -301,11 +318,12 @@ export function createAgentToolScope(ctx: AgentToolScopeContext, input: {
               expectedBody: expectedRaw === undefined ? target.body : { ...target.body, raw: expectedRaw },
               body: { format: 'loom-markdown.v1', raw: content },
             })
-            return { nodeId: edited.replacements[0]!.node.id }
+            return { nodeId: edited.replacements[0]!.node.id, headNodeId: edited.branch.headNodeId }
           },
         )
-        return result.value
-      },
+        if (input.narrativeSource) input.narrativeSource.cursorNodeId = result.value.headNodeId
+        return { nodeId: result.value.nodeId }
+      }),
     }
   }
   return scope

@@ -49,7 +49,7 @@ true 必须经宿主用户审批；没有审批处理器则拒绝。授权仅限
 complete=false 表示仅返回请求范围的尾段；把 nextBeforeNodeId 作为下一次 throughNodeId 继续读取，range 保留原 afterNodeId，tail 的 count 减去本次 nodes.length。position 从 1 开始，仅为本次返回窗口内的位置，不是绝对楼层。正则 depth 也相对于本次窗口，不宣称分页分别加工等于整段加工。
 每次最多 1000 个节点、2000000 个原文字符；CodeAct 桥接和 print 的输出限制另行生效，大段正文应缩小范围，不把字符预算当成 Token 预算。
 示例：const story = await ctx["readNarrative"]({ selection: { kind: "tail", count: 3 } }); print(story.text);
-限制：只能读取当前授权 Timeline，不能传入其他 Timeline；读取不会推进 Memory 指针、默认有效 Head 或写入 Narrative。读取已总结的历史原文需要单次 Yes/No 授权；没有交互处理器时拒绝。批准只覆盖当前固定范围和预算，后续请求或续读需重新授权；等待用户期间暂停执行计时，取消后不返回旧正文。`,
+限制：只能读取当前授权 Timeline，不能传入其他 Timeline；读取不会推进 Memory 指针、默认有效 Head 或写入 Narrative。读取依赖宿主配置的默认剧情上下文来源；narrative.context_unconfigured 表示缺少读取范围配置，不表示 Timeline 未绑定，也不表示 appendNarrative 不可用。不要重复同一失败读取；已有上下文足够时可继续完成写作，不足时明确报告缺少读取配置，不编造剧情。读取已总结的历史原文需要单次 Yes/No 授权；没有交互处理器时拒绝。批准只覆盖当前固定范围和预算，后续请求或续读需重新授权；等待用户期间暂停执行计时，取消后不返回旧正文。`,
   appendNarrative: `### ctx.appendNarrative
 用途：将剧情正文追加到宿主当前绑定的 Timeline/Branch，新增一个 Narrative 节点。
 调用：await ctx.appendNarrative({ content })

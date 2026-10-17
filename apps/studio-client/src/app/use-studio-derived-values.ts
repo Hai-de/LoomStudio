@@ -51,7 +51,7 @@ export function useStudioDerivedValues(input: {
     isPlaceholder: !cardOpeningEntry || cardOpeningEntry.length === 0,
   } : undefined
 
-  const canSend = Boolean(input.timeline && input.branch && input.primarySession?.timelineId === input.timeline.id)
+  const canSend = Boolean(input.timeline && input.branch)
     && input.agentSessionReady
     && !input.sessionBusy
     && !input.agentChatBusy
@@ -77,7 +77,7 @@ export function useStudioDerivedValues(input: {
   return {
     canSend,
     canSendAgent,
-    canPreviewPrompt: canSend,
+    canPreviewPrompt: canSend && input.primarySession?.timelineId === input.timeline?.id,
     emptyTimelineText: readEmptyTimelineText({ timeline: input.timeline, branch: input.branch }, input.t),
     openingDraft,
     macroContext,

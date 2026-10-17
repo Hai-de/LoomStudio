@@ -12,7 +12,7 @@ export const messages = {
   'reference.invalidRange': 'Invalid line range · Not located',
   'reference.loading': 'Loading...',
   'reference.open': 'Open',
-  'promptResource.referenceUnavailable': 'The referenced resource or node is not available: {{id}}',
+  'promptResource.referenceUnavailable': 'This resource or content is unavailable. Please select another item from the resource list.',
   'promptResource.temporaryOpen': 'Temporarily open',
   'context.draftConflict': 'This resource changed elsewhere. Your draft is preserved; copy it before discarding local changes.',
   'context.discardDraft': 'Discard local changes',

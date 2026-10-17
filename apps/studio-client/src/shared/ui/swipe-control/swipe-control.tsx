@@ -10,6 +10,7 @@ export function SwipeControl(props: {
   chooseLabel: string
   onPrevious(): void
   onNext(): void
+  onGenerateNext?(): void
   onChoose(): void
 }) {
   return <div className={styles.control}>
@@ -22,8 +23,9 @@ export function SwipeControl(props: {
       aria-haspopup="dialog" onClick={props.onChoose}>
       {props.index + 1}/{props.count}
     </button>
-    <button type="button" disabled={props.disabled || props.index === props.count - 1}
-      title={props.nextLabel} aria-label={props.nextLabel} onClick={props.onNext}>
+    <button type="button" disabled={props.disabled || (props.index === props.count - 1 && !props.onGenerateNext)}
+      title={props.nextLabel} aria-label={props.nextLabel}
+      onClick={props.index === props.count - 1 ? props.onGenerateNext : props.onNext}>
       <ChevronRight size={18} aria-hidden="true" />
     </button>
   </div>

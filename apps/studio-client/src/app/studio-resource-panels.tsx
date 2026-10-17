@@ -28,6 +28,15 @@ export function StudioResourcePanels(props: {
     onDiscardDraft: state.discardContextAssetDraft,
     onRetryDraft: state.retryContextAssetDraft,
     onChangeNode: state.previewContextAsset,
+    onBatchToggleEnabled: async (ids: string[], enabled: boolean) => {
+      const failedIds: string[] = []
+      const errors: string[] = []
+      for (const id of ids) {
+        try { await state.updateContextAsset(id, { enabled }) }
+        catch (cause) { failedIds.push(id); errors.push(cause instanceof Error ? cause.message : String(cause)) }
+      }
+      return { failedIds, error: errors.join('\n') }
+    },
     // Terminal editor events rely on the operation reporter; selection-changing commands retain rejection.
     onCommitNode: (...args: Parameters<StudioState['updateContextAsset']>) => {
       void state.updateContextAsset(...args).catch(() => undefined)
@@ -54,6 +63,7 @@ export function StudioResourcePanels(props: {
     onDuplicateResource: state.duplicatePromptResource,
     onDeleteResource: async (resourceId: string) => {
       await state.deletePromptResource(resourceId)
+      navigation.clearResourceTarget(resourceId)
       if (uiState.selectedPresetId === resourceId) uiState.setSelectedPresetId(undefined)
     },
     onImportResource: state.importPromptResource,

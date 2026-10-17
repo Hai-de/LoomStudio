@@ -1,3 +1,4 @@
+import { ResourceUnavailable } from '../../shared/ui/resource-unavailable/resource-unavailable.js'
 import type { ResourceSearchReveal } from '../../shared/lib/search-match.js'
 import { useEffect, useId, useMemo, useState } from 'react'
 import { Trash2, X } from 'lucide-react'
@@ -37,6 +38,7 @@ type ContextWorkbenchProps = {
   onRetryDraft(resourceId: string): Promise<void>
   onRenameNode(id: string, label: string): Promise<void>
   onCommitNode: (id: string, partial: Partial<ContextAssetNode>) => void
+  onBatchToggleEnabled?: (ids: string[], enabled: boolean) => Promise<{ failedIds: string[]; error?: string }>
   onChangeNodes: (updates: ContextAssetUpdate[]) => void
   onMoveNode: (draggedId: string, targetId: string, position: 'before' | 'inside' | 'after') => void
   onAddNode: (parentId: string) => Promise<string | undefined>
@@ -78,6 +80,9 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
   const setMetadataOpen = useStudioLayoutStore(state => state.setAssetMetadataOpen)
   const setTextEditorMode = useStudioLayoutStore(state => state.setTextEditorMode)
   const searchQuery = props.searchQuery
+  const [pendingDelete, setPendingDelete] = useState<PromptResource>()
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string>()
   const [bindingOpen, setBindingOpen] = useState(false)
   const [internalSelectedResourceId, setInternalSelectedResourceId] = useState<string>()
   const [temporarySelection, setTemporarySelection] = useState<{
@@ -122,8 +127,8 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
       ? temporarySelection.nodeId : props.routeAssetId ?? target.target!.rootNode.id)
     : explorerView.selectedId
   const selectedNodeResource = selectedId ? loreResources.find(r => r.id === selectedId || Boolean(findContextNode([r.rootNode], selectedId))) : undefined
-  const selectedResourceId = props.routeResourceId ?? props.selectedResourceId
-    ?? routeTargetResource?.id ?? selectedNodeResource?.id ?? internalSelectedResourceId
+  const selectedResourceId = selectedNodeResource?.id ?? props.routeResourceId ?? props.selectedResourceId
+    ?? routeTargetResource?.id ?? internalSelectedResourceId
     ?? (loreResources.find(r => cardResourceIds.has(r.id))?.id ?? (unavailableBoundIds.length === 0 ? loreResources[0]?.id : undefined))
   const tokenResource = targetResources.find(resource => resource.id === selectedResourceId)
   const tokenSnapshot = useResourceTokenSnapshot(tokenResource ? [tokenResource.rootNode] : [], `${props.workspaceId}:${selectedResourceId ?? ''}`)
@@ -252,6 +257,11 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
     else openAssetDetail('resources', props.workspaceId, id)
   }
 
+  async function handleDeleteResource(resourceId: string) {
+    await props.onDeleteResource(resourceId)
+    setInternalSelectedResourceId(current => current === resourceId ? undefined : current)
+  }
+
   function handleSelectResource(resourceId: string) {
     setInternalSelectedResourceId(resourceId)
     if (props.onSelectResource) {
@@ -265,10 +275,11 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
   }
 
   if (props.routeResourceId && (target.unavailable || (props.routeAssetId && !findContextNode([routeTargetResource!.rootNode], props.routeAssetId)))) {
-    return <p role="alert">{props.t('promptResource.referenceUnavailable', { id: props.routeResourceId })}</p>
+    return <ResourceUnavailable message={props.t('promptResource.referenceUnavailable')} />
   }
 
   return (
+    <>
     <AssetWorkbenchLayout
       explorerWidth={explorerLayout.explorerWidth}
       hasSelection={hasDetailSelection}
@@ -309,7 +320,7 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
           draftResourceIds={props.draftResourceIds}
           onDiscardDraft={props.onDiscardDraft}
           onRetryDraft={props.onRetryDraft}
-          onDelete={props.onDeleteResource}
+          onDelete={handleDeleteResource}
           onDuplicate={props.onDuplicateResource}
           onExport={props.onExportResource}
           onExportZip={props.onExportResourceZip}
@@ -339,7 +350,15 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
             workspaceId={props.workspaceId}
             onAddNode={props.onAddNode}
             onAddFolderNode={props.onAddFolderNode}
-            onDeleteNode={props.onDeleteNode}
+            onDeleteNode={async (id, currentSelectedId) => {
+              const resource = loreResources.find(item => item.rootNode.id === id)
+              if (!resource) return props.onDeleteNode(id, currentSelectedId)
+              if (resource.origin?.kind === 'builtin') return currentSelectedId
+              setDeleteError(undefined)
+              setPendingDelete(resource)
+              return currentSelectedId
+            }}
+            onBatchToggleEnabled={props.onBatchToggleEnabled}
             onDuplicateNode={props.onDuplicateNode}
             onRenameNode={props.onRenameNode}
             onExpandedIdsChange={expandedIds => target.temporary ? setTemporaryExpandedIds(expandedIds) : setExpandedIds('resources', props.workspaceId, expandedIds)}
@@ -399,6 +418,33 @@ export function ContextWorkbench(props: ContextWorkbenchProps) {
         />
       </div>
     </AssetWorkbenchLayout>
+    <Dialog
+      open={Boolean(pendingDelete)}
+      role="alertdialog"
+      title={props.t('promptResource.deleteConfirmTitle')}
+      description={props.t('promptResource.deleteConfirmBody', { name: pendingDelete?.rootNode.label ?? '' })}
+      dismissible={!deleting}
+      onClose={() => setPendingDelete(undefined)}
+      actions={<>
+        <button type="button" disabled={deleting} onClick={() => setPendingDelete(undefined)}>{props.t('promptResource.cancel')}</button>
+        <button type="button" disabled={deleting} onClick={async () => {
+          if (!pendingDelete) return
+          setDeleting(true)
+          setDeleteError(undefined)
+          try {
+            await handleDeleteResource(pendingDelete.id)
+            setPendingDelete(undefined)
+          } catch (error) {
+            setDeleteError(error instanceof Error ? error.message : String(error))
+          } finally {
+            setDeleting(false)
+          }
+        }}>{props.t('promptResource.confirmDelete')}</button>
+      </>}
+    >
+      {deleteError ? <p role="alert">{deleteError}</p> : null}
+    </Dialog>
+    </>
   )
 }
 

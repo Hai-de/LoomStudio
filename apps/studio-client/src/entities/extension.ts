@@ -1,3 +1,4 @@
+import type { ExtensionStyleContribution } from '@loom-studio/extension-sdk'
 import type { ClientJsonValue } from '@loom-studio/client-bridge'
 import type {
   ClientActionPlacement,
@@ -129,6 +130,8 @@ export type ManagedExtensionPackage = {
   sourceKinds: string[]
   modules: ManagedExtensionModule[]
   resources?: {
+    themes?: ExtensionStyleContribution[]
+    styles?: ExtensionStyleContribution[]
     transformRules?: ExtensionTextTransformRuleContribution[]
     textExtractors?: ExtensionTextExtractorContribution[]
     promptResources?: ExtensionPromptResourceContribution[]

@@ -12,7 +12,7 @@ export const messages = {
   'reference.invalidRange': '참조 행 범위가 유효하지 않음 · 미배치',
   'reference.loading': '불러오는 중…',
   'reference.open': '열기',
-  'promptResource.referenceUnavailable': '참조된 리소스 또는 노드를 현재 사용할 수 없음: {{id}}',
+  'promptResource.referenceUnavailable': '이 리소스 또는 콘텐츠를 사용할 수 없습니다. 리소스 목록에서 다시 선택해 주세요.',
   'promptResource.temporaryOpen': '임시 열기',
   'context.draftConflict': '리소스가 다른 위치에서 수정되었습니다. 초안은 유지됩니다. 로컬 수정을 취소하기 전에 내용을 복사하는 것이 좋습니다.',
   'context.discardDraft': '로컬 수정 취소',

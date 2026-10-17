@@ -2,12 +2,14 @@ import { isRecord, type ChatMessage, type JsonObject } from '@loom-studio/shared
 import type { AgentStore, AgentTranscriptEntry, AgentTranscriptEntryData } from '@loom-studio/application-data'
 import type { InvokeAgentTurnInput, ProviderModelSelection, ApplyStateMutationInput, GatewayChatResult, TimelineExtensionLease } from '../types.js'
 import type { ProcessedPromptSnapshot } from '../prompt/process-prompt.js'
+import type { NarrativeExecutionSource } from '../runtime/swipe-runtime.js'
 
 export type AgentRunRecoveryCheckpoint = {
   version: 1
   phase: 'provider' | 'tools' | 'content'
   executor: { pid: number; id: string }
   request: InvokeAgentTurnInput
+  narrativeSource?: NarrativeExecutionSource
   model: ProviderModelSelection
   toolContract: string
   messages: ChatMessage[]
@@ -83,6 +85,15 @@ function parseCheckpoint(value: JsonObject): AgentRunRecoveryCheckpoint {
     throw recoveryError('checkpoint_invalid', 'Agent recovery checkpoint is incomplete or unsupported')
   }
   const target = value.request.narrativeTarget
+  if (value.narrativeSource !== undefined) {
+    const source = value.narrativeSource
+    if (!isRecord(source) || typeof source.timelineId !== 'string' || typeof source.branchId !== 'string'
+      || !isRecord(target) || source.timelineId !== target.timelineId || source.branchId !== target.branchId
+      || !['groupId', 'candidateId', 'nodeId', 'cursorNodeId'].every(key => source[key] === undefined || typeof source[key] === 'string')
+      || (source.generation !== undefined && (!Number.isSafeInteger(source.generation) || Number(source.generation) < 0))) {
+      throw recoveryError('checkpoint_invalid', 'Narrative execution source is invalid or does not match the original target')
+    }
+  }
   if (!Array.isArray(value.promptExtensionLeases) || !value.promptExtensionLeases.every(lease =>
     isRecord(lease) && isRecord(target) && lease.timelineId === target.timelineId
     && typeof lease.installationId === 'string' && lease.installationId.length > 0

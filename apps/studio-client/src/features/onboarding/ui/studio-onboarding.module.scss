@@ -1,0 +1,17 @@
+.languages { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; }
+.languages legend { margin-bottom: 12px; color: var(--loom-color-text-muted); }
+.languages label { display: flex; gap: 14px; align-items: center; padding: 12px 0; cursor: pointer; }
+.languages input { accent-color: var(--loom-color-accent); }
+.form, .form fieldset { display: grid; gap: 18px; }
+.form fieldset { padding: 0; margin: 0; border: 0; min-width: 0; }
+.form label { display: grid; gap: 8px; color: var(--loom-color-text-muted); }
+.form select, .form input { width: 100%; box-sizing: border-box; min-height: 36px; color: var(--loom-color-text); background: transparent; border: 0; border-bottom: 1px solid var(--loom-color-border); border-radius: 0; }
+.form option { background: var(--loom-color-background); }
+.note { color: var(--loom-color-text-subtle); font-size: var(--loom-font-size-2); line-height: var(--loom-line-height-relaxed); }
+.assistant { display: flex; align-items: flex-start; gap: 24px; padding-top: 12px; }
+.assistant img { width: 76px; height: 76px; object-fit: contain; }
+.assistant h2 { margin: 0; font-size: var(--loom-font-size-5); }
+.assistant p { line-height: var(--loom-line-height-relaxed); color: var(--loom-color-text-muted); }
+.guide { padding: 12px 20px; background: var(--loom-color-surface); color: var(--loom-color-text); display: flex; align-items: center; gap: 16px; }
+.guide p { margin: 0; flex: 1; line-height: var(--loom-line-height-relaxed); }
+@media (max-width: 600px) { .assistant { flex-direction: column; } }

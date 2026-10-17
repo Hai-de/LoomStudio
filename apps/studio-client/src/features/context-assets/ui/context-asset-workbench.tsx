@@ -51,6 +51,7 @@ export function ContextAssetExplorer(props: {
   onRenameNode?(id: string, newLabel: string): Promise<void>
   onSelectId(id?: string): void
   onToggleEnabled(id: string, enabled: boolean): void
+  onBatchToggleEnabled?(ids: string[], enabled: boolean): Promise<{ failedIds: string[]; error?: string }>
   onChangeRole?(id: string, role: 'system' | 'user' | 'assistant' | 'developer'): void
 }) {
   const [editingId, setEditingId] = useState<string>()
@@ -107,7 +108,27 @@ export function ContextAssetExplorer(props: {
       <div ref={scroll.attach} className={styles.explorerContent} onScroll={scroll.onScroll}>
         {error ? <p role="alert">{error}</p> : null}
         <FileTree
+          key={props.workspaceId}
           active={props.active}
+          canBatchSelect={item => !isReadOnlyContextAssetTreeNode(item as ContextAssetNode) && !['folder', 'module', 'slot'].includes(item.kind ?? '')}
+          getBatchActions={selected => [
+            ...(props.onBatchToggleEnabled ? ([true, false] as const).map(enabled => ({
+              id: enabled ? 'enable' : 'disable', label: props.t(enabled ? 'common.batchEnable' : 'common.batchDisable'),
+              disabled: !selected.every(node => canToggleContextAssetEnabled(node as ContextAssetNode)),
+              run: (nodes: typeof selected) => props.onBatchToggleEnabled!(nodes.map(node => node.id), enabled),
+            })) : []),
+            { id: 'delete', label: props.t('common.batchDelete'), tone: 'danger', confirm: true, run: async nodes => {
+              const failedIds: string[] = []
+              const errors: string[] = []
+              let selectedId = props.selectedId
+              for (const node of nodes) {
+                try { selectedId = await props.onDeleteNode(node.id, selectedId) }
+                catch (cause) { failedIds.push(node.id); errors.push(`${node.label}: ${cause instanceof Error ? cause.message : String(cause)}`) }
+              }
+              if (mountedRef.current) props.onSelectId(selectedId)
+              return { failedIds, error: errors.join('\n') }
+            } },
+          ]}
           highlightMessages={props.highlightMessages}
           renderLabel={node => <SearchHighlight text={resolveVirtualDisplayName(node.label, (node as ContextAssetNode).kind)} query={props.highlightQuery ?? ''} />}
           editingId={editingId}

@@ -1,0 +1,140 @@
+import type { ActiveAgentRun } from '../model/use-narrative-runtime.js'
+import type { AgentTranscriptEntry } from '../../../entities/index.js'
+import { resolveAgentRuntimePhase } from '../model/agent-runtime-phase.js'
+import { useId, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Button, Dialog, IconButton } from '@loom-studio/ui'
+import { Activity, ChevronUp, CircleX, ExternalLink, Pause, Play, RefreshCw } from 'lucide-react'
+import type { StudioApi } from '../../../shared/api/studio-api.js'
+import type { Translator } from '../../../shared/i18n/index.js'
+import styles from './agent-task-menu.module.scss'
+
+type Task = Awaited<ReturnType<StudioApi['agentSessions']['listRuns']>>['tasks'][number]
+
+export function AgentTaskMenu(props: {
+  activeRun?: ActiveAgentRun
+  messages?: AgentTranscriptEntry[]
+  api: StudioApi
+  endpoint: string
+  timelineId?: string
+  t: Translator
+  onOpen(sessionId: string, runId?: string): Promise<void>
+  onResumed(sessionId: string, runId: string): void
+  onAbandoned(sessionId: string): Promise<void>
+}) {
+  const { api, endpoint, t } = props
+  const [open, setOpen] = useState(false)
+  const [allOpen, setAllOpen] = useState(false)
+  const contentId = useId()
+  const [busy, setBusy] = useState<string>()
+  const busyRef = useRef(false)
+  const [error, setError] = useState<string>()
+  const [abandon, setAbandon] = useState<Task>()
+  const tasks = useQuery({
+    queryKey: ['agent-tasks', endpoint, props.timelineId],
+    queryFn: () => api.agentSessions.listRuns({ timelineId: props.timelineId }),
+    enabled: Boolean(props.timelineId),
+    refetchInterval: query => open || query.state.data?.tasks.some(task => task.state === 'running') || props.activeRun?.status === 'running' ? 2000 : 10000,
+    retry: false,
+  })
+  const allTasks = useQuery({
+    queryKey: ['agent-tasks', endpoint, 'all'],
+    queryFn: () => api.agentSessions.listRuns(),
+    enabled: allOpen,
+    refetchInterval: allOpen ? 2000 : false,
+    retry: false,
+  })
+  const currentTasks = tasks.data?.tasks ?? []
+  const counts = (['running', 'suspended', 'interrupted', 'failed'] as const)
+    .map(state => ({ state, count: currentTasks.filter(task => task.state === state).length }))
+    .filter(item => item.count > 0)
+  const summary = tasks.error ? tasks.error.message : tasks.isPending && props.timelineId ? t('agentTasks.loading')
+    : counts.length ? counts.map(item => `${t(`agentTasks.${item.state}`)} · ${item.count}`).join(' / ')
+      : currentTasks.length ? t(`agentTasks.${currentTasks[0].state}`) : t('agentTasks.empty')
+  const phase = resolveAgentRuntimePhase(props.activeRun, props.messages, t)
+  const matchingRun = currentTasks.find(task => task.runId === props.activeRun?.runId)
+
+
+  async function act(task: Task, action: 'pause' | 'resume' | 'abandon' | 'open') {
+    if (busyRef.current) return
+    busyRef.current = true
+    setBusy(task.runId)
+    setError(undefined)
+    try {
+      if (action === 'open') {
+        await props.onOpen(task.agentSessionId, task.state === 'running' ? task.runId : undefined)
+        setOpen(false)
+        setAllOpen(false)
+      } else if (action === 'pause') {
+        const result = await api.agentSessions.pauseRun(task.runId)
+        if (!result.accepted) throw new Error(t('agentTasks.changed'))
+      } else if (action === 'resume') {
+        const result = await api.agentSessions.resumeRun({ runId: task.runId, agentSessionId: task.agentSessionId })
+        if (!result.accepted) throw new Error(t('agentTasks.changed'))
+        props.onResumed(task.agentSessionId, result.runId)
+      } else {
+        const result = await api.agentSessions.abandonRun(task.runId, task.agentSessionId)
+        if (!result.accepted) throw new Error(t('agentTasks.changed'))
+        setAbandon(undefined)
+        await props.onAbandoned(task.agentSessionId)
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      busyRef.current = false
+      setBusy(undefined)
+      if (props.timelineId) void tasks.refetch()
+      if (allOpen) void allTasks.refetch()
+    }
+  }
+
+  const renderTasks = (query: typeof tasks) => (
+      <div className={styles.content}>
+        {error || query.error ? <p role="alert" className={styles.error}>{error ?? query.error?.message}</p> : null}
+        {query.isPending ? <p role="status">{t('agentTasks.loading')}</p> : !query.data?.tasks.length && !query.error ? <p>{t('agentTasks.empty')}</p> : null}
+        <ul className={styles.list}>{query.data?.tasks.map(task => <li className={styles.row} key={task.runId} aria-busy={busy === task.runId}>
+          <div className={styles.identity}>
+            <strong>{task.title || task.agentSessionId}</strong>
+            <span>{task.runId === props.activeRun?.runId && phase.kind !== 'idle' ? phase.text : t(`agentTasks.${task.state}`)} · {new Date(task.updatedAt).toLocaleString()}</span>
+            {task.reason ? <p>{task.reason}</p> : null}
+          </div>
+          <div className={styles.actions}>
+            {task.canPause ? <IconButton aria-label={t('agentTasks.pause')} disabled={Boolean(busy)} onClick={() => void act(task, 'pause')}><Pause aria-hidden="true" /></IconButton> : null}
+            {task.canResume ? <IconButton aria-label={t('agentTasks.resume')} disabled={Boolean(busy)} onClick={() => void act(task, 'resume')}><Play aria-hidden="true" /></IconButton> : null}
+            {task.canAbandon ? <IconButton aria-label={t('agentTasks.abandon')} disabled={Boolean(busy)} onClick={() => { setError(undefined); setAbandon(task) }}><CircleX aria-hidden="true" /></IconButton> : null}
+            <IconButton aria-label={t('agentTasks.open')} disabled={Boolean(busy)} onClick={() => void act(task, 'open')}><ExternalLink aria-hidden="true" /></IconButton>
+          </div>
+        </li>)}</ul>
+      </div>
+  )
+
+  return <>
+    <section className={styles.panel} data-open={open} aria-label={t('agentTasks.title')}>
+      <div className={styles.bar}>
+        <button type="button" className={styles.toggle} aria-expanded={open} aria-controls={contentId} onClick={() => setOpen(value => !value)}>
+          <Activity aria-hidden="true" /><span>{t('agentTasks.current')}</span>
+          <ChevronUp className={styles.chevron} aria-hidden="true" />
+        </button>
+        <span className={styles.summary} title={summary}>{summary}{matchingRun && counts.length === 1 && counts[0].count === 1 && phase.kind !== 'idle' ? ` · ${phase.text}` : ''}</span>
+      </div>
+      <div className={styles.expansion} data-open={open} inert={!open} aria-hidden={!open}>
+        <div className={styles.clip}>
+          <div id={contentId} className={styles.details}>
+            {props.timelineId ? renderTasks(tasks) : <p>{t('agentTasks.empty')}</p>}
+            <div className={styles.detailsFooter}><Button onClick={() => setAllOpen(true)}>{t('agentTasks.all')}</Button></div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <Dialog open={allOpen} title={t('agentTasks.all')} onClose={() => setAllOpen(false)}
+      actions={<Button onClick={() => setAllOpen(false)}>{t('agentTasks.close')}</Button>}
+      headerActions={<IconButton aria-label={t('agentTasks.refresh')} disabled={allTasks.isFetching} onClick={() => void allTasks.refetch()}><RefreshCw aria-hidden="true" /></IconButton>}>
+      {renderTasks(allTasks)}
+    </Dialog>
+    <Dialog open={Boolean(abandon)} title={t('agentTasks.abandon')} onClose={() => { if (!busy) setAbandon(undefined) }}
+      actions={<><Button disabled={Boolean(busy)} onClick={() => setAbandon(undefined)}>{t('agentTasks.close')}</Button><Button disabled={Boolean(busy)} onClick={() => { if (abandon) void act(abandon, 'abandon') }}>{t('agentTasks.abandon')}</Button></>}>
+      <p>{t('agentTasks.abandonDescription')}</p>
+      {error ? <p role="alert">{error}</p> : null}
+    </Dialog>
+  </>
+}

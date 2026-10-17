@@ -12,7 +12,7 @@ export const messages = {
   'reference.invalidRange': '行の範囲が無効です · 未配置',
   'reference.loading': '読み込み中…',
   'reference.open': '開く',
-  'promptResource.referenceUnavailable': '参照先のリソースまたはノードは現在利用できません：{{id}}',
+  'promptResource.referenceUnavailable': 'このリソースまたは内容は利用できません。リソース一覧から選び直してください。',
   'promptResource.temporaryOpen': '一時的に開く',
   'context.draftConflict': 'リソースが別の場所で変更されました。下書きは保持されています。変更を破棄する前にコピーすることをお勧めします。',
   'context.discardDraft': 'ローカル変更を破棄',

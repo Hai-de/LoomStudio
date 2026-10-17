@@ -1,3 +1,4 @@
+import { dismissStartupCurtain } from './startup-curtain.js'
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { t } from '../shared/i18n/index.js'
 import { AppStatusPage } from './app-status-page.js'
@@ -19,6 +20,7 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
+    dismissStartupCurtain()
     this.props.onError(error, info)
   }
 

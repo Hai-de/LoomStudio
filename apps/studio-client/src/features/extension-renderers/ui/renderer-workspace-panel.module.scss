@@ -7,7 +7,7 @@
 }
 
 .management {
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .panel[data-runtime-error='true'] {
@@ -15,7 +15,7 @@
 }
 
 .management[data-runtime-error='true'] {
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .runtimeAlert {
@@ -116,6 +116,7 @@
 }
 
 .detail {
+  flex: 1;
   min-height: 0;
   overflow: auto;
 }

@@ -1,0 +1,22 @@
+:root {
+ color-scheme: dark;
+ --loom-color-background: #10262c;
+ --loom-color-surface: #19343b;
+ --loom-color-surface-inset: #112b32;
+ --loom-color-surface-emphasis: #27474f;
+ --loom-color-surface-subtle: #203b43;
+ --loom-color-surface-muted: #29454d;
+ --loom-color-surface-raised: #304e57;
+ --loom-color-text: #e0f1ed;
+ --loom-color-text-muted: #b0cfca;
+ --loom-color-text-subtle: #91b6b0;
+ --loom-color-border: #41636a;
+ --loom-color-border-strong: #719c9e;
+ --loom-color-divider: #37565d;
+ --loom-color-accent: #7adac6;
+ --loom-color-accent-strong: #a8edda;
+ --loom-color-accent-soft: #294f49;
+ --loom-color-accent-foreground: #10262c;
+}
+[data-loom-component='base-chat-canvas'] { background: linear-gradient(160deg, #10262c, #193c43); }
+[data-loom-component='chat-composer'] { border-radius: var(--extension-tide-radius, 12px); }

@@ -179,8 +179,9 @@ export type ExtensionHostOptions = {
     target: ExtensionInstallationTarget
   }, initialize?: import('@loom-studio/extension-sdk').ExtensionStateInitializer): Disposable
   runTimelineWork?<T>(
-    input: { timelineId: string; installationId: string; packageVersion: string; signal?: AbortSignal },
-    work: (execution: { lease: import('@loom-studio/extension-sdk').ExtensionTimelineLease; signal: AbortSignal }) => Promise<T>,
+    input: { timelineId: string; branchId: string; installationId: string; packageVersion: string; signal?: AbortSignal },
+    work: (execution: { lease: import('@loom-studio/extension-sdk').ExtensionTimelineLease; signal: AbortSignal;
+      narrativeSource?: import('@loom-studio/extension-sdk').ExtensionTimelineExecution['narrativeSource'] }) => Promise<T>,
   ): Promise<T>
   beginTimelineWork?(
     input: { timelineId: string; installationId: string; packageVersion: string; signal?: AbortSignal },

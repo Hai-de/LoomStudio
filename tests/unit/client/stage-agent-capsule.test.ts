@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveAgentRuntimePhase } from '../../../apps/studio-client/src/pages/studio/stage-agent-capsule.js'
+import { resolveAgentRuntimePhase } from '../../../apps/studio-client/src/features/narrative-runtime/model/agent-runtime-phase.js'
 import type { AgentTranscriptEntry } from '../../../apps/studio-client/src/entities/index.js'
 import type { ActiveAgentRun } from '../../../apps/studio-client/src/features/narrative-runtime/model/use-narrative-runtime.js'
 

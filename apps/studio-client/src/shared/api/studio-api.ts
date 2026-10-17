@@ -243,18 +243,19 @@ export function createStudioApi(trpc: StudioTrpcClient = createStudioTrpcClient(
       recoverDirectory: (cardId: string) => trpc.directories.recoverCard.mutate({ cardId }),
     },
     agentSessions: {
+      listRuns: (input?: { timelineId?: string }) => trpc.application['agent.run.list'].query(input ?? {}),
       create: (input: CreateAgentSessionInput) => trpc.application['createAgentSession'].mutate({
         ...input, title: input.title ?? createDefaultTitle('session'),
       }),
       list: (input?: { agentPresetId?: string; timelineId?: string; standalone?: boolean; cursor?: string; limit?: number }) => trpc.application['listAgentSessions'].query((input ?? {})),
       get: (agentSessionId: string) => trpc.application['getAgentSession'].query({ agentSessionId }),
-      getTranscript: (input: { agentSessionId: string; cursor?: string; limit?: number }) => trpc.application['getAgentTranscriptPage'].query(input),
+      getTranscript: (input: { agentSessionId: string; cursor?: string; limit?: number; selectedCandidates?: boolean }) => trpc.application['getAgentTranscriptPage'].query(input),
       invoke: (input: InvokeAgentTurnInput) => trpc.application['invokeAgentTurn'].mutate(input),
       createRun: (input: InvokeAgentTurnInput) => trpc.application['agent.run.create'].mutate(input),
       subscribeRun: (runId: string, cursor?: number, agentSessionId?: string) => trpc.application['agent.run.subscribe'].query({ runId, ...(cursor === undefined ? {} : { cursor }), ...(agentSessionId === undefined ? {} : { agentSessionId }) }),
       acknowledgeRunCompletion: (runId: string) => trpc.application['agent.run.acknowledge-completion'].mutate({ runId }),
       cancelRun: (runId: string, reason?: string) => trpc.application['agent.run.cancel'].mutate({ runId, ...(reason ? { reason } : {}) }),
-      abandonRun: (runId: string) => trpc.application['agent.run.abandon'].mutate({ runId }),
+      abandonRun: (runId: string, agentSessionId?: string) => trpc.application['agent.run.abandon'].mutate({ runId, agentSessionId }),
       pauseRun: (runId: string) => trpc.application['agent.run.pause'].mutate({ runId }),
       resumeRun: (runIdOrOptions: string | { runId?: string; agentSessionId?: string }) => trpc.application['agent.run.resume'].mutate(typeof runIdOrOptions === 'string' ? { runId: runIdOrOptions } : runIdOrOptions),
       approveHistoryRead: (runId: string, requestId: string, allow: boolean, reason?: string) => trpc.application['agent.run.history-read-approval'].mutate({
@@ -263,7 +264,7 @@ export function createStudioApi(trpc: StudioTrpcClient = createStudioTrpcClient(
       approveMutation: (runId: string, requestId: string, allow: boolean, reason?: string) => trpc.application['agent.run.mutation-approval'].mutate({
         runId, requestId, allow, ...(reason ? { reason } : {}),
       }),
-      runState: (runId: string) => trpc.application['agent.run.state'].query({ runId }),
+      runState: (runId: string, agentSessionId?: string) => trpc.application['agent.run.state'].query({ runId, agentSessionId }),
       preview: (input: PreviewAgentTurnInput) => trpc.application['previewAgentTurn'].query(input),
       delete: (agentSessionId: string) => trpc.application['deleteAgentSession'].mutate({ agentSessionId }),
       update: (input: { agentSessionId: string; title?: string }) => trpc.application['updateAgentSession'].mutate(input),
@@ -308,6 +309,8 @@ export function createStudioApi(trpc: StudioTrpcClient = createStudioTrpcClient(
       update: (input: StudioRpcInputs['application']['updateAgentTool']) => trpc.application['updateAgentTool'].mutate(input),
     },
     narratives: {
+      getSwipes: (input: StudioRpcInputs['application']['getNarrativeSwipes']) => trpc.application['getNarrativeSwipes'].query(input),
+      selectSwipe: (input: StudioRpcInputs['application']['selectNarrativeSwipe']) => trpc.application['selectNarrativeSwipe'].mutate(input),
       getEffectivePreview: (input: { timelineId: string; branchId: string }) => trpc.application['getEffectiveNarrativePreview'].query(input),
       appendInput: (input: { timelineId: string; branchId: string; nodeId: string; expectedHeadNodeId: string | null; content: string }) => trpc.application['appendNarrativeInput'].mutate(input),
       editNode: (input: { timelineId: string; branchId: string; nodeId: string; expectedHeadNodeId: string; expectedRaw: string; raw: string }) => trpc.application['editNarrativeNode'].mutate(input),

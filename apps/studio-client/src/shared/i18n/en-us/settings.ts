@@ -1,6 +1,23 @@
 import type { messages as zhCN } from '../zh-cn/settings.js'
 
 export const messages = {
+  'settings.themes': "Themes and styles",
+  'settings.themeMain': "Main theme",
+  'settings.themeDefault': "Studio default",
+  'settings.themeUnavailable': "Theme unavailable",
+  'settings.themeEnhancements': "Style enhancements",
+  'settings.themeEnhancementsEmpty': "No style enhancements installed",
+  'settings.themeAuthorizeJs': "Authorize JavaScript",
+  'settings.themeJsAuthorized': "JavaScript authorized",
+  'settings.themeCssOnly': "Use CSS only",
+  'settings.themeMoveUp': "Move up",
+  'settings.themeMoveDown': "Move down",
+  'settings.themeApply': "Apply appearance",
+  'settings.themeApplying': "Applying…",
+  'settings.themeParameters': "Appearance parameters",
+  'settings.themeRestoreParameter': "Restore default",
+  'settings.themeReset': "Reset themes, enhancements and custom CSS",
+  'settings.themeRecoveryHint': "If the interface becomes unusable, press Ctrl+Alt+Shift+T to disable themes, enhancements and custom CSS. Theme and enhancement changes apply immediately; JavaScript requires separate authorization.",
   'appearance.background': 'Background',
   'appearance.material': 'Material',
   'appearance.general': 'Scale and CSS',

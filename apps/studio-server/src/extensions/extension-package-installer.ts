@@ -90,7 +90,7 @@ export async function installExtensionPackageFromZip(options: {
     for (const [entryName, bytes] of Object.entries(files)) {
       const path = safeZipEntryPath(stagingDirectory, entryName)
       if (entryName.endsWith('/')) {
-        await mkdir(path, { recursive: false, mode: 0o700 })
+        await mkdir(path, { recursive: true, mode: 0o700 })
         continue
       }
       budget.files += 1
@@ -102,13 +102,24 @@ export async function installExtensionPackageFromZip(options: {
       await writeFile(path, bytes, { mode: 0o600 })
     }
     return await installExtensionPackageFromDirectory({
-      sourceDirectory: stagingDirectory,
+      sourceDirectory: await resolveZipPackageDirectory(stagingDirectory),
       installedDirectory: options.installedDirectory,
       flat: options.flat,
     })
   } finally {
     await rm(stagingDirectory, { recursive: true, force: true }).catch(() => undefined)
   }
+}
+
+async function resolveZipPackageDirectory(root: string): Promise<string> {
+  const entries = await readdir(root, { withFileTypes: true })
+  if (entries.some(entry => entry.name === 'manifest.json' && entry.isFile())) return root
+  if (entries.length === 1 && entries[0]!.isDirectory()) {
+    const directory = join(root, entries[0]!.name)
+    const children = await readdir(directory, { withFileTypes: true })
+    if (children.some(entry => entry.name === 'manifest.json' && entry.isFile())) return directory
+  }
+  throw new Error('扩展 ZIP 必须在根目录或唯一的第一层目录中包含 manifest.json。请选择扩展发行包。')
 }
 
 async function ensureChildDirectory(parent: string, name: string): Promise<string> {

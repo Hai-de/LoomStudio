@@ -106,6 +106,59 @@ afterEach(() => {
 })
 
 describe('Client Extension Runtime Effect lifecycle', () => {
+  it('reports sustained disconnection but cancels the notice on reconnect or cleanup', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    class TestEvents extends EventTarget {
+      static OPEN = 1
+      readyState = 0
+      static instance: TestEvents
+      constructor() { super(); TestEvents.instance = this }
+      close() {}
+    }
+    vi.stubGlobal('EventSource', TestEvents)
+    const page = Object.assign(new EventTarget(), { visibilityState: 'visible' })
+    vi.stubGlobal('document', page)
+    const { runtime, setup } = createHarness()
+    const cleanup = setup() as () => void
+    const errors = () => hooks.setters.flatMap(setter => setter.mock.calls.map(([value]) => value))
+      .filter(value => value instanceof Error && value.message === 'Extension event stream disconnected')
+    try {
+      TestEvents.instance.dispatchEvent(new Event('open'))
+      await drainTasks()
+      TestEvents.instance.dispatchEvent(new Event('error'))
+      vi.advanceTimersByTime(1000)
+      expect(errors()).toHaveLength(0)
+      TestEvents.instance.dispatchEvent(new Event('open'))
+      await drainTasks()
+      vi.advanceTimersByTime(5000)
+      expect(errors()).toHaveLength(0)
+      TestEvents.instance.dispatchEvent(new Event('error'))
+      vi.advanceTimersByTime(5000)
+      expect(errors()).toHaveLength(0)
+      page.visibilityState = 'hidden'
+      page.dispatchEvent(new Event('visibilitychange'))
+      vi.advanceTimersByTime(60_000)
+      expect(errors()).toHaveLength(0)
+      page.visibilityState = 'visible'
+      page.dispatchEvent(new Event('visibilitychange'))
+      vi.advanceTimersByTime(29_999)
+      expect(errors()).toHaveLength(0)
+      vi.advanceTimersByTime(1)
+      expect(errors()).toHaveLength(1)
+      TestEvents.instance.dispatchEvent(new Event('error'))
+      vi.advanceTimersByTime(30_000)
+      expect(errors()).toHaveLength(1)
+      const connectionSetter = hooks.setters.find(setter => setter.mock.calls.some(([value]) =>
+        value instanceof Error && value.message === 'Extension event stream disconnected'))!
+      TestEvents.instance.dispatchEvent(new Event('open'))
+      expect(connectionSetter).toHaveBeenLastCalledWith(undefined)
+      TestEvents.instance.dispatchEvent(new Event('error'))
+      cleanup()
+      vi.advanceTimersByTime(30_000)
+      expect(errors()).toHaveLength(1)
+    } finally { cleanup(); await runtime.host.dispose(); vi.useRealTimers() }
+  })
+
   it('follows adoption and State through SSE, rejects changed installations and stops on disconnect', async () => {
     class TestEvents extends EventTarget {
       static OPEN = 1

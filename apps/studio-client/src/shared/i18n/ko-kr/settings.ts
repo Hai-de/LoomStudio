@@ -1,6 +1,23 @@
 import type { messages as zhCN } from '../zh-cn/settings.js'
 
 export const messages = {
+  'settings.themes': "테마 및 스타일",
+  'settings.themeMain': "기본 테마",
+  'settings.themeDefault': "Studio 기본값",
+  'settings.themeUnavailable': "테마를 사용할 수 없음",
+  'settings.themeEnhancements': "스타일 확장",
+  'settings.themeEnhancementsEmpty': "설치된 스타일 확장이 없습니다",
+  'settings.themeAuthorizeJs': "JavaScript 허용",
+  'settings.themeJsAuthorized': "JavaScript 허용됨",
+  'settings.themeCssOnly': "CSS만 사용",
+  'settings.themeMoveUp': "위로",
+  'settings.themeMoveDown': "아래로",
+  'settings.themeApply': "모양 적용",
+  'settings.themeApplying': "적용 중…",
+  'settings.themeParameters': "모양 매개변수",
+  'settings.themeRestoreParameter': "기본값 복원",
+  'settings.themeReset': "테마, 확장 및 사용자 CSS 초기화",
+  'settings.themeRecoveryHint': "화면을 조작할 수 없으면 Ctrl+Alt+Shift+T를 눌러 테마, 확장 및 사용자 CSS를 끄세요. 테마와 확장 변경은 즉시 적용됩니다. JavaScript는 별도 허용이 필요합니다.",
   'appearance.background': '배경',
   'appearance.material': '머티리얼',
   'appearance.general': '비율 및 CSS',

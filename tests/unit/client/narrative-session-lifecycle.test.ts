@@ -1,9 +1,51 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fixture, hooks } from '../../support/client/narrative-runtime.js'
+import { fixture, hooks, primaryFixture } from '../../support/client/narrative-runtime.js'
 import type { StudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
 import type { DataOperation } from '../../../apps/studio-client/src/shared/api/data-commit-events.js'
 
 describe('Narrative primary Session lifecycle', () => {
+  it('does not reset an active Timeline Session when mount effects replay', async () => {
+    const f = await primaryFixture()
+    const before = f.render()
+    const list = vi.mocked(f.input.api.agentSessions.list)
+    list.mockClear()
+    for (const effect of hooks.mountEffects) effect()
+    await Promise.resolve()
+    expect(list).not.toHaveBeenCalled()
+    expect(f.render().agentSession).toEqual(before.agentSession)
+    expect(f.render().agentMessages).toEqual(before.agentMessages)
+    expect(f.render().agentSessionReady).toBe(true)
+  })
+
+  it('keeps the selected Session through incomplete background lists but clears it on an explicit deletion', async () => {
+    vi.stubGlobal('EventSource', class {})
+    const f = fixture()
+    await f.render().createTimelineFromCard()
+    await f.render().createAgentSession('profile', true)
+    const list = vi.fn(async () => ({ sessions: [f.result.agentSession] }))
+    f.input.api.agentSessions.list = list
+    await f.render().activateAgentSession(f.result.agentSession)
+    list.mockResolvedValue({ sessions: [] })
+    f.render()
+    hooks.subscribingSessions = true
+    const dispose = hooks.sessionEffect?.()
+    hooks.connected?.()
+    await vi.waitFor(() => expect(f.render().agentSessions).toEqual([]))
+    expect(f.render().agentSession?.id).toBe('session')
+    expect(f.render().primarySession?.id).toBe('session')
+    hooks.sessionCommit?.([{
+      entityType: 'agent.session', entityId: 'session', kind: 'delete',
+      scope: { store: 'narrative', entityType: 'narrative.timeline', entityId: 'timeline' },
+    }])
+    expect(f.render().agentSession).toBeUndefined()
+    expect(f.render().primarySession).toBeUndefined()
+    list.mockResolvedValue({ sessions: [f.result.agentSession] })
+    hooks.connected?.()
+    await vi.waitFor(() => expect(f.render().agentSessions).toHaveLength(1))
+    expect(f.render().agentSession).toBeUndefined()
+    dispose?.()
+  })
+
   it('keeps failed core Session restoration unavailable and completes Timeline activation after retry', async () => {
     const f = fixture()
     const failure = new Error('Session catalog unavailable')
@@ -139,7 +181,7 @@ describe('Narrative primary Session lifecycle', () => {
     dispose?.()
   })
 
-  it('requires explicit Timeline and primary creation before the first write', async () => {
+  it('requires an explicit Timeline but creates the primary Session on first send and reuses it', async () => {
     const storage = new Map<string, string>()
     vi.stubGlobal('localStorage', {
       getItem: (key: string) => storage.get(key) ?? null,
@@ -155,22 +197,21 @@ describe('Narrative primary Session lifecycle', () => {
 
     await f.render().createTimelineFromCard()
     await f.render().submitTurn(f.event)
-    expect(f.reportFailure).toHaveBeenCalledWith(expect.objectContaining({ message: '请先新建并设置主写作对话' }))
-    expect(f.appendInput).not.toHaveBeenCalled()
-    const primary = (await f.render().createAgentSession('profile', true))!
+    const primary = f.render().primarySession!
     expect(f.createTimeline).toHaveBeenCalledExactlyOnceWith({ cardId: 'card', openingContent: '', expectedCardVersion: undefined })
     expect(f.createSession).toHaveBeenCalledExactlyOnceWith({ agentPresetId: 'profile', timelineId: 'timeline' })
     expect(primary.timelineId).toBe('timeline')
     expect(f.render().primarySession?.id).toBe(primary.id)
     expect(storage.get('loom.studio.primarySession:test:timeline')).toBe(primary.id)
-    expect(f.render().input).toBe('  Draft\n')
-
-    await f.render().submitTurn(f.event)
     expect(f.appendInput).toHaveBeenCalledOnce()
     expect(f.createRun).toHaveBeenCalledWith(expect.objectContaining({
       agentSessionId: primary.id,
       narrativeTarget: expect.objectContaining({ timelineId: 'timeline' }),
     }))
+    f.render().setInput('Next turn')
+    await f.render().submitTurn(f.event)
+    expect(f.createSession).toHaveBeenCalledOnce()
+    expect(f.createRun).toHaveBeenCalledTimes(2)
   })
 
   it.each(['profile', 'child-profile'])('keeps the primary receiver when viewing a Session of preset %s', async childPresetId => {

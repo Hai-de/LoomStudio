@@ -53,9 +53,9 @@ export function StudioRail(props: StudioRailProps) {
           <div className={styles.railGroupLabel}>{props.t('rail.groupPlay')}</div>
           <RailTab activePanel={props.activePanel} panel="play" preloadPanel={props.preloadPanel} t={props.t} togglePanel={props.togglePanel} />
           <div className={styles.railPlayRow}>
-            <RailTab activePanel={props.activePanel} panel="recent" preloadPanel={props.preloadPanel} t={props.t} togglePanel={props.togglePanel} />
+            <RailTab activePanel={props.activePanel} panel="recent" label={props.t('recentCharacters.title')} preloadPanel={props.preloadPanel} t={props.t} togglePanel={props.togglePanel} />
             {props.recentSessions && props.activePanel === null ? (
-              <button className={styles.railPlayToggle} type="button" aria-expanded={recentOpen} aria-label={recentOpen ? '收起最近会话' : '展开最近会话'} onClick={() => setRecentOpen(value => !value)}>
+              <button className={styles.railPlayToggle} type="button" aria-expanded={recentOpen} aria-label={props.t('recentCharacters.title')} onClick={() => setRecentOpen(value => !value)}>
                 {recentOpen ? <ChevronDown aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
               </button>
             ) : null}
@@ -107,7 +107,7 @@ function RailTab(props: RailTabProps) {
       onClick={() => props.togglePanel(props.panel)}
     >
       <Icon aria-hidden="true" />
-      <span className={styles.railLabel}>{props.t(presentation.labelKey)}</span>
+      <span className={styles.railLabel}>{label}</span>
     </button>
   )
 }

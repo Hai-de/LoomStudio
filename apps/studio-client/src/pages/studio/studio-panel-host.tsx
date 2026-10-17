@@ -5,7 +5,6 @@ import styles from './studio-page.module.scss'
 
 type StudioPanelHostProps = {
   activePanel: StudioPanelId | null
-  historyMotion?: { direction: 'back' | 'forward'; panel: StudioPanelId | null } | null
   panels: Record<StudioPanelId, (active: boolean) => ReactNode>
 }
 
@@ -16,7 +15,6 @@ export function StudioPanelHost(props: StudioPanelHostProps) {
           return <StudioPanelStage
             key={panel}
             active={props.activePanel === panel}
-            historyDirection={props.historyMotion?.panel === panel ? props.historyMotion.direction : undefined}
             panel={panel}
             render={props.panels[panel]}
           />
@@ -27,7 +25,6 @@ export function StudioPanelHost(props: StudioPanelHostProps) {
 
 const StudioPanelStage = memo(function StudioPanelStage(props: {
   active: boolean
-  historyDirection?: 'back' | 'forward'
   panel: StudioPanelId
   render(active: boolean): ReactNode
 }) {
@@ -46,7 +43,6 @@ const StudioPanelStage = memo(function StudioPanelStage(props: {
       style={{ display: props.active ? undefined : 'none' }}
       data-loom-component={`overlay-${props.panel}-layer`}
       data-loom-object={`${props.panel}-panel`}
-      data-history-direction={props.active ? props.historyDirection : undefined}
     >
       {visited || props.active ? (
         <Suspense fallback={<div aria-busy="true" className={styles.panelLoading}><LoadingText /></div>}>

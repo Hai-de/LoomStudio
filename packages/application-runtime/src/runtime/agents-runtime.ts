@@ -82,6 +82,15 @@ import {
   tombstoneExtensionStorageScope,
 } from './context.js'
 import { readAgentTurnVariables } from './narrative-runtime.js'
+import {
+  assertNarrativeExecutionSource,
+  beginNarrativeSwipeRun,
+  captureNarrativeExecutionSource,
+  finishNarrativeSwipeRun,
+  projectSwipeSessionHistory,
+  settleDiscardedNarrativeRuns,
+  type SwipeExecution,
+} from './swipe-runtime.js'
 import { inspectApplicationMacros, inspectPreparedMacros, variableContextFromInspection } from './macros-runtime.js'
 
 const executingSessions = new WeakMap<object, Set<string>>()
@@ -104,6 +113,8 @@ type AgentsRuntimeContext = Pick<ApplicationRuntimeContext,
   | 'promptResources'
   | 'providerAdapters'
   | 'states'
+  | 'swipes'
+  | 'onStateChanged'
 >
 
 export function createAgentsRuntimeMethods(ctx: AgentsRuntimeContext) {
@@ -213,20 +224,28 @@ export function createAgentsRuntimeMethods(ctx: AgentsRuntimeContext) {
       return { sessions: page.sessions, nextCursor: page.nextCursor }
     },
 
+    listAgentRunStates: () => requireAgents(ctx).listRunStates(),
+
     getAgentSession: async (input: GetAgentSessionInput): Promise<GetAgentSessionResult> => {
       const session = await requireAgents(ctx).getSession(input.agentSessionId)
       if (!session) throw new Error(`Agent session not found: ${input.agentSessionId}`)
       return { session }
     },
 
-    getAgentTranscriptPage: (input: GetAgentTranscriptPageInput): Promise<AgentTranscriptPage> =>
-      requireAgents(ctx).getEntryPage(input),
+    getAgentTranscriptPage: async (input: GetAgentTranscriptPageInput): Promise<AgentTranscriptPage> => {
+      const page = await requireAgents(ctx).getEntryPage(input)
+      return input.selectedCandidates
+        ? { ...page, entries: await projectSwipeSessionHistory(ctx, input.agentSessionId, page.entries, true) }
+        : page
+    },
 
     appendAgentTranscriptEntries: async (input: AppendAgentTranscriptEntriesInput, requestContext?: RuntimeRequestContext): Promise<AppendAgentTranscriptEntriesResult> => {
       const result = await requireAgents(ctx).appendEntries({
         ...narrativeWriteContext(requestContext, 'application.appendAgentTranscriptEntries'),
         ...input,
       })
+      await settleDiscardedNarrativeRuns(ctx, input.agentSessionId, result.entries.flatMap(item =>
+        item.runId && item.entry.kind === 'run-state' && item.entry.state === 'discarded' ? [item.runId] : []), requestContext)
       return {
         session: result.session,
         entries: result.entries,
@@ -323,6 +342,7 @@ export function createAgentsRuntimeMethods(ctx: AgentsRuntimeContext) {
     },
 
     invokeAgentTurn: async (input: InvokeAgentTurnInput, requestContext?: RuntimeRequestContext): Promise<InvokeAgentTurnResult> => {
+      input = structuredClone(input)
       const agents = requireAgents(ctx)
       let executing = executingSessions.get(agents)
       if (!executing) {
@@ -336,6 +356,7 @@ export function createAgentsRuntimeMethods(ctx: AgentsRuntimeContext) {
       const releaseExecutor = registerAgentExecutor(runId)
       const startedAt = performance.now()
       const progress: AgentRunProgress = { stage: 'preparation', providerStep: 0, toolCount: 0, suspended: false }
+      let swipeExecution: SwipeExecution | undefined
       const logContext = {
         correlationId: requestContext?.correlationId,
         callId: requestContext?.callId,
@@ -351,6 +372,7 @@ export function createAgentsRuntimeMethods(ctx: AgentsRuntimeContext) {
         for (const lease of requestContext?.agentRun?.continuation?.recovery?.promptExtensionLeases ?? []) {
           await assertTimelineExtensionLease(ctx, ctx.documents, lease)
         }
+        swipeExecution = await beginNarrativeSwipeRun(ctx, input, runId, requestContext)
         const prepared = await collectPromptExtensionDependencies(ctx, () => prepareAgentTurn(ctx, input, 'runtime', requestContext, runId))
         const {
           model,
@@ -393,9 +415,12 @@ export function createAgentsRuntimeMethods(ctx: AgentsRuntimeContext) {
             ? { resumeAssistantEntryId: requestContext.agentRun.continuation.partialEntryId }
             : {}),
         })
-        const outcome = requestContext?.abortSignal?.aborted
+        const outcome = progress.suspended ? 'suspended' : requestContext?.abortSignal?.aborted
           ? requestContext.abortSignal.reason === 'user-pause' ? 'suspended' : 'cancelled'
           : 'completed'
+        const execution = swipeExecution
+        swipeExecution = undefined
+        await finishNarrativeSwipeRun(ctx, execution, outcome === 'cancelled' ? 'failed' : outcome, requestContext)
         runLogger?.info(`Agent turn ${outcome}`, {
           event: `run.${outcome}`, ...logContext,
           data: {
@@ -428,6 +453,13 @@ export function createAgentsRuntimeMethods(ctx: AgentsRuntimeContext) {
         const aborted = requestContext?.abortSignal?.aborted || (error instanceof Error && error.name === 'AbortError')
         const outcome = progress.suspended || (aborted && requestContext?.abortSignal?.reason === 'user-pause')
           ? 'suspended' : aborted ? 'cancelled' : 'failed'
+        if (swipeExecution) {
+          const execution = swipeExecution
+          swipeExecution = undefined
+          const swipeOutcome = requestContext?.agentRun?.continuation && progress.stage === 'preparation'
+            ? 'preparation-failed' : outcome === 'cancelled' ? 'failed' : outcome
+          await finishNarrativeSwipeRun(ctx, execution, swipeOutcome, requestContext)
+        }
         runLogger?.[outcome === 'failed' ? 'error' : !aborted && outcome === 'suspended' ? 'warn' : 'info'](`Agent turn ${outcome} · ${progress.stage}`, {
           event: `run.${outcome}`, ...logContext,
           data: {
@@ -639,6 +671,26 @@ async function prepareAgentTurn(
         limit: 1,
       })
     : undefined
+  const continuation = requestContext?.agentRun?.continuation
+  const recoveredSource = continuation?.recovery?.narrativeSource
+  const narrativeSource = recoveredSource ? structuredClone(recoveredSource) : narrativePage
+    ? await captureNarrativeExecutionSource(ctx, {
+        timelineId: narrativePage.timeline.id,
+        branchId: narrativePage.branch.id,
+        sourceNodeId: input.narrativeTarget?.sourceNodeId,
+      })
+    : undefined
+  if (recoveredSource && (recoveredSource.timelineId !== narrativePage?.timeline.id || recoveredSource.branchId !== narrativePage?.branch.id)) {
+    throw Object.assign(new Error('The recovered Narrative source does not match the Agent turn target'), {
+      code: 'narrative.swipe_source_changed',
+    })
+  }
+  if (recoveredSource) await assertNarrativeExecutionSource(ctx, narrativeSource!)
+  if (!continuation && narrativeSource && narrativeSource.nodeId !== narrativePage!.branch.headNodeId) {
+    throw Object.assign(new Error('Narrative head changed while preparing the Agent turn; retry with the current reply'), {
+      code: 'narrative.swipe_source_changed',
+    })
+  }
   const inputNodeId = input.narrativeTarget?.inputNodeId
   const inputPage = inputNodeId !== undefined && narrativePage
     ? await narratives!.getPage({
@@ -674,6 +726,9 @@ async function prepareAgentTurn(
     ? await readNarrativeContext(narratives, { timelineId: narrativePage.timeline.id, branchId: narrativePage.branch.id }, narrativeContext)
     : narrativeSample?.nodes ?? []
   const agentPage = await readSessionHistory(ctx.agents, session.id)
+  if (ctx.narratives) {
+    agentPage.entries = await projectSwipeSessionHistory(ctx, session.id, agentPage.entries)
+  }
   const preset = await readPresetResource(ctx.promptResources, session.agentPresetId)
   const availableInstallations = await readAvailableExtensionInstallations(
     ctx.documents, narrativePage?.timeline.createdFrom?.cardId, narrativePage?.timeline.id ?? null,
@@ -850,6 +905,7 @@ async function prepareAgentTurn(
       sessionId: session.id,
       runId,
       ...(narrativePage ? { narrative: { page: narrativePage, rules: narrativeTextPipeline!.rules } } : {}),
+      narrativeSource,
       requestContext,
     })
     const durationMs = readDurationMs(startedAt)
@@ -873,7 +929,7 @@ async function prepareAgentTurn(
     })
     throw error
   }
-  return {
+  const prepared = {
     classificationRules: (await resolveEffectiveTextPipeline(ctx,
       { kind: 'agent-session', sessionId: session.id }, 'classify')).rules,
     userInput,
@@ -894,6 +950,8 @@ async function prepareAgentTurn(
     runId,
     session,
   }
+  if (narrativeSource) await assertNarrativeExecutionSource(ctx, narrativeSource)
+  return prepared
 }
 
 async function buildProviderPayloadPreview(input: {

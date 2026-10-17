@@ -189,6 +189,19 @@ export type AgentSessionPage = {
   nextCursor?: string
 }
 
+export type AgentSessionRunSummary = {
+  agentSessionId: string
+  title?: string
+  timelineId?: string
+  updatedAt: string
+  run?: {
+    runId: string
+    state: Extract<AgentTranscriptEntryData, { kind: 'run-state' }>['state']
+    reason?: string
+    updatedAt: string
+  }
+}
+
 export type AgentTransaction = {
   getSession(id: string): AgentSession | null
   createSession(
@@ -207,6 +220,7 @@ export type AgentTransaction = {
 }
 
 export type AgentStore = {
+  listRunStates(): Promise<AgentSessionRunSummary[]>
   getSession(id: string): Promise<AgentSession | null>
   listSessions(input?: ListAgentSessionsInput): Promise<AgentSessionPage>
   getEntry(id: string): Promise<AgentTranscriptEntry | null>

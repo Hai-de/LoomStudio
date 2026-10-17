@@ -1012,11 +1012,11 @@
   }
 }
 
-.panelStage[data-history-direction='back'] {
+.workspacePanel[data-history-direction='back'][data-loom-motion-owner='native'] {
   animation: panel-history-back var(--loom-motion-duration-standard) var(--loom-shell-motion-easing) both;
 }
 
-.panelStage[data-history-direction='forward'] {
+.workspacePanel[data-history-direction='forward'][data-loom-motion-owner='native'] {
   animation: panel-history-forward var(--loom-motion-duration-standard) var(--loom-shell-motion-easing) both;
 }
 
@@ -1371,15 +1371,7 @@
   }
 }
 
-.stageAgentCapsuleRunning {
-  border-color: color-mix(in srgb, var(--loom-color-accent) 50%, transparent);
-}
 
-.stageAgentCapsuleApproval {
-  border-color: color-mix(in srgb, #f59e0b 60%, transparent);
-  background: color-mix(in srgb, #f59e0b 12%, transparent);
-  color: #f59e0b;
-}
 
 .stageAgentCapsuleLeading {
   display: flex;
@@ -1388,27 +1380,8 @@
   flex-shrink: 0;
 }
 
-.stageAgentSpinner {
-  width: 14px;
-  height: 14px;
-  color: var(--loom-color-accent);
-  animation: stageAgentSpin 1s linear infinite;
-}
 
-@keyframes stageAgentSpin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
 
-.stageAgentApprovalIcon {
-  width: 14px;
-  height: 14px;
-  color: #f59e0b;
-}
 
 .stageAgentPrimaryStar {
   width: 14px;
@@ -1432,8 +1405,7 @@
   overflow: hidden;
 }
 
-.stageAgentTitle,
-.stageAgentStatusText {
+.stageAgentTitle {
   font-size: 13px;
   font-weight: 500;
   color: inherit;
@@ -1444,10 +1416,6 @@
   line-height: 1;
 }
 
-.stageAgentStatusText {
-  color: var(--loom-color-accent-strong);
-  font-weight: 600;
-}
 
 .stageAgentBadge {
   display: inline-flex;
@@ -1633,9 +1601,6 @@
     transition: none;
   }
 
-  .stageAgentSpinner {
-    animation: none !important;
-  }
 
   .panelStage {
     animation: none !important;
@@ -1645,4 +1610,36 @@
 
 .stageHeaderButtonActive {
   color: var(--loom-color-accent-strong) !important;
+}
+
+// Gate only host-owned effects; theme CSS and JS replacements remain independent.
+.workspacePanel[data-loom-motion-owner]:not([data-loom-motion-owner='native']) {
+  animation: none;
+  transition: none;
+}
+
+.floatingDock:has(.workspacePanel[data-loom-motion-owner]:not([data-loom-motion-owner='native'])) {
+  transition: none;
+
+  &[data-panel-motion='closing'] {
+    width: var(--loom-shell-panel-target-width) !important;
+
+    .workspacePanel { opacity: 1; }
+  }
+}
+
+:global(html[data-loom-native-motion='disable']) {
+  .floatingDock, .workspacePanel, .workspaceRail, .workspaceBody {
+    transition: none;
+  }
+  .workspacePanel { animation: none; }
+}
+
+.workspacePanel[data-loom-motion-owner='native'][data-loom-motion-phase='enter']:not([data-history-direction]) {
+  animation: panel-enter var(--loom-shell-motion-duration-enter) var(--loom-shell-motion-easing) both;
+}
+
+@keyframes panel-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }

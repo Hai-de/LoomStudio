@@ -1,6 +1,8 @@
+import { StartupReady } from './app/startup-curtain.js'
+import { StartupFailurePage } from './app/startup-failure-page.js'
 import { createConsoleLogSink, createMemoryLogSink, createRootLogger } from '@loom-studio/logging'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Route, Routes, matchPath } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { App } from './app/app.js'
 import { AppErrorBoundary } from './app/app-error-boundary.js'
@@ -56,19 +58,15 @@ if (!root) {
     event: 'client.root.missing',
   })
 } else {
-  if (import.meta.env.DEV) {
-    const previewId = readDevelopmentPreviewId(window.location.pathname)
-    if (previewId) {
-      void import('./dev/preview/index.js').then(({ renderComponentPreview }) => renderComponentPreview(root, previewId))
-    } else {
-      void startStudioClient(root)
-    }
-  } else {
-    void startStudioClient(root)
-  }
+  void startStudioClient(root)
 }
 
 async function startStudioClient(rootElement: HTMLElement): Promise<void> {
+  const reactRoot = createRoot(rootElement)
+  if (!STUDIO_ENTRY_PATHS.some(path => matchPath(path, window.location.pathname))) {
+    reactRoot.render(<><NotFoundPage /><StartupReady /></>)
+    return
+  }
   try {
     const response = await fetch('/auth/session', {
       method: 'POST',
@@ -82,7 +80,7 @@ async function startStudioClient(rootElement: HTMLElement): Promise<void> {
         <App clientLogs={clientLogs} transportLogger={rootLogger.child('transport.rpc')} extensionLogger={rootLogger.child('extension.loader')} />
       </QueryClientProvider>
     )
-    createRoot(rootElement).render(
+    reactRoot.render(
       <AppErrorBoundary onError={(error, info) => systemLogger.error('React render failed', {
         event: 'client.react.render_failed',
         error,
@@ -91,7 +89,7 @@ async function startStudioClient(rootElement: HTMLElement): Promise<void> {
         <BrowserRouter>
           <Routes>
             {STUDIO_ENTRY_PATHS.map(path => <Route key={path} path={path} element={studio} />)}
-            <Route path="*" element={<NotFoundPage />} />
+            <Route path="*" element={<><NotFoundPage /><StartupReady /></>} />
           </Routes>
         </BrowserRouter>
       </AppErrorBoundary>,
@@ -101,7 +99,7 @@ async function startStudioClient(rootElement: HTMLElement): Promise<void> {
       event: 'client.start.failed',
       error,
     })
-    rootElement.textContent = 'Studio client failed to start.'
+    reactRoot.render(<><StartupFailurePage /><StartupReady /></>)
   }
 }
 
@@ -112,9 +110,4 @@ window.addEventListener('pagehide', () => {
 
 function shouldWriteClientConsoleLog(record: { level: string; namespace: string }): boolean {
   return record.level === 'warn' || record.level === 'error' || record.namespace === 'system'
-}
-
-function readDevelopmentPreviewId(pathname: string): string | undefined {
-  const match = /^\/dev\/preview\/([^/]+)\/?$/.exec(pathname)
-  return match?.[1] ? decodeURIComponent(match[1]) : undefined
 }

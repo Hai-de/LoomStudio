@@ -44,6 +44,7 @@ import { isExtensionResourceAvailable, readAvailableExtensionInstallations } fro
 import type { AgentToolContent } from '../types.js'
 import { encodeRunRecovery, type AgentRunRecoveryCheckpoint } from './run-recovery.js'
 import { applyApplicationStateMutation, type ApplicationStateContext } from '../state/state.js'
+import { guardNarrativeWrite } from '../runtime/swipe-runtime.js'
 import { prepareStateContent } from '../state/process-state-content.js'
 import { beginTimelineExtensionWork, assertTimelineExtensionLease } from '../extensions/timeline-participation.js'
 import { collectPromptExtensionDependencies } from '../extensions/prompt-dependencies.js'
@@ -84,7 +85,7 @@ export type ContentToolPromptRuntimeInputs = {
 }
 
 type AgentToolResolutionContext = Pick<ApplicationRuntimeContext, 'agentTools' | 'documents' | 'providerAdapters'>
-type NativeToolLoopContext = ApplicationStateContext & Pick<ApplicationRuntimeContext, 'agentTools' | 'createId' | 'gateway' | 'runtimeLogger' | 'stateContent'>
+type NativeToolLoopContext = ApplicationStateContext & Pick<ApplicationRuntimeContext, 'agentTools' | 'createId' | 'gateway' | 'runtimeLogger' | 'stateContent' | 'swipes'>
 
 export async function compileAgentToolSet(input: {
   ctx: AgentToolResolutionContext
@@ -370,6 +371,7 @@ async function runToolLoop(
     return encodeRunRecovery({
       version: 1, phase, executor: { pid: process.pid, id: input.runId },
       request: input.recoveryRequest, model: input.model, toolContract,
+      ...(input.toolExecutionScope?.narrativeSource ? { narrativeSource: input.toolExecutionScope.narrativeSource } : {}),
       messages, userEntryId, nextProviderStep,
       promptExtensionLeases: input.promptExtensionLeases ?? [],
       ...(input.processedPrompt ? { processedPrompt: input.processedPrompt } : {}),
@@ -530,6 +532,7 @@ async function runToolLoop(
         const completeText = classifyAssistantContent(pendingAssistantContent + (providerResult.message.content ?? ''),
           session.id, input.classificationRules ?? []).text
         const prepared = await prepareStateContent(input.ctx, {
+          assertSource: input.toolExecutionScope?.assertNarrativeSource,
           text: scanContentTools(completeText, contentTools.map(tool => tool.definition.name)).text,
           operationId: `agent-content:${input.runId}:${step}`,
           target: input.recoveryRequest.narrativeTarget ? {
@@ -665,6 +668,8 @@ async function runToolLoop(
       `Agent Provider step limit exceeded: ${maximumProviderSteps}`,
     )
   } catch (error) {
+    // Whitespace from a provider is not a valid partial assistant message.
+    if (!streamedText.trim()) streamedText = ''
     const aborted =
       input.requestContext?.abortSignal?.aborted || isAbortError(error)
     const userPaused = aborted && input.requestContext?.abortSignal?.reason === 'user-pause'
@@ -759,15 +764,28 @@ async function runToolLoop(
           ...(appendedPartial ? { partialEntryId: appendedPartial.id }
             : continuationAssistantEntryId ? { partialEntryId: continuationAssistantEntryId } : {}),
         })
-        progress.suspended = Boolean(input.requestContext?.agentRun?.onSuspended)
+        // A durable checkpoint remains resumable even without an in-process observer.
+        progress.suspended = true
       } else {
         await append([{
           kind: 'run-state', state: 'aborted', reason: errorMessage(error),
           ...(measurementId ? { measurementId } : {}),
         }])
       }
-    } catch {
-      // Preserve the original failure if recording the terminal state also fails.
+    } catch (checkpointError) {
+      stepLogger?.error('Failed to persist Agent recovery checkpoint', {
+        event: 'run.checkpoint_failed', ...logContext,
+        data: { ...references, ...readLogFailure(checkpointError) },
+      })
+      // Invalid recovery payloads must not leave a stopped executor marked running.
+      try {
+        await append([{ kind: 'run-state', state: 'failed', reason: errorMessage(error) }])
+      } catch (terminalError) {
+        stepLogger?.error('Failed to persist Agent terminal state', {
+          event: 'run.terminal_state_failed', ...logContext,
+          data: { ...references, ...readLogFailure(terminalError) },
+        })
+      }
     }
     throw error
   }
@@ -776,10 +794,12 @@ async function runToolLoop(
     const accepted = acceptedContent!
     await assertPromptDependencies()
     input.requestContext?.abortSignal?.throwIfAborted()
-    await applyApplicationStateMutation(input.ctx, accepted.mutation, {
+    const apply = () => applyApplicationStateMutation(input.ctx, accepted.mutation, {
       ...input.requestContext,
       extensionLeases: [...(input.requestContext?.extensionLeases ?? []), ...accepted.extensionLeases],
     })
+    const source = input.toolExecutionScope?.narrativeSource
+    await (source ? guardNarrativeWrite(input.ctx, source, apply) : apply())
     const persisted = await runTool(() => append([...accepted.entries, {
       kind: 'run-state', state: 'completed',
       ...(accepted.diagnostics?.length ? { reason: accepted.diagnostics.join('\n') } : {}),

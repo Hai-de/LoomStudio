@@ -33,7 +33,7 @@ export function createNarrativeReader(input: {
       const selected = structuredClone(request)
       signal?.throwIfAborted()
       const published = await input.context.resolve({ ...scope, cardId: input.cardId })
-      if (!published) throw Object.assign(new Error('No default Narrative context source is configured'), { code: 'narrative.context_unconfigured' })
+      if (!published) throw Object.assign(new Error('The Timeline and branch are bound, but no default Narrative context source is configured to authorize this read. This is a read-range configuration error, not a missing Timeline or a loss of appendNarrative capability. Do not repeat the same read. Use the context already provided if sufficient; otherwise report the missing read configuration.'), { code: 'narrative.context_unconfigured' })
       const page = await input.store.getPage({ ...scope, limit: 1 })
       signal?.throwIfAborted()
       const throughNodeId = page.branch.headNodeId ?? null

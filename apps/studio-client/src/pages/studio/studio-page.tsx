@@ -1,5 +1,6 @@
+import { styleMotion } from '../../features/themes/model/style-motion.js'
 import { useWallpaper } from './use-wallpaper.js'
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { AlignLeft, ArrowLeft, ArrowRight, PanelLeft, PanelLeftClose, PanelRight, PanelRightClose, Search, X } from 'lucide-react'
 import type { Translator } from '../../shared/i18n/index.js'
 import { StudioPanelRight } from './studio-panel-right.js'
@@ -15,15 +16,12 @@ import { useStudioWindowResize } from './use-studio-window-resize.js'
 import { useEffectiveMotion } from '../../shared/hooks/use-motion-preference.js'
 import { resolveRailPresentation } from './studio-shell-layout.js'
 import type { WindowResizeAxis } from '../../shared/studio-shell/window-resize.js'
-import type { ActiveAgentRun } from '../../features/narrative-runtime/model/use-narrative-runtime.js'
-import type { AgentSession, AgentTranscriptEntry } from '../../entities/index.js'
+import type { AgentSession } from '../../entities/index.js'
 import { StageAgentCapsule } from './stage-agent-capsule.js'
 import styles from './studio-page.module.scss'
 
 type StudioPageProps = {
   navigation: ReturnType<typeof useStudioNavigation>
-  agentActiveRun?: ActiveAgentRun
-  agentMessages?: AgentTranscriptEntry[]
   agentPanel: ReactNode
   agentPanelOpen?: boolean
   agentSession?: AgentSession
@@ -35,7 +33,6 @@ type StudioPageProps = {
   canUndo: boolean
   canvas: ReactNode
   characterControl?: ReactNode
-  customCss: string
   isPrimarySession?: boolean
   modelConfigured?: boolean
   panelHeaderActions?: Partial<Record<StudioPanelId, ReactNode>>
@@ -45,7 +42,6 @@ type StudioPageProps = {
   preloadPanel?(panel: StudioPanelId): void
   recentSessions?: ReactNode
   t: Translator
-  uiScale: number
   wallpaperUrl?: string
   onRedo(): void
   onOpenSearch(): void
@@ -67,8 +63,7 @@ export function StudioPage(props: StudioPageProps) {
   const [displayedPanel, setDisplayedPanel] = useState(activePanel)
   const [panelMotion, setPanelMotion] = useState<'closing' | 'idle'>('idle')
   const displayedPanelRef = useRef(activePanel)
-  const panelCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const historyMotionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const panelVisualRef = useRef<HTMLDivElement>(null)
   const requestedHistoryDirection = useRef<'back' | 'forward' | undefined>(undefined)
   const assetMetadataOpen = useStudioLayoutStore(state => state.assetMetadataOpen)
   const closeDock = useStudioLayoutStore(state => state.closeDock)
@@ -92,19 +87,6 @@ export function StudioPage(props: StudioPageProps) {
   const toggleAgentPanel = props.onToggleAgentPanel ?? (() => setLocalAgentPanelOpen(prev => !prev))
   const [agentPanelWidth, setAgentPanelWidth] = useState<number | undefined>(undefined)
   const [headerActionsTarget, setHeaderActionsTarget] = useState<HTMLDivElement | null>(null)
-  const [historyMotion, setHistoryMotion] = useState<{ direction: 'back' | 'forward'; panel: StudioPanelId | null } | null>(null)
-  useEffect(() => {
-    const direction = requestedHistoryDirection.current
-    requestedHistoryDirection.current = undefined
-    if (!direction || props.navigation.historyAction !== 'POP') return
-    if (historyMotionTimerRef.current) clearTimeout(historyMotionTimerRef.current)
-    setHistoryMotion({ direction, panel: activePanel })
-    historyMotionTimerRef.current = setTimeout(() => {
-      setHistoryMotion(null)
-      historyMotionTimerRef.current = null
-    }, 240)
-  }, [props.navigation.locationKey, props.navigation.historyAction, activePanel])
-
   useEffect(() => {
     if (isAgentPanelOpen) return
     const panel = document.getElementById('studio-panel-right')
@@ -122,33 +104,40 @@ export function StudioPage(props: StudioPageProps) {
     }
   }, [activePanel, railHidden])
 
-  useEffect(() => {
-    if (panelCloseTimerRef.current) clearTimeout(panelCloseTimerRef.current)
+  useLayoutEffect(() => {
     if (activePanel !== null) {
       displayedPanelRef.current = activePanel
       setDisplayedPanel(activePanel)
       setPanelMotion('idle')
-      return
+    } else if (displayedPanelRef.current !== null) {
+      setPanelMotion('closing')
     }
-    if (displayedPanelRef.current === null || effectiveMotion === 'reduce') {
-      displayedPanelRef.current = null
-      setDisplayedPanel(null)
-      setPanelMotion('idle')
-      return
-    }
-    setPanelMotion('closing')
-    panelCloseTimerRef.current = setTimeout(() => {
-      displayedPanelRef.current = null
-      setDisplayedPanel(null)
-      setPanelMotion('idle')
-      panelCloseTimerRef.current = null
-    }, 240)
-  }, [activePanel, effectiveMotion])
+  }, [activePanel])
 
-  useEffect(() => () => {
-    if (panelCloseTimerRef.current) clearTimeout(panelCloseTimerRef.current)
-    if (historyMotionTimerRef.current) clearTimeout(historyMotionTimerRef.current)
-  }, [])
+  useLayoutEffect(() => {
+    const element = panelVisualRef.current
+    if (!element || displayedPanel === null) return
+    if (activePanel !== null && (displayedPanel !== activePanel || panelMotion === 'closing')) return
+    if (activePanel === null && panelMotion !== 'closing') return
+    const controller = new AbortController()
+    const direction = requestedHistoryDirection.current
+    requestedHistoryDirection.current = undefined
+    if (direction && props.navigation.historyAction === 'POP') element.dataset.historyDirection = direction
+    const phase = activePanel === null ? 'exit' : 'enter'
+    void styleMotion.run(element, phase, controller.signal).then(() => {
+      if (controller.signal.aborted) return
+      delete element.dataset.historyDirection
+      if (phase === 'exit') {
+        displayedPanelRef.current = null
+        setDisplayedPanel(null)
+        setPanelMotion('idle')
+      }
+    })
+    return () => {
+      controller.abort()
+      delete element.dataset.historyDirection
+    }
+  }, [activePanel, displayedPanel, panelMotion, effectiveMotion, props.navigation.locationKey, props.navigation.historyAction])
 
   const handleMouseEnter = () => {
     if (leaveTimerRef.current) {
@@ -432,13 +421,11 @@ export function StudioPage(props: StudioPageProps) {
           else void props.navigation.goForward()
         }}
       /> : null}
-      <StudioPanelHost activePanel={displayedPanel} historyMotion={historyMotion} panels={props.panels} />
+      <StudioPanelHost activePanel={displayedPanel} panels={props.panels} />
     </div>
   )
   return (
     <main className={styles.workbench} data-loom-component="studio-workspace-shell" data-loom-object="studio-shell">
-      <style>{`:root { --loom-ui-scale: ${props.uiScale / 100}; }`}</style>
-      <style>{props.customCss}</style>
       <section
         ref={stageRef}
         className={styles.studioStage}
@@ -523,9 +510,7 @@ export function StudioPage(props: StudioPageProps) {
             {props.headerActions}
             <StageAgentCapsule
               ref={agentPanelToggleRef}
-              activeRun={props.agentActiveRun}
               isPrimary={props.isPrimarySession}
-              messages={props.agentMessages}
               open={isAgentPanelOpen}
               session={props.agentSession}
               sessionsCount={props.agentSessionsCount}
@@ -586,7 +571,7 @@ export function StudioPage(props: StudioPageProps) {
               data-rail-hidden={railHidden && displayedPanel !== null ? 'true' : undefined}
             >
               <div className={styles.workspaceRail}>{dockSidebar}</div>
-              <div className={styles.workspacePanel} hidden={displayedPanel === null}
+              <div ref={panelVisualRef} data-loom-component="workbench-panel" className={styles.workspacePanel} hidden={displayedPanel === null}
                 style={displayedPanel === null ? { display: 'none' } : undefined}>{panelHost}</div>
             </div>
           </div>

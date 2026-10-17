@@ -21,6 +21,7 @@ export type NarrativeBranch = {
   timelineId: string
   title?: string
   headNodeId?: string
+  stateHeadRevisionId: string
   parentBranchId?: string
   forkedFromNodeId?: string
   createdAt: string

@@ -166,7 +166,7 @@
 .rowContent {
   position: relative;
   z-index: 1;
-  flex: 1;
+  flex: var(--loom-tree-label-flex, 1);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -419,7 +419,7 @@
 }
 
 .trailing {
-  margin-left: auto;
+  margin-left: var(--loom-tree-value-margin, auto);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -467,3 +467,16 @@
   background: color-mix(in srgb, var(--loom-color-accent) 24%, transparent);
   border-radius: 2px;
 }
+
+.batchAnchor { position: sticky; top: 4px; height: 0; z-index: 6; }
+.batchBar {
+  display: flex; align-items: center; gap: 6px; width: max-content; max-width: calc(100% - 12px);
+  margin-inline: auto; padding: 6px 8px; box-sizing: border-box; overflow-x: auto;
+  border: 1px solid var(--loom-color-border); border-radius: var(--loom-radius-popover);
+  background: var(--loom-color-surface); box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
+  > span { white-space: nowrap; font-size: var(--loom-font-size-2); color: var(--loom-color-text-muted); }
+  > button { flex-shrink: 0; }
+}
+.batchError { position: sticky; top: 48px; z-index: 6; background: var(--loom-color-surface); color: var(--loom-color-danger); padding: 8px; }
+
+.tree[data-selecting='true'] { user-select: none; }

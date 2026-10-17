@@ -391,6 +391,33 @@ export function useTextTransformController(props: TextTransformProps) {
     }
   }
 
+  async function batchEditTextResources(nodeIds: string[], operation: 'enable' | 'disable' | 'delete') {
+    const failedIds: string[] = []
+    const errors: string[] = []
+    setBusy(true)
+    setError('')
+    try {
+      for (const nodeId of nodeIds) {
+        const rule = rules.find(item => `rule:${item.id}` === nodeId)
+        const extractor = extractors.find(item => `extractor:${item.id}` === nodeId)
+        try {
+          if (rule) {
+            if (operation === 'delete') await props.api.deleteRule({ ruleId: rule.id, expectedVersion: rule.version })
+            else await props.api.upsertRule({ ruleId: rule.id, expectedVersion: rule.version, rule: { ...toRuleDraft(rule), enabled: operation === 'enable' } })
+          } else if (extractor) {
+            if (operation === 'delete') await props.api.deleteExtractor({ extractorId: extractor.id, expectedVersion: extractor.version })
+            else await props.api.upsertExtractor({ extractorId: extractor.id, expectedVersion: extractor.version, extractor: { ...toExtractorDraft(extractor), enabled: operation === 'enable' } })
+          }
+        } catch (cause) { failedIds.push(nodeId); errors.push(`${rule?.name ?? extractor?.name}: ${readError(cause)}`) }
+      }
+      props.onRuntimeChanged?.()
+      await refresh()
+      const error = errors.join('\n')
+      setError(error)
+      return { failedIds, error }
+    } finally { setBusy(false) }
+  }
+
   async function deleteRule() {
     try {
       const existing = rules.find(rule => rule.id === selectedRuleId)
@@ -457,6 +484,7 @@ export function useTextTransformController(props: TextTransformProps) {
     mobilePane,
     selectedRuleId,
     deleteRule,
+    batchEditTextResources,
     selectedExtractorId,
     ruleText,
     unsavedNewRule: selectedTarget.kind === 'rule' && Boolean(selectedRuleId) && !rules.some(rule => rule.id === selectedRuleId),

@@ -143,3 +143,9 @@ export function formatProviderErrorMessage(error: unknown, t?: Translator): { ti
     description: parsed.detail && parsed.detail !== title ? parsed.detail : undefined,
   }
 }
+
+/** Operation scopes also contain catalog reads; unknown failures do not identify a model call. */
+export function isProviderOperationError(scope: string, message: string): boolean {
+  const providerScope = scope === 'provider-settings' || scope === 'agent-chat' || /\bProvider\b/i.test(message)
+  return providerScope && parseProviderError(message).messageKey !== 'notify.provider.genericFailed'
+}

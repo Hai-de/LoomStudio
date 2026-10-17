@@ -42,6 +42,7 @@ export function StateVariablesPanel(props: Props) {
   const requestIdRef = useRef(0)
   const saveRequestRef = useRef<symbol | undefined>(undefined)
   const mountedRef = useRef(true)
+  const treeScrollRef = useRef<HTMLDivElement>(null)
   const targetKey = JSON.stringify([props.timelineTarget?.timelineId, props.timelineTarget?.branchId, props.refreshToken])
   const sourceRef = useRef<SnapshotSource>({ api: props.api, key: targetKey })
   if (sourceRef.current.api !== props.api || sourceRef.current.key !== targetKey) {
@@ -462,13 +463,15 @@ export function StateVariablesPanel(props: Props) {
               </Button>
             </div>
           </header>
-          <div className={styles.treeContainer} inert={saving} aria-busy={saving}>
+          <div ref={treeScrollRef} className={styles.treeContainer} inert={saving} aria-busy={saving}>
             {scope === 'timeline' && props.timelineTarget ? <div className={styles.scopeBanner}>{props.timelineTarget.timelineId} · {props.timelineTarget.branchId}</div> : null}
             {treeNodes.length === 0 ? (
               <div className={styles.emptyState}><p>{props.t('stateVariables.emptyRuntime')}</p></div>
             ) : (
               <FileTree
                 ariaLabel={props.t('stateVariables.treeLabel')}
+                virtualized
+                getVirtualScrollElement={() => treeScrollRef.current}
                 expandedIds={treeExpandedIds}
                 getDisclosureLabel={(node, expanded) => `${expanded ? props.t('stateVariables.collapse') : props.t('stateVariables.expand')} ${node.label}`}
                 getDragLabel={node => node.label}
