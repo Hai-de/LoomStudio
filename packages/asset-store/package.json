@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run --root ../.. tests/unit/asset-store",
-    "lint": "eslint ."
+    "lint": "oxlint ."
   },
   "dependencies": {
     "@loom-studio/blob-store": "workspace:*",

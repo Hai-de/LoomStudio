@@ -1,7 +1,11 @@
 # 编码规范 (Code Style)
 
-Loom Studio 使用 `eslint` 与 TypeScript 静态检查约束可自动判断的规则。
+Loom Studio 使用 Oxlint 与 TypeScript 静态检查约束可自动判断的规则。
 但是，工具无法替代良好的命名和架构直觉，以下是我们约定俗成的规则。
+
+从仓库根目录运行 `pnpm lint`，或运行 `pnpm --filter <包名> lint` 检查单个 Workspace。规则、导入边界和文件范围维护在根目录 [`.oxlintrc.jsonc`](../../.oxlintrc.jsonc)，CI 沿用 `pnpm lint`。
+
+Oxlint 默认遵循 `.gitignore`，目录扫描会跳过本地 `extensions/` 等忽略项；需要检查独立扩展时显式传入源码文件。构建产物、运行时副本、测试、脚本与配置文件沿用原 lint 排除范围。类型检查仍由 TypeScript 承担，不启用 Oxlint 的类型检查或类型感知模式。
 
 ## 1. 命名规范
 

@@ -10,7 +10,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -b",
-    "lint": "eslint ."
+    "lint": "oxlint ."
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.41",

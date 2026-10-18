@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run --root ../.. tests/unit/application-runtime tests/integration/application-runtime",
-    "lint": "eslint ."
+    "lint": "oxlint ."
   },
   "dependencies": {
     "@loom-studio/ai-gateway": "workspace:*",

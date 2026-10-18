@@ -34,7 +34,7 @@ React 负责局部组件状态。TanStack Query 负责缓存型远端状态，Zu
 
 ## 3. 开发与审计工具
 
-- TypeScript 与 ESLint：类型、导入方向和静态规则。
+- TypeScript 7 原生编译器与 Oxlint：类型、导入方向和静态规则；现有 `tsc`、Build 和 Watch 命令保持不变。
 - Vitest：单元、契约与集成测试。
 - fast-check：树操作和状态转换等真实不变量。
 - mitata：纯 model/lib 基准，不替代浏览器性能诊断。

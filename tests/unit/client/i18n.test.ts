@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs'
-import ts from 'typescript'
+import { parseSync, traverse, types } from '@babel/core'
 import { describe, expect, it } from 'vitest'
 import { enUS } from '../../../apps/studio-client/src/shared/i18n/en-us.js'
 import { jaJP } from '../../../apps/studio-client/src/shared/i18n/ja-jp.js'
@@ -19,21 +19,25 @@ const root = new URL('../../../apps/studio-client/src/shared/i18n/', import.meta
 function readDomains(locale: string) {
   const directory = new URL(`${locale}/`, root)
   return Object.fromEntries(readdirSync(directory).filter(file => file.endsWith('.ts')).map(file => {
-    const source = ts.createSourceFile(file, readFileSync(new URL(file, directory), 'utf8'), ts.ScriptTarget.Latest, true)
+    const source = parseSync(readFileSync(new URL(file, directory), 'utf8'), {
+      filename: file,
+      babelrc: false,
+      configFile: false,
+      parserOpts: { plugins: ['typescript'] },
+    })
+    if (!source) throw new Error(`${locale}/${file}: dictionary could not be parsed`)
     const entries: [string, string][] = []
-    function visit(node: ts.Node) {
-      if (ts.isObjectLiteralExpression(node)) {
-        for (const property of node.properties) {
-          if (!ts.isPropertyAssignment(property) || !ts.isStringLiteral(property.name) || !ts.isStringLiteral(property.initializer)) {
+    traverse(source, {
+      ObjectExpression(path) {
+        for (const property of path.node.properties) {
+          if (!types.isObjectProperty(property) || property.computed || !types.isStringLiteral(property.key) || !types.isStringLiteral(property.value)) {
             throw new Error(`${locale}/${file}: dictionaries must contain literal string entries`)
           }
-          entries.push([property.name.text, property.initializer.text])
+          entries.push([property.key.value, property.value.value])
         }
-      } else {
-        ts.forEachChild(node, visit)
-      }
-    }
-    visit(source)
+        path.skip()
+      },
+    })
     expect(entries.length, `${locale}/${file}`).toBeGreaterThan(0)
     return [file, entries]
   }))

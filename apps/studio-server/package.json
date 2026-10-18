@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run --root ../.. tests/unit/studio-server tests/integration/studio-server",
-    "lint": "eslint .",
+    "lint": "oxlint .",
     "dev": "tsx src/main.ts"
   },
   "dependencies": {

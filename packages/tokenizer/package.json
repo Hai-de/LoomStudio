@@ -9,6 +9,6 @@
     "./contracts": "./dist/contracts.js"
   },
   "types": "./dist/index.d.ts",
-  "scripts": { "build": "tsc -b", "lint": "eslint ." },
+  "scripts": { "build": "tsc -b", "lint": "oxlint ." },
   "dependencies": { "gpt-tokenizer": "4.0.0" }
 }

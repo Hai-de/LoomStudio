@@ -16,7 +16,7 @@
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run --root ../.. tests/unit/logging",
-    "lint": "eslint ."
+    "lint": "oxlint ."
   },
   "dependencies": {
     "@loom-studio/shared": "workspace:*"
