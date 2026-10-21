@@ -218,6 +218,7 @@ function assertPromptResourceArtifact(value: unknown): asserts value is PromptRe
   if (!isPromptResourceKind(value.resourceKind)) throw new Error(`Invalid Prompt Resource kind: ${String(value.resourceKind)}`)
   if (value.macroOptions !== undefined) normalizeMacroOptions(value.macroOptions)
   if (value.useCardLore !== undefined && typeof value.useCardLore !== 'boolean') throw new Error('Invalid Preset card Lore selection')
+  if (value.useGlobalLore !== undefined && typeof value.useGlobalLore !== 'boolean') throw new Error('Invalid Preset global Lore selection')
   if (value.loreMounts !== undefined && (!Array.isArray(value.loreMounts) || value.resourceKind !== 'preset'
     || value.loreMounts.some(reference => !isObject(reference)
       || (reference.kind !== 'package' && reference.kind !== 'external')
@@ -259,7 +260,7 @@ export function isCardBundleArtifact(value: JsonValue | undefined): value is Car
   }
 }
 
-function assertCardBundleArtifact(value: unknown): asserts value is CardBundleArtifact {
+export function assertCardBundleArtifact(value: unknown): asserts value is CardBundleArtifact {
   if (!isObject(value)) throw new Error('Card bundle must be an object')
   if (value.schemaVersion !== 4) throw new Error(`Unsupported card bundle schemaVersion: ${String(value.schemaVersion)}`)
   assertNonEmptyString(value.artifactId, 'Card bundle artifactId')

@@ -102,24 +102,36 @@ export function projectSessionHistory(
 
 export async function readSessionHistory(
   store: AgentStore, agentSessionId: string,
+  acceptsSummary: (entry: AgentTranscriptEntry) => boolean | Promise<boolean> = () => true,
 ) {
   const page = await store.getEntryPage({ agentSessionId, limit: 100 })
-  const summary = await store.getLatestWorkSummary(agentSessionId)
   const pages = [page.entries]
   let cursor = page.nextCursor
-  let oldestSequence = page.entries[0]?.sequence ?? 0
+  let summary: AgentTranscriptEntry | undefined
+  const chooseSummary = async (entries: AgentTranscriptEntry[]) => {
+    for (const entry of [...entries].reverse()) {
+      if (entry.entry.kind === 'work-summary' && await acceptsSummary(entry)) return entry
+    }
+  }
+  summary = await chooseSummary(page.entries)
   // Page size is not retention. Only a committed handoff can retire a work segment.
-  while (cursor && oldestSequence > (summary?.sequence ?? 0)) {
+  while (cursor && (!summary || pages.at(-1)![0]!.sequence > summaryRetiredThrough(summary))) {
     const older = await store.getEntryPage({ agentSessionId, cursor, limit: 100 })
     pages.push(older.entries)
-    oldestSequence = older.entries[0]?.sequence ?? 0
+    summary ??= await chooseSummary(older.entries)
     cursor = older.nextCursor
   }
   const entries = pages.reverse().flat()
   if (summary) {
-    return { ...page, entries: [summary, ...entries.filter(entry => entry.sequence > summary.sequence)], nextCursor: summary.parentEntryId }
+    return { ...page, entries: [summary, ...entries.filter(entry =>
+      entry.entry.kind !== 'work-summary' && entry.sequence > summaryRetiredThrough(summary!))], nextCursor: cursor }
   }
-  return { ...page, entries, nextCursor: cursor }
+  return { ...page, entries: entries.filter(entry => entry.entry.kind !== 'work-summary'), nextCursor: cursor }
+}
+
+export function summaryRetiredThrough(summary: AgentTranscriptEntry): number {
+  return summary.entry.kind === 'work-summary'
+    ? summary.entry.boundary?.retiredThroughSequence ?? summary.sequence : 0
 }
 
 function escapeAttribute(value: string): string {

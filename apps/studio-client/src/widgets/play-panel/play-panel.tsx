@@ -1,23 +1,16 @@
-import { Bot, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react'
-import { useMemo, useState, type ReactNode } from 'react'
+import { Bot, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Star, X } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { formatDate, formatDateTime, type Translator } from '../../shared/i18n/index.js'
 import type { AgentPreset, AgentSession, CardSummary, NarrativeTimeline } from '../../entities/index.js'
 import { cardMediaUrl, useCardMediaRevision } from '../../shared/lib/card-media.js'
 import styles from './play-panel.module.scss'
-import { PanelHeaderActions } from '../../shared/studio-shell/studio-window-header-context.js'
 import { useStudioLayoutStore } from '../../shared/studio-shell/studio-layout-store.js'
-import { PanelTabs } from '../../shared/ui/panel-tabs/index.js'
 import { useSlidingHover } from '../../shared/hooks/use-sliding-hover.js'
 
-type PlayTab = 'character' | 'sessions'
-
-type PlayPanelProps = {
-  character: ReactNode
-  sessions: ReactNode
-  t: Translator
-}
-
 type RecentPlayPanelProps = {
+  activeTimelineId?: string
+  activeSessionId?: string
+  primarySessionId?: string
   t: Translator
   cards: CardSummary[]
   timelines: NarrativeTimeline[]
@@ -26,29 +19,6 @@ type RecentPlayPanelProps = {
   onOpenCard(card: CardSummary): void
   onOpenTimeline(timeline: NarrativeTimeline): void
   onOpenAgentSession(session: AgentSession): void
-}
-
-export function PlayPanel(props: PlayPanelProps) {
-  const tab = useStudioLayoutStore(state => state.playTab)
-  const setTab = useStudioLayoutStore(state => state.setPlayTab)
-  return (
-    <section className={styles.panel} aria-label={props.t('rail.play')}>
-      <div className={styles.header}>
-        <PanelTabs<PlayTab>
-          activeId={tab}
-          ariaLabel={props.t('rail.play')}
-          items={[
-            { id: 'character', label: props.t('rail.character') },
-            { id: 'sessions', label: props.t('rail.sessions') },
-          ]}
-          onChange={setTab}
-        />
-      </div>
-      <div className={styles.content}>
-        {tab === 'character' ? props.character : props.sessions}
-      </div>
-    </section>
-  )
 }
 
 export function RecentPlayPanel(props: RecentPlayPanelProps) {
@@ -116,8 +86,8 @@ export function RecentPlayPanel(props: RecentPlayPanelProps) {
   const sessionsHover = useSlidingHover<HTMLElement>()
 
   return (
-    <section className={styles.panel} aria-label={props.t('rail.recent')}>
-      <PanelHeaderActions panel="recent">
+    <section className={styles.panel} aria-label={props.t('history.tabRecent')}>
+      <div className={styles.header}>
         <button
           aria-expanded={calendarOpen}
           aria-label={props.t('play.filterDate')}
@@ -128,7 +98,7 @@ export function RecentPlayPanel(props: RecentPlayPanelProps) {
         >
           <CalendarDays size={15} aria-hidden="true" />
         </button>
-      </PanelHeaderActions>
+      </div>
       {calendarOpen ? (
         <div className={styles.calendarPopover} role="dialog" aria-label={props.t('play.filterDate')}>
           <div className={styles.calendarHeader}>
@@ -178,7 +148,8 @@ export function RecentPlayPanel(props: RecentPlayPanelProps) {
             {groupedTimelines.map(group => <div className={styles.sessionGroup} key={group.key}>
               {!selectedDate ? <span className={styles.sessionDate}>{formatDay(group.key)}</span> : null}
               {group.items.slice(0, 8).map(item => (
-                <button data-hover-item className={styles.sessionRow} key={item.id} type="button" onClick={item.open}>
+                <button data-hover-item className={styles.sessionRow} key={item.id} type="button" onClick={item.open}
+                  aria-current={item.id === props.activeTimelineId ? 'true' : undefined}>
                   <span className={styles.sessionAvatar}>
                     {item.avatarUrl ? <img src={item.avatarUrl} alt="" /> : item.title.slice(0, 1)}
                   </span>
@@ -209,8 +180,11 @@ export function RecentPlayPanel(props: RecentPlayPanelProps) {
             {recentSessionsOpen ? groupedSessions.map(group => <div className={styles.sessionGroup} key={group.key}>
               {!selectedDate ? <span className={styles.sessionDate}>{formatDay(group.key)}</span> : null}
               {group.items.slice(0, 8).map(item => (
-                <button data-hover-item className={styles.sessionRow} key={item.id} type="button" onClick={item.open}>
-                  <Bot className={styles.sessionBot} aria-hidden="true" />
+                <button data-hover-item className={styles.sessionRow} key={item.id} type="button" onClick={item.open}
+                  aria-current={item.id === props.activeSessionId ? 'true' : undefined}>
+                  {item.id === props.primarySessionId
+                    ? <Star className={`${styles.sessionBot} ${styles.primaryIcon}`} fill="currentColor" aria-label={props.t('agent.primarySession')} />
+                    : <Bot className={styles.sessionBot} aria-hidden="true" />}
                   <span className={styles.sessionContent}>
                     <span className={styles.sessionInfo}>
                       <span className={styles.sessionType}>{formatRecentDate(item.updatedAt)}</span>

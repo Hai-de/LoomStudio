@@ -47,7 +47,7 @@ Package 只通过 [`src/index.ts`](./src/index.ts) 暴露 public API，构建产
 - **外部网络与执行依赖**：`undici`（用于与模型服务通信及 `ProxyAgent` 代理支持）、`quickjs-emscripten`（用于 CodeAct 沙箱隔离执行）。
 - **宽松引用与容错构建**：删除 Provider/Model、Agent Preset 或被引用的 Lore 保留下游软引用，不自动改绑；必要 Provider Profile/Preset/Model 缺失时执行失败。PromptBuild 对可跳过的缺失 Lore/Tool 发出警告并跳过，未解析宏保留原文；这不意味着必要资源缺失或存储失败也可以忽略。
 - **Agent 身份**：Session 创建时固定引用 Agent Preset，换预设须新建 Session；Preset 聚合编排、历史/交付配置、可选模型绑定及资源使用配置。Agent Profile 层已取消，Provider Profile 仍是独立模型连接配置。
-- **定义与消费分离**：预设 Lore Mount 显式采用 Lore，`useCardLore` 控制默认角色 Lore，`textUses` 覆盖正则/提取器启用与顺序，Tool Mount 配置工具。公共 Lore 不默认注入，公共正则按上下文参与默认消费；引用不改变归属或绕过安装可用性。切换 Session 不启停整个扩展，也不建立预设专属代码实例。
+- **定义与消费分离**：预设 Lore Mount 显式采用 Lore，`useGlobalLore` 控制已挂载的全局 Lore 继承（默认开启），`useCardLore` 控制默认角色 Lore，`textUses` 覆盖正则/提取器启用与顺序，Tool Mount 配置工具。未挂载的公共 Lore 不默认注入，公共正则按上下文参与默认消费；引用不改变归属或绕过安装可用性。切换 Session 不启停整个扩展，也不建立预设专属代码实例。
 - **单资源导出**：输出资源树、作者宏及已实现的使用配置引用，不递归包含脚本、规则定义或关联资源内容；只有实际纳入扩展文件及贡献清单的资源才随扩展包分发。见[资源归属与使用配置](../../docs/architecture/application/prompt-build/README.md#资源归属与使用配置)。
 
 本包不注册 HTTP/JSON-RPC 路由，不拥有 React/Zustand 前端状态，不提供 Kernel 核心路由，也不直接操作 SQLite 裸连接。装配接收独立 Store，而不是 `ApplicationDataStore` 聚合对象：`dataEngine`、`documents`、`promptResources` 必需；`states` 可基于同一 Engine 创建，Agent/Narrative 操作要求对应的 `agents` / `narratives` 已注入，见 [`application-context.ts`](./src/foundation/application-context.ts)。

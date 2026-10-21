@@ -287,8 +287,6 @@
   }
 
   &[data-active='true'] {
-    background: var(--loom-color-surface-subtle);
-
     .itemActionButton {
       opacity: 1;
     }
@@ -438,10 +436,6 @@
     .itemActionButton {
       opacity: 1;
     }
-  }
-
-  &[data-active='true'] {
-    background: var(--loom-color-surface-subtle);
   }
 
   &[data-selected='true'] {
@@ -1000,4 +994,48 @@
   .detailPane {
     background: transparent;
   }
+}
+
+.scopeRow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; color: var(--loom-color-text-muted); font-size: var(--loom-font-size-1); }
+.summaryPane { flex: 1; min-height: 360px; display: flex; flex-direction: column; }
+
+// Detail content scrolls; navigation must retain its intrinsic height.
+.detailPane > [data-loom-ui-tabs] { flex-shrink: 0; }
+
+// Keep inspected selection distinct from the currently used story or session.
+.itemRow[data-active='true'],
+.childItemRow[data-active='true'] {
+  color: var(--loom-color-accent-strong);
+  background: color-mix(in srgb, var(--loom-color-accent-strong) 14%, var(--loom-color-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--loom-color-accent-strong) 25%, transparent);
+
+  strong,
+  > svg,
+  .avatarPlaceholder > svg { color: var(--loom-color-accent-strong); }
+}
+
+.childItemRow > .primaryIcon,
+.avatarPlaceholder > .primaryIcon { color: var(--loom-color-accent-strong); }
+
+.itemRow[aria-current='true'] .itemBody strong,
+.childItemRow[aria-current='true'] .childItemBody strong {
+  color: var(--loom-color-accent-strong);
+}
+
+.sessionHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  min-width: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--loom-color-divider);
+  > svg { flex: none; color: var(--loom-color-text-muted); }
+  h3 { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--loom-font-size-3); }
+}
+.sessionRole { flex: none; color: var(--loom-color-text-muted); font-size: var(--loom-font-size-1); }
+.sessionActions { margin-left: auto; display: flex; align-items: center; gap: 4px; flex: none; }
+@media (max-width: 640px) {
+  .sessionHeader { flex-wrap: wrap; }
+  .sessionActions { flex-wrap: wrap; }
 }

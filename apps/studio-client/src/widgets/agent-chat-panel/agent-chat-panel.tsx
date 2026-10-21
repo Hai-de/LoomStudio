@@ -74,10 +74,12 @@ type StepToolItem = {
   inputs: Array<{ label: string; content: string }>
   resultContent?: string
   errorContent?: string
-  status?: 'success' | 'error' | 'running'
+  status?: 'success' | 'error' | 'running' | 'interrupted'
 }
 
 type RenderItem =
+  | { kind: 'summary'; id: string; label: string; content: string }
+
   | {
       kind: 'message'
       id: string
@@ -100,7 +102,19 @@ type RenderItem =
       content: string
     }
 
-export function buildRenderItems(entries: AgentTranscriptEntryEntity[]): RenderItem[] {
+export function buildRenderItems(entries: AgentTranscriptEntryEntity[], activeRun?: ActiveAgentRun): RenderItem[] {
+  const runStates = new Map<string, string>()
+  let latestRunId: string | undefined
+  for (const message of entries) {
+    if (message.runId && message.entry.kind === 'run-state' && typeof message.entry.state === 'string') {
+      runStates.set(message.runId, message.entry.state)
+      latestRunId = message.runId
+    }
+  }
+  if (activeRun) {
+    runStates.set(activeRun.runId, activeRun.status)
+    latestRunId = activeRun.runId
+  }
 
   const toolResultsByInvocationId = new Map<string, AgentTranscriptEntryEntity['entry']>()
   for (const msg of entries) {
@@ -117,7 +131,7 @@ export function buildRenderItems(entries: AgentTranscriptEntryEntity[]): RenderI
     if (pendingTools.length === 0) return
     const toolCount = pendingTools.length
     const label = toolCount === 1 ? pendingTools[0].label
-      : pendingTools.some(tool => tool.status === 'running') ? `正在执行 ${toolCount} 个操作` : `已执行 ${toolCount} 个操作`
+      : pendingTools.some(tool => tool.status === 'running') ? `正在执行 ${toolCount} 个操作` : pendingTools.some(tool => tool.status === 'interrupted') ? `${toolCount} 个操作（含中断）` : `已执行 ${toolCount} 个操作`
     items.push({
       kind: 'tool-group',
       id: `tool-group-${pendingTools[0].id}`,
@@ -135,7 +149,10 @@ export function buildRenderItems(entries: AgentTranscriptEntryEntity[]): RenderI
       continue
     }
 
-    if (entry.kind === 'tool-invocation') {
+    if (entry.kind === 'work-summary') {
+      flushTools()
+      items.push({ kind: 'summary', id: msg.id, label: '已保存交接摘要', content: String(entry.content ?? '') })
+    } else if (entry.kind === 'tool-invocation') {
       const toolId = String(entry.toolId || '')
       const exposedName = String(entry.exposedName || entry.toolId || '执行工具')
       const invocationId = String(entry.invocationId ?? '')
@@ -177,6 +194,8 @@ export function buildRenderItems(entries: AgentTranscriptEntryEntity[]): RenderI
         ? [typeof error.code === 'string' ? error.code : '', typeof error.message === 'string' ? error.message : ''].filter(Boolean).join(': ')
         : undefined
 
+      const runState = msg.runId ? runStates.get(msg.runId) : undefined
+      const interrupted = Boolean(runState && (runState !== 'running' && runState !== 'created' || msg.runId !== latestRunId))
       pendingTools.push({
         id: msg.id,
         iconType,
@@ -184,7 +203,7 @@ export function buildRenderItems(entries: AgentTranscriptEntryEntity[]): RenderI
         inputs,
         resultContent,
         errorContent: errorContent || undefined,
-        status: !pairedResult ? 'running' : pairedResult.status === 'completed' ? 'success' : 'error',
+        status: !pairedResult ? interrupted ? 'interrupted' : 'running' : pairedResult.status === 'completed' ? 'success' : 'error',
       })
     } else if (entry.kind === 'reasoning' && typeof entry.content === 'string') {
       flushTools()
@@ -241,7 +260,11 @@ export type AgentChatPanelProps = RunRecoveryControlsProps & {
   timelines?: NarrativeTimeline[]
   sessionReady?: boolean
   sessionTail?: ReactNode
+  summaryCoverage?: { retiredThroughSequence: number; sourceThroughSequence: number; messages: { retired: number; source: number; total: number } }
+  summaryRows?: { id: string; sourceThroughSequence: number; adopted: boolean; content: ReactNode }[]
+  summaryControl?: { state: 'running' | 'suspended' | 'idle'; stop(): void; resume(): void }
   t: Translator
+  onOpenMemory?(): void
   onChangeInput(value: string): void
   onSelectProfile(id: string): void
   onSelectSession?(id: string): void
@@ -262,14 +285,55 @@ export type AgentChatPanelProps = RunRecoveryControlsProps & {
 
 export const AgentChatPanel = memo(function AgentChatPanel(props: AgentChatPanelProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const summaryControl = !props.busy && props.activeRun?.status !== 'running' && props.activeRun?.status !== 'suspended' ? props.summaryControl : undefined
   const recovery = props.runRecovery?.target === 'agent' ? props.runRecovery : undefined
   const disconnected = props.runRecovery?.status === 'disconnected'
+  const canSend = Boolean(props.input.trim()) && !props.busy && props.summaryControl?.state !== 'running' && !disconnected && !props.runRecoveryBusy && props.sessionReady !== false && Boolean(props.selectedProfileId)
+    && props.activeRun?.status !== 'running' && props.activeRun?.status !== 'suspended'
   const [createOpen, setCreateOpen] = useState(false)
   const approval = props.activeRun?.approval
+  const approvalKey = approval ? `${props.activeRun!.runId}:${approval.requestId}` : undefined
+  const [hiddenApproval, setHiddenApproval] = useState<string>()
   const { feedback: copyState, copy: copyText } = useCopyFeedback()
 
   const effectiveMessages = props.messages
-  const renderItems = useMemo(() => buildRenderItems(effectiveMessages), [effectiveMessages])
+  const renderItems = useMemo(() => {
+    const rows = props.summaryRows ?? []
+    const mergedSources = new Set<number>()
+    const entries = effectiveMessages.filter(message => {
+      const boundary = message.entry.boundary
+      if (message.entry.kind !== 'work-summary' || !boundary || typeof boundary !== 'object' || Array.isArray(boundary)) return true
+      const source = boundary.sourceThroughSequence
+      if (typeof source !== 'number' || mergedSources.has(source)) return true
+      if (!rows.some(row => row.adopted && row.sourceThroughSequence === source)) return true
+      mergedSources.add(source)
+      return false
+    })
+    const base = buildRenderItems(entries, props.activeRun)
+    const sequence = new Map(entries.map(entry => [entry.id, entry.sequence]))
+    const result: (RenderItem | { kind: 'summary-activity'; id: string; content: ReactNode })[] = []
+    const pending = [...rows]
+    const coverage = props.summaryCoverage
+    if (coverage && coverage.retiredThroughSequence > 0) {
+      pending.push({ id: 'summary-retired-start', sourceThroughSequence: 0, adopted: false,
+        content: <div className={styles.contextBoundary}><strong>已由摘要替代的历史</strong><span>会话消息 #1–#{coverage.messages.retired} 及对应工具记录不再以原文注入，仍可在此查阅。</span></div> })
+      pending.push({ id: 'summary-retired-end', sourceThroughSequence: coverage.retiredThroughSequence, adopted: false,
+        content: <div className={styles.contextBoundary}><strong>{coverage.sourceThroughSequence > coverage.retiredThroughSequence ? '原文缓冲区' : '以下保留原文'}</strong><span>此前的工作由会话摘要接续；以下工作仍保留完整上下文。</span></div> })
+      if (coverage.sourceThroughSequence > coverage.retiredThroughSequence) pending.push({ id: 'summary-buffer-end', sourceThroughSequence: coverage.sourceThroughSequence, adopted: false,
+        content: <div className={styles.contextBoundary}><strong>交接后新增工作</strong><span>以上为此次交接保留的缓冲区；以下是后续新工作。</span></div> })
+    }
+    pending.sort((a, b) => a.sourceThroughSequence - b.sourceThroughSequence)
+    for (const item of base) {
+      const start = sequence.get(item.kind === 'tool-group' ? item.tools[0].id : item.id) ?? Infinity
+      while (pending.length && pending[0].sourceThroughSequence < start) {
+        const row = pending.shift()!
+        result.push({ kind: 'summary-activity', id: row.id, content: row.content })
+      }
+      result.push(item)
+    }
+    for (const row of pending) result.push({ kind: 'summary-activity', id: row.id, content: row.content })
+    return result
+  }, [effectiveMessages, props.summaryRows, props.summaryCoverage, props.activeRun])
   const { scrollRef: conversationRef, contentRef, listRef, headerRef, virtualizer, scrollMargin, onScroll } = useConversationViewport({
     items: renderItems,
     active: props.active,
@@ -300,8 +364,10 @@ export const AgentChatPanel = memo(function AgentChatPanel(props: AgentChatPanel
           presets={props.profiles} cards={props.cards} timelines={props.timelines} t={props.t}
           disabled={props.busy}
           sessionReady={props.sessionReady} primarySessionId={props.primarySessionId} timelineId={props.timelineId}
-          onSelect={props.onSelectSession} onRename={props.onRenameSession} onSetPrimary={props.onSetPrimary} />
+          onRename={props.onRenameSession} onSetPrimary={props.onSetPrimary} />
         <div className={styles.sessionActions}>
+          {props.onOpenMemory && <button className={styles.sessionAction} type="button" disabled={!props.session || props.sessionReady === false}
+            title="会话记忆" aria-label="会话记忆" onClick={props.onOpenMemory}><BookOpen aria-hidden="true" /></button>}
           <button className={styles.sessionAction} type="button" disabled={props.busy || (!props.onCreateSession && !props.onNewSession)}
             title={props.t('agent.sessionNew')} aria-label={props.t('agent.sessionNew')}
             onClick={() => props.onCreateSession ? setCreateOpen(true) : props.onNewSession?.()}>
@@ -349,6 +415,7 @@ export const AgentChatPanel = memo(function AgentChatPanel(props: AgentChatPanel
           {virtualizer.getVirtualItems().map(row => {
             const item = renderItems[row.index]
             let content: ReactNode
+            if (item.kind === 'summary-activity') content = item.content
             if (item.kind === 'tool-group') {
               content = (
                 <AgentToolGroupBlock
@@ -360,6 +427,13 @@ export const AgentChatPanel = memo(function AgentChatPanel(props: AgentChatPanel
                   t={props.t}
                 />
               )
+            }
+            if (item.kind === 'summary') {
+              content = <details style={{ margin: '10px 16px', fontSize: 'var(--loom-font-size-2)' }}>
+                <summary>{item.label}</summary>
+                <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{item.content}</p>
+                <button type="button" onClick={props.onOpenMemory}>查看当前生效摘要</button>
+              </details>
             }
             if (item.kind === 'reasoning') {
               content = (
@@ -407,26 +481,30 @@ export const AgentChatPanel = memo(function AgentChatPanel(props: AgentChatPanel
         </div>
       </div>
 
-      {approval ? <AgentMutationApprovalDialog key={`${props.activeRun!.runId}:${approval.requestId}`}
-        approval={approval} onApprove={props.onApproveMutation} t={props.t} /> : null}
+      {approval && hiddenApproval !== approvalKey ? <AgentMutationApprovalDialog key={`${props.activeRun!.runId}:${approval.requestId}`}
+        approval={approval} onApprove={props.onApproveMutation} onClose={() => setHiddenApproval(approvalKey)} t={props.t} /> : null}
 
       <footer className={styles.footer}>
+        {approval ? <button type="button" className={styles.pendingApproval} onClick={() => setHiddenApproval(undefined)}>
+          {props.t('agent.approvalPending')} · {props.t('agent.approvalReview')}
+        </button> : null}
+        {recovery ? <div className={styles.floatingRecovery}><RunRecoveryControls {...props} runRecovery={recovery} /></div> : null}
         <ChatComposer
           inputRef={inputRef}
           canPreviewPrompt={false}
-          canSend={Boolean(props.input.trim()) && !props.busy && !disconnected && !props.runRecoveryBusy && props.sessionReady !== false && Boolean(props.selectedProfileId)}
-          sheet={recovery ? <RunRecoveryControls {...props} runRecovery={recovery} /> : undefined}
+          canSend={canSend}
           input={props.input}
           moreLabel={props.t('composer.more')}
           placeholder={props.t('agent.composerPlaceholder')}
           previewLabel={props.t('composer.preview')}
           retryLabel={props.t('composer.retry')}
           sendLabel={props.t('agent.send')}
-          pauseLabel={props.t('agent.run.pause')}
-          resumeLabel={props.t('agent.run.resume')}
-          runStatus={disconnected ? 'idle' : props.busy || props.activeRun?.status === 'running' ? 'running' : props.activeRun?.status === 'suspended' ? 'suspended' : 'idle'}
-          onPause={props.onPauseRun}
-          onResume={props.onResumeRun}
+          pauseLabel={summaryControl?.state === 'running' ? '终止总结' : props.t('agent.run.pause')}
+          resumeLabel={summaryControl?.state === 'suspended' ? '继续总结' : props.t('agent.run.resume')}
+          runStatus={summaryControl && summaryControl.state !== 'idle' ? summaryControl.state : disconnected ? 'idle' : props.busy || props.activeRun?.status === 'running' ? 'running' : props.activeRun?.status === 'suspended' ? 'suspended' : 'idle'}
+          stopAction={summaryControl?.state === 'running'}
+          onPause={summaryControl?.state === 'running' ? summaryControl.stop : props.onPauseRun}
+          onResume={summaryControl?.state === 'suspended' ? summaryControl.resume : props.onResumeRun}
           sendLeadingAction={(
             <AgentPresetPicker
               disabled={props.busy || props.sessionReady === false || props.activeRun?.status === 'suspended'}
@@ -437,11 +515,11 @@ export const AgentChatPanel = memo(function AgentChatPanel(props: AgentChatPanel
               onSelect={props.onSelectProfile}
             />
           )}
-          textareaDisabled={(!disconnected && props.busy) || !props.selectedProfileId}
+          textareaDisabled={!props.selectedProfileId}
           textareaLabel={props.t('agent.composerLabel')}
           onChangeInput={props.onChangeInput}
           onSubmit={event => {
-            if (disconnected || props.runRecoveryBusy) { event.preventDefault(); return }
+            if (!canSend) { event.preventDefault(); return }
             props.onSubmit(event)
           }}
         />
@@ -519,9 +597,10 @@ type RowExpansion = {
   toggle(id: string, initial?: boolean): void
 }
 
-function AgentToolActionItem(props: StepToolItem & { defaultOpen?: boolean; expansion?: RowExpansion; t?: Translator }) {
+export function AgentToolActionItem(props: StepToolItem & { defaultOpen?: boolean; expansion?: RowExpansion; t?: Translator }) {
   const [localOpen, setLocalOpen] = useState(props.defaultOpen ?? false)
   const open = props.expansion?.isOpen(props.id, props.defaultOpen) ?? localOpen
+  const duplicateResult = Boolean(props.errorContent && props.resultContent?.trim() === props.errorContent.trim())
 
   const renderIcon = () => {
     switch (props.iconType) {
@@ -548,7 +627,7 @@ function AgentToolActionItem(props: StepToolItem & { defaultOpen?: boolean; expa
         onClick={() => props.expansion ? props.expansion.toggle(props.id, props.defaultOpen) : setLocalOpen(prev => !prev)}
         aria-expanded={open}
       >
-        <span className={styles.toolItemIcon}>{renderIcon()}</span>
+        <span className={styles.toolItemIcon}>{props.status === 'running' ? <RefreshCw className={styles.toolSpinner} aria-hidden="true" /> : renderIcon()}</span>
         <span className={styles.toolItemLabel}>{props.label}</span>
         {open ? (
           <ChevronDown className={styles.toolItemChevron} aria-hidden="true" />
@@ -571,7 +650,7 @@ function AgentToolActionItem(props: StepToolItem & { defaultOpen?: boolean; expa
               <pre className={`${styles.toolDetailCode} ${styles.toolDetailError}`}>{props.errorContent}</pre>
             </div>
           ) : null}
-          {props.resultContent !== undefined && (props.resultContent || !props.errorContent) ? (
+          {props.resultContent !== undefined && !duplicateResult && (props.resultContent || !props.errorContent) ? (
             <div className={styles.toolDetailSection}>
               <span className={styles.toolDetailTag}>{props.t ? props.t('agent.tool.result') : '结果'}</span>
               <pre className={styles.toolDetailCode}>{props.resultContent || (props.t ? props.t('agent.tool.noOutput') : '无输出')}</pre>
@@ -585,6 +664,11 @@ function AgentToolActionItem(props: StepToolItem & { defaultOpen?: boolean; expa
               <>
                 <AlertCircle aria-hidden="true" />
                 <span>{props.t ? props.t('agent.tool.failed') : '失败'}</span>
+              </>
+            ) : props.status === 'interrupted' ? (
+              <>
+                <AlertCircle aria-hidden="true" />
+                <span>{props.t ? props.t('agent.tool.interrupted') : '已中断'}</span>
               </>
             ) : props.status === 'running' ? (
               <>

@@ -1,0 +1,168 @@
+{
+  "schema": "loom.promptResource.files.v1",
+  "artifact": {
+    "format": "loom.promptResource",
+    "schemaVersion": 2,
+    "resourceKind": "preset",
+    "useCardLore": true,
+    "useGlobalLore": false
+  },
+  "rootNode": {
+    "metadata": {
+      "id": "official.story-memory.summary",
+      "kind": "module",
+      "category": "preset",
+      "label": "剧情总结"
+    },
+    "children": [
+      {
+        "metadata": {
+          "id": "official.story-memory.summary.system",
+          "kind": "message",
+          "category": "preset",
+          "label": "总结指令",
+          "capabilities": {
+            "roleHint": "system"
+          }
+        },
+        "children": [
+          {
+            "metadata": {
+              "id": "official.story-memory.summary.common",
+              "kind": "entry",
+              "category": "preset",
+              "label": "共同总结规则",
+              "enabled": true
+            },
+            "body": "entries/common.md"
+          },
+          {
+            "metadata": {
+              "id": "official.story-memory.summary.lv1",
+              "kind": "entry",
+              "category": "preset",
+              "label": "LV1 · 原始剧情总结",
+              "enabled": true,
+              "capabilities": {
+                "activation": {
+                  "kind": "condition",
+                  "conditions": [
+                    {
+                      "fact": "summary.level",
+                      "equals": 1
+                    }
+                  ]
+                }
+              }
+            },
+            "body": "entries/lv1.md"
+          },
+          {
+            "metadata": {
+              "id": "official.story-memory.summary.lv2",
+              "kind": "entry",
+              "category": "preset",
+              "label": "LV2 · 跨总结压缩",
+              "enabled": true,
+              "capabilities": {
+                "activation": {
+                  "kind": "condition",
+                  "conditions": [
+                    {
+                      "fact": "summary.level",
+                      "equals": 2
+                    }
+                  ]
+                }
+              }
+            },
+            "body": "entries/lv2.md"
+          }
+        ]
+      },
+      {
+        "metadata": {
+          "id": "official.story-memory.summary.lore",
+          "kind": "message",
+          "category": "preset",
+          "label": "角色世界书参考",
+          "capabilities": {
+            "roleHint": "system"
+          }
+        },
+        "children": [
+          {
+            "metadata": {
+              "id": "official.story-memory.summary.lore.stable",
+              "kind": "virtual",
+              "category": "preset",
+              "label": "角色常驻设定",
+              "capabilities": {
+                "targetAnchorId": "@lore.stable"
+              }
+            }
+          },
+          {
+            "metadata": {
+              "id": "official.story-memory.summary.lore.lower",
+              "kind": "virtual",
+              "category": "preset",
+              "label": "角色条件设定",
+              "capabilities": {
+                "targetAnchorId": "@lore.lower"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "metadata": {
+          "id": "official.story-memory.summary.session",
+          "kind": "message",
+          "category": "preset",
+          "label": "任务会话历史",
+          "capabilities": {
+            "roleHint": "system"
+          }
+        },
+        "children": [
+          {
+            "metadata": {
+              "id": "official.story-memory.summary.session.anchor",
+              "kind": "virtual",
+              "category": "preset",
+              "label": "@chat.session",
+              "capabilities": {
+                "targetAnchorId": "@chat.session"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "metadata": {
+          "id": "official.story-memory.summary.input",
+          "kind": "message",
+          "category": "preset",
+          "label": "本次来源与任务要求",
+          "capabilities": {
+            "roleHint": "user"
+          }
+        },
+        "children": [
+          {
+            "metadata": {
+              "id": "official.story-memory.summary.input.anchor",
+              "kind": "virtual",
+              "category": "preset",
+              "label": "@chat.input",
+              "capabilities": {
+                "targetAnchorId": "@chat.input"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

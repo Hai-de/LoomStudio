@@ -24,6 +24,7 @@ export type MasterDetailWorkbenchProps = {
   drilldown?: boolean
   hasSelection?: boolean
   hideBackBar?: boolean
+  navigationScope?: 'workspace' | 'local'
 }
 
 export function MasterDetailWorkbench(props: MasterDetailWorkbenchProps) {
@@ -87,6 +88,7 @@ export function MasterDetailWorkbench(props: MasterDetailWorkbenchProps) {
   }, [mobilePane])
 
   useEffect(() => {
+    if (props.navigationScope === 'local') return
     const nav = {
       canGoBack: () => showDetailOnlyRef.current,
       goBack: handleGoBack,
@@ -97,7 +99,7 @@ export function MasterDetailWorkbench(props: MasterDetailWorkbenchProps) {
     return () => {
       setWorkbenchNavigation(null)
     }
-  }, [handleGoBack, handleGoForward, setWorkbenchNavigation])
+  }, [handleGoBack, handleGoForward, setWorkbenchNavigation, props.navigationScope])
 
   const currentMasterWidth = typeof props.masterWidth === 'number' ? props.masterWidth : internalMasterWidth
 
@@ -114,7 +116,7 @@ export function MasterDetailWorkbench(props: MasterDetailWorkbenchProps) {
 
   const detailPane = (
     <section className={styles.detailPane} data-loom-slot="detail" inert={singlePane && !showDetailOnly}>
-      {isNarrow && props.hideBackBar === false ? (
+      {singlePane && (props.hideBackBar ?? props.navigationScope !== 'local') === false ? (
         <div className={styles.narrowBackBar}>
           <button
             className={styles.narrowBackButton}

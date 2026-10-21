@@ -3,16 +3,27 @@
   --loom-model-card-inset: 12px;
 
   min-width: 0;
-  min-height: 100%;
-  overflow-x: hidden;
-  padding-bottom: 32px;
+  height: 100%;
+  min-height: 0;
+  container-type: inline-size;
+  overflow: hidden;
   color: var(--loom-color-text);
   background: var(--loom-color-surface);
 }
 
 .accountsSection {
   min-width: 0;
-  padding: 14px var(--loom-model-panel-gutter);
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(0, 1.5fr);
+}
+
+.accountsPane {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px var(--loom-model-panel-gutter) 32px;
 }
 
 .aiLab {
@@ -201,13 +212,11 @@
 }
 
 .stickyCreateSection {
-  position: sticky;
-  top: 0;
-  z-index: 5;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px var(--loom-model-panel-gutter) 24px;
   background: var(--loom-color-surface);
-  padding-bottom: 12px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid var(--loom-color-divider);
 }
 
 .createAccountForm {
@@ -630,5 +639,16 @@
 :global(html[data-loom-glass-panels='true']) {
   .modelPanel {
     background: transparent;
+  }
+}
+
+@container (max-width: 640px) {
+  .accountsSection {
+    display: block;
+    overflow: auto;
+  }
+  .stickyCreateSection,
+  .accountsPane {
+    overflow: visible;
   }
 }

@@ -1,10 +1,10 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve, sep } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { pathToFileURL } from 'node:url'
 import semver from 'semver'
 
-const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+const repositoryRoot = resolve(import.meta.dirname, '../..')
 const rootPackage = readJson(resolve(repositoryRoot, 'package.json'))
 const expectedPnpm = readPackageManagerVersion(rootPackage.packageManager)
 const expectedNode = readFileSync(resolve(repositoryRoot, '.node-version'), 'utf8').trim()

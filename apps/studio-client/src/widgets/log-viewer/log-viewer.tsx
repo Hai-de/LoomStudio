@@ -250,7 +250,7 @@ export function LogViewer(props: {
     </div>
     <footer className={styles.footer}>{props.t('logs.count', { count: visibleRecords.length })} · {props.t(historyMode ? 'logs.historyAvailability' : 'logs.currentAvailability')}</footer>
     {report && <Dialog open onClose={closeReport} className={styles.report} title={props.t('logs.report')}
-      headerActions={<IconButton aria-label={props.t('logs.close')} onClick={closeReport}><X size={16} /></IconButton>}
+      showCloseButton={false} headerActions={<IconButton aria-label={props.t('logs.close')} onClick={closeReport}><X size={16} /></IconButton>}
       actions={<>
         <button type="button" onClick={() => void copyReport()}><Copy size={14} />{props.t(copyState === 'copied' ? 'logs.copied' : 'logs.reportCopy')}</button>
         <IconButton aria-label={props.t('logs.download')} onClick={() => downloadBlob(new Blob([report[reportMode]], { type: 'text/plain;charset=utf-8' }), 'loom-diagnostic.txt')}><Download size={15} /></IconButton>

@@ -81,7 +81,7 @@ export function CardResourceOverview({ api, cardId, onRefresh, t }: { api: CardD
     {error ? <p role="alert" className={styles.error}>{error}</p> : null}
     {actionError ? <p role="alert" className={styles.error}>{actionError}</p> : null}
     {overview ? <CardResourceSummary key={overview.directory} overview={overview} api={api} t={t} /> : loading || !error ? <p className={styles.empty}>{t(loading ? 'directory.loading' : 'directory.unsaved')}</p> : null}
-    {applyPreview ? <Dialog open title={t('directory.apply')} onClose={() => { if (!busy) setApplyPreview(undefined) }} headerActions={<IconButton disabled={busy} title={t('character.cancel')} aria-label={t('character.cancel')} onClick={() => setApplyPreview(undefined)}><X /></IconButton>}>
+    {applyPreview ? <Dialog open title={t('directory.apply')} onClose={() => { if (!busy) setApplyPreview(undefined) }} showCloseButton={false} headerActions={<IconButton disabled={busy} title={t('character.cancel')} aria-label={t('character.cancel')} onClick={() => setApplyPreview(undefined)}><X /></IconButton>}>
       <div className={styles.preview}>
         <p>{applyPreview.changes.length ? t('directory.changeSummary', { added: applyPreview.changes.filter(item => item.kind === 'added').length, modified: applyPreview.changes.filter(item => item.kind === 'modified').length, deleted: applyPreview.changes.filter(item => item.kind === 'deleted').length }) : t('directory.noChanges')}</p>
         {applyPreview.conflicts.length ? <><p className={styles.error}>{t('directory.conflicts', { count: applyPreview.conflicts.length })}</p><ul>{applyPreview.conflicts.map(conflict => <li key={conflict}>{conflict}</li>)}</ul></> : null}
@@ -128,7 +128,7 @@ function CardResourceSummary({ overview, api, t }: { overview: OpenCardDirectory
     {copyError ? <p role="alert" className={styles.error}>{copyError}</p> : null}
     <span role="status" className={styles.status}>{copied ? t('directory.copied') : ''}</span>
     {selectedAttachment?.kind === 'image' ? <ImageViewer title={selectedAttachment.label === 'avatar' ? t('directory.avatar') : selectedAttachment.label === 'background' ? t('directory.background') : selectedAttachment.label} src={preview?.content} fileName={selectedAttachment.path.split('/').pop() ?? 'image.png'} error={error} onClose={() => setSelected(undefined)} t={t} /> : null}
-    {selectedAttachment?.kind === 'document' ? <Dialog open title={selectedAttachment.label} onClose={() => setSelected(undefined)} headerActions={<IconButton title={t('character.cancel')} aria-label={t('character.cancel')} onClick={() => setSelected(undefined)}><X /></IconButton>}><div className={styles.preview}>{error ? <p role="alert">{error}</p> : preview ? <Markdown remarkPlugins={[remarkGfm]} skipHtml components={{ img: ({ alt }) => <span>{alt}</span>, a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer noopener">{children}</a> }}>{preview.content}</Markdown> : <p role="status">{t('directory.loading')}</p>}</div></Dialog> : null}
+    {selectedAttachment?.kind === 'document' ? <Dialog open title={selectedAttachment.label} onClose={() => setSelected(undefined)} showCloseButton={false} headerActions={<IconButton title={t('character.cancel')} aria-label={t('character.cancel')} onClick={() => setSelected(undefined)}><X /></IconButton>}><div className={styles.preview}>{error ? <p role="alert">{error}</p> : preview ? <Markdown remarkPlugins={[remarkGfm]} skipHtml components={{ img: ({ alt }) => <span>{alt}</span>, a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer noopener">{children}</a> }}>{preview.content}</Markdown> : <p role="status">{t('directory.loading')}</p>}</div></Dialog> : null}
   </>
 }
 
@@ -162,7 +162,7 @@ export function DirectoryDiscoveryNotice({ catalog, api, onRefresh, t, onClose }
     }
     finally { pending.current = false; if (active.current) setBusy(false) }
   }
-  return <Dialog open title={t('directory.found')} onClose={() => { if (!busy) onClose() }} headerActions={<IconButton disabled={busy} title={t('character.cancel')} aria-label={t('character.cancel')} onClick={onClose}><X /></IconButton>}>
+  return <Dialog open title={t('directory.found')} onClose={() => { if (!busy) onClose() }} showCloseButton={false} headerActions={<IconButton disabled={busy} title={t('character.cancel')} aria-label={t('character.cancel')} onClick={onClose}><X /></IconButton>}>
     {error ? <p role="alert" className={styles.error}>{error}</p> : null}
     <div className={styles.discovery}>{catalog.entries.filter(entry => !entry.registeredCardId && !imported.includes(entry.directory)).map(entry => <div key={entry.directory}><strong>{entry.name}</strong>{entry.sameSourceCount ? <small>{t('directory.sameSource', { count: entry.sameSourceCount })}</small> : null}{entry.error ? <p className={styles.error}>{entry.error}</p> : null}<button type="button" disabled={busy || !!entry.error} onClick={() => void importDirectory(entry.directory)}>{t('directory.confirmImport')}</button></div>)}</div>
   </Dialog>

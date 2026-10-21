@@ -29,6 +29,8 @@ export type NarrativeBranch = {
 }
 
 export type NarrativeNode = {
+  kind: 'user-input' | 'narrative'
+  floor: number
   id: string
   timelineId: string
   parentNodeId?: string

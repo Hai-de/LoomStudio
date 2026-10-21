@@ -1,6 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
-import { dirname, resolve } from 'node:path'
+import { resolve } from 'node:path'
 import { assertDevelopmentDataReady, developmentDataEnvironment } from '../lib/development-data-paths.mjs'
 
 const target = process.argv[2]
@@ -9,7 +8,7 @@ if (target !== 'server' && target !== 'client') {
   process.exit(1)
 }
 
-const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+const repositoryRoot = resolve(import.meta.dirname, '../..')
 if (target === 'server') assertDevelopmentDataReady(repositoryRoot)
 const developmentEnvironment = { ...developmentDataEnvironment(repositoryRoot), NODE_ENV: 'development' }
 const initialBuild = spawnSync('pnpm', ['run', 'build:packages'], {
@@ -44,9 +43,14 @@ process.on('SIGINT', shutdown)
 process.on('SIGTERM', shutdown)
 
 function start(label, args) {
+  const env = { ...developmentEnvironment }
+  if (label === 'studio-server' && process.stdout.isTTY
+    && env.FORCE_COLOR === undefined && env.NO_COLOR === undefined) {
+    env.FORCE_COLOR = '1'
+  }
   const child = spawn('pnpm', args, {
     cwd: repositoryRoot,
-    env: developmentEnvironment,
+    env,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   child.stdout.on('data', chunk => writePrefixed(process.stdout, label, chunk))

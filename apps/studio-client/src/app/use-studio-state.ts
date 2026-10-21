@@ -1,3 +1,4 @@
+import { useNewStoryExtensions } from '../features/extension-renderers/ui/new-story-extensions.js'
 import { readStudioLocale, saveStudioLocale } from '../features/onboarding/model/onboarding-preferences.js'
 import { createStudioTrpcClient } from '../shared/api/trpc-client.js'
 import type { Logger } from '@loom-studio/logging'
@@ -119,7 +120,9 @@ export function useStudioState(transportLogger: Logger) {
   })
   const selectedAgentPreset = agentPresets.agentPresets.find(profile => profile.id === agentPresets.selectedAgentPresetId)
   const activationFacts = useMemo(() => createActivationFacts(activationControl), [activationControl])
+  const newStoryExtensions = useNewStoryExtensions(api)
   const narrativeRuntime = useNarrativeRuntime({
+    chooseStoryExtensions: newStoryExtensions.choose,
     activationFacts,
     getMacroSelections: (timelineId, branchId) => macroSelection.getSelections(timelineId, branchId),
     api,
@@ -272,7 +275,7 @@ export function useStudioState(transportLogger: Logger) {
 
   async function updateNetworkSettings(next: { proxyMode: NetworkSettings['proxyMode']; proxyUrl?: string }) {
     if (!startup.ready('network')) return
-    const updated = await operations.runReported('settings', () => api.settings.updateNetwork(next))
+    const updated = await operations.run('settings', () => api.settings.updateNetwork(next))
     if (updated && apiRef.current === api) {
       setNetworkSettings(updated)
       transportLogger.info('Network settings updated', {
@@ -476,6 +479,7 @@ export function useStudioState(transportLogger: Logger) {
     updateAiCapabilityProfile: providerSettings.updateAiCapabilityProfile,
     createModelProfile: providerSettings.createModelProfile,
     createTimelineFromCard: narrativeRuntime.createTimelineFromCard,
+    newStoryExtensionsDialog: newStoryExtensions.dialog,
     openingChoice: narrativeRuntime.openingChoice,
     setOpeningChoice: narrativeRuntime.setOpeningChoice,
     replaceOpening: narrativeRuntime.replaceOpening,

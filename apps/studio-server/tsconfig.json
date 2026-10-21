@@ -15,6 +15,7 @@
     { "path": "../../packages/diagnostics" },
     { "path": "../../packages/document-store" },
     { "path": "../../packages/extension-sdk/extension-host" },
+    { "path": "../../packages/extension-sdk" },
     { "path": "../../packages/kernel" },
     { "path": "../../packages/logging" },
     { "path": "../../packages/loom-runner" },

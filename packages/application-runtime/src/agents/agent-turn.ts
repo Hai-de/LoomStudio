@@ -19,7 +19,7 @@ import type { ToolExecutionScope } from './tool-registry.js'
 import { cloneVariableRenderTrace, createVariableRenderContext, renderVariableMacros, type VariableRenderContext } from '../prompt/variables.js'
 import { projectHistoryEntries, type TextTransformRuleEntry } from '../transforms/history-text.js'
 import { projectNarrativeNodes } from '../narrative/projection.js'
-import { projectSessionHistory } from './session-history.js'
+import { projectSessionHistory, summaryRetiredThrough } from './session-history.js'
 import type { ResolvedNarrativeContext } from '../narrative/context-provider.js'
 import { isExtensionResourceAvailable } from '../runtime/extension-resource-access.js'
 import { readExtensionPromptInputs } from '../prompt/extension-prompt.js'
@@ -29,6 +29,7 @@ export async function composeAgentTurnPrompt(input: {
   activationFacts?: ActivationFacts
   variables?: VariableRenderContext
   agentMessages: AgentTranscriptEntry[]
+  workspaceMemory?: string
   promptResources: PromptResourceStore
   contextResourceIds: readonly string[]
   availableExtensionInstallations?: ReadonlyMap<string, string>
@@ -71,7 +72,10 @@ export async function composeAgentTurnPrompt(input: {
       message: `Skipped missing optional Prompt resource: ${resourceId}`,
     })
   }
-  const presetMounts = await input.promptResources.listLoreMounts({ source: { kind: 'preset', id: input.preset.id } })
+  const presetMounts = [
+    ...(input.preset.useGlobalLore === false ? [] : await input.promptResources.listLoreMounts({ source: { kind: 'manual', id: 'global' } })),
+    ...await input.promptResources.listLoreMounts({ source: { kind: 'preset', id: input.preset.id } }),
+  ]
   for (const mount of presetMounts) {
     if (mount.resolvedLoreResourceId !== null) continue
     diagnostics.push({
@@ -112,6 +116,7 @@ export async function composeAgentTurnPrompt(input: {
     : undefined
   const runtimeInputs = createRuntimePromptSources({
     agentMessages: input.agentMessages,
+    workspaceMemory: input.workspaceMemory,
     narrative: input.narrative,
     userInput: input.userInput,
     historyRules: input.historyRules,
@@ -214,6 +219,7 @@ export async function composeAgentTurnPrompt(input: {
 
 function createRuntimePromptSources(input: {
   agentMessages: AgentTranscriptEntry[]
+  workspaceMemory?: string
   narrative?: {
     timeline: NarrativeTimeline
     nodes: NarrativeNode[]
@@ -228,9 +234,17 @@ function createRuntimePromptSources(input: {
 }): { sourceNodes: SourceNode[]; contributions: PromptContribution[] } {
   const sourceNodes: SourceNode[] = []
   const contributions: PromptContribution[] = []
+  if (input.workspaceMemory !== undefined) {
+    const id = 'runtime.workspace.memory'
+    sourceNodes.push({ id, sourceId: input.narrative!.timeline.id, parentId: null,
+      displayName: 'Shared Workspace Memory', orderIndex: 0, kind: 'virtual' })
+    contributions.push({ id, sourceRef: { kind: 'runtime', sourceId: input.narrative!.timeline.id, sourceNodeId: id },
+      content: input.workspaceMemory, capabilities: { targetAnchorId: '@memory.workspace', localDepth: 0 } })
+  }
   const summary = [...input.agentMessages].reverse().find(entry => entry.entry.kind === 'work-summary')
   if (summary?.entry.kind === 'work-summary') {
-    input = { ...input, agentMessages: input.agentMessages.filter(entry => entry.sequence > summary.sequence) }
+    input = { ...input, agentMessages: input.agentMessages.filter(entry =>
+      entry.entry.kind !== 'work-summary' && entry.sequence > summaryRetiredThrough(summary)) }
     const id = `runtime.session.summary:${summary.id}`
     sourceNodes.push({
       id, sourceId: summary.agentSessionId, parentId: null,

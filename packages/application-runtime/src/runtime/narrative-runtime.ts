@@ -1,9 +1,10 @@
+import { workspaceBinaryLimit } from './workspace-runtime.js'
 import type { DocumentRecord } from '@loom-studio/document-store'
 import type { JsonObject } from '@loom-studio/shared'
 import type { ApplicationRuntimeContext } from '../foundation/application-context.js'
 import { applicationDocumentTypes } from '../foundation/document-types.js'
 import { listDocuments, readDocument, writeDocument } from '../foundation/document-store.js'
-import { normalizeCardContent, readOpening } from '../cards/card.js'
+import { normalizeCardContent, parseCardExtensionAdoptions, readOpening } from '../cards/card.js'
 import { composeStateContributions, createCardStateContribution, materializeStateContribution } from '../state/state-contribution.js'
 import { expandTimelineStateBindings } from '../state/state-definition.js'
 import type { StateContributionSource } from '../state/state-contribution-registry.js'
@@ -19,7 +20,7 @@ import { deleteTimelinePresetConfigs, listTimelinePresetConfigs, timelinePresetC
 import { normalizeMacroSelections } from '@loom-studio/shared'
 import type { NarrativeNode, NarrativePage } from '@loom-studio/application-data'
 import { createNarrativeSampler } from '../narrative/sampling.js'
-import { parseTimelineArchive, timelineArchivePendingId, type TimelineArchive, type TimelineArchiveIdMap, type TimelineArchivePendingContent } from '../archive/timeline-archive.js'
+import { composeTimelineArchiveIdMap, parseTimelineArchive, timelineArchivePendingId, type TimelineArchive, type TimelineArchiveIdMap, type TimelineArchivePendingContent } from '../archive/timeline-archive.js'
 import type {
   AppendNarrativeInput,
   AppendNarrativeInputResult,
@@ -58,7 +59,7 @@ import {
 import { executeDocumentMutation } from '../foundation/mutation.js'
 
 type NarrativeRuntimeContext = Pick<ApplicationRuntimeContext,
-  'agents' | 'createId' | 'dataEngine' | 'documents' | 'narratives' | 'narrativeContext' | 'now' | 'promptResources' | 'stateContributions' | 'states' | 'timelineArchiveParticipants'
+  'workspaces' | 'blobs' | 'agents' | 'createId' | 'dataEngine' | 'documents' | 'narratives' | 'narrativeActivity' | 'narrativeContext' | 'now' | 'promptResources' | 'stateContributions' | 'states' | 'timelineArchiveParticipants'
 >
 
 export function createNarrativeRuntimeMethods(ctx: NarrativeRuntimeContext) {
@@ -122,19 +123,36 @@ export function createNarrativeRuntimeMethods(ctx: NarrativeRuntimeContext) {
       const scope = await ctx.states.getScope({ kind: 'timeline', ownerId: timeline.id })
       if (!scope) throw new Error(`Timeline State scope not found: ${timeline.id}`)
       const revisions = await ctx.states.listRevisions(scope.id)
+      const workspaceRevisions = await ctx.workspaces.list(timeline.id)
+      const blobIds = new Map<string, string | undefined>()
+      for (const revision of workspaceRevisions) for (const entry of revision.entries)
+        if (entry.kind === 'file' && 'blobId' in entry.content) blobIds.set(entry.content.blobId, entry.content.mediaType)
+      const workspaceBlobs = await Promise.all([...blobIds].map(async ([id, mediaType]) => {
+        if (!ctx.blobs) throw new Error('Blob Storage is required to export Workspace files')
+        return { id, mediaType, base64: Buffer.from(await ctx.blobs.read(id)).toString('base64') }
+      }))
       const participants = await ctx.timelineArchiveParticipants.exportParticipants({
         timelineId: timeline.id,
         branchIds: branches.map(branch => branch.id),
         nodeIds: nodes.map(node => node.id),
         stateRevisionIds: revisions.map(revision => revision.id),
       })
+      const pendingDocument = await ctx.documents.get(timelineArchivePendingId(timeline.id))
+      const pending = pendingDocument?.content as TimelineArchivePendingContent | undefined
+      for (const block of pending?.blocks ?? []) {
+        const activeIndex = participants.findIndex(active => active.namespace === block.namespace)
+        if (activeIndex >= 0) throw new Error(`Unresolved archived participant conflicts with current data: ${block.namespace}`)
+        participants.push(block)
+      }
       return { archive: {
         format: 'loom-timeline-archive.v1',
         exportedAt: ctx.now(),
         timeline,
         branches,
         nodes,
+        recoveryPoints: await narratives.listRecoveryPoints(timeline.id),
         state: { scope, revisions },
+        workspace: { revisions: workspaceRevisions, blobs: workspaceBlobs },
         participants,
         macroConfigurations: (await listTimelinePresetConfigs(ctx.documents, timeline.id)).map(record => ({
           presetId: record.content.presetId, macroSelections: record.content.macroSelections,
@@ -152,6 +170,11 @@ export function createNarrativeRuntimeMethods(ctx: NarrativeRuntimeContext) {
         nodeIds: Object.fromEntries(archive.nodes.map(node => [node.id, ctx.createId('node')])),
         stateRevisionIds: Object.fromEntries(archive.state.revisions.map(revision => [revision.id, ctx.createId('state-revision')])),
       }
+      const workspaceIds = Object.fromEntries((archive.workspace?.revisions ?? []).map(revision => [revision.id, ctx.createId('workspace-revision')]))
+      const workspaceBlobs = new Map(await Promise.all((archive.workspace?.blobs ?? []).map(async blob => {
+        if (!ctx.blobs) throw new Error('Blob Storage is required to import Workspace files')
+        return [blob.id, await ctx.blobs.prepareWrite({ source: Buffer.from(blob.base64, 'base64'), mediaType: blob.mediaType, maxBytes: workspaceBinaryLimit })] as const
+      })))
       const revisions = orderArchiveItems(archive.state.revisions, item => item.parentRevisionId)
       const branches = orderArchiveItems(archive.branches, item => item.parentBranchId)
       const roots = branches.filter(branch => !branch.parentBranchId)
@@ -169,7 +192,15 @@ export function createNarrativeRuntimeMethods(ctx: NarrativeRuntimeContext) {
             parentRevisionId: revision.parentRevisionId ? idMap.stateRevisionIds[revision.parentRevisionId] : undefined,
             snapshot: revision.snapshot, operations: revision.operations,
           })
-          narrativeTx.createTimeline({
+          for (const blob of workspaceBlobs.values()) ctx.blobs!.participateWrite(dataTx, blob)
+          for (const revision of orderArchiveItems(archive.workspace?.revisions ?? [], item => item.parentRevisionId)) {
+            ctx.workspaces.transaction(dataTx).create({ id: workspaceIds[revision.id], timelineId,
+              parentRevisionId: revision.parentRevisionId ? workspaceIds[revision.parentRevisionId] : undefined,
+              entries: revision.entries.map(entry => entry.kind === 'file' && 'blobId' in entry.content
+                ? { ...entry, content: { ...entry.content, blobId: workspaceBlobs.get(entry.content.blobId)!.blob.id } } : entry),
+            })
+          }
+          const initial = narrativeTx.createTimeline({
             // Imported histories stay locked, even when the archive carries an opening window.
             id: timelineId, primaryBranchId: idMap.branchIds[root.id], title: archive.timeline.title,
             primaryBranchTitle: root.title, stateRevisionId: idMap.stateRevisionIds[root.stateHeadRevisionId]!,
@@ -178,10 +209,11 @@ export function createNarrativeRuntimeMethods(ctx: NarrativeRuntimeContext) {
           })
           narrativeTx.restoreArchivePaths({
             timelineId,
+            recoveryPoints: archive.recoveryPoints?.map(point => ({ branchId: idMap.branchIds[point.branchId]!, nodeId: idMap.nodeIds[point.nodeId]!, stateRevisionId: idMap.stateRevisionIds[point.stateRevisionId]!, workspaceRevisionId: workspaceIds[point.workspaceRevisionId]! })),
             nodes: nodes.map(node => ({
               id: idMap.nodeIds[node.id]!, timelineId,
               parentNodeId: node.parentNodeId ? idMap.nodeIds[node.parentNodeId] : undefined,
-              body: node.body, stateRevisionId: idMap.stateRevisionIds[node.stateRevisionId]!,
+              kind: node.kind, floor: node.floor, workspaceRevisionId: workspaceIds[node.workspaceRevisionId] ?? initial.branch.workspaceHeadRevisionId, body: node.body, stateRevisionId: idMap.stateRevisionIds[node.stateRevisionId]!,
               createdAt: node.createdAt,
             })),
             branches: branches.map(branch => ({
@@ -190,6 +222,7 @@ export function createNarrativeRuntimeMethods(ctx: NarrativeRuntimeContext) {
               parentBranchId: branch.parentBranchId ? idMap.branchIds[branch.parentBranchId] : undefined,
               forkedFromNodeId: branch.forkedFromNodeId ? idMap.nodeIds[branch.forkedFromNodeId] : undefined,
               stateHeadRevisionId: idMap.stateRevisionIds[branch.stateHeadRevisionId]!,
+              workspaceHeadRevisionId: workspaceIds[branch.workspaceHeadRevisionId] ?? initial.branch.workspaceHeadRevisionId,
             })),
           })
           narrativeTx.switchBranch({ timelineId, branchId: idMap.branchIds[archive.timeline.activeBranchId]! })
@@ -209,7 +242,9 @@ export function createNarrativeRuntimeMethods(ctx: NarrativeRuntimeContext) {
         blocks: archive.participants,
       })
       if (participantResult.unknownNamespaces.length > 0 || participantResult.failures.length > 0) {
-        const pendingBlocks = archive.participants.filter(block => participantResult.unknownNamespaces.includes(block.namespace))
+        const pendingNamespaces = new Set([...participantResult.unknownNamespaces, ...participantResult.failures.map(failure => failure.namespace)])
+        const pendingBlocks = archive.participants.filter(block => pendingNamespaces.has(block.namespace))
+          .map(block => ({ ...block, idMap: composeTimelineArchiveIdMap(block.idMap, idMap) }))
         await executeDocumentMutation(ctx.documents, undefined, 'application.importTimelineArchive.pendingParticipants', async documents => {
           const id = timelineArchivePendingId(timelineId)
           const existing = await documents.get(id)
@@ -217,6 +252,7 @@ export function createNarrativeRuntimeMethods(ctx: NarrativeRuntimeContext) {
           const content: TimelineArchivePendingContent = {
             timelineId,
             blocks: pendingBlocks,
+            idMap,
             failures: participantResult.failures,
             createdAt: existing?.content && typeof existing.content === 'object' && !Array.isArray(existing.content) && typeof (existing.content as { createdAt?: unknown }).createdAt === 'string'
               ? (existing.content as { createdAt: string }).createdAt
@@ -280,6 +316,7 @@ export function createNarrativeRuntimeMethods(ctx: NarrativeRuntimeContext) {
         expectedHeadNodeId: input.expectedHeadNodeId,
         body: { format: 'loom-markdown.v1', raw: input.content },
       })
+      ctx.narrativeActivity.emit({ kind: 'input', timelineId: input.timelineId, branchId: input.branchId, nodeId: result.node.id })
       return { timeline: result.timeline, branch: result.branch, node: result.node, mutation: { changesetId: result.commit.changesetId } }
     },
 
@@ -295,20 +332,9 @@ export function createNarrativeRuntimeMethods(ctx: NarrativeRuntimeContext) {
     },
 
     forkNarrativeBranch: async (input: ForkNarrativeBranchInput, requestContext?: RuntimeRequestContext): Promise<ForkNarrativeBranchResult> => {
-      const narratives = requireNarratives(ctx)
-      const branches = await narratives.listBranches(input.timelineId)
-      const sourceBranch = branches.find(branch => branch.id === input.fromBranchId)
-      if (!sourceBranch) throw new Error(`Narrative branch not found: ${input.fromBranchId}`)
-      const page = await narratives.getPage({ timelineId: input.timelineId, branchId: input.fromBranchId })
-      const fromNode = page.nodes.find(node => node.id === input.fromNodeId)
-      if (!fromNode) throw new Error(`Narrative node not found on branch: ${input.fromNodeId}`)
-      const stateRevisionId = sourceBranch.headNodeId === fromNode.id
-        ? sourceBranch.stateHeadRevisionId
-        : fromNode.stateRevisionId
       const result = await requireNarratives(ctx).forkBranch({
         ...narrativeWriteContext(requestContext, 'application.forkNarrativeBranch'),
         ...input,
-        stateRevisionId,
       })
       return { branch: result.branch, mutation: { changesetId: result.commit.changesetId } }
     },
@@ -402,7 +428,9 @@ async function createTimelineFromCard(
     throw new Error('Card changed while choosing an opening; reload the Card before starting')
   }
   const cardContent = normalizeCardContent(card.content)
-  const adoptedInstallations = await Promise.all((cardContent.extensionAdoptions ?? []).map(async reference => {
+  const extensionAdoptions = input.extensionAdoptions === undefined
+    ? cardContent.extensionAdoptions ?? [] : parseCardExtensionAdoptions(input.extensionAdoptions)
+  const adoptedInstallations = await Promise.all(extensionAdoptions.map(async reference => {
     const target = reference.target === 'card' ? { kind: 'card' as const, cardId: card.id } : { kind: 'global' as const }
     const installation = await readDocument<ExtensionInstallationContent>(
       ctx.documents, extensionInstallationId(reference.packageId, target), applicationDocumentTypes.extensionInstallation,
@@ -578,8 +606,8 @@ async function createTimelineFromCard(
       const nodes: NarrativeNode[] = []
       for (const message of history) {
         nodes.push({
-          id: ctx.createId('node'), timelineId, parentNodeId: nodes.at(-1)?.id,
-          stateRevisionId, body: { format: 'loom-markdown.v1', raw: message.content },
+          id: ctx.createId('node'), kind: 'narrative', timelineId, floor: nodes.length + 1, parentNodeId: nodes.at(-1)?.id,
+          stateRevisionId, workspaceRevisionId: created.branch.workspaceHeadRevisionId, body: { format: 'loom-markdown.v1', raw: message.content },
           createdAt: message.createdAt ?? ctx.now(),
         })
       }

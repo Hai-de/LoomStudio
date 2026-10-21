@@ -59,7 +59,11 @@ pnpm exec vitest run tests/unit/client
 
 ## 开发组件预览
 
-开发预览与旧消息 HTML 演示已于 2026-10-15 清理，`/dev/preview/*` 不再提供页面。正式启动与首次引导直接使用生产组件；消息 HTML 回归样例保留在 `tests/fixtures/client/message-html-examples.ts`。
+开发预览仅在 Vite 开发环境显式注册，认证和业务初始化前分流，不访问真实数据或持久 Storage。启动 Client 后打开 `/dev/preview/narrative-session`，体验 Timeline Session 统一交互草稿；`?scene=empty` 从空白开始，`?scene=long` 展示较多轮次。页面内可重播工具/正文流程、讨论修订、整轮 Swipe、切换候选/预设/输出模式，以及查看副 Session 和上下文投影。模拟输出为固定样例，不调用模型。
+
+预览注册位于 `src/dev-preview/preview-entry.tsx`，样例与模拟控制器位于 `src/dev-preview/narrative-session-preview.tsx`，可复用展示组件位于 `src/widgets/narrative-session/`。新增预览必须同时在 `main.tsx` 的开发分流和显式注册中列出路径；不得加入生产路由。旧消息 HTML 演示未恢复，回归样例保留在 `tests/fixtures/client/message-html-examples.ts`。
+
+该预览对应的[融合架构构想](../../docs/workbench/drafts/narrative-timeline-session-unification.md)已转为 Draft、暂不实施。页面保留为交互参考；后续 UI 改善以现有 Timeline 与 Session 双模型为前提，不能把样例直接接为融合后端。
 
 正式搜索入口位于工作区左上角，也可按 `⌘K` / `Ctrl+K`。最近访问仅记录本次应用会话中从搜索打开的条目。正式 Narrative 与 Agent 消息消费 `features/message-content`，完整 HTML 文档使用隔离 iframe。
 

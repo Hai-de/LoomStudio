@@ -66,12 +66,12 @@ for (const [name, { path, pkg }] of selected) {
 }
 
 for (const path of [
-  'apps/studio-client/dist', 'official/starter', 'official/extensions/loom-assistant',
+  'apps/studio-client/dist', 'official/starter', 'official/extensions/loom-assistant', 'official/extensions/story-memory',
   'official/cards/character-status', 'public/images/default-card.png',
   'scripts/start.mjs', 'start.sh', 'start.command', 'start.bat',
 ]) {
   await mkdir(dirname(join(destination, path)), { recursive: true })
-  await cp(join(root, path), join(destination, path), { recursive: true })
+  await cp(join(root, path), join(destination, path), { recursive: true, filter: source => !relative(join(root, path), source).split(/[\\/]/).includes('node_modules') })
 }
 await cp(join(root, 'apps/studio-server/src/banner.txt'), join(destination, 'apps/studio-server/dist/banner.txt'))
 await cp(join(root, 'docs/guide/beta-release.md'), join(destination, 'README.md'))

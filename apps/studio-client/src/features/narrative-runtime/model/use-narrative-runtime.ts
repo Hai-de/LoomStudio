@@ -13,7 +13,7 @@ import type {
 import type { StudioApi } from '../../../shared/api/studio-api.js'
 import { subscribeDataCommits } from '../../../shared/api/data-commit-events.js'
 import {
-  inspectSessionRunStatus, loadTranscript, releasePrimaryRun, runAgentTurn,
+  loadTranscript, releasePrimaryRun, resolveSessionRun, runAgentTurn,
   type ActiveAgentRun, type ObservedRun, type RunRecovery,
 } from './agent-run-observer.js'
 export { inspectSessionRunStatus, releasePrimaryRun, mergeAgentRunEntries } from './agent-run-observer.js'
@@ -49,6 +49,7 @@ type UseNarrativeRuntimeInput = {
   initialNodes?: NarrativeNode[]
   selectedCard?: Card
   selectedCardId?: string
+  chooseStoryExtensions?: (cardId: string) => Promise<Array<{ packageId: string; target: 'global' | 'card' }> | undefined>
   onSelectCard(id: string): void
   selectedAgentPresetId?: string
   onSelectAgentPreset(id: string): void
@@ -71,6 +72,17 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
   }
   const [timeline, setTimeline] = useState<NarrativeTimeline>()
   const [openingSelection, setOpeningSelection] = useState<{ source: CardSource; timelineId?: string; choice: OpeningChoice }>()
+  const pendingSends = useRef(new Map<string, { api: StudioApi; signature: string; requestId: string }>())
+  async function createConfirmedRun(request: Parameters<StudioApi['agentSessions']['createRun']>[0]) {
+    const signature = JSON.stringify(request)
+    const previous = pendingSends.current.get(request.agentSessionId)
+    const pending = previous?.api === input.api && previous.signature === signature ? previous
+      : { api: input.api, signature, requestId: crypto.randomUUID() }
+    pendingSends.current.set(request.agentSessionId, pending)
+    const started = await input.api.agentSessions.createRun({ ...request, requestId: pending.requestId })
+    if (pendingSends.current.get(request.agentSessionId) === pending) pendingSends.current.delete(request.agentSessionId)
+    return started
+  }
   const creatingTimelineRef = useRef(false)
   const replacingOpeningRef = useRef(false)
   const [branch, setBranch] = useState<NarrativeBranch>()
@@ -225,7 +237,7 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
         if ((swipe.requiresRegeneration || session.id !== swipe.sourceAgentSessionId) && (!allowSessionChange || mode !== 'regenerate'))
           throw new Error(input.t?.('swipe.sessionChanged') ?? 'Primary writing session changed')
         const selection = agentSelectionRef.current
-        const started = await input.api.agentSessions.createRun({
+        const started = await createConfirmedRun({
           agentSessionId: session.id, input: '', activationFacts: input.activationFacts,
           macroSelections: input.getMacroSelections?.(swipe.timelineId, swipe.branchId),
           narrativeTarget: { timelineId: swipe.timelineId, branchId: swipe.branchId, inputNodeId: swipe.inputNodeId,
@@ -494,6 +506,10 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
     creatingTimelineRef.current = true
 
     try {
+      const requestedSource = cardSourceRef.current
+      const extensionAdoptions = input.chooseStoryExtensions ? await input.chooseStoryExtensions(cardId) : undefined
+      if (input.chooseStoryExtensions && extensionAdoptions === undefined) return
+      if (requestedSource.disposed || cardSourceRef.current !== requestedSource) return
       let activated: { branchId: string; timelineId: string } | undefined
       let activatedSelection: number | undefined
       const source = cardSourceRef.current
@@ -503,6 +519,7 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
           : input.selectedCard && input.selectedCard.id === cardId ? { kind: 'card' as const, id: input.selectedCard.opening.id } : undefined)
         const result = await input.api.narratives.create({
           cardId, ...(selectedOpening ? openingChoiceRequest(selectedOpening) : {}),
+          ...(extensionAdoptions !== undefined ? { extensionAdoptions } : {}),
           expectedCardVersion: cardVersion ?? (input.selectedCard?.id === cardId ? input.selectedCard.version : undefined),
         })
         if (source.disposed || cardSourceRef.current !== source || selection !== agentSelectionRef.current) return
@@ -710,7 +727,7 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
         if (!session || session.timelineId !== currentTimeline.id) throw new Error('请先设置主写作对话')
         if (selection !== agentSelectionRef.current || !ownsNarrativeSubmission(submission)) return
 
-        const started = await input.api.agentSessions.createRun({
+        const started = await createConfirmedRun({
           agentSessionId: session.id,
           input: content,
           activationFacts: input.activationFacts,
@@ -783,7 +800,7 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
         const selection = agentSelectionRef.current
         const session = await ensureAgentSession()
         if (selection !== agentSelectionRef.current || input.api !== cardSourceRef.current.api) return
-        const started = await input.api.agentSessions.createRun({
+        const started = await createConfirmedRun({
           agentSessionId: session.id,
           input: content,
           macroSelections: input.getMacroSelections?.(timeline?.id, branch?.id),
@@ -1015,10 +1032,16 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
   function observeTaskRun(sessionId: string, runId: string) {
     if (input.api !== cardSourceRef.current.api || cardSourceRef.current.disposed
       || agentSessionRef.current?.id !== sessionId || startingRunRef.current) return
+    followSessionRun(sessionId, runId)
+  }
+
+  function followSessionRun(sessionId: string, runId: string) {
+    const session = agentSessionRef.current
+    if (!session || session.id !== sessionId) return
     const previous = observedRunRef.current
     if (previous?.runId === runId && ownsRun(previous) && previous.observing) return
     const displayed = displayedNarrativeRef.current
-    const narrativeTarget = agentSessionRef.current.timelineId === displayed.timelineId
+    const narrativeTarget = session.timelineId === displayed.timelineId
       && displayed.timelineId && displayed.branchId
       ? { timelineId: displayed.timelineId, branchId: displayed.branchId } : undefined
     setRunRecovery(undefined)
@@ -1037,7 +1060,13 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
     if (input.api !== cardSourceRef.current.api || cardSourceRef.current.disposed
       || agentSessionRef.current?.id !== sessionId) return
     const run = observedRunRef.current
-    if (run && ownsRun(run) && run.observing) return
+    if (startingRunRef.current) return
+    if (run && ownsRun(run)) {
+      if (run.observing) return
+      // Summary status refresh must preserve the original run and its input recovery.
+      await refreshRunState(run)
+      return
+    }
     const displayed = displayedNarrativeRef.current
     const snapshot: ObservedRun = {
       api: input.api, selection: agentSelectionRef.current, runId: '', sessionId,
@@ -1102,7 +1131,17 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
       try {
         const state = await run.api.agentSessions.runState(run.runId, run.sessionId)
         if (!ownsRun(run)) return
-        if (state.state !== 'suspended') throw new Error(input.t?.('runRecovery.abandonNotSuspended') ?? 'The run is not suspended')
+        if (state.state !== 'suspended') {
+          run.status = state.state
+          setActiveAgentRun({ runId: state.runId, status: state.state })
+          if (state.state === 'running') {
+            setRunRecovery(undefined)
+            run.observing = false
+            await observeRun(run)
+            return
+          }
+          throw new Error(input.t?.('runRecovery.abandonNotSuspended') ?? 'The run is not suspended')
+        }
         const result = await run.api.agentSessions.abandonRun(run.runId, run.sessionId)
         if (!result.accepted) throw new Error(input.t?.('runRecovery.abandonRejected') ?? 'The attempt could not be abandoned')
         abandoned = true
@@ -1114,7 +1153,7 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
         await refreshRunState(run)
       } catch (error) {
         if (ownsRun(run)) setRunRecovery({
-          target: run.target, status: abandoned ? 'refresh-failed' : 'suspended',
+          target: run.target, status: abandoned ? 'refresh-failed' : run.status === 'suspended' ? 'suspended' : run.status === 'running' ? 'disconnected' : 'failed',
           ...(abandoned ? { refreshFailed: true } : {}),
           error: error instanceof Error ? error.message : String(error),
         })
@@ -1448,15 +1487,12 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
     const selected = sessions.find(item => item.id === selectedId) ?? sessions[0]
     if (selected) {
       const transcript = await loadTranscript(input.api, selected.id, true)
+      const restoredRun = await resolveSessionRun(input.api, selected.id, transcript.entries)
       if (selection !== agentSelectionRef.current || input.api !== cardSourceRef.current.api) return
       publishAgentSession(transcript.session)
       setAgentTranscriptEntries(transcript.entries)
-      const inspected = inspectSessionRunStatus(transcript.entries)
-      if (inspected.status === 'suspended') {
-        setActiveAgentRun({ runId: inspected.runId ?? `session-run-${selected.id}`, status: 'suspended' })
-      } else {
-        setActiveAgentRun(undefined)
-      }
+      setActiveAgentRun(restoredRun)
+      if (restoredRun?.status === 'running') followSessionRun(selected.id, restoredRun.runId)
     }
     markAgentSessionReady(true)
   }
@@ -1488,6 +1524,7 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
           ? await input.api.narratives.getPage({ timelineId, branchId: details?.timeline.activeBranchId, limit: 100 })
           : undefined
         const sessions = await listAgentSessions(timelineId)
+        const restoredRun = await resolveSessionRun(input.api, sessionId, transcript.entries)
         if (selection !== agentSelectionRef.current || input.api !== cardSourceRef.current.api) return
         if (canActivate && !canActivate()) return
         if (!sameNarrative) {
@@ -1504,12 +1541,8 @@ export function useNarrativeRuntime(input: UseNarrativeRuntimeInput) {
         setAgentSessions(sessions)
         publishAgentSession(transcript.session)
         setAgentTranscriptEntries(transcript.entries)
-        const inspected = inspectSessionRunStatus(transcript.entries)
-        if (inspected.status === 'suspended') {
-          setActiveAgentRun({ runId: inspected.runId ?? `session-run-${sessionId}`, status: 'suspended' })
-        } else {
-          setActiveAgentRun(undefined)
-        }
+        setActiveAgentRun(restoredRun)
+        if (restoredRun?.status === 'running') followSessionRun(sessionId, restoredRun.runId)
         markAgentSessionReady(true)
         activated = { session: transcript.session, branchId: sameNarrative ? branch?.id : page?.branch.id }
       } finally {

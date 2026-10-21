@@ -1,4 +1,5 @@
 #!/usr/bin/env tsx
+/// <reference lib="es2025.regexp" />
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, extname, isAbsolute, join, normalize, relative, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
@@ -66,7 +67,7 @@ if (packageMode) {
 printSummaryAndApply(modifications, isWrite)
 
 function executePackageRewrite(oldPkg: string, newPkg: string): void {
-  const specifierRegex = new RegExp(`(['"\`])${escapeRegex(oldPkg)}((?:/[^'"\`]+)?)(['"\`])`, 'g')
+  const specifierRegex = new RegExp(`(['"\`])${RegExp.escape(oldPkg)}((?:/[^'"\`]+)?)(['"\`])`, 'g')
 
   for (const filePath of allFiles) {
     const content = readFileSync(filePath, 'utf8')
@@ -232,7 +233,7 @@ function extractRelativeSpecifiers(line: string): string[] {
 }
 
 function replaceSpecifier(line: string, oldSpec: string, newSpec: string): string {
-  return line.replace(new RegExp(`(['"\`])${escapeRegex(oldSpec)}(['"\`])`, 'g'), `$1${newSpec}$2`)
+  return line.replace(new RegExp(`(['"\`])${RegExp.escape(oldSpec)}(['"\`])`, 'g'), `$1${newSpec}$2`)
 }
 
 function isImportOrRequireLine(line: string): boolean {
@@ -312,10 +313,6 @@ function printSummaryAndApply(mods: FileModification[], write: boolean): void {
 
 function normalizePosix(p: string): string {
   return p.split('\\').join('/')
-}
-
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function printHelp(): void {

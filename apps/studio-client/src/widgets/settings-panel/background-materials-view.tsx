@@ -163,7 +163,7 @@ export function BackgroundMaterialsView(props: {
       </div>
       <Dialog open={!!preview} onClose={() => setPreviewId(null)} closeOnBackdrop
         className={styles.previewDialog} title={preview?.name ?? props.t('appearance.preview')}
-        headerActions={<IconButton aria-label={props.t('appearance.closePreview')} onClick={() => setPreviewId(null)}><X aria-hidden="true" size={18} /></IconButton>}
+        showCloseButton={false} headerActions={<IconButton aria-label={props.t('appearance.closePreview')} onClick={() => setPreviewId(null)}><X aria-hidden="true" size={18} /></IconButton>}
         actions={preview ? <Button disabled={props.selectedId === preview.id} onClick={() => { props.onSelect(preview.id); setPreviewId(null) }}>
           <Check aria-hidden="true" size={16} />{props.t(props.selectedId === preview.id ? 'appearance.selected' : 'appearance.useBackground')}
         </Button> : undefined}>

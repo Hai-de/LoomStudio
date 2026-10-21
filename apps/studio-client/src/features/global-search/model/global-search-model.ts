@@ -58,7 +58,7 @@ export type GlobalSearchNavigationHit = {
   Icon: LucideIcon
 }
 
-const COMMON_PANELS: StudioPanelId[] = ['character', 'resource', 'agent', 'model', 'sessions', 'settings']
+const COMMON_PANELS: StudioPanelId[] = ['character', 'resource', 'agent', 'model', 'recent', 'settings']
 
 export function findGlobalSearchNavigation(input: {
   query: string
@@ -71,7 +71,7 @@ export function findGlobalSearchNavigation(input: {
   const query = input.query.trim().toLowerCase()
   const panels = query ? Object.keys(STUDIO_PANEL_PRESENTATION) as StudioPanelId[] : COMMON_PANELS
   return panels
-    .filter(panel => panel !== 'preset')
+    .filter(panel => panel !== 'preset' && panel !== 'sessions')
     .map(panel => {
       const presentation = STUDIO_PANEL_PRESENTATION[panel]
       const title = input.t(presentation.labelKey)

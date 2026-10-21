@@ -21,7 +21,7 @@ export function RunRecoveryControls(props: RunRecoveryControlsProps) {
   const reconnectLabel = props.t(disconnected ? 'runRecovery.reconnect' : 'runRecovery.refresh')
 
   return (
-    <div className={styles.controls} aria-busy={props.runRecoveryBusy}>
+    <div className={styles.controls} data-status={recovery.status} aria-busy={props.runRecoveryBusy}>
       <div className={styles.message} role="status">
         <span>{props.t(`runRecovery.${recovery.status}`)}</span>
         {recovery.error ? <span>{recovery.error}</span> : null}

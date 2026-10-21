@@ -28,6 +28,19 @@ describe('Timeline archive participants', () => {
     const revision = { id: 'revision-1', scopeId: 'scope-1', snapshot: {}, operations: [], changesetId: 'change-1', createdAt: '2026-01-01T00:00:00Z' } as StateRevision
     const source = serializeTimelineArchive({ format: 'loom-timeline-archive.v1', exportedAt: '2026-01-01T00:00:00Z', timeline, branches: [branch], nodes: [node], state: { scope, revisions: [revision] }, participants: [] })
     expect(parseTimelineArchive(source).timeline.id).toBe('timeline-1')
+    expect(parseTimelineArchive(source).nodes[0]?.kind).toBe('narrative')
+    const mapped = JSON.parse(source)
+    mapped.participants = [{ namespace: 'memory.pending', version: 1, payload: {},
+      idMap: { timelineId: 'timeline-1', branchIds: {}, nodeIds: { original: 'node-1' }, stateRevisionIds: {} } }]
+    expect(parseTimelineArchive(JSON.stringify(mapped)).participants).toHaveLength(1)
+    mapped.participants[0].idMap.nodeIds.original = 'foreign-node'
+    expect(() => parseTimelineArchive(JSON.stringify(mapped))).toThrow('outside the archive')
+
+    const withKind = JSON.parse(source)
+    withKind.nodes[0].kind = 'user-input'
+    expect(parseTimelineArchive(JSON.stringify(withKind)).nodes[0]?.kind).toBe('user-input')
+    withKind.nodes[0].kind = 'unknown'
+    expect(() => parseTimelineArchive(JSON.stringify(withKind))).toThrow('node kind')
     expect(() => parseTimelineArchive(source.replace('branch-1', 'missing-branch'))).toThrow('active branch')
   })
 
@@ -50,6 +63,19 @@ describe('Timeline archive participants', () => {
     expect(result).toEqual({ unknownNamespaces: ['future.memory'], failures: [] })
     expect(calls).toHaveLength(1)
     expect(calls[0]).toMatchObject({ timelineId: 'timeline-new', idMap: input.idMap })
+  })
+
+  it('composes preserved payload IDs through repeated imports and rejects unmapped targets', async () => {
+    const calls: any[] = []
+    const registry = createTimelineArchiveParticipantRegistry([participant('memory.saved', 1, undefined, value => calls.push(value))])
+    const block = { namespace: 'memory.saved', version: 1, payload: { nodeId: 'original' },
+      idMap: { timelineId: 'old', branchIds: {}, nodeIds: { original: 'node-old' }, stateRevisionIds: {} } }
+    expect(await registry.importParticipants({ ...input, blocks: [block] })).toEqual({ failures: [], unknownNamespaces: [] })
+    expect(calls[0].idMap.nodeIds).toEqual({ original: 'node-new' })
+    expect(calls[0].idMap.timelineId).toBe('timeline-new')
+    block.idMap.nodeIds.original = 'outside'
+    expect(await registry.importParticipants({ ...input, blocks: [block] })).toMatchObject({ failures: [{ namespace: 'memory.saved' }] })
+    expect(calls).toHaveLength(1)
   })
 
   it('rejects invalid and duplicate namespaces, and unregisters only its own participant', () => {

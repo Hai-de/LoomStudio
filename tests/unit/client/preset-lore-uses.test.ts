@@ -29,7 +29,7 @@ function elements(value: unknown): Element[] {
   const loreContent = value.props.loreContent
   return [value, ...Object.values(value.props).flatMap(elements),
     ...(typeof loreContent === 'function'
-      ? elements(loreContent((value.props.preset as PromptResource).useCardLore ?? true)) : []),
+      ? elements(loreContent((value.props.preset as PromptResource).useCardLore ?? true, (value.props.preset as PromptResource).useGlobalLore ?? true)) : []),
     ...(trailing ? visit(value.props.nodes as FileTreeNode[]) : [])]
 }
 
@@ -100,6 +100,8 @@ describe('Preset Lore mounts', () => {
     expect(group.label).toBe('CodeAct（Freeform / JSON）')
     expect(group.meta).toBe('0 / 1 已启用')
     expect((directory().props.isMuted as (node: FileTreeNode) => boolean)(leaf)).toBe(true)
+
+
     const detail = () => (directory().props.renderExpandedRow as (node: FileTreeNode) => Element | null)(leaf)
     expect(detail()).toBeNull()
     ;(directory().props.onExpandedIdsChange as (ids: string[]) => void)([group.id, leaf.id])
@@ -145,5 +147,13 @@ describe('Preset Lore mounts', () => {
     expect(disabled.props['aria-pressed']).toBe(false)
     expect(disabled.props.disabled).toBe(false)
     expect((directory().props.isMuted as (node: FileTreeNode) => boolean)(leaf)).toBe(true)
+    props.loreMounts = [{ id: 'global-mount', loreResourceId: 'other', source: { kind: 'manual', id: 'global' }, orderIndex: 0 } as LoreMount]
+    const inheritedGlobal = render().find(element => element.props['aria-label'] === '停用 Lore：Other')!
+    expect(inheritedGlobal.props.disabled).toBe(true)
+    expect(inheritedGlobal.props['aria-pressed']).toBe(true)
+    props.preset = { ...props.preset, useGlobalLore: false }
+    const unselectedGlobal = render().find(element => element.props['aria-label'] === '启用 Lore：Other')!
+    expect(unselectedGlobal.props.disabled).toBe(false)
+
   })
 })

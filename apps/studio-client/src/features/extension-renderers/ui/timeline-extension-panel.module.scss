@@ -26,10 +26,10 @@
 
 .row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(88px, auto);
+  grid-template-columns: minmax(180px, 1fr) auto auto;
   align-items: center;
   gap: 12px;
-  min-height: 76px;
+  min-height: 88px;
   padding: 12px 0;
   border-bottom: 1px solid var(--loom-color-divider);
 }
@@ -51,7 +51,8 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .resourceList {
@@ -70,24 +71,6 @@
 .resourceList span {
   color: var(--loom-color-text-muted);
   font-size: 12px;
-}
-
-.actions > input {
-  justify-self: end;
-  width: 18px;
-  height: 18px;
-}
-
-.iconButton {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--loom-color-divider);
-  background: transparent;
-  color: inherit;
-  border-radius: 4px;
 }
 
 .error {
@@ -109,5 +92,18 @@
 @media (max-width: 540px) {
   .row { grid-template-columns: minmax(0, 1fr) auto; }
   .status { grid-column: 1; }
-  .actions { grid-column: 2; grid-row: 1 / 3; }
+  .actions { grid-column: 1 / -1; }
 }
+
+.source { color: var(--loom-color-text-muted); font-size: 12px; }
+.source summary { cursor: pointer; }
+.source code, .source small { display: block; margin-top: 6px; overflow-wrap: anywhere; }
+.hint { color: var(--loom-color-text-muted); font-size: 12px; line-height: 1.6; }
+
+@media (max-width: 760px) {
+  .row { grid-template-columns: minmax(0, 1fr) auto; }
+  .actions { grid-column: 1 / -1; justify-content: flex-start; }
+}
+
+.choiceRow { padding: 12px 0; border-bottom: 1px solid var(--loom-color-divider); }
+.choiceRow > label { width: 100%; align-items: flex-start; }

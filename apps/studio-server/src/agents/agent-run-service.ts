@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { ApplicationRuntime, AgentRunEvent, AgentRunTask, RuntimeRequestContext, InvokeAgentTurnInput, VfsMutationDecision } from '@loom-studio/application-runtime'
 
 type AgentRun = {
@@ -12,11 +13,13 @@ type AgentRun = {
   firstCursor: number
   nextCursor: number
   partialText: string
+  partialReasoning: string
   sessionId: string
   pendingCompletion?: Extract<AgentRunEvent, { type: 'completed' }>
   replayTimer?: ReturnType<typeof setTimeout>
   state: 'running' | 'suspended' | 'completed' | 'failed' | 'cancelled'
   promise?: Promise<unknown>
+  sendRequestDigest?: string
   request?: InvokeAgentTurnInput
   sourceRunId?: string
   continuationRunId?: string
@@ -37,6 +40,7 @@ type AgentRunSubscription = {
   state: AgentRun['state']
   replayExpired?: boolean
   partialText?: string
+  partialReasoning?: string
   pendingApprovals?: AgentRunEvent[]
 }
 
@@ -101,8 +105,34 @@ export function getAgentRunService(runtime: ApplicationRuntime) {
         return ended <= 30
       }) }
     },
-    create(request: InvokeAgentTurnInput, context?: RuntimeRequestContext) {
+    async create(request: InvokeAgentTurnInput, context?: RuntimeRequestContext) {
       const runs = getRunStore(runtime)
+      let runId: string | undefined
+      if (request.requestId !== undefined) {
+        if (!/^[a-zA-Z0-9-]{1,128}$/.test(request.requestId)) throw new Error('Invalid Agent send request ID')
+        runId = `agent-run-${request.requestId}`
+        const digest = sendRequestDigest(request)
+        const existing = runs.get(runId)
+        if (existing) {
+          if (existing.sendRequestDigest !== digest) throw new Error('Agent send request ID was reused with different input')
+          return { runId }
+        }
+        // A lost acknowledgement may outlive the server process. The first durable
+        // checkpoint records this request before tools or Provider calls can begin.
+        const checkpoint = await runtime.findAgentRunCheckpoint({ agentSessionId: request.agentSessionId, runId })
+        const saved = checkpoint?.entry
+        if (saved?.kind === 'run-state' && saved.recovery) {
+          const savedDigest = saved.recovery.sendRequestDigest ?? sendRequestDigest(saved.recovery.request)
+          if (savedDigest !== digest) throw new Error('Agent send request ID was reused with different input')
+          return { runId }
+        }
+        // Another create for this request may have completed while reading history.
+        const concurrent = runs.get(runId)
+        if (concurrent) {
+          if (concurrent.sendRequestDigest !== digest) throw new Error('Agent send request ID was reused with different input')
+          return { runId }
+        }
+      }
       const run = startAgentRun(runtime, context, request)
       runs.set(run.id, run)
       pruneCompletedRuns(runs)
@@ -120,8 +150,11 @@ export function getAgentRunService(runtime: ApplicationRuntime) {
           const page = await runtime.getAgentTranscriptPage({ agentSessionId: sessionId, limit: 100, cursor: pageCursor })
           const state = [...page.entries].reverse().find(entry => entry.runId === runId && entry.entry.kind === 'run-state')?.entry
           if (state?.kind === 'run-state') {
-            if (state.state === 'running' || state.state === 'created')
-              throw new Error('Agent Run execution is unavailable; its persisted Transcript is still accessible')
+            if (state.state === 'running' || state.state === 'created') {
+              const inspected = await runtime.inspectAgentRunState({ agentSessionId: sessionId, runId })
+              if (inspected.state === 'running') throw new Error('Agent Run is executing in another process; reconnect to its owner')
+              return { events: [], nextCursor: cursor, done: true, state: inspected.state, replayExpired: true, partialText: '', pendingApprovals: [] }
+            }
             const terminal = state.state === 'completed' ? 'completed' : state.state === 'suspended' ? 'suspended'
               : state.state === 'aborted' || state.state === 'discarded' ? 'cancelled' : 'failed'
             return { events: [], nextCursor: cursor, done: true, state: terminal, replayExpired: true, partialText: '', pendingApprovals: [] }
@@ -140,10 +173,11 @@ export function getAgentRunService(runtime: ApplicationRuntime) {
         nextCursor: run.nextCursor,
         done: run.state !== 'running',
         state: run.state,
+        pendingApprovals: [...run.mutationApprovals.values()].map(pending => pending.event),
         ...(replayExpired ? {
           replayExpired: true,
           partialText: run.partialText,
-          pendingApprovals: [...run.mutationApprovals.values()].map(pending => pending.event),
+          partialReasoning: run.partialReasoning,
         } : {}),
       }
     },
@@ -177,11 +211,11 @@ export function getAgentRunService(runtime: ApplicationRuntime) {
       const run = getRunStore(runtime).get(runId)
       if (!run) {
         if (!agentSessionId) throw new Error(`Agent run not found: ${runId}`)
-        const recovered = await runtime.prepareAgentRunRecovery({ agentSessionId, runId })
-        if (!recovered) throw new Error(`Agent run has no recoverable checkpoint: ${runId}`)
+        const state = await runtime.inspectAgentRunState({ agentSessionId, runId })
+        if (state.state !== 'suspended') return { runId, accepted: false, state: state.state }
         await runtime.appendAgentTranscriptEntries({
           agentSessionId,
-          expectedEntryCount: recovered.continuation.expectedEntryCount,
+          expectedEntryCount: state.entryCount,
           entries: [{ runId, entry: { kind: 'run-state', state: 'discarded' } }],
         }, context)
         return { runId, accepted: true, state: 'suspended' as const }
@@ -249,10 +283,7 @@ export function getAgentRunService(runtime: ApplicationRuntime) {
       const run = getRunStore(runtime).get(runId)
       if (run) return { runId: run.id, state: run.state }
       if (!agentSessionId) throw new Error(`Agent run not found: ${runId}`)
-      return runtime.prepareAgentRunRecovery({ agentSessionId, runId }).then(recovered => {
-        if (!recovered) throw new Error(`Agent run has no recoverable checkpoint: ${runId}`)
-        return { runId, state: 'suspended' as const }
-      })
+      return runtime.inspectAgentRunState({ agentSessionId, runId }).then(({ state }) => ({ runId, state }))
     },
   }
 }
@@ -267,14 +298,15 @@ function startAgentRun(
 ): AgentRun {
   if ([...getRunStore(runtime).values()].some(run => run.state === 'running' && run.sessionId === request.agentSessionId))
     throw Object.assign(new Error('Agent Session already has an executing Run'), { code: 'agent.session_busy' })
-  const id = `agent-run-${crypto.randomUUID()}`
+  const id = !continuation && !sourceRunId && request.requestId ? `agent-run-${request.requestId}` : `agent-run-${crypto.randomUUID()}`
   const controller = new AbortController()
   const timestamp = new Date().toISOString()
   const run: AgentRun = {
     id, createdAt: timestamp, updatedAt: timestamp, controller, request, sourceRunId, sessionId: request.agentSessionId,
     ...(continuation ? { checkpoint: continuation } : {}),
-    events: [], eventSizes: [], eventBytes: 0, firstCursor: 0, nextCursor: 0, partialText: '',
+    events: [], eventSizes: [], eventBytes: 0, firstCursor: 0, nextCursor: 0, partialText: '', partialReasoning: '',
     state: 'running', promise: Promise.resolve(), mutationApprovals: new Map(),
+    ...(request.requestId ? { sendRequestDigest: continuation?.recovery?.sendRequestDigest ?? source?.sendRequestDigest ?? sendRequestDigest(request) } : {}),
   }
   const transferCheckpoint = () => {
     run.checkpoint = undefined
@@ -287,6 +319,8 @@ function startAgentRun(
     if (event.type === 'failed') run.reason = event.error.message
     if (event.type === 'suspended' || event.type === 'cancelled') run.reason = event.reason
     if (event.type === 'text-delta') run.partialText += event.delta
+    if (event.type === 'reasoning-delta') run.partialReasoning += event.delta
+    if (event.type === 'transcript-appended' && event.entries.some(entry => entry.entry.kind === 'reasoning' && entry.entry.source === 'provider-native')) run.partialReasoning = ''
     if (event.type === 'transcript-appended' && event.entries.some(entry =>
       entry.entry.kind === 'message' && entry.entry.role === 'assistant' || entry.entry.kind === 'tool-invocation',
     )) run.partialText = ''
@@ -302,6 +336,7 @@ function startAgentRun(
     abortSignal: controller.signal,
     agentRun: {
       runId: id,
+      ...(run.sendRequestDigest ? { sendRequestDigest: run.sendRequestDigest } : {}),
       onEvent: emit,
       ...(continuation ? { continuation } : {}),
       onSuspended: checkpoint => { transferCheckpoint(); run.checkpoint = checkpoint },
@@ -329,6 +364,7 @@ function startAgentRun(
         emit(event)
       }),
       onMutationApproval: (preview, signal) => new Promise((resolve, reject) => {
+        signal.throwIfAborted()
         const requestId = `mutation-approval-${crypto.randomUUID()}`
         const event: AgentRunEvent = { type: 'mutation-approval-requested', runId: id, requestId, preview }
         const abort = () => {
@@ -374,6 +410,7 @@ function startAgentRun(
     run.controller = undefined
     run.promise = undefined
     run.partialText = ''
+    run.partialReasoning = ''
     const retainedColdCheckpoint = !source && continuation !== undefined && run.checkpoint === continuation
     if (run.state !== 'suspended' && !retainedColdCheckpoint || !run.checkpoint && source?.checkpoint) {
       run.request = undefined
@@ -440,4 +477,13 @@ function requireAgentRun(runs: Map<string, AgentRun>, runId: string): AgentRun {
   const run = runs.get(runId)
   if (!run) throw new Error(`Agent run not found: ${runId}`)
   return run
+}
+
+function sendRequestDigest(request: unknown): string {
+  const canonical = JSON.stringify(request, (_key, value: unknown) => {
+    if (value && typeof value === 'object' && !Array.isArray(value))
+      return Object.fromEntries(Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0))
+    return value
+  })
+  return createHash('sha256').update(canonical).digest('hex')
 }

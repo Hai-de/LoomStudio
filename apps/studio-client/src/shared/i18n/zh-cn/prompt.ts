@@ -1,4 +1,6 @@
 export const messages = {
+  'provider.confirmDeleteAccount': '删除账户“{{name}}”？该账户及其模型配置将被移除，此操作无法撤销。',
+  'provider.cancelDelete': '取消',
   'tokens.messageAndToolEstimate': '消息: {{messages}} · 工具: {{tools}}',
   'tokens.uncounted': '未计入: {{items}}',
   'tokens.modelMultiplierHelp': 'o200k_base 基础计数的估算系数',
@@ -75,6 +77,7 @@ export const messages = {
   'provider.aiLabNoProfile': '先为这个 Capability 创建一个 Profile。',
   'provider.aiLabUnavailable': 'Provider 未挂载',
   'provider.aiLabSave': '保存配置',
+  'inspector.previewTruncated': '预览已截断，仅显示部分数据。',
   'inspector.cardSnapshot': '角色卡快照',
   'inspector.run': 'Run Inspector',
   'inspector.agentTranscript': 'Agent Transcript',

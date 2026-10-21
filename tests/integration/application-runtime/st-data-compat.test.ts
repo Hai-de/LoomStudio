@@ -12,10 +12,10 @@ import {
 } from '@loom-studio/application-runtime'
 import type { ExtensionActivationContext } from '@loom-studio/extension-sdk'
 // This suite deliberately exercises the shipped worker, not an in-process parser substitute.
-import { registerStDataRuntime } from '../../../extensions/st-data-compat/dist/runtime/register.js'
+import { mvuContribution, registerStDataRuntime } from '../../../extensions/st-data-compat/dist/runtime/register.js'
 import { convertSillyTavernCard } from '../../../extensions/st-data-compat/src/normalizer/card.js'
 
-function open(filename: string, invokeChat: NonNullable<ApplicationRuntimeOptions['gateway']>['invokeChat']) {
+function open(filename: string, invokeChat: NonNullable<ApplicationRuntimeOptions['gateway']>['invokeChat'], legacy = false) {
   const engine = createSqliteDataEngine({ filename, createId: prefix => `${prefix}-${randomUUID()}`, now: () => new Date().toISOString() })
   const agents = createAgentStore({ engine })
   const documents = createSqliteDocumentStore({ engine })
@@ -26,7 +26,14 @@ function open(filename: string, invokeChat: NonNullable<ApplicationRuntimeOption
     prompt: { registerProcessor: processor => promptProcessors.register(processor) },
     state: {
       contribute: (contribution, options) => stateContributions.register({
-        contribution, initialize: options?.initialize,
+        contribution: legacy ? { ...mvuContribution,
+          entityTypes: [{ id: 'sillytavern-importer-compatibility', collectionPath: 'entities.stCompatibility' }],
+          entities: [{ typeId: 'sillytavern-importer-compatibility', entityId: 'mvu' }],
+          templates: mvuContribution.templates.map(template => ({ ...template, componentKey: 'data', targetEntityTypeIds: ['sillytavern-importer-compatibility'] })),
+          componentMounts: [{ templateId: mvuContribution.id, templateVersion: 1, componentKey: 'data',
+            target: { kind: 'entity', entity: { typeId: 'sillytavern-importer-compatibility', entityId: 'mvu' } } }],
+          bindings: [],
+        } : contribution, initialize: options?.initialize,
         packageId: 'sillytavern.importer', packageVersion: '0.1.0', moduleId: 'server', instanceId: 'test',
       }),
       registerContentHandler: handler => stateContent.register(handler, {
@@ -42,7 +49,7 @@ function open(filename: string, invokeChat: NonNullable<ApplicationRuntimeOption
   return { engine, agents, runtime, stateContent, promptProcessors }
 }
 
-async function setup(runtime: ReturnType<typeof open>['runtime']) {
+async function setup(runtime: ReturnType<typeof open>['runtime'], extraLore = '') {
   await runtime.initialize()
   const converted = convertSillyTavernCard({
     spec: 'chara_card_v2', spec_version: '2.0',
@@ -52,6 +59,7 @@ async function setup(runtime: ReturnType<typeof open>['runtime']) {
       tags: [], creator: '', character_version: '', extensions: {},
       character_book: { name: 'State Book', entries: [
         { id: 1, keys: [], content: 'hp: 10', comment: '[initvar]', enabled: false, insertion_order: 0 },
+        ...(extraLore ? [{ id: 3, keys: [], content: extraLore, comment: 'Unrelated lore', enabled: false, insertion_order: 2 }] : []),
         { id: 2, keys: [], content: 'HP=<%- getvar("stat_data.hp") %>', comment: 'Current HP', enabled: true, constant: true, insertion_order: 1 },
       ] },
     },
@@ -70,7 +78,7 @@ async function setup(runtime: ReturnType<typeof open>['runtime']) {
 
 const answer = "Damage. _.add('hp', -3);"
 const response = (text = answer) => ({ provider: 'fixture', model: 'test', text, message: { role: 'assistant' as const, content: text } })
-const hp = (value: Record<string, any>) => value.entities.stCompatibility.mvu.components.data.stat_data.hp
+const hp = (value: Record<string, any>) => value.mvu.stat_data.hp
 
 describe('STBridge complete data path', () => {
   it('initializes imported initvar, renders latest State, accepts original commands, reloads and follows native revert', async () => {
@@ -96,7 +104,7 @@ describe('STBridge complete data path', () => {
       expect(preview.messages.some(message => message.content?.includes('HP=7'))).toBe(true)
       const mutation = await fixture.runtime.applyStateMutation({
         target: stateTarget, expectedRevisionId: restored.revisionId,
-        operations: [{ op: 'set', path: '/entities/stCompatibility/mvu/components/data/stat_data/hp', value: 2 }],
+        operations: [{ op: 'set', path: '/mvu/stat_data/hp', value: 2 }],
       })
       await fixture.runtime.revertChangeset({ changesetId: mutation.mutation.changesetId })
       expect(hp((await fixture.runtime.getStateSnapshot({ target: stateTarget })).snapshot.value)).toBe(7)
@@ -104,6 +112,45 @@ describe('STBridge complete data path', () => {
       expect(reverted.messages.some(message => message.content?.includes('HP=7'))).toBe(true)
       expect(invoke).toHaveBeenCalledOnce()
     } finally { await fixture.engine.close(); await rm(directory, { recursive: true, force: true }) }
+  })
+
+  it('keeps legacy Timeline storage, EJS reads, updates and revert on their original address after reload', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'loom-mvu-legacy-'))
+    const filename = join(directory, 'data.sqlite')
+    let fixture = open(filename, async () => response(), true)
+    try {
+      const { session, target } = await setup(fixture.runtime)
+      await fixture.engine.close()
+      fixture = open(filename, async () => response())
+      await fixture.runtime.initialize()
+      const stateTarget = { scope: 'timeline' as const, ...target }
+      const legacyHp = (value: Record<string, any>) => value.entities.stCompatibility.mvu.components.data.stat_data.hp
+      const original = (await fixture.runtime.getStateSnapshot({ target: stateTarget })).snapshot
+      expect(original.value.mvu).toBeUndefined()
+      expect(legacyHp(original.value)).toBe(10)
+      const preview = await fixture.runtime.previewAgentTurn({ agentSessionId: session.id, input: 'Next', narrativeTarget: target })
+      expect(preview.messages.some(message => message.content?.includes('HP=10'))).toBe(true)
+      await fixture.runtime.invokeAgentTurn({ agentSessionId: session.id, input: 'Attack', narrativeTarget: target })
+      const updated = (await fixture.runtime.getStateSnapshot({ target: stateTarget })).snapshot
+      expect(legacyHp(updated.value)).toBe(7)
+      expect(updated.value.mvu).toBeUndefined()
+      const changed = await fixture.runtime.applyStateMutation({
+        target: stateTarget, expectedRevisionId: updated.revisionId,
+        operations: [{ op: 'set', path: '/entities/stCompatibility/mvu/components/data/stat_data/hp', value: 2 }],
+      })
+      await fixture.runtime.revertChangeset({ changesetId: changed.mutation.changesetId })
+      expect(legacyHp((await fixture.runtime.getStateSnapshot({ target: stateTarget })).snapshot.value)).toBe(7)
+    } finally { await fixture.engine.close(); await rm(directory, { recursive: true, force: true }) }
+  })
+
+  it('does not send unrelated large worldbook bodies to the MVU initializer', async () => {
+    const fixture = open(':memory:', async () => response())
+    try {
+      const { target } = await setup(fixture.runtime, 'x'.repeat(2_100_000))
+      const snapshot = (await fixture.runtime.getStateSnapshot({ target: { scope: 'timeline', ...target } })).snapshot
+      expect(hp(snapshot.value)).toBe(10)
+      expect(snapshot.value.entities).toBeUndefined()
+    } finally { await fixture.engine.close() }
   })
 
   it('replays an accepted State commit after transcript failure without re-running MVU or the Provider', async () => {

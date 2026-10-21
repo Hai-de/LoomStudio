@@ -80,6 +80,7 @@ describe('agent store', () => {
       const before = await store.getEntryPage({ agentSessionId: session.id })
       engine.database.exec(`
         ALTER TABLE agent_sessions RENAME COLUMN agent_preset_id TO agent_profile_id;
+        ALTER TABLE agent_sessions DROP COLUMN summary_policy_json;
         UPDATE schema_migrations SET version = 5 WHERE namespace = 'application.agent';
       `)
       const reopened = createAgentStore({ engine })
@@ -133,7 +134,7 @@ describe('agent store', () => {
       engine.database
         .prepare("SELECT version FROM schema_migrations WHERE namespace = 'application.agent'")
         .get(),
-    ).toEqual({ version: 6 })
+    ).toEqual({ version: 7 })
     engine.close()
   })
 
@@ -640,7 +641,7 @@ describe('agent store', () => {
         .prepare('SELECT version FROM schema_migrations WHERE namespace = ?')
         .get('application.agent')
       database.close()
-      expect(migration).toEqual({ version: 6 })
+      expect(migration).toEqual({ version: 7 })
     } finally {
       await rm(directory, { recursive: true, force: true })
     }

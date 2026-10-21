@@ -19,8 +19,8 @@ drafts/
 /data/
 /data.migrating-*/
 .DS_Store
+# 已拆分的独立扩展不回流到主仓库；旧路径只作为防误提交边界。
 /official/extensions/the-world/
-
 /official/extensions/st-data-compat/
 /official/extensions/backgrounds/
 /extensions/

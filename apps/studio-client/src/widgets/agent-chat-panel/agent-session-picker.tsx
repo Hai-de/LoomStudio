@@ -124,15 +124,15 @@ export function AgentSessionPicker(props: {
         : <TextInput className={styles.nameInput} readOnly aria-label={props.t('agent.session')}
           value={props.session ? title(props.session) : ''}
           placeholder={props.t('agent.sessionPending')} />}
-      <IconButton aria-label={props.t('agent.selectSession')} title={props.t('agent.selectSession')} disabled={locked}
+      {props.onSelect && <IconButton aria-label={props.t('agent.selectSession')} title={props.t('agent.selectSession')} disabled={locked}
         className={styles.pickerTrigger}
         onClick={() => { setQuery(''); setError(''); setEditingId(undefined); setOpen(true) }}>
         <MessagesSquare size={16} aria-hidden="true" />
-      </IconButton>
+      </IconButton>}
     </div>
     {open ? <Dialog open title={props.t('agent.sessionsTitle')} className={styles.dialog} dismissible={!locked}
       onClose={() => setOpen(false)}
-      headerActions={<IconButton aria-label={props.t('agent.closeSessionPicker')} title={props.t('agent.close')} disabled={locked}
+      showCloseButton={false} headerActions={<IconButton aria-label={props.t('agent.closeSessionPicker')} title={props.t('agent.close')} disabled={locked}
         onClick={() => setOpen(false)}><X size={16} aria-hidden="true" /></IconButton>}
       actions={<Button disabled={locked} onClick={() => setOpen(false)}>{props.t('agent.close')}</Button>}>
       <div className={styles.pickerBody}>

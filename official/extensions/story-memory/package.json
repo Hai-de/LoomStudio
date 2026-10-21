@@ -1,0 +1,14 @@
+{
+  "name": "@loom-studio/story-memory",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "node build.mjs", "check:types": "tsc -p tsconfig.json" },
+  "dependencies": {
+    "@loom-studio/ui": "workspace:*",
+    "@loom-studio/extension-sdk": "workspace:*",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "lucide-react": "^1.17.0"
+  }
+}

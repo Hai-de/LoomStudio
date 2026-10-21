@@ -1,6 +1,9 @@
 import type { messages as zhCN } from '../zh-cn/common.js'
 
 export const messages = {
+  'history.tabRecent': '최근',
+  'history.tabTimelines': '이야기',
+  'history.tabSessions': '대화',
   "recentCharacters.title": "최근 캐릭터",
   "recentCharacters.empty": "이야기를 연 캐릭터가 여기에 표시됩니다.",
   "recentCharacters.continue": "계속: {{title}}",
@@ -110,12 +113,13 @@ export const messages = {
   'rail.agent': 'Agent 프리셋',
   'rail.user': '내 리소스',
   'rail.play': '플레이',
-  'rail.recent': '최근',
+  'rail.recent': '기록',
   'rail.sessions': '기록',
   'rail.resource': '리소스',
   'rail.lore': '설정',
   'rail.inspector': '디버그',
   'rail.logs': '로그',
+  'rail.memory': '메모리',
   'rail.state': '상태 변수',
   'rail.macro': '매크로',
   'rail.textTransform': '텍스트 파이프라인',

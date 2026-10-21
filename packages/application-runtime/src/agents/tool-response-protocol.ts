@@ -26,20 +26,22 @@ export function decodeToolResponse<T extends ResponseTool>({
   const toolCalls = providerResult.message.tool_calls ?? []
   const nativeInvocationPairs = toolCalls.map((call) => {
     const resolved = byExposedName.get(call.function.name)
+    const parsed = parseToolArguments(call.function.arguments, call.function.name)
+    const validationError = providerResult.toolCallErrors?.[call.id] ?? parsed.error
+    const recordedCall = parsed.replayArguments === call.function.arguments ? call
+      : { ...call, function: { ...call.function, arguments: parsed.replayArguments } }
     const invocation: ToolInvocation = {
       id: createInvocationId(),
       toolId: resolved?.definition.id ?? `unresolved/${call.function.name}`,
-      arguments: parseToolArguments(
-        call.function.arguments,
-        call.function.name,
-      ),
+      arguments: parsed.arguments,
+      ...(validationError ? { rawInput: call.function.arguments } : {}),
       transport: 'native-function',
       ...(providerResult.providerCallId
         ? { providerCallId: providerResult.providerCallId }
         : {}),
       providerItemId: call.id,
     }
-    return { call, invocation, resolved, transport: 'native-function' as const }
+    return { call: recordedCall, invocation, resolved, validationError, transport: 'native-function' as const }
   })
   const classified = classifyAssistantContent(
     providerResult.message.content ?? '',
@@ -94,7 +96,8 @@ export function decodeToolResponse<T extends ResponseTool>({
     ...nativeInvocationPairs,
     ...contentInvocationPairs,
   ]
-  return { classified, contentScan, invocationPairs }
+  return { classified, contentScan, invocationPairs, providerMessage: nativeInvocationPairs.length
+    ? { ...providerResult.message, tool_calls: nativeInvocationPairs.map(pair => pair.call) } : providerResult.message }
 }
 
 /** Native and content transports use the same encoding in live and recovery messages. */
@@ -153,15 +156,20 @@ export function scanContentTools(content: string, knownToolNames: string[]) {
   return finished.result
 }
 
-function parseToolArguments(value: string, toolName: string) {
-  try {
-    const parsed = JSON.parse(value) as unknown
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
-      throw new Error()
-    return parsed as Record<string, import('@loom-studio/shared').JsonValue>
-  } catch {
-    throw new Error(
-      `Provider tool arguments are invalid JSON object: ${toolName}`,
-    )
+function parseToolArguments(value: string, toolName: string): {
+  arguments?: ToolInvocation['arguments']
+  error?: { code: string; message: string }
+  replayArguments: string
+} {
+  const error = { code: 'tool.invalid_input', message: `Provider tool arguments are invalid JSON object: ${toolName}` }
+  let parsed: unknown
+  try { parsed = JSON.parse(value) }
+  catch {
+    // Preserve malformed input as a JSON string for the next Provider request;
+    // the original text remains on the invocation and is never executed.
+    return { error, replayArguments: JSON.stringify(value) }
   }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
+    return { error, replayArguments: value }
+  return { arguments: parsed as Record<string, import('@loom-studio/shared').JsonValue>, replayArguments: value }
 }

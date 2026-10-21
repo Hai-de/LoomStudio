@@ -14,6 +14,7 @@ const surfaces = new Set<RendererSurface>([
   'shell.background',
   'narrative.entry.inline',
   'narrative.timeline.tail',
+  'memory.panel',
   'agent.message.inline',
   'agent.session.tail',
   'composer.sheet',

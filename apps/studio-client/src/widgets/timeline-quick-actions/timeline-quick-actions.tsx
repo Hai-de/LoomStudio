@@ -15,6 +15,7 @@ export type TimelineQuickActionsProps = {
     expand: string; collapse: string; openCharacter: string; opening: string; story: string; selectStory: string
     branch: string; rename: string; newStory: string; fork: string; deleteStory: string; deleteCharacter: string
   }
+  onOpenWorkspace?(): void
   onOpenCharacter(): void
   onNewStory(): void
   onRenameStory(): void
@@ -122,6 +123,7 @@ export function TimelineQuickActions(props: TimelineQuickActionsProps) {
             </DropdownMenuContent>
           </DropdownMenu> : null}
           <div className={styles.actions}>
+            {props.timeline && props.onOpenWorkspace ? <Button onClick={props.onOpenWorkspace}>打开工作区</Button> : null}
             <Button disabled={props.busy} onClick={props.onNewStory}><Plus size={16} aria-hidden="true" />{props.labels.newStory}</Button>
             {props.timeline ? <Button disabled={props.busy || props.canFork === false} onClick={props.onFork}><GitGraph size={16} aria-hidden="true" />{props.labels.fork}</Button> : null}
           </div>

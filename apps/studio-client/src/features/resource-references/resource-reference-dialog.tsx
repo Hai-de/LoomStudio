@@ -44,7 +44,7 @@ export function ResourceReferenceDialog(props: {
 
   if (!uri) return null
   return (
-    <Dialog open onClose={props.onClose} className={styles.dialog} title={current?.entity?.title ?? view?.title ?? props.t('reference.title')}
+    <Dialog showCloseButton={false} open onClose={props.onClose} className={styles.dialog} title={current?.entity?.title ?? view?.title ?? props.t('reference.title')}
       headerActions={<>
         {view?.editor ? <IconButton title={props.t('reference.openEditor')} aria-label={props.t('reference.openEditor')} onClick={() => props.onOpenEditor(view.editor!)}><ExternalLink size={16} /></IconButton> : null}
         <IconButton title={props.t('agent.close')} aria-label={props.t('agent.close')} onClick={props.onClose}><X size={18} /></IconButton>

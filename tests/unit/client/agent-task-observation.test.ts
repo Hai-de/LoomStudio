@@ -2,6 +2,17 @@ import { describe, expect, it, vi } from 'vitest'
 import { primaryFixture } from '../../support/client/narrative-runtime.js'
 
 describe('Task menu Run observation', () => {
+  it('preserves cancelled input recovery when summary status refreshes the Session', async () => {
+    const f = await primaryFixture()
+    f.render().setAgentInput('Keep this input')
+    f.subscribeRun.mockResolvedValueOnce({ events: [], nextCursor: 1, done: true, state: 'cancelled' })
+    await f.render().submitAgentTurn(f.event)
+    await f.render().refreshTaskSession('session')
+    expect(f.render().runRecovery?.input).toBe('Keep this input')
+    f.render().restoreRunInput()
+    expect(f.render().agentComposerInput).toBe('Keep this input')
+  })
+
   it('observes an externally resumed Run without creating a Run or clearing either draft', async () => {
     const f = await primaryFixture()
     f.render().setAgentInput('Unsent agent draft')

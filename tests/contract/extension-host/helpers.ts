@@ -14,6 +14,11 @@ import { join } from 'node:path'
 import { onTestFinished } from 'vitest'
 
 export function createExtensionHostHarness(options: {
+  readExtensionNarrative?: ExtensionHostOptions['readExtensionNarrative']
+  validateExtensionNarrative?: ExtensionHostOptions['validateExtensionNarrative']
+  subscribeNarrativeActivity?: ExtensionHostOptions['subscribeNarrativeActivity']
+  registerReadonlyFiles?: ExtensionHostOptions['registerReadonlyFiles']
+  extensionAgentTasks?: ExtensionHostOptions['extensionAgentTasks']
   logger?: Logger
   grantAssetCapabilities?: (packageId: string, moduleId: string) => readonly ExtensionAssetCapability[]
   assets?: ExtensionHostOptions['assets']
@@ -44,6 +49,11 @@ export function createExtensionHostHarness(options: {
   const loomRunner = createLoomRunner({ traceAudit, factories: createSamplePassFactories() })
   let kernel: Kernel
   const extensionHost = createExtensionHost({
+    readExtensionNarrative: options.readExtensionNarrative,
+    validateExtensionNarrative: options.validateExtensionNarrative,
+    subscribeNarrativeActivity: options.subscribeNarrativeActivity,
+    registerReadonlyFiles: options.registerReadonlyFiles,
+    extensionAgentTasks: options.extensionAgentTasks,
     documents,
     diagnostics,
     logger: options.logger,

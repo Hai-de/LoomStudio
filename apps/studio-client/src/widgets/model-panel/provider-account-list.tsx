@@ -5,7 +5,7 @@ import { mergeModelCatalog } from '../../features/provider-settings/model/model-
 import { resolveModelBrand, resolveProviderBrand, type ModelBrand } from '../../features/provider-settings/model/model-brand.js'
 import type { Translator } from '../../shared/i18n/index.js'
 import { tryWriteClipboardText } from '../../shared/browser/clipboard.js'
-import { IconButton, Toggle } from '@loom-studio/ui'
+import { Button, Dialog, IconButton, Toggle } from '@loom-studio/ui'
 import { notify } from '../../shared/notifications/index.js'
 import styles from './model-panel.module.scss'
 import { ModelBrandIcon } from './model-brand-icon.js'
@@ -24,6 +24,25 @@ type ProviderAccountListProps = {
 }
 
 export function ProviderAccountList(props: ProviderAccountListProps) {
+  const [deletingAccount, setDeletingAccount] = useState<ProviderAccount>()
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState<string>()
+
+  async function confirmDelete() {
+    if (!deletingAccount || deleteBusy) return
+    setDeleteBusy(true)
+    setDeleteError(undefined)
+    try {
+      await props.onDelete(deletingAccount.id)
+      setDeletingAccount(undefined)
+      notify.success(props.t('notify.success.deleted'))
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
   return (
     <div className={styles.accountList}>
       {props.accounts.length === 0
@@ -35,7 +54,7 @@ export function ProviderAccountList(props: ProviderAccountListProps) {
               busy={props.busy}
               models={props.modelProfiles.filter(profile => profile.providerAccountId === account.id)}
               onCreateModel={props.onCreateModel}
-              onDelete={props.onDelete}
+              onDelete={account => { setDeleteError(undefined); setDeletingAccount(account) }}
               onDeleteModel={props.onDeleteModel}
               onListModels={props.onListModels}
               onUpdateConnection={props.onUpdateConnection}
@@ -43,6 +62,15 @@ export function ProviderAccountList(props: ProviderAccountListProps) {
               t={props.t}
             />
           ))}
+      <Dialog open={Boolean(deletingAccount)} title={props.t('provider.deleteAccount')}
+        description={props.t('provider.confirmDeleteAccount', { name: deletingAccount?.displayName ?? '' })}
+        dismissible={!deleteBusy} closeOnBackdrop={false} closeLabel={props.t('agentTasks.close')}
+        onClose={() => setDeletingAccount(undefined)} actions={<>
+          <Button disabled={deleteBusy} onClick={() => setDeletingAccount(undefined)}>{props.t('provider.cancelDelete')}</Button>
+          <Button disabled={deleteBusy || props.busy} variant="danger" onClick={() => { void confirmDelete() }}>{props.t('provider.deleteAccount')}</Button>
+        </>}>
+        {deleteError ? <p role="alert">{props.t('notify.provider.accountDeleteFailed')} · {deleteError}</p> : null}
+      </Dialog>
     </div>
   )
 }
@@ -53,7 +81,7 @@ function ProviderAccountItem(props: {
   busy: boolean
   models: ModelProfile[]
   onCreateModel(providerAccountId: string, providerModelId: string): Promise<void>
-  onDelete(id: string): Promise<void>
+  onDelete(account: ProviderAccount): void
   onDeleteModel(id: string): Promise<void>
   onListModels(providerAccountId: string): Promise<string[]>
   onUpdateConnection(providerAccountId: string, connection: { displayName: string; baseUrl: string; apiKey?: string }): Promise<boolean>
@@ -94,16 +122,9 @@ function ProviderAccountItem(props: {
         setMenuOpen(false)
       }
     }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setMenuOpen(false)
-      }
-    }
     document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('keydown', handleKeyDown)
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('keydown', handleKeyDown)
     }
   }, [menuOpen])
 
@@ -247,9 +268,7 @@ function ProviderAccountItem(props: {
             onClick={event => {
               event.preventDefault()
               event.stopPropagation()
-              void props.onDelete(props.account.id)
-                .then(() => notify.success(props.t('notify.success.deleted')))
-                .catch(error => notify.error(props.t('notify.provider.accountDeleteFailed'), { description: error instanceof Error ? error.message : String(error) }))
+              props.onDelete(props.account)
             }}
           >
             <Trash2 aria-hidden="true" />
@@ -334,7 +353,7 @@ function ProviderAccountItem(props: {
                   <IconButton size="small" variant="danger" disabled={props.busy} aria-label={props.t('provider.modelDelete')} onClick={() => {
                     void props.onDeleteModel(profile.id)
                       .then(() => notify.success(props.t('notify.success.deleted')))
-                      .catch(error => notify.error(props.t('notify.provider.modelDeleteFailed'), { description: error instanceof Error ? error.message : String(error) }))
+                      .catch(error => setActionError(`${props.t('notify.provider.modelDeleteFailed')} · ${error instanceof Error ? error.message : String(error)}`))
                   }}>
                     <Trash2 aria-hidden="true" />
                   </IconButton>
@@ -344,7 +363,13 @@ function ProviderAccountItem(props: {
           </div>
 
           {!fake ? (
-            <div ref={pickerRef} className={`${styles.modelPicker} loom-underlined-fields`}>
+            <div ref={pickerRef} className={`${styles.modelPicker} loom-underlined-fields`} onKeyDown={event => {
+              if (event.key === 'Escape' && menuOpen) {
+                event.preventDefault()
+                event.stopPropagation()
+                setMenuOpen(false)
+              }
+            }}>
               <form onSubmit={addModel}>
                 <input
                   aria-label={props.t('provider.modelSearchPlaceholder')}

@@ -1,3 +1,4 @@
+import { extensionSharedModules } from './build/extension-shared-modules.js'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import babel from '@rolldown/plugin-babel'
@@ -18,6 +19,7 @@ export default defineConfig({
     __LOOM_STUDIO_VERSION__: JSON.stringify(packageVersion),
   },
   plugins: [
+    extensionSharedModules(),
     react(),
     babel({
       presets: [reactCompilerPreset({ compilationMode: 'annotation' })],
@@ -32,6 +34,7 @@ export default defineConfig({
     }) as PluginOption] : []),
   ],
   resolve: {
+    dedupe: ['react', 'react-dom'],
     alias: {
       '@': resolvePath('./src'),
       '@loom-studio/logging': resolvePath('../../packages/logging/src/index.ts'),

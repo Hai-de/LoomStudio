@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, type FormEvent, type ReactNode, type Ref } from 'react'
-import { ArrowUp, BringToFront, ChevronUp, Lock, Pause, Play, Plus, RotateCcw, Unlock } from 'lucide-react'
+import { ArrowUp, BringToFront, ChevronUp, Lock, Pause, Square, Play, Plus, RotateCcw, Unlock } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,6 +46,8 @@ type ChatComposerProps = {
   toggleExpandedLabel?: string
   unpinLabel?: string
   runStatus?: 'idle' | 'running' | 'suspended'
+  stopAction?: boolean
+  resumeWithInput?: boolean
   onPause?: () => void
   onResume?: () => void
   pauseLabel?: string
@@ -185,9 +187,9 @@ export function ChatComposer(props: ChatComposerProps) {
                     onClick={props.onPause}
                     title={props.pauseLabel ?? 'Pause'}
                   >
-                    <Pause aria-hidden="true" strokeWidth={2} />
+                    {props.stopAction ? <Square aria-hidden="true" strokeWidth={2} /> : <Pause aria-hidden="true" strokeWidth={2} />}
                   </button>
-                ) : props.runStatus === 'suspended' && !props.input.trim() ? (
+                ) : props.runStatus === 'suspended' && (props.resumeWithInput || !props.input.trim()) ? (
                   <button
                     aria-label={props.resumeLabel ?? 'Resume'}
                     className={styles.sendButton}

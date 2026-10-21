@@ -2,6 +2,7 @@
 
 本页是 `docs/workbench/plans/` 的施工入口，用于跟踪当前正在推进及延期规划的路线图。
 已实现或已被新架构取代的历史 Plan 均已整理归档至 [`docs/archive/plans/`](../../archive/plans/)。
+暂不实施、未来按需求重新评估的构想放在 [`Draft`](../drafts/README.md)，不作为当前路线图。
 
 ---
 
@@ -9,23 +10,32 @@
 
 | 路线图 / 计划                                                                                | 当前状态     | 关注点                                                                  |
 | -------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------- |
+| [新叙事扩展选择与当前故事面板](./new-story-extension-selection-plan.md) | 已实现 / 待人工体验验收 | 新故事一次选择、事务内采用和初始化，统一控件与当前角色上下文 |
 | [Agent 通用触发与主写作常驻配置](./agent-trigger-and-standing-resource-bindings-plan.md) | 方向已确认 / 待收束实施合同 | 通用 Session 投递、后端主写作与首次初始化、常驻引用和扩展来源可用性；绑定冲突与迁移待决定 |
-| [Timeline 工作空间与 VFS 组织](./timeline-workspace-and-vfs-organization-plan.md) | 讨论记录 / 未授权业务实施 | 工作材料、来源目录、包素材与生成素材、归属和引用；路径及树版本合同待收束 |
+| [Timeline 基础设施实施](./timeline-foundation-implementation-plan.md) | 文件/恢复/楼号基础已实现 / 定向验证通过 | Workspace、共同恢复、稳定楼号；Session 总结接续，剧情扩展问题延期 |
+| [Session 总结实施](./session-summary-implementation-plan.md) | 后端与交互已接通 / 视觉待验收 | 会话摘要、策略配置、统一记忆入口与 Workspace 文件工作台；剧情总结延期 |
+| [Timeline 工作空间与 VFS 组织](./timeline-workspace-and-vfs-organization-plan.md) | 文件与恢复基础已实现 | Timeline 共享 MEMORY 与 Session 自有摘要分开；工作材料、路径及树版本合同待收束 |
+| [Timeline 稳定楼号基建](../../archive/plans/narrative-memory-and-refresh-policy-plan.md#10-稳定楼号总结计数与旧原文清理2026-10-20-补充确认) | 已实现 / 定向验证通过 | 与 Workspace 同层；持久位置编号、缺号/分支/Swipe 语义及受控楼号引用，不依赖官方记忆扩展 |
+| [Timeline 运行数据共同恢复合同](./timeline-runtime-recovery-contract-plan.md) | 基础恢复已接线 / Session 接续待实施 | 正文、State、Workspace 一致恢复；历史时点、执行来源及记忆/脚本准备边界，不重开已确认 Swipe 规则 |
+| [Loom Script 单文件分发与运行](./loom-script-distribution-and-runtime-plan.md) | 核心方向已确认 / 未授权业务实施 | 通用脚本、多运行环境、局部刷新、角色与全局生命周期、外部依赖；存储及恢复与 Timeline 工作区协同 |
 | [Settings → Lore 全量命名切换](./settings-to-lore-plan.md) | 源码已实施 / 文件数据迁移待停服 | 全量领域改名、官方扩展同步；数据库已升级，文件型测试卡副本已验证；State 不变 |
 | [审查归档后续](../issues/audit-follow-ups.md) | Deferred / Backlog | 远端 CI、旧计划接续及精简后的用户 UI 验收/独立测试维护；完整修复账目已移出活跃目录 |
 | [扩展模块补全](./extension-module-completion-plan.md) | 待调研 / 未实施 | 远程安装与独立官方扩展发行接续；来源、构建脚本与权限合同待决定 |
 | [扩展的故事级采用与运行隔离](./extension-story-participation-plan.md) | 首版实现完成 / 待人工验收 | Prompt/恢复凭据、通用事务守卫、间接资源过滤与来源诊断已接通；Package 总开关与跨声明迁移未纳入首版 |
 | [The World 世界状态与 AI 接入](./the-world-state-and-agent-plan.md) | 首版实现完成 / 待人工与发行验收 | 原生 EC、可信工具、Client 与来源诊断已接通，确定性 Provider/真实 Server 工具链通过；外部模型、公网安装与人工界面尚未验收 |
+| [`st-migration-and-mvu-state-repair-plan.md`](./st-migration-and-mvu-state-repair-plan.md) | 已实施 / 待人工验收 | ST 转换与宿主导入通路、迁移诊断及 MVU 扁平绑定与旧历史兼容 |
 | [`agent-preset-resources-and-usage-plan.md`](./agent-preset-resources-and-usage-plan.md) | 阶段实施完成 / 待人工验收 | 使用配置与空引用、固定 Session、主接收方与临时编辑；官方助手资源实验通过，未做真实模型或浏览器验收 |
 | [`ui/README.md`](./ui/README.md) | UI 计划子索引 | Shell 动画、资源 Diff 与 Provider 展示等实施及延期入口 |
 | [`opening-swipes-and-runtime-swipe-plan.md`](./opening-swipes-and-runtime-swipe-plan.md) | 多开场已实施 / 人工验收待办；运行时未实施 | 多开场初始化、ST 备选开场兼容；最新 Narrative Swipe 与 Session 工作历史隔离 |
 | [`workspace-resource-and-distribution-plan.md`](./workspace-resource-and-distribution-plan.md) | In Progress / 本地分发已实现，资源包改造转独立计划 | 用户自定义来源、Git 更新、开发模式；单资源附件旧方向已被替代 |
+| [`codeact-vfs-usability-plan.md`](./codeact-vfs-usability-plan.md) | 已实现 / 待真实模型体验 | State 结构化读写、类型保护、回执、目录与提示词 |
+| [`agent-send-and-sdk-boundary-repair-plan.md`](./agent-send-and-sdk-boundary-repair-plan.md) | 已实现 / 待真实 Provider 验收 | 发送幂等、无进展停止、无效工具纠正与原生 reasoning |
+| [`agent-approval-recovery-plan.md`](./agent-approval-recovery-plan.md) | 已实现 / 待真实 Session 验收 | 审批恢复、分范围策略、冷放弃及取消状态一致性 |
 | [`agent-runtime-session-and-workspace-plan.md`](./agent-runtime-session-and-workspace-plan.md) | In Progress / Agent 执行与流式基础已实现 | 统一写入结果、统计组件与 CodeAct 接入；工具细节归独立计划 |
 | [`codeact-vfs-tooling-plan.md`](./codeact-vfs-tooling-plan.md) | In Progress / 双通道与领域 VFS 读取已接入 | 实时源节点、State 子树、脚本 Blob、路径身份与版本；写入、Pin、Narrative 与通用资产待接续 |
 | [`agent-context-skeleton-and-memory-projection-plan.md`](./agent-context-skeleton-and-memory-projection-plan.md) | In Progress / 骨架已接线，生命周期未验收 | 投影、统一刷新与 Session 生命周期；摘要策略已拆至独立记忆 Plan |
-| [`narrative-memory-and-refresh-policy-plan.md`](./narrative-memory-and-refresh-policy-plan.md) | Open / 已确认方向，实施合同待收束 | 按剧情次数整理、Token 容量兜底、近期缓冲、记事板与 Card / Timeline 配置 |
 | [`application-capability-cli-mcp-adapters-plan.md`](./application-capability-cli-mcp-adapters-plan.md) | 待讨论 / 未授权实施 | 承接独立 CLI/MCP；在线连接、权限、首批命令及 Capability 抽取范围待确认 |
-| [持久 Agent Script / Script Mount 历史候选](../../archive/plans/file-backed-resource-agent-script-codeact-plan.md) | 延期 / 未授权实施 | 仅保留远期事项可发现入口；旧综合方案已归档，CodeAct 以独立计划为准 |
+| [持久 Agent Script / Script Mount 历史候选](../../archive/plans/file-backed-resource-agent-script-codeact-plan.md) | 历史候选 / 新讨论已独立立项 | Script 当前方向见上方单文件分发与运行计划；CodeAct 以独立计划为准，不自动恢复旧稿范围 |
 | [`extension-developer-experience.md`](./extension-developer-experience.md)                   | Roadmap / UI 方向已确认 | SDK、工具链，以及扩展页面、声明式设置和组件使用；UI 具体合同待设计 |
 | [`search-and-timeline-indexing-plan.md`](./search-and-timeline-indexing-plan.md)             | 局部 Asset Search 已实现 / 独立 Timeline Search 延期 | 旧局部搜索背景与 Timeline 搜索候选；不属于全局资源搜索的实施或扩容范围 |
 | [`ui/prompt-resource-diff-mode-v0.md`](./ui/prompt-resource-diff-mode-v0.md)                 | 延期规划     | PromptResource Revision 差异对比与 Tokenizer 合同                       |
@@ -36,6 +46,10 @@
 ---
 
 ## 历史已归档计划
+
+2026-10-21：[剧情记忆与统一刷新策略](../../archive/plans/narrative-memory-and-refresh-policy-plan.md)按用户确认归档；总结保存已由用户实测，后续质量与交互随游玩反馈迭代。旧原文清理与完整长程验收边界保留在归档结论。
+
+2026-10-18：[Node 24 原生能力简化](../../archive/plans/node24-native-modernization-plan.md)已完成并经用户确认归档；原生入口、模块目录、正则转义、Promise 句柄、冒烟自动清理与 macOS/Linux 发布启动缓存已接入。Windows 自动缓存保留为后续可选优化，不阻塞交付；平台验证范围见原记录。
 
 2026-10-14：[Timeline 与 Agent Session 命名及辨识信息](../../archive/plans/ui/timeline-session-identification-plan.md)已完成并归档；Studio 创建时生成简短名称，四处列表复用来源 metadata，保留人工视觉验收边界。
 

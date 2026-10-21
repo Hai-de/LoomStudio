@@ -1,3 +1,6 @@
+import { decideAgentApproval, mutationApprovalScope, parseAgentApprovalPolicy, type AgentApprovalPolicy } from './approval-policy.js'
+import { createWorkspaceRuntimeMethods } from '../runtime/workspace-runtime.js'
+import type { VfsEntry } from '../vfs/types.js'
 import type { NarrativePage, PromptResourceNodeDraft, PromptResourceNodePatch, PromptResourceTreeNode } from '@loom-studio/application-data'
 import type { ApplicationRuntimeContext } from '../foundation/application-context.js'
 import type { RuntimeRequestContext, StateMutationOperation } from '../types.js'
@@ -14,22 +17,31 @@ import { assertNarrativeExecutionSource, guardNarrativeWrite, type NarrativeExec
 
 type AgentToolScopeContext = Pick<ApplicationRuntimeContext,
   'agentTools' | 'blobs' | 'createId' | 'dataEngine' | 'documents' | 'narratives'
-  | 'narrativeContext' | 'now' | 'promptResources' | 'states' | 'swipes'
+  | 'extensionReadonlyFiles' | 'workspaces' | 'narrativeContext' | 'now' | 'promptResources' | 'states' | 'swipes'
 >
 
 /** Bind tool I/O to the prepared turn without making PromptBuild own mutation implementations. */
-export function createAgentToolScope(ctx: AgentToolScopeContext, input: {
+export async function createAgentToolScope(ctx: AgentToolScopeContext, input: {
   base: ToolExecutionScope
   presetId: string
+  approvalPolicy?: AgentApprovalPolicy
   sessionId: string
   runId: string
   narrative?: { page: NarrativePage; rules: TextTransformRuleEntry[] }
   narrativeSource?: NarrativeExecutionSource
   requestContext?: RuntimeRequestContext
-}): ToolExecutionScope {
+}): Promise<ToolExecutionScope> {
   const { presetId, sessionId, runId, narrative, requestContext } = input
   const narratives = ctx.narratives
   const scope: ToolExecutionScope = { ...input.base }
+  if (narrative) {
+    requestContext?.abortSignal?.throwIfAborted()
+    const files = await ctx.extensionReadonlyFiles.resolve({
+      timelineId: narrative.page.timeline.id, branchId: narrative.page.branch.id,
+    }, narrative.page.timeline.createdFrom?.cardId)
+    requestContext?.abortSignal?.throwIfAborted()
+    scope.vfs = [...(scope.vfs ?? []), ...files]
+  }
   scope.narrativeSource = input.narrativeSource
   const assertSource = async () => {
     if (input.narrativeSource) await assertNarrativeExecutionSource(ctx, input.narrativeSource)
@@ -39,13 +51,42 @@ export function createAgentToolScope(ctx: AgentToolScopeContext, input: {
   scope.assertNarrativeSource = assertSource
   scope.withNarrativeWrite = writeSource
   scope.vfsAttachments = () => listPresetScriptAttachments(ctx, presetId, scope.availableExtensionInstallations)
-  if (requestContext?.agentRun?.onMutationApproval)
-    scope.approveMutation = requestContext.agentRun.onMutationApproval
-  if (requestContext?.agentRun?.onHistoryReadApproval)
-    scope.requestHistoryApproval = requestContext.agentRun.onHistoryReadApproval
+  const policy = parseAgentApprovalPolicy(input.approvalPolicy)
+  const mutationHandler = requestContext?.agentRun?.onMutationApproval
+  if (mutationHandler || policy) scope.approveMutation = (preview, signal) => {
+    signal.throwIfAborted()
+    return decideAgentApproval(policy, mutationApprovalScope(preview), mutationHandler ? () => mutationHandler(preview, signal) : undefined)
+  }
+  const historyHandler = requestContext?.agentRun?.onHistoryReadApproval
+  if (historyHandler || policy) scope.requestHistoryApproval = (action, signal) => {
+    signal?.throwIfAborted()
+    return decideAgentApproval(policy, 'historyRead', historyHandler ? () => historyHandler(action, signal) : undefined)
+  }
   const allowedTimelineTarget = narrative?.page
     ? { scope: 'timeline' as const, timelineId: narrative.page.timeline.id, branchId: narrative.page.branch.id }
     : undefined
+  if (allowedTimelineTarget) {
+    const workspace = createWorkspaceRuntimeMethods(ctx)
+    scope.workspace = {
+      snapshot: async () => {
+        await assertSource()
+        const revision = await workspace.getTimelineWorkspace(allowedTimelineTarget)
+        await assertSource()
+        const entries: VfsEntry[] = [{ path: '/workspace', kind: 'directory', binding: { kind: 'workspace', revisionId: revision.id, entryId: '' } }]
+        const byId = new Map(revision.entries.map(entry => [entry.id, entry]))
+        const pathOf = (entry: typeof revision.entries[number]): string => entry.parentId ? `${pathOf(byId.get(entry.parentId)!)}/${entry.name}` : `/workspace/${entry.name}`
+        for (const entry of revision.entries) entries.push({ path: pathOf(entry), kind: entry.kind,
+          binding: { kind: 'workspace', revisionId: revision.id, entryId: entry.id },
+          ...(entry.kind === 'file' ? 'text' in entry.content ? { content: entry.content.text } : { state: 'locked' as const } : {}),
+        })
+        return entries
+      },
+      mutate: async (expectedRevisionId, operations) => {
+        const result = await writeSource(() => workspace.mutateTimelineWorkspace({ ...allowedTimelineTarget, expectedRevisionId, operations }, requestContext))
+        return { changesetId: result.mutation.changesetId }
+      },
+    }
+  }
   scope.state = {
     defaultTarget: allowedTimelineTarget ?? { scope: 'global' as const },
     canAccess: target => target.scope === 'global'

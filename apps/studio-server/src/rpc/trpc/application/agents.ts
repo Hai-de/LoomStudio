@@ -1,3 +1,4 @@
+import { parseAgentApprovalPolicy } from '@loom-studio/application-runtime'
 import type {
   ApplicationRuntime,
   InvokeAgentTurnInput,
@@ -27,6 +28,7 @@ export const agentsProcedures = {
       model: readOptionalProviderModelSelection(params, 'model'),
       delivery: readOptionalDelivery(params),
       historyPolicy: readOptionalHistoryPolicy(params),
+      approvalPolicy: parseAgentApprovalPolicy(isRecord(params) ? params.approvalPolicy : undefined),
     }
   })).mutation(({ ctx, input }) => ctx.runtime.createAgentPreset(input, ctx.request)),
   'getAgentPreset': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['getAgentPreset']>[0] => {
@@ -45,7 +47,9 @@ export const agentsProcedures = {
       model: isRecord(params) && params.model === null ? null : readOptionalProviderModelSelection(params, 'model'),
       delivery: readOptionalDelivery(params),
       historyPolicy: readOptionalHistoryPolicy(params),
+      approvalPolicy: parseAgentApprovalPolicy(isRecord(params) ? params.approvalPolicy : undefined),
       useCardLore: readOptionalBoolean(params, 'useCardLore'),
+      useGlobalLore: readOptionalBoolean(params, 'useGlobalLore'),
       textUses: readPresetTextUses(params),
     }
   })).mutation(({ ctx, input }) => ctx.runtime.updateAgentPreset(input, ctx.request)),
@@ -96,13 +100,25 @@ export const agentsProcedures = {
       agentSessionId: readString(params, 'agentSessionId'),
     }
   })).mutation(({ ctx, input }) => ctx.runtime.deleteAgentSession(input, ctx.request)),
+  'summarizeAgentSession': procedure.input(jsonInput((params: JsonValue | undefined) => ({ agentSessionId: readString(params, 'agentSessionId'), branchId: readOptionalString(params, 'branchId') }))).mutation(({ ctx, input }) => ctx.runtime.summarizeAgentSession(input, ctx.request)),
+  'cancelAgentSessionSummary': procedure.input(jsonInput((params: JsonValue | undefined) => ({ agentSessionId: readString(params, 'agentSessionId') }))).mutation(({ ctx, input }) => ctx.runtime.cancelAgentSessionSummary(input)),
+  'updateAgentSessionSummary': procedure.input(jsonInput((params: JsonValue | undefined) => ({ agentSessionId: readString(params, 'agentSessionId'), branchId: readOptionalString(params, 'branchId'), expectedSummaryId: readString(params, 'expectedSummaryId'), expectedEntryCount: readNumber(params, 'expectedEntryCount'), content: readString(params, 'content') }))).mutation(({ ctx, input }) => ctx.runtime.updateAgentSessionSummary(input, ctx.request)),
+  'getAgentSessionMemory': procedure.input(jsonInput((params: JsonValue | undefined) => ({ agentSessionId: readString(params, 'agentSessionId'), branchId: readOptionalString(params, 'branchId') }))).query(({ ctx, input }) => ctx.runtime.getAgentSessionMemory(input)),
+  'listAgentSessionSummaryTasks': procedure.input(jsonInput((params: JsonValue | undefined) => ({ agentSessionId: readString(params, 'agentSessionId') }))).query(({ ctx, input }) => ctx.runtime.listAgentSessionSummaryTasks(input)),
+  'getAgentSessionSummaryStatus': procedure.input(jsonInput((params: JsonValue | undefined) => ({ agentSessionId: readString(params, 'agentSessionId') }))).query(({ ctx, input }) => ctx.runtime.getAgentSessionSummaryStatus(input)),
   'completeAgentSessionHandoff': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['completeAgentSessionHandoff']>[0] => ({ agentSessionId: readString(params, 'agentSessionId'), expectedEntryCount: readNumber(params, 'expectedEntryCount'), summary: readString(params, 'summary'), branchId: readOptionalString(params, 'branchId') }))).mutation(async ({ ctx, input }) => {
     const result = await ctx.runtime.completeAgentSessionHandoff(input, ctx.request)
     return { ...result, entries: result.entries.map(agentTranscriptEntryDto) }
   }),
   'updateAgentSession': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['updateAgentSession']>[0] => {
     if (isRecord(params) && 'agentPresetId' in params) throw new Error('Agent Session preset binding is immutable')
+    const summaryPolicy = readOptionalObject(params, 'summaryPolicy')
     return {
+      ...(summaryPolicy ? { summaryPolicy: {
+        enabled: readBoolean(summaryPolicy, 'enabled'), asynchronous: readBoolean(summaryPolicy, 'asynchronous'),
+        maxTokens: readNumber(summaryPolicy, 'maxTokens'), bufferFloors: readNumber(summaryPolicy, 'bufferFloors'),
+        triggerFloors: readNumber(summaryPolicy, 'triggerFloors'), triggerTokens: readNumber(summaryPolicy, 'triggerTokens'),
+      } } : {}),
       agentSessionId: readString(params, 'agentSessionId'),
       title: readOptionalString(params, 'title'),
       ...(isRecord(params) && params.timelineId !== undefined
@@ -245,6 +261,7 @@ function readOptionalMacroTimelineTarget(params: JsonValue | undefined): { timel
 
 function readAgentTurnInput(params: JsonValue | undefined): InvokeAgentTurnInput {
   return {
+    requestId: readOptionalString(params, 'requestId'),
     agentSessionId: readString(params, 'agentSessionId'),
     input: readString(params, 'input'),
     activationFacts: readOptionalObject(params, 'activationFacts'),

@@ -21,6 +21,7 @@ import {
 } from './agents-runtime.js'
 import { createPromptRuntimeMethods } from './prompt-runtime.js'
 import { createSearchRuntimeMethods } from './search-runtime.js'
+import { createWorkspaceRuntimeMethods } from './workspace-runtime.js'
 import { createStateRuntimeMethods } from './state-runtime.js'
 import { createTransformsRuntimeMethods } from './transforms-runtime.js'
 import {
@@ -44,6 +45,9 @@ export function createApplicationRuntime(options: ApplicationRuntimeOptions): Ap
   const ctx: ApplicationRuntimeContext = createApplicationRuntimeContext(options)
 
   return {
+    subscribeNarrativeActivity: ctx.narrativeActivity.subscribe,
+    registerReadonlyFiles: ctx.extensionReadonlyFiles.register,
+    registerTimelineArchiveParticipant: ctx.timelineArchiveParticipants.register,
     initialize: async () => {
       await initializeGlobalState(ctx)
       await initializeOfficialFakeProviderProfiles(ctx)
@@ -119,6 +123,7 @@ export function createApplicationRuntime(options: ApplicationRuntimeOptions): Ap
     ...createPromptRuntimeMethods(ctx),
     ...createSearchRuntimeMethods(ctx),
     ...createStateRuntimeMethods(ctx),
+    ...createWorkspaceRuntimeMethods(ctx),
     ...createTransformsRuntimeMethods(ctx),
     ...createProvidersRuntimeMethods(ctx),
     ...createExtensionsRuntimeMethods(ctx),

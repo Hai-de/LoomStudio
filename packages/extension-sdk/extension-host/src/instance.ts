@@ -201,7 +201,96 @@ export function createContext(
     return { dispose: () => { active = false; return registration.dispose() } }
   }
 
+
+  const requireTimelineCapability = async (capability: 'narrative.read' | 'agent.tasks' | 'vfs.provide') => {
+    assertScopeActive(instance)
+    if (moduleManifest.capabilities?.[capability] !== true) throw new Error(`Extension module requires ${capability}`)
+    const execution = timelineWork.getStore()
+    if (!execution) throw new Error('This capability requires ctx.timeline.run')
+    await executionSignal()
+    return execution
+  }
+  const taskOwner = { packageId: packageManifest.id, installationId: extensionInstallationId(packageManifest.id, record.target) }
+  const withTask = async <T>(work: (service: NonNullable<ExtensionHostOptions['extensionAgentTasks']>, execution: NonNullable<ReturnType<typeof timelineWork.getStore>>) => Promise<T>) => {
+    const execution = await requireTimelineCapability('agent.tasks')
+    if (!options.extensionAgentTasks) throw new Error('Extension Agent tasks are unavailable')
+    const result = await work(options.extensionAgentTasks, execution)
+    await executionSignal()
+    return result
+  }
+
   return {
+    archives: {
+      registerRecords: adapter => {
+        assertScopeActive(instance)
+        if (packageManifest.participation !== 'timeline') throw new Error('Record archives require Timeline participation')
+        if (!adapter.id.startsWith(`${packageManifest.id}.`)) throw new Error('Archive adapter must use package namespace')
+        if (!options.registerRecordArchive) throw new Error('Record archives are unavailable')
+        const handle = options.registerRecordArchive({ ...adapter,
+          remap: input => instance.scope.run(() => Promise.resolve(adapter.remap(input))),
+        }, { ...taskOwner, target: structuredClone(record.target) })
+        instance.scope.track(`record-archive:${adapter.id}`, handle)
+        return handle
+      },
+    },
+    narrative: {
+      read: async input => {
+        const execution = await requireTimelineCapability('narrative.read')
+        if (!options.readExtensionNarrative) throw new Error('Narrative reading is unavailable')
+        const result = await options.readExtensionNarrative(execution.target, input, execution.signal)
+        await executionSignal()
+        return result
+      },
+      validate: async source => {
+        const execution = await requireTimelineCapability('narrative.read')
+        if (!options.validateExtensionNarrative) throw new Error('Narrative validation is unavailable')
+        const result = await options.validateExtensionNarrative(execution.target, source, execution.signal)
+        await executionSignal()
+        return result
+      },
+      subscribe: handler => {
+        assertScopeActive(instance)
+        if (moduleManifest.capabilities?.['narrative.read'] !== true || packageManifest.participation !== 'timeline')
+          throw new Error('Narrative activity requires narrative.read and Timeline participation')
+        if (!options.subscribeNarrativeActivity) throw new Error('Narrative activity is unavailable')
+        let active = true
+        const registration = options.subscribeNarrativeActivity(event => {
+          void (async () => {
+            if (!active || !instance.scope.active || !await isTimelineAvailable(event.timelineId)) return
+            await runTimeline({ scope: 'timeline', timelineId: event.timelineId, branchId: event.branchId }, async () => {
+              if (active) await handler(event)
+            })
+          })().catch(error => reportDiagnostic(options.diagnostics, record, instance.instanceId, {
+            severity: 'error', code: 'extension.narrative_listener_failed', source: 'extension-host',
+            message: error instanceof Error ? error.message : String(error),
+          }))
+        })
+        const handle = { dispose() { active = false; registration.dispose() } }
+        instance.scope.track('narrative-activity', handle)
+        return handle
+      },
+    },
+    agentTasks: {
+      create: input => withTask((service, execution) => service.create(taskOwner, execution.target, input, execution.signal)),
+      invoke: input => withTask((service, execution) => service.invoke(taskOwner, execution.target, input, execution.signal)),
+      read: sessionId => withTask((service, execution) => service.read(taskOwner, execution.target, sessionId, execution.signal)),
+      cancel: sessionId => withTask(async (service, execution) => { await service.cancel(taskOwner, execution.target, sessionId, execution.signal) }),
+    },
+    vfs: {
+      register: provider => {
+        assertScopeActive(instance)
+        if (moduleManifest.capabilities?.['vfs.provide'] !== true || packageManifest.participation !== 'timeline')
+          throw new Error('Readonly files require vfs.provide and Timeline participation')
+        if (!provider.id.startsWith(`${packageManifest.id}.`)) throw new Error('Readonly file provider must use package namespace')
+        if (!options.registerReadonlyFiles) throw new Error('Readonly file providers are unavailable')
+        const handle = options.registerReadonlyFiles({ ...provider,
+          id: installedExtensionContributionId(packageManifest.id, record.target, provider.id),
+          resolve: target => runTimeline({ scope: 'timeline', ...target }, () => provider.resolve(target)),
+        }, { target: structuredClone(record.target), isAvailable: target => isTimelineAvailable(target.timelineId) })
+        instance.scope.track(`readonly-files:${provider.id}`, handle)
+        return handle
+      },
+    },
     timeline: {
       run: runTimeline,
       subscribe: listener => {

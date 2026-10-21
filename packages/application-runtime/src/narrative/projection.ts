@@ -16,8 +16,8 @@ export function projectNarrativeNodes(
   return projectHistoryEntries({
     source,
     phase: options.phase,
-    entries: input.nodes.map((node, index) => ({
-      id: node.id, source, text: node.body.raw, sequence: index + 1, createdAt: node.createdAt,
+    entries: input.nodes.map(node => ({
+      id: node.id, source, text: node.body.raw, sequence: node.floor, createdAt: node.createdAt,
     })),
     rules: options.rules,
     preserveRuleOrder: true,

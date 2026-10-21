@@ -86,6 +86,7 @@ export function StudioTimelineActions({ state, navigation, cardId, busy }: Props
       labels={{ expand: t('timelineQuick.expand'), collapse: t('timelineQuick.collapse'), openCharacter: `${card.name} · ${t('rail.character')}`,
         selectStory: t('timelineQuick.selectStory'), opening: t('timelineQuick.opening'), story: t('timelineQuick.story'), branch: t('sessions.branches'), rename: t('sessions.rename'),
         newStory: t('timelineQuick.new'), fork: t('timelineQuick.fork'), deleteStory: t('timelineQuick.deleteStory'), deleteCharacter: t('character.delete') }}
+      onOpenWorkspace={() => { if (timeline) void navigation.openMemory({ timelineId: timeline.id, branchId: state.branch?.id, view: 'workspace' }) }}
       onOpenCharacter={() => navigation.openPanel('character', { cardId })}
       onNewStory={() => void run(async () => {
         const activated = await state.createTimelineFromCard(cardId)

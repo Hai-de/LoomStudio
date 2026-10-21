@@ -40,6 +40,8 @@ export type AiGatewayRequest = {
 export type AiGatewayResult = {
   message: AssistantChatMessage
   text: string
+  reasoning?: string
+  toolCallErrors?: Record<string, { code: string; message: string }>
   model: string
   provider: string
   finishReason?: 'stop' | 'length' | 'tool_call' | 'error'
@@ -59,6 +61,7 @@ export type AiGatewayError = {
 
 export type AiGatewayEvent<Result = AiGatewayResult> =
   | { type: 'started'; runId: string }
+  | { type: 'reasoning-delta'; runId: string; reasoningId: string; delta: string }
   | { type: 'text-delta'; runId: string; delta: string }
   | { type: 'tool-input-delta'; runId: string; toolCallId: string; toolName?: string; delta: string }
   | { type: 'usage'; runId: string; usage: AiGatewayUsage }

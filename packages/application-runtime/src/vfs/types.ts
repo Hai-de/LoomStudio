@@ -7,6 +7,7 @@ export type VfsEntry = {
 }
 
 export type VfsBinding =
+  | { kind: 'workspace'; entryId: string; revisionId: string }
   | { kind: 'prompt-resource'; resourceId: string; nodeId: string; version: number; field: 'body' | 'metadata' }
   | { kind: 'state'; target: VfsStateTarget; revisionId: string; pointer: string }
   | { kind: 'script'; documentId: string; version: number; blobId: string; mountId: string }
@@ -25,7 +26,7 @@ export type VfsReadObservation = {
 export type VfsMutationPreview = {
   action: 'replace' | 'patch' | 'move' | 'delete' | 'create' | 'copy' | 'author-mode'
   path: string
-  kind: 'prompt-resource' | 'state' | 'narrative'
+  kind: 'prompt-resource' | 'state' | 'narrative' | 'workspace'
   before: string
   after: string
   target?: VfsStateTarget

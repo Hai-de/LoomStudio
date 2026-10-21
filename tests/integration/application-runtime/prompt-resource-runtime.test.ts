@@ -519,7 +519,7 @@ describe('Prompt Resource Store application runtime', () => {
     await rm(directory, { recursive: true, force: true })
   })
 
-  it('uses explicit preset mounts without automatically including global mounts', async () => {
+  it('inherits global mounts alongside explicit preset mounts by default', async () => {
     const createId = createIds()
     const now = () => '2026-08-19T00:00:00.000Z'
     const engine = createSqliteDataEngine({ filename: ':memory:', createId, now })
@@ -542,9 +542,9 @@ describe('Prompt Resource Store application runtime', () => {
     await runtime.replaceLoreMounts({ source: { kind: 'preset', id: presetB.resource.id }, loreResourceIds: [settingB.resource.id] })
     const promptA = await composeAgentTurnPrompt({ promptResources, contextResourceIds: [], preset: (await runtime.getPromptResource({ resourceId: presetA.resource.id })).resource, agentMessages: [], userInput: 'Hi' })
     const promptB = await composeAgentTurnPrompt({ promptResources, contextResourceIds: [], preset: (await runtime.getPromptResource({ resourceId: presetB.resource.id })).resource, agentMessages: [], userInput: 'Hi' })
-    expect(promptA.messages.some(message => typeof message.content === 'string' && message.content.includes('A only'))).toBe(false)
+    expect(promptA.messages.some(message => typeof message.content === 'string' && message.content.includes('A only'))).toBe(true)
     expect(promptA.messages.some(message => typeof message.content === 'string' && message.content.includes('B only'))).toBe(false)
-    expect(promptB.messages.some(message => typeof message.content === 'string' && message.content.includes('A only'))).toBe(false)
+    expect(promptB.messages.some(message => typeof message.content === 'string' && message.content.includes('A only'))).toBe(true)
     expect(promptB.messages.some(message => typeof message.content === 'string' && message.content.includes('B only'))).toBe(true)
     engine.close()
   })
@@ -564,6 +564,13 @@ describe('Prompt Resource Store application runtime', () => {
       const preset = await runtime.createPromptResource({ resourceKind: 'preset', name: 'Preset' })
       const setting = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Setting' })
       const cardLore = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Card Setting' })
+      const globalLore = await runtime.createPromptResource({ resourceKind: 'lore', name: 'Global Setting' })
+      await runtime.createPromptResourceAsset({ resourceId: globalLore.resource.id,
+        targetAssetId: globalLore.resource.rootNode.id, position: 'inside',
+        asset: { id: 'global-entry', kind: 'entry', label: 'Global', body: 'GLOBAL_DEFAULT_MARKER', capabilities: { targetAnchorId: '@chat.system' } },
+      })
+      await runtime.replaceLoreMounts({ source: { kind: 'manual', id: 'global' }, loreResourceIds: [globalLore.resource.id] })
+
       await runtime.createPromptResourceAsset({
         resourceId: cardLore.resource.id, targetAssetId: cardLore.resource.rootNode.id, position: 'inside',
         asset: { id: 'card-setting-entry', kind: 'entry', label: 'Card Setting', body: 'CARD_DEFAULT_MARKER', capabilities: { targetAnchorId: '@chat.system' } },
@@ -585,6 +592,20 @@ describe('Prompt Resource Store application runtime', () => {
       const { session } = await runtime.createAgentSession({ agentPresetId: current.id, timelineId: timeline.id })
       expect(JSON.stringify((await runtime.previewAgentTurn({ agentSessionId: session.id, input: 'Hi' })).messages))
         .not.toContain('CARD_DEFAULT_MARKER')
+      const preview = async () => JSON.stringify((await runtime.previewAgentTurn({ agentSessionId: session.id, input: 'Hi' })).messages)
+      expect(await preview()).toContain('GLOBAL_DEFAULT_MARKER')
+      const inherited = (await runtime.getAgentPreset({ agentPresetId: current.id })).agentPreset
+      await runtime.updateAgentPreset({ agentPresetId: current.id, expectedVersion: inherited.version, useGlobalLore: false })
+      expect(await preview()).not.toContain('GLOBAL_DEFAULT_MARKER')
+      const exported = await runtime.exportPromptResource({ resourceId: current.id })
+      expect(exported.artifact.useGlobalLore).toBe(false)
+      expect((await runtime.importPromptResource({ artifact: exported.artifact })).resource.useGlobalLore).toBe(false)
+      await runtime.replaceLoreMounts({ source: { kind: 'preset', id: current.id }, loreResourceIds: [setting.resource.id, globalLore.resource.id] })
+      expect(await preview()).toContain('GLOBAL_DEFAULT_MARKER')
+      const explicit = (await runtime.getAgentPreset({ agentPresetId: current.id })).agentPreset
+      await runtime.updateAgentPreset({ agentPresetId: current.id, expectedVersion: explicit.version, useGlobalLore: true })
+      expect((await preview()).match(/GLOBAL_DEFAULT_MARKER/g)).toHaveLength(1)
+
     } finally { engine.close() }
   })
 

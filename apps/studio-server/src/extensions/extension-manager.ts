@@ -1,3 +1,4 @@
+import { loadPromptResourceFiles } from '../codecs/prompt-resource-files.js'
 import type {
   EventCapabilityCategory,
   ExtensionAgentToolContribution,
@@ -25,7 +26,7 @@ import { serializeError } from '@loom-studio/shared'
 import { createHash, randomUUID } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 import { cp, mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { extname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path'
 import { acquireExtension, checkGitUpdate, createDownloadWorkspace, extensionGit, parseDownloadSource, readDownloadMetadata, satisfiesExtensionVersion, type ExtensionCandidate } from './extension-download.js'
 import { writeJsonAtomically } from '../platform/atomic-json.js'
 import { discoverExtensionSources, removeExtensionDevLink, type DiscoveredExtensionSource, type ExtensionSource } from './extension-sources.js'
@@ -85,6 +86,7 @@ export function createServerExtensionManager(options: {
   deleteData?(packageId: string, documentTypes: string[]): Promise<void>
   officialSetupFile?: string
   bundledDirectories?: string[]
+  bundledEnabledModules?: Record<string, readonly string[]>
   readCardPackage(input: { cardId: string; packageId: string; source?: 'installed' }): Promise<{ cardVersion: number; archive: { packageId: string; version: string; archiveBase64: string } }>
   listInstallations(): Promise<ListExtensionInstallationsResult>
   importPackageResources(input: {
@@ -422,7 +424,8 @@ export function createServerExtensionManager(options: {
       ...(cardSource ? { target: { kind: 'card' as const, cardId: cardSource.cardId }, expectedCardVersion: cardSource.expectedCardVersion } : {}),
       ...(update ? { update: { expectedInstallationVersion: update.expectedInstallationVersion } } : {}),
       promptResources: await Promise.all((record.manifest.contributes?.promptResources ?? []).map(async contribution => ({
-        contribution, artifact: await readPackageJson(record, contribution.source),
+        contribution, artifact: await loadPromptResourceFiles(await readPackageJson(record, contribution.source),
+          async path => (await readFileFromPackage(record, posix.join(posix.dirname(contribution.source), path))).bytes),
       }))),
       agentTools: await Promise.all((record.manifest.contributes?.agentTools ?? []).map(async contribution => ({
         contribution, definition: await readPackageJson(record, contribution.source),
@@ -642,6 +645,13 @@ export function createServerExtensionManager(options: {
       for (const [directory, manifest] of bundled) {
         try {
           if (!installations.installations.some(item => item.packageId === manifest.id && item.target.kind === 'global')) await importResources(manifest.id)
+          for (const moduleId of options.bundledEnabledModules?.[manifest.id] ?? []) {
+            requireModule(manifest, moduleId)
+            if (options.stateStore.get(manifest.id, moduleId)) continue
+            await options.stateStore.set(manifest.id, moduleId, {
+              enabled: true, grantedEventCapabilities: [], grantedAssetCapabilities: [], grantedUiCapabilities: [],
+            })
+          }
           if (options.officialSetupFile) {
             const next = { ...setup, bundled: [...setup.bundled ?? [], manifest.id] }
             await writeJsonAtomically(options.officialSetupFile, next)

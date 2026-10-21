@@ -1,10 +1,11 @@
+import type { JsonObject, JsonValue } from '@loom-studio/shared'
 import type { VfsReadObservation, VfsApprovalControl } from '../../vfs/types.js'
 import { createResourceVfs } from '../../vfs/resource-filesystem.js'
 import type { ToolExecutionScope } from '../tool-registry.js'
 import type { CodeActHostMethod } from './sandbox.js'
 import type { NarrativeSampleSelection } from '../../narrative/sampling.js'
 
-export const codeActMethodNames = ['setAuthorMode', 'ls', 'search', 'read', 'readNarrative', 'appendNarrative', 'write', 'patch', 'move', 'delete', 'create', 'copy'] as const
+export const codeActMethodNames = ['setAuthorMode', 'ls', 'search', 'read', 'readValue', 'readNarrative', 'appendNarrative', 'write', 'patch', 'move', 'delete', 'create', 'copy'] as const
 
 export function createCodeActContext(scope: ToolExecutionScope | undefined, operationPrefix = 'codeact') {
   const observations: VfsReadObservation[] = []
@@ -14,6 +15,7 @@ export function createCodeActContext(scope: ToolExecutionScope | undefined, oper
   const state = scope?.state
   const filesystem = scope?.resourceVfs ?? createResourceVfs({
     projections: scope?.vfs ?? [],
+    workspace: scope?.workspace,
     ...(scope?.narrative ? {
       narrative: {
         snapshot: async (path: string, signal: AbortSignal, control?: VfsApprovalControl) => {
@@ -73,35 +75,40 @@ export function createCodeActContext(scope: ToolExecutionScope | undefined, oper
       observations.push(result.observation)
       return result.text
     },
+    readValue: async (args, signal, control) => {
+      const result = await filesystem.readValue(args, signal, control)
+      observations.push(result.observation)
+      return result.value
+    },
     write: async (args, signal, control) => {
       const result = await filesystem.write(args, signal, `${operationPrefix}:${++operationSequence}`, control)
       writes.push(result)
-      return JSON.stringify(result)
+      return jsonReceipt(result)
     },
     patch: async (args, signal, control) => {
       const result = await filesystem.patch(args, signal, control)
       writes.push(result)
-      return JSON.stringify(result)
+      return jsonReceipt(result)
     },
     move: async (args, signal, control) => {
       const result = await filesystem.move(args, signal, control)
       writes.push(result)
-      return JSON.stringify(result)
+      return jsonReceipt(result)
     },
     delete: async (args, signal, control) => {
       const result = await filesystem.delete(args, signal, control)
       writes.push(result)
-      return JSON.stringify(result)
+      return jsonReceipt(result)
     },
     create: async (args, signal, control) => {
       const result = await filesystem.create(args, signal, control)
       writes.push({ ...result, path: result.parentPath })
-      return JSON.stringify(result)
+      return jsonReceipt(result)
     },
     copy: async (args, signal, control) => {
       const result = await filesystem.copy(args, signal, control)
       writes.push({ ...result, path: result.sourcePath })
-      return JSON.stringify(result)
+      return jsonReceipt(result)
     },
   }
   methods.readNarrative = async (args, signal, control) => {
@@ -123,7 +130,7 @@ export function createCodeActContext(scope: ToolExecutionScope | undefined, oper
       throw codeActError('codeact.invalid_arguments', 'Narrative selection must be an object.')
     }
     const selector = selection as Record<string, unknown>
-    const keys = selector.kind === 'tail' ? ['kind', 'count', 'throughNodeId'] : ['kind', 'afterNodeId', 'throughNodeId']
+    const keys = selector.kind === 'floors' ? ['kind', 'from', 'through', 'throughNodeId'] : selector.kind === 'tail' ? ['kind', 'count', 'throughNodeId'] : ['kind', 'afterNodeId', 'throughNodeId']
     if (Object.keys(selector).some(key => !keys.includes(key))) {
       throw codeActError('codeact.invalid_arguments', 'Unsupported Narrative selection field.')
     }
@@ -164,4 +171,8 @@ function codeActError(code: string, message: string): Error & { code: string } {
   const error = new Error(message) as Error & { code: string }
   error.code = code
   return error
+}
+
+function jsonReceipt(value: Record<string, JsonValue | undefined>): JsonObject {
+  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, JsonValue] => entry[1] !== undefined))
 }

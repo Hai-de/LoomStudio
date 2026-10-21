@@ -5,12 +5,12 @@
   "type": "module",
   "packageManager": "pnpm@9.15.0",
   "engines": {
-    "node": ">=22.18.0",
+    "node": ">=24.22.0",
     "pnpm": ">=9.0.0"
   },
   "scripts": {
     "build": "pnpm run build:packages && tsc -b",
-    "build:app": "pnpm run build:packages && pnpm --filter @loom-studio/studio-server build && pnpm --filter @loom-studio/studio-client build",
+    "build:app": "pnpm run build:packages && pnpm --filter @loom-studio/story-memory build && pnpm --filter @loom-studio/studio-server build && pnpm --filter @loom-studio/studio-client build",
     "release:prepare": "node scripts/release/prepare-release.mjs",
     "release:smoke": "node scripts/release/smoke-release.mjs",
     "start": "node scripts/start.mjs",
@@ -54,7 +54,7 @@
     "@rolldown/plugin-babel": "0.2.4",
     "@size-limit/file": "13.1.1",
     "@tanstack/react-query": "5.102.8",
-    "@types/node": "22.20.1",
+    "@types/node": "24.19.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "babel-plugin-react-compiler": "1.0.0",

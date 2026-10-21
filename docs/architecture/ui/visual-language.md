@@ -28,7 +28,7 @@ Raised Surface:
 
 普通 Dialog 与工作台共用基础 Surface，浮起感由 backdrop 与阴影表达，不因进入 Top Layer 自动变浅。全屏媒体 Dialog 保留独立的媒体底色。
 
-聊天流默认直接铺在 Base Canvas 上，不额外制造聊天容器边框。用户消息可以使用浅色气泡，Assistant 正文保持接近文档流。
+Narrative 正文使用一块连续的阅读表面，背景沿用 `--loom-color-background`，统一表面跟随实色、半透明和毛玻璃材质模式，并使用配置的透明度与模糊强度；末尾保留留白，并在输入框前留出间隔。Assistant 楼层按文档流展示，不单独设置圆角、边框或背景；用户输入统一靠右，使用独立的浅色气泡。剧情楼层的 Header 仅显示“剧情”，其下为分割线；用户 Header 位于气泡上方，仅显示与 `{{user}}` 一致的用户名，不显示头像。底部操作、Swipe 和 metadata 位于气泡外。
 
 ## 3. 视觉约定
 

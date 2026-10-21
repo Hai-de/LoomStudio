@@ -2,6 +2,30 @@ import { createAiGateway, type AiGatewayEvent } from '../../../packages/ai-gatew
 import { describe, expect, it } from 'vitest'
 
 describe('AI gateway run', () => {
+  it.each(['complete', 'stream'] as const)('preserves native reasoning in %s delivery', async delivery => {
+    const fetch = delivery === 'complete' ? (async () => new Response(JSON.stringify({
+      id: 'reasoning', model: 'test', choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: 'Answer', reasoning_content: 'Think carefully' } }], usage: usage(),
+    }), { headers: { 'content-type': 'application/json' } })) as typeof globalThis.fetch
+      : stubSse([
+        chunk({ choices: [{ index: 0, delta: { role: 'assistant', reasoning_content: 'Think carefully' }, finish_reason: null }] }),
+        chunk({ choices: [{ index: 0, delta: { content: 'Answer' }, finish_reason: null }] }),
+        chunk({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: usage() }), '[DONE]',
+      ])
+    const run = createAiGateway().createRun({ provider: provider(fetch), modelId: 'test', messages: [{ role: 'user', content: 'Question' }], delivery })
+    await expect(run.result).resolves.toMatchObject({ text: 'Answer', reasoning: 'Think carefully' })
+    if (delivery === 'stream') expect(await collect(run.events)).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'reasoning-delta', delta: 'Think carefully' })]))
+  })
+
+  it('preserves SDK invalid-tool diagnostics rather than treating them as a valid call', async () => {
+    const fetch = (async () => new Response(JSON.stringify({
+      id: 'invalid', model: 'test', choices: [{ finish_reason: 'tool_calls', message: { role: 'assistant', content: null,
+        tool_calls: [{ id: 'bad', type: 'function', function: { name: 'write_text', arguments: '{broken' } }] } }], usage: usage(),
+    }), { headers: { 'content-type': 'application/json' } })) as typeof globalThis.fetch
+    const result = await createAiGateway().invokeChat({ provider: provider(fetch), modelId: 'test', messages: [{ role: 'user', content: 'Write' }], tools: [{ name: 'write_text', inputSchema: { type: 'object' } }] })
+    expect(result.toolCallErrors?.bad).toMatchObject({ code: 'tool.invalid_input', message: expect.any(String) })
+    expect(result.message.tool_calls?.[0]?.id).toBe('bad')
+  })
+
   it('replays the same sequence to simultaneous and late consumers with independent cursors', async () => {
     const run = createAiGateway().createRun({
       provider: provider(stubComplete('complete')),

@@ -61,6 +61,19 @@ Client Module 由 Studio Client 根据 Catalog 与 desired state 独立编排。
 - **状态订阅安全（State Subscription Safety）**：`packages/extension-sdk/extension-host` 保证预先已处于 Abort 状态的 Signal 绝不会创建有效订阅；正常取消订阅与重复调用 `dispose()` 完全幂等。
 - **客户端实例隔离与清理**：Client Extension Host 在模块卸载或清理发生异常时，严格隔离故障，绝不影响其他正常注册的扩展；失效实例立即失去资源访问权，且旧 Catalog 异步回调绝不会复活已卸载的实例。
 
+## 用户发起的原生数据批量导入
+
+Client Extension 在用户确认迁移后调用 `context.imports.commit(sessionId)`。Client Host 固定当前 Package 与安装目标，转交 `extensions.importConvertedBatch`；Server Host 通过已有安装隔离的 RPC 通路调用该包的 `<packageId>.migration.prepare({ sessionId, index })`。Server Extension 的 `ctx.rpc` 仍不可调用 `application.*`。
+
+`prepare` 按索引返回一个原生条目，结束返回 `null`。条目使用同批唯一的 `key`：
+
+- `prompt-resource`：`artifact` 为 Loom Prompt Resource Artifact；
+- `card`：`artifact` 为 Loom CardBundleArtifact，可带 PNG 的 `avatarBase64`，以及引用前序资源的 `promptResourceKeys`；
+- `history`：`cardKey` 引用前序 Card，携带 `title` 与 `messages: [{ content, createdAt? }]`；
+- `skipped`：携带可展示给用户的 `reason`。
+
+宿主只校验原生 Artifact 并调用现有 Runtime、Asset 与目录保存能力，不解析外部格式。每项成功写入立即生效；批次不伪装成跨资源原子事务。结果包含已导入项数和跳过原因；中途失败明确报告已有写入，不自动重试。结束时调用同包 `migration.cancel` 消耗 staging session，避免同一失败批次重复提交；重新扫描仍是新批次，不能当作全局幂等导入。
+
 ## 3. Manifest v2
 
 ```json

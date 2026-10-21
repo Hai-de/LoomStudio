@@ -62,6 +62,7 @@ export {
 export {
   isPromptResourceArtifact,
   isCardBundleArtifact,
+  assertCardBundleArtifact,
   normalizeCardBundleArtifact,
   normalizePromptResourceArtifact,
   normalizePortableExtensionPayloadArtifact,
@@ -235,3 +236,11 @@ export type {
   CardBundleSourceBinding,
   PromptResourceCompositionCapabilities,
 } from './cards/workspace-types.js'
+
+export type { WorkspaceTarget, WorkspaceMutation, WorkspaceMutationInput } from './runtime/workspace-runtime.js'
+
+export type { SessionSummaryStatus } from './agents/session-summary.js'
+export { defaultSessionSummaryPolicy } from './agents/session-summary.js'
+
+export { parseAgentApprovalPolicy } from './agents/approval-policy.js'
+export type { AgentApprovalPolicy, AgentApprovalMode, AgentApprovalScope } from './agents/approval-policy.js'

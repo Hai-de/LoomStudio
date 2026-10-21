@@ -40,4 +40,28 @@ describe('recent play panel', () => {
     expect(sessions).toContain('Writing Assistant · 42 条记录 · 剧情：Story')
     expect(sessions).not.toContain('timeline-1')
   })
+  it('highlights the current story and viewed session independently from the primary writing star', () => {
+    const timestamp = '2026-10-20T00:00:00.000Z'
+    const t = createTranslator('zh-CN')
+    const html = renderToStaticMarkup(createElement(RecentPlayPanel, {
+      activeTimelineId: 'current-story', activeSessionId: 'viewed', primarySessionId: 'writer',
+      cards: [], agentPresets: [],
+      timelines: [{ id: 'current-story', title: 'Current story', updatedAt: timestamp, createdAt: timestamp, activeBranchId: 'branch', promptResourceIds: [] }],
+      agentSessions: ['viewed', 'writer', 'other'].map(id => ({
+        id, title: id, agentPresetId: 'preset', entryCount: 1, createdAt: timestamp, updatedAt: timestamp,
+      })),
+      t, onOpenCard: () => {}, onOpenTimeline: () => {}, onOpenAgentSession: () => {},
+    }))
+    const buttons = [...html.matchAll(/<button\b[^>]*>[\s\S]*?<\/button>/g)].map(match => match[0])
+    const row = (title: string) => buttons.find(button => button.includes(`<strong>${title}</strong>`))!
+    expect(row('Current story')).toContain('aria-current="true"')
+    expect(row('viewed')).toContain('aria-current="true"')
+    expect(row('viewed')).not.toContain(`aria-label="${t('agent.primarySession')}"`)
+    expect(row('writer')).not.toContain('aria-current=')
+    expect(row('writer')).toContain(`aria-label="${t('agent.primarySession')}"`)
+    expect(row('writer')).toContain('lucide-star')
+    expect(row('other')).not.toContain('aria-current=')
+    expect(row('other')).toContain('lucide-bot')
+  })
+
 })

@@ -63,6 +63,93 @@ const testContentTool: ToolDefinition = {
 }
 
 describe('Native Function Tool Loop', () => {
+  it('stops an output-limited step with no visible progress and preserves native reasoning', async () => {
+    let calls = 0
+    const fixture = await createFixture({ execute: vi.fn(), invokeChat: async () => {
+      calls++
+      if (calls > 1) throw new Error('Must not request the same empty continuation')
+      return { provider: 'test', model: 'test', text: '', reasoning: 'Budget consumed while thinking', finishReason: 'length', message: { role: 'assistant' } }
+    } })
+    try {
+      await expect(fixture.runtime.invokeAgentTurn({ agentSessionId: fixture.sessionId, input: 'Work' }))
+        .rejects.toThrow('automatic continuation stopped')
+      expect(calls).toBe(1)
+      const { entries } = await fixture.runtime.getAgentTranscriptPage({ agentSessionId: fixture.sessionId })
+      expect(entries).toEqual(expect.arrayContaining([expect.objectContaining({ entry: expect.objectContaining({
+        kind: 'reasoning', source: 'provider-native', content: 'Budget consumed while thinking', replay: 'omit',
+      }) })]))
+    } finally { fixture.close() }
+  })
+
+  it.each([false, true])('returns invalid native input to the model without executing it (SDK diagnostic: %s)', async sdkError => {
+    let calls = 0
+    const execute = vi.fn()
+    const fixture = await createFixture({ execute, invokeChat: async input => {
+      if (++calls === 1) return { provider: 'test', model: 'test', text: '', finishReason: 'tool_call',
+        message: { role: 'assistant', tool_calls: [{ id: 'bad', type: 'function', function: { name: 'read_context', arguments: '{broken' } }] },
+        ...(sdkError ? { toolCallErrors: { bad: { code: 'tool.invalid_input', message: 'SDK could not parse tool input' } } } : {}) }
+      expect(input.request.messages).toEqual(expect.arrayContaining([expect.objectContaining({ role: 'tool', tool_call_id: 'bad', content: expect.any(String) })]))
+      const assistant = input.request.messages.find(message => message.role === 'assistant' && message.tool_calls?.length)
+      expect(() => JSON.parse(assistant!.role === 'assistant' ? assistant!.tool_calls![0]!.function.arguments : '')).not.toThrow()
+      return { provider: 'test', model: 'test', text: 'Corrected response', reasoning: 'Reviewed failure', finishReason: 'stop', message: { role: 'assistant', content: 'Corrected response' } }
+    } })
+    try {
+      await fixture.runtime.invokeAgentTurn({ agentSessionId: fixture.sessionId, input: 'Read context' })
+      expect(execute).not.toHaveBeenCalled()
+      expect(calls).toBe(2)
+      const { entries } = await fixture.runtime.getAgentTranscriptPage({ agentSessionId: fixture.sessionId })
+      expect(entries).toEqual(expect.arrayContaining([expect.objectContaining({ entry: expect.objectContaining({
+        kind: 'tool-result', status: 'failed', error: expect.objectContaining({ code: 'tool.invalid_input' }),
+      }) }), expect.objectContaining({ entry: expect.objectContaining({ kind: 'reasoning', content: 'Reviewed failure', source: 'provider-native' }) })]))
+    } finally { fixture.close() }
+  })
+
+  it('continues beyond eight Provider rounds until a final response', async () => {
+    let calls = 0
+    let tools = 0
+    const fixture = await createFixture({
+      execute: async ({ invocation }) => {
+        tools++
+        return { invocationId: invocation.id, toolId: invocation.toolId, status: 'completed', content: [] }
+      },
+      invokeChat: async () => ++calls <= 10 ? toolCall(`call-${calls}`, 'read_context', { query: 'next' }) : {
+        provider: 'test', model: 'test-model', text: 'Done.', finishReason: 'stop', message: { role: 'assistant', content: 'Done.' },
+      },
+    })
+    try {
+      await fixture.runtime.invokeAgentTurn({ agentSessionId: fixture.sessionId, input: 'Complete the work' })
+      expect(calls).toBe(11)
+      expect(tools).toBe(10)
+      const transcript = await fixture.runtime.getAgentTranscriptPage({ agentSessionId: fixture.sessionId })
+      expect(transcript.entries.some(item => item.entry.kind === 'run-state' && item.entry.state === 'completed')).toBe(true)
+    } finally { fixture.close() }
+  })
+
+  it('allows a tool to wait beyond thirty seconds without an application timeout', async () => {
+    let calls = 0
+    const started = Promise.withResolvers<void>()
+    const fixture = await createFixture({
+      execute: async ({ invocation }) => {
+        const waiting = new Promise(resolve => setTimeout(resolve, 31_000))
+        started.resolve()
+        await waiting
+        return { invocationId: invocation.id, toolId: invocation.toolId, status: 'completed', content: [] }
+      },
+      invokeChat: async () => ++calls === 1 ? toolCall('long-call', 'read_context', { query: 'image' }) : {
+        provider: 'test', model: 'test-model', text: 'Done.', finishReason: 'stop', message: { role: 'assistant', content: 'Done.' },
+      },
+    })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const turn = fixture.runtime.invokeAgentTurn({ agentSessionId: fixture.sessionId, input: 'Wait for the tool' })
+      await started.promise
+      await vi.advanceTimersByTimeAsync(31_001)
+      await turn
+      const transcript = await fixture.runtime.getAgentTranscriptPage({ agentSessionId: fixture.sessionId })
+      expect(transcript.entries.find(item => item.entry.kind === 'tool-result')?.entry).toMatchObject({ status: 'completed' })
+    } finally { vi.useRealTimers(); fixture.close() }
+  })
+
   it('delivers a completed prompt beyond the replay budget until the Client acknowledges it', async () => {
     const fixture = await createFixture({
       execute: async ({ invocation }) => ({

@@ -51,6 +51,34 @@ async function setup(runtime: ReturnType<typeof open>['runtime']) {
 }
 
 describe('durable Agent Run recovery', () => {
+  it('finds an acknowledged send from its durable checkpoint after server replacement', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'loom-send-recovery-'))
+    const filename = join(directory, 'data.sqlite')
+    let calls = 0
+    const invokeChat = async () => {
+      calls++
+      return { provider: 'test', model: 'test', text: 'Done', message: { role: 'assistant' as const, content: 'Done' } }
+    }
+    const first = open(filename, invokeChat)
+    let second: ReturnType<typeof open> | undefined
+    try {
+      const { session } = await setup(first.runtime)
+      const request = { requestId: 'durable-send', agentSessionId: session.id, input: 'Persist once' }
+      const created = await handleAgentsRpc(first.runtime, 'application.agent.run.create', request) as { runId: string }
+      for (let n = 0; n < 100; n++) {
+        const state = await handleAgentsRpc(first.runtime, 'application.agent.run.state', { runId: created.runId }) as { state: string }
+        if (state.state !== 'running') break
+        await new Promise<void>(resolve => setTimeout(resolve, 5))
+      }
+      expect(calls).toBe(1)
+      second = open(filename, invokeChat)
+      expect(await handleAgentsRpc(second.runtime, 'application.agent.run.create', request)).toEqual(created)
+      expect(calls).toBe(1)
+      const { entries } = await second.runtime.getAgentTranscriptPage({ agentSessionId: session.id })
+      expect(entries.filter(entry => entry.entry.kind === 'message' && entry.entry.role === 'user')).toHaveLength(1)
+      await expect(handleAgentsRpc(second.runtime, 'application.agent.run.create', { ...request, input: 'Changed' })).rejects.toThrow('different input')
+    } finally { second?.engine.close(); first.engine.close(); await rm(directory, { recursive: true, force: true }) }
+  })
   it('does not strand a running marker when a provider emits only whitespace before failure', async () => {
     const fixture = open(':memory:', async input => {
       input.onEvent?.({ type: 'text-delta', runId: 'provider-run', delta: ' ' })
@@ -366,6 +394,21 @@ describe('durable Agent Run recovery', () => {
         } }],
       })
       await expect(fixture.runtime.prepareAgentRunRecovery({ agentSessionId: session.id })).rejects.toMatchObject({ code: 'agent.recovery_tool_outcome_unknown' })
+      const interrupted = await fixture.agents.getEntryPage({ agentSessionId: session.id })
+      const checkpoint = interrupted.entries.find(item => item.entry.kind === 'run-state' && item.entry.recovery)!.entry.recovery!
+      await fixture.agents.appendEntries({ actor: { kind: 'kernel', id: 'fixture' }, agentSessionId: session.id,
+        expectedEntryCount: interrupted.session.entryCount,
+        entries: [{ runId: 'live-run', entry: { kind: 'run-state', state: 'running', recovery: { ...checkpoint, phase: 'tools' } } }],
+      })
+      await expect(fixture.runtime.prepareAgentRunRecovery({ agentSessionId: session.id })).rejects.toMatchObject({ code: 'agent.recovery_tool_outcome_unknown' })
+      expect(await handleAgentsRpc(fixture.runtime, 'application.agent.run.state', { runId: 'live-run', agentSessionId: session.id }))
+        .toMatchObject({ runId: 'live-run', state: 'suspended' })
+      expect(await handleAgentsRpc(fixture.runtime, 'application.agent.run.abandon', { runId: 'live-run', agentSessionId: session.id }))
+        .toMatchObject({ accepted: true })
+      expect(await fixture.runtime.prepareAgentRunRecovery({ agentSessionId: session.id })).toBeUndefined()
+      expect((await fixture.agents.getEntryPage({ agentSessionId: session.id })).entries.at(-1)!.entry)
+        .toMatchObject({ kind: 'run-state', state: 'discarded' })
+
     } finally {
       finish.resolve()
       fixture.engine.close()

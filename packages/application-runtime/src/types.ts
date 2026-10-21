@@ -1,3 +1,4 @@
+import type { AgentApprovalPolicy } from './agents/approval-policy.js'
 import type { CreateLoomScriptMountInput, UpdateLoomScriptMountInput, ListLoomScriptMountsInput, MutateLoomScriptMountResult, ListLoomScriptMountsResult } from '@loom-studio/shared/loom-scripts'
 import type { ListPresetToolMountsInput, ListPresetToolMountsResult, PresetToolMountInput, ReplacePresetToolMountsInput, ReplacePresetToolMountsResult } from '@loom-studio/shared/tool-mounts'
 export type { ListPresetToolMountsInput, ListPresetToolMountsResult, PresetToolMountInput, ReplacePresetToolMountsInput, ReplacePresetToolMountsResult } from '@loom-studio/shared/tool-mounts'
@@ -182,7 +183,10 @@ export type {
   TimelineStateBinding,
 } from '@loom-studio/shared'
 
-export type ApplicationRuntime = {
+export type ApplicationRuntime = ReturnType<typeof import('./runtime/workspace-runtime.js').createWorkspaceRuntimeMethods> & {
+  subscribeNarrativeActivity: ReturnType<typeof import('./extensions/narrative-activity.js').createNarrativeActivityRegistry>['subscribe']
+  registerReadonlyFiles: ReturnType<typeof import('./extensions/readonly-files.js').createExtensionReadonlyFilesRegistry>['register']
+  registerTimelineArchiveParticipant: import('./archive/timeline-archive.js').TimelineArchiveParticipantRegistry['register']
   searchResources(input: SearchResourcesInput): Promise<SearchResourcesResult>
   listGlobalSearchScopes(input: ListGlobalSearchScopesInput): Promise<ListGlobalSearchScopesResult>
   getTimelinePresetConfig(input: { timelineId: string; presetId: string }): Promise<{ config: import('./prompt/timeline-preset-config.js').TimelinePresetConfig }>
@@ -323,10 +327,22 @@ export type ApplicationRuntime = {
   getAgentSession(input: GetAgentSessionInput): Promise<GetAgentSessionResult>
   getAgentTranscriptPage(input: GetAgentTranscriptPageInput): Promise<AgentTranscriptPage>
   appendAgentTranscriptEntries(input: AppendAgentTranscriptEntriesInput, context?: RuntimeRequestContext): Promise<AppendAgentTranscriptEntriesResult>
+  summarizeAgentSession(input: { agentSessionId: string; branchId?: string }, context?: RuntimeRequestContext): Promise<import('./agents/session-summary.js').SessionSummaryStatus>
+  cancelAgentSessionSummary(input: { agentSessionId: string }): Promise<import('./agents/session-summary.js').SessionSummaryStatus>
+  updateAgentSessionSummary(input: { agentSessionId: string; branchId?: string; expectedSummaryId: string; expectedEntryCount: number; content: string }, context?: RuntimeRequestContext): Promise<void>
+  getAgentSessionMemory(input: { agentSessionId: string; branchId?: string }): Promise<{
+    session: AgentSession; policy: NonNullable<AgentSession['summaryPolicy']>;
+    status: import('./agents/session-summary.js').SessionSummaryStatus; summary: AgentTranscriptEntry | null;
+    coverage: { retiredThroughSequence: number; sourceThroughSequence: number; messages: { retired: number; source: number; total: number } };
+  }>
+  listAgentSessionSummaryTasks(input: { agentSessionId: string }): ReturnType<import('@loom-studio/application-data').AgentStore['listSummaryTasks']>
+  getAgentSessionSummaryStatus(input: { agentSessionId: string }): import('./agents/session-summary.js').SessionSummaryStatus
   completeAgentSessionHandoff(input: CompleteAgentSessionHandoffInput, context?: RuntimeRequestContext): Promise<CompleteAgentSessionHandoffResult>
   deleteAgentSession(input: DeleteAgentSessionInput, context?: RuntimeRequestContext): Promise<DeleteAgentSessionResult>
   updateAgentSession(input: UpdateAgentSessionInput, context?: RuntimeRequestContext): Promise<UpdateAgentSessionResult>
   invokeAgentTurn(input: InvokeAgentTurnInput, context?: RuntimeRequestContext): Promise<InvokeAgentTurnResult>
+  findAgentRunCheckpoint(input: { agentSessionId: string; runId: string }): Promise<AgentTranscriptEntry | null>
+  inspectAgentRunState(input: { agentSessionId: string; runId: string }): Promise<{ runId: string; state: 'running' | 'suspended' | 'completed' | 'failed' | 'cancelled'; entryCount: number }>
   prepareAgentRunRecovery(input: { agentSessionId: string; runId?: string }): Promise<import('./agents/run-recovery.js').AgentRunRecovery | undefined>
   previewAgentTurn(input: PreviewAgentTurnInput, context?: RuntimeRequestContext): Promise<PreviewAgentTurnResult>
   buildExtensionPrompt(input: import('@loom-studio/extension-sdk').ExtensionPromptBuildInput, target: import('@loom-studio/extension-sdk').ExtensionInstallationTarget, packageId: string, lease?: TimelineExtensionLease): Promise<import('@loom-studio/extension-sdk').ExtensionPromptBuildResult>
@@ -380,6 +396,7 @@ export type RuntimeRequestContext = {
   abortSignal?: AbortSignal
   agentRun?: {
     runId: string
+    sendRequestDigest?: string
     onEvent: (event: AgentRunEvent) => void
     continuation?: {
       sourceRunId: string
@@ -419,6 +436,7 @@ export type AgentRunTask = {
 }
 
 export type AgentRunEvent =
+  | { type: 'reasoning-delta'; runId: string; providerRunId: string; providerStep: number; reasoningId: string; delta: string }
   | { type: 'started'; runId: string }
   | { type: 'transcript-appended'; runId: string; entries: AgentTranscriptEntry[] }
   | { type: 'text-delta'; runId: string; providerRunId: string; providerStep: number; delta: string }
@@ -666,6 +684,7 @@ export type AppendNarrativeInputResult = {
 
 export type CreateNarrativeTimelineInput = {
   cardId: string
+  extensionAdoptions?: CardExtensionAdoption[]
   expectedCardVersion?: number
   title?: string
   openingId?: string
@@ -820,6 +839,13 @@ export type CompleteAgentSessionHandoffInput = {
   expectedEntryCount: number
   summary: string
   branchId?: string
+  /** Fixed by the host when preparing the summary, never by a model tool argument. */
+  boundary?: {
+    sourceThroughSequence: number
+    retiredThroughSequence: number
+    adoptedWorkspaceRevisionId?: string
+    narrative?: { timelineId: string; branchId: string; nodeId: string | null; stateRevisionId?: string; workspaceRevisionId?: string }
+  }
 }
 
 export type CompleteAgentSessionHandoffResult = AppendAgentTranscriptEntriesResult & {
@@ -837,6 +863,7 @@ export type DeleteAgentSessionResult = {
 
 export type UpdateAgentSessionInput = {
   agentSessionId: string
+  summaryPolicy?: import('@loom-studio/application-data').SessionSummaryPolicy
   title?: string
 }
 
@@ -846,6 +873,9 @@ export type UpdateAgentSessionResult = {
 }
 
 export type InvokeAgentTurnInput = {
+  /** Host task execution without story history/state; Preset-controlled Card Lore remains available. */
+  contextMode?: 'isolated'
+  requestId?: string
   agentSessionId: string
   input: string
   resume?: boolean
@@ -882,6 +912,7 @@ export type PreviewAgentTurnResult = {
 }
 
 export type InvokeAgentTurnResult = {
+  summaryStatus?: import('./agents/session-summary.js').SessionSummaryStatus
   runId: string
   agentSession: AgentSession
   entries: {
@@ -1040,6 +1071,8 @@ export type CanonicalChatRequest = {
 export type GatewayChatResult = {
   message: AssistantChatMessage
   text: string
+  reasoning?: string
+  toolCallErrors?: Record<string, { code: string; message: string }>
   model: string
   provider: string
   finishReason?: 'stop' | 'length' | 'tool_call' | 'error'
@@ -1418,6 +1451,7 @@ export type CreateAgentPresetInput = {
   model?: ProviderModelSelection
   delivery?: AgentDelivery
   historyPolicy?: AgentHistoryPolicy
+  approvalPolicy?: AgentApprovalPolicy
 }
 export type AgentPresetResult = {
   agentPreset: AgentPresetEntry
@@ -1430,7 +1464,9 @@ export type UpdateAgentPresetInput = {
   model?: ProviderModelSelection | null
   delivery?: AgentDelivery
   historyPolicy?: AgentHistoryPolicy
+  approvalPolicy?: AgentApprovalPolicy
   useCardLore?: boolean
+  useGlobalLore?: boolean
   textUses?: Array<{ id: string; kind: 'rule' | 'extractor'; enabled: boolean; orderIndex?: number }>
 }
 

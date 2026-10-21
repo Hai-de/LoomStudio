@@ -9,6 +9,7 @@ import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/in
 
 vi.mock('react', async importOriginal => ({
   ...await importOriginal<typeof import('react')>(),
+  memo: (component: unknown) => component,
   useState: (initial: unknown) => [typeof initial === 'function' ? initial() : initial, vi.fn()],
   useRef: (current: unknown) => ({ current }),
   useEffect: () => undefined,
@@ -59,7 +60,7 @@ describe('Run recovery controls', () => {
     const composer = elements(AgentComposer(props)).find(element => element.type === ChatComposer)!
     const controls = elements(ChatComposer(composer.props as Parameters<typeof ChatComposer>[0]))
     const retry = controls.find(element => element.type === 'button'
-      && element.props['aria-label'] === props.t('composer.resendNarrativeInput'))!
+      && element.props['aria-label'] === props.t('swipe.reset'))!
     expect(retry.props.disabled).toBe(false)
     ;(retry.props.onClick as () => void)()
     expect(onRetryNarrativeInput).toHaveBeenCalledOnce()
@@ -113,6 +114,34 @@ describe('Run recovery controls', () => {
       .find(element => element.props['aria-label'] === 'Reconnect')!.props.disabled).toBe(true)
   })
 
+  it.each([
+    { busy: true, activeRun: undefined },
+    { busy: false, activeRun: { runId: 'run', status: 'running' as const } },
+    { busy: false, activeRun: { runId: 'run', status: 'suspended' as const } },
+  ])('keeps the Session draft editable without submitting another turn: %j', state => {
+    const onSubmit = vi.fn()
+    const onChangeInput = vi.fn()
+    const props = {
+      ...recoveryProps({ runRecovery: undefined }), ...state, input: 'next message',
+      messages: [], profiles: [], providerAccounts: [], selectedProfileId: 'profile',
+      onChangeInput, onSelectProfile: vi.fn(), onSubmit,
+    }
+    const composer = elements(AgentChatPanel(props)).find(element => element.type === ChatComposer)!
+    expect(composer.props.textareaDisabled).toBe(false)
+    expect(composer.props.canSend).toBe(false)
+    ;(composer.props.onChangeInput as (value: string) => void)('draft while running')
+    expect(onChangeInput).toHaveBeenCalledWith('draft while running')
+    const preventDefault = vi.fn()
+    ;(composer.props.onSubmit as (event: FormEvent) => void)({ preventDefault } as unknown as FormEvent)
+    expect(preventDefault).toHaveBeenCalledOnce()
+    expect(onSubmit).not.toHaveBeenCalled()
+
+    const idle = elements(AgentChatPanel({ ...props, busy: false, activeRun: undefined })).find(element => element.type === ChatComposer)!
+    expect(idle.props.canSend).toBe(true)
+    ;(idle.props.onSubmit as (event: FormEvent) => void)({ preventDefault } as unknown as FormEvent)
+    expect(onSubmit).toHaveBeenCalledOnce()
+  })
+
   it.each(['narrative', 'agent'] as const)('keeps drafts editable and blocks new turns in both composers when %s is disconnected', target => {
     const recovery = recoveryProps({ runRecovery: { target, status: 'disconnected' } })
     const onSubmit = vi.fn()
@@ -128,6 +157,7 @@ describe('Run recovery controls', () => {
     }))
     for (const tree of [narrative, agent]) {
       const composer = tree.find(element => element.type === ChatComposer)!
+      expect(elements(composer.props.sheet).some(element => element.type === RunRecoveryControls)).toBe(false)
       expect(composer.props.canSend).toBe(false)
       expect(composer.props.textareaDisabled).toBe(false)
       expect(composer.props.input).toBe('new draft')

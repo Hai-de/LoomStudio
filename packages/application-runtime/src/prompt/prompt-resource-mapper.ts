@@ -21,11 +21,13 @@ type PromptResourceMetadata = JsonObject & {
   historyPolicy?: PromptResourceContent['historyPolicy']
   model?: PromptResourceContent['model']
   delivery?: PromptResourceContent['delivery']
+  approvalPolicy?: PromptResourceContent['approvalPolicy']
   origin?: PromptResourceContent['origin']
   sourceArtifactRef?: PromptResourceContent['sourceArtifactRef']
   macros?: Record<string, string>
   macroOptions?: import("@loom-studio/shared").MacroOptions
   useCardLore?: boolean
+  useGlobalLore?: boolean
   textUses?: PromptResourceContent['textUses']
 }
 
@@ -42,10 +44,12 @@ export function toStoredResourceInput(input: {
   const metadata: PromptResourceMetadata = {}
   if (input.content.historyPolicy !== undefined) metadata.historyPolicy = input.content.historyPolicy
   if (input.content.useCardLore !== undefined) metadata.useCardLore = input.content.useCardLore
+  if (input.content.useGlobalLore !== undefined) metadata.useGlobalLore = input.content.useGlobalLore
   if (input.content.textUses !== undefined) metadata.textUses = input.content.textUses
   if (input.content.resourceKind === 'preset') {
     if (input.content.model !== undefined) metadata.model = input.content.model
     if (input.content.delivery !== undefined) metadata.delivery = input.content.delivery
+    if (input.content.approvalPolicy !== undefined) metadata.approvalPolicy = input.content.approvalPolicy
   }
   if (input.content.origin !== undefined) metadata.origin = input.content.origin
   if (input.content.sourceArtifactRef !== undefined) metadata.sourceArtifactRef = input.content.sourceArtifactRef
@@ -92,7 +96,9 @@ export function fromStoredResource(resource: StoredPromptResource): PromptResour
     ...(resource.resourceKind === 'preset' ? { historyPolicy: metadata.historyPolicy ?? 'persistent' } : {}),
     ...(resource.resourceKind === 'preset' && metadata.model !== undefined ? { model: metadata.model } : {}),
     ...(resource.resourceKind === 'preset' && metadata.delivery !== undefined ? { delivery: metadata.delivery } : {}),
+    ...(resource.resourceKind === 'preset' && metadata.approvalPolicy !== undefined ? { approvalPolicy: metadata.approvalPolicy } : {}),
     ...(resource.resourceKind === 'preset' && metadata.useCardLore !== undefined ? { useCardLore: metadata.useCardLore } : {}),
+    ...(resource.resourceKind === 'preset' && metadata.useGlobalLore !== undefined ? { useGlobalLore: metadata.useGlobalLore } : {}),
     ...(resource.resourceKind === 'preset' && metadata.textUses !== undefined ? { textUses: metadata.textUses } : {}),
     ...(metadata.origin ? { origin: metadata.origin } : {}),
     ...(metadata.sourceArtifactRef ? { sourceArtifactRef: metadata.sourceArtifactRef } : {}),

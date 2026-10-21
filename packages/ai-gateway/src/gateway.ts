@@ -79,6 +79,7 @@ async function executeComplete(input: AiGatewayRequest, abortSignal: AbortSignal
   const result = await generateText(prepared)
   return buildGatewayResult(input, {
     text: result.text,
+    reasoning: result.reasoningText,
     toolCalls: result.toolCalls,
     finishReason: result.finishReason,
     rawFinishReason: result.rawFinishReason,
@@ -94,6 +95,7 @@ async function executeStream(input: AiGatewayRequest, runId: string, abortSignal
   const toolNames = new Map<string, string>()
   let finished = false
   for await (const part of result.fullStream) {
+    if (part.type === 'reasoning-delta') events.push({ type: 'reasoning-delta', runId, reasoningId: part.id, delta: part.text })
     if (part.type === 'text-delta') events.push({ type: 'text-delta', runId, delta: part.text })
     if (part.type === 'tool-input-start') toolNames.set(part.id, part.toolName)
     if (part.type === 'tool-input-delta') {
@@ -106,6 +108,7 @@ async function executeStream(input: AiGatewayRequest, runId: string, abortSignal
   if (!finished) throw new Error('Provider stream ended before completion')
   return buildGatewayResult(input, {
     text: await result.text,
+    reasoning: await result.reasoningText,
     toolCalls: await result.toolCalls,
     finishReason: await result.finishReason,
     rawFinishReason: await result.rawFinishReason,
@@ -137,7 +140,8 @@ function prepareRequest(input: AiGatewayRequest, abortSignal: AbortSignal, deliv
 
 function buildGatewayResult(input: AiGatewayRequest, result: {
   text: string
-  toolCalls: Array<{ toolCallId: string; toolName: string; input: unknown }>
+  reasoning?: string
+  toolCalls: Array<{ toolCallId: string; toolName: string; input: unknown; invalid?: boolean; error?: unknown }>
   finishReason: string
   rawFinishReason?: string
   usage: {
@@ -153,6 +157,9 @@ function buildGatewayResult(input: AiGatewayRequest, result: {
     type: 'function' as const,
     function: { name: call.toolName, arguments: JSON.stringify(call.input) },
   }))
+  const toolCallErrors = Object.fromEntries(result.toolCalls.filter(call => call.invalid).map(call => [call.toolCallId, {
+    code: 'tool.invalid_input', message: call.error instanceof Error ? call.error.message : 'Provider returned an invalid tool call.',
+  }]))
   const message = {
     role: 'assistant' as const,
     ...(result.text ? { content: result.text } : {}),
@@ -164,6 +171,8 @@ function buildGatewayResult(input: AiGatewayRequest, result: {
   return {
     message,
     text: result.text,
+    ...(result.reasoning ? { reasoning: result.reasoning } : {}),
+    ...(Object.keys(toolCallErrors).length ? { toolCallErrors } : {}),
     provider: input.provider.name ?? input.provider.kind,
     model: result.response.modelId ?? input.modelId,
     finishReason: normalizeFinishReason(result.finishReason),

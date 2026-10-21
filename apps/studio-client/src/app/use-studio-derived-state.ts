@@ -19,9 +19,7 @@ export function useStudioDerivedState(
 ) {
   const mediaRevision = useCardMediaRevision()
   return useMemo(() => {
-    const assetWorkspaceId = route.panel === 'preset' || route.panel === 'resource'
-      ? route.cardId ?? state.selectedCardId ?? 'default'
-      : state.selectedCardId ?? 'default'
+    const assetWorkspaceId = state.narrativeTimeline?.createdFrom?.cardId ?? state.selectedCardId ?? 'default'
     const bootstrapBusy = !state.startup.ready('cards')
     const activeCardId = state.narrativeTimeline?.createdFrom?.cardId
       ?? (state.narrativeTimeline ? state.selectedCardId : undefined)

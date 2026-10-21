@@ -3,7 +3,7 @@ import type {
   LoreInput,
   OpeningChatInput
 } from '@loom-studio/application-runtime'
-import { isCardBundleArtifact, isPromptActivation, parseCardExtensionAdoptions } from '@loom-studio/application-runtime'
+import { assertCardBundleArtifact, isPromptActivation, parseCardExtensionAdoptions } from '@loom-studio/application-runtime'
 import type { JsonValue } from '@loom-studio/shared'
 import {
   isRecord,
@@ -357,7 +357,7 @@ function readOptionalComponentMounts(params: JsonValue | undefined, key: string)
 function readCardBundleArtifact(params: JsonValue | undefined, key: string) {
   if (!isRecord(params) || params[key] === undefined) throw new Error(`Expected card bundle artifact param: ${key}`)
   const value = params[key]
-  if (!isCardBundleArtifact(value)) throw new Error(`Expected card bundle artifact param: ${key}`)
+  assertCardBundleArtifact(value)
   return value
 }
 

@@ -35,11 +35,11 @@ Agent Transcript 是 append-only 运行事实序列。当前 Entry 包括：
 | `tool-invocation` | Studio Invocation ID、Tool、Transport、输入与执行状态 |
 | `tool-result` | Invocation 配对结果、内容、错误与 synthetic reason |
 | `run-state` | Run 的 created / running / suspended / terminal 状态 |
-| `work-summary` | 已保存的工作交接，之前的 Transcript 保留但退出后续 Prompt |
+| `work-summary` | 已保存的工作交接，显式压缩边界之前的 Transcript 保留但退出后续 Prompt，近期完整工作段继续使用 |
 
 Transcript 不绑定 OpenAI Chat Completions wire schema。Provider Replay 是 Runtime 根据 canonical Entry 和原始 Invocation Transport 生成的下一步输入投影。
 
-Turn Preparation 按 100 条分页读取最新 `work-summary` 之后的工作历史，并携带该摘要；没有摘要时读取整个工作段，不把分页当作静默裁剪。Narrative 若配置记忆来源则读取其明确发布范围；未配置来源的旧路径仍读最新 100 节点并产生诊断。这些读取不等于自动摘要、Token 预算或未完成 Run 的跨进程恢复。
+Turn Preparation 按 100 条分页选择与当前来源相容的 `work-summary`，按其显式压缩边界保留尾段；没有有效摘要时读取原工作段，不把分页当作静默裁剪。Narrative 若配置记忆来源则读取其明确发布范围；未配置来源的旧路径仍读最新 100 节点并产生诊断。Session 自动整理见下文；这些读取不等于剧情摘要、Provider 容量保证或未完成任务的跨进程恢复。
 
 每条 Entry 保存 `parentEntryId`、`sequence` 和可选 `runId`。当前 Store 沿 active parent chain 分页，并以 `expectedEntryCount` 防止并发追加覆盖。Tool Invocation / Result 的轻量配对索引保证 Invocation ID 不重复、Result 引用已知 Invocation、Tool ID 匹配，并且一个 Invocation 只有一个 Result。
 
@@ -61,10 +61,12 @@ Loop 是否继续由 Runtime 派生，不由 Provider Stop Reason 单独决定�
 
 - 扫描到 Native 或 Content Invocation：继续执行 Tool；
 - 没有 Invocation、有 Assistant 正文且不是 error / length：完成；
-- `error`、`length`、空输出、非法 Tool 参数或超过 Step 上限：失败；
+- 无工具调用且 `length` 仍有正文：保存 partial 并继续；`length` 没有有效正文时明确停止，避免无进展续跑；
+- 无效 Native Tool 调用：记录失败工具结果，交回模型纠正，不执行对应工具；
+- `error` 或其他缺少正文/工具调用的结果：失败；
 - AbortSignal 或取消错误：中止。
 
-因此 Content Tool 即使随 Provider `stop` 返回，也不会被误判为最终完成。当前每个 Run 最多执行 8 个 Provider Step，每次 Tool 执行默认最多 30 秒；这是现阶段的安全上限，不是永久产品配置。
+因此 Content Tool 即使随 Provider `stop` 返回，也不会被误判为最终完成。Agent 不设置固定 Provider Step 次数上限，也不设置统一的单工具 30 秒超时；由模型完成响应或用户暂停、取消结束执行。恢复沿用已有 Step 编号，不因原第 8 轮门槛再次停止。提供商或具体工具自身的请求策略仍由其实现负责。
 
 同一 Provider Step 当前不接受 Native 与 Content 两类 Invocation 混合出现。Content Invocation 按出现顺序串行执行。
 
@@ -77,6 +79,9 @@ Tool Result 的 canonical 身份不随 Provider 改变。Native Function 使用 
 Agent 主动读取与 ToolResult 的生命周期由 Runtime 管理，不等于 PromptBuild 的第三种注入语法。Anchor / Slot、正文宏与主动读取之间的边界见 [注入与内联展开](../prompt-build/injection-and-inline-expansion.md)；持续 Pin 的保留策略仍属于 Agent 侧的待实施设计。
 
 `completeAgentSessionHandoff` 保存已生成的工作摘要，不负责生成摘要。计数 CAS 和 Store 内的安全边界校验保证不会在运行 / 暂停的 Run 或未完成工具组中提交交接。提交后旧段退出投影，摘要进入 `@memory.session`，原始记录仍可查询；后续 resume 不复活交接前的失败任务。剧情采用通知与失败收据见 [默认剧情上下文来源](../extension/narrative-context.md)。
+
+`session-summary.ts` 沿当前 Session 的固定上下文执行自我交接，仅任务期间开放提交工具；支持全文替换/patch、5000 Token 默认上限、可配置缓冲及同步/异步。来源与历史压缩边界由宿主确定，结果和共享 MEMORY 在安全边界通过同一事务采用；失败不清理历史。正常游玩在下一条正式正文输入持久化后触发；无楼层 Session 在下一输入前检查上轮 Token 压力。已采用版本持久化，未采用任务重启后丢弃。默认共享文件通过 `@memory.workspace` 注入，摘要通过 `@memory.session` 注入；自定义 Preset 需显式挂载锚点。具体接口、调度默认值和验证边界见 [实施记录](../../../workbench/plans/session-summary-implementation-plan.md)。
+
 
 ## 5. 持久化与恢复边界
 
@@ -132,3 +137,15 @@ Agent Loop 分阶段提交 Transcript，Agent 正文只能由授权工具写入 
 - [`packages/application-runtime/src/narrative/sampling.ts`](../../../../packages/application-runtime/src/narrative/sampling.ts)
 - [`packages/application-runtime/src/agents/tool-loop.ts`](../../../../packages/application-runtime/src/agents/tool-loop.ts)
 - [`packages/application-runtime/src/agents/agent-turn.ts`](../../../../packages/application-runtime/src/agents/agent-turn.ts)
+
+### 中断状态与审批恢复
+
+Session 恢复先查询服务端 Run 状态，再决定重新观察或显示暂停操作。持久化的 `running` 不足以证明执行器仍在运行。状态读取与放弃任务只需要确认原执行器停止及 Transcript CAS，不要求检查点可重放；继续执行仍保留完整检查点校验，工具副作用不明时拒绝重放。
+
+工具调用没有配对结果时，正在运行的任务显示“执行中”；明确暂停、取消、放弃或其他终态显示“已中断”。此显示不补造工具结果，不代表回滚了已提交副作用。网络观察失败保留断连恢复入口，不自行判定后台暂停。
+
+### 发送确认与请求身份
+
+Studio 三个 Run 发送入口为每次提交生成 `requestId`；确认失败后，同一 Session 中相同请求的显式重试沿用该 ID，确认成功后下一次发送生成新 ID。服务端以其确定初始 Run 身份，校验规范化请求摘要；同 ID、不同参数明确拒绝。
+
+存活 Run 由内存记录去重；重启或记录回收后，使用已有 Session/Run 索引查询首个持久检查点中的发送摘要，不扫描整个 Transcript，不重放工具。没有保存检查点的准备阶段失败不等同于已有可恢复 Run。找回停止进程的 Run 后通过已有状态/Transcript 恢复，不自动续跑模型。恢复产生的 continuation 仍使用新的 Run ID。

@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import type {
   ApplicationRuntime
 } from '@loom-studio/application-runtime'
@@ -14,7 +15,28 @@ import {
 } from '../../rpc-params.js'
 import { jsonInput, procedure } from '../context.js'
 
+const workspaceTarget = z.strictObject({ timelineId: z.string().min(1), branchId: z.string().min(1) })
+const workspaceEntry = z.discriminatedUnion('kind', [
+  z.strictObject({ id: z.string().min(1), parentId: z.string().optional(), name: z.string().min(1), kind: z.literal('directory') }),
+  z.strictObject({ id: z.string().min(1), parentId: z.string().optional(), name: z.string().min(1), kind: z.literal('file'), content: z.strictObject({ text: z.string() }) }),
+])
+const workspaceMutation = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('create'), entry: workspaceEntry }),
+  z.strictObject({ kind: z.literal('write'), entryId: z.string(), content: z.union([z.string(), z.array(z.number().int().min(0).max(255)).max(32 * 1024 * 1024)]), mediaType: z.string().optional() }),
+  z.strictObject({ kind: z.literal('move'), entryId: z.string(), parentId: z.string().optional(), name: z.string() }),
+  z.strictObject({ kind: z.literal('copy'), entryId: z.string(), parentId: z.string().optional(), name: z.string() }),
+  z.strictObject({ kind: z.literal('delete'), entryId: z.string() }),
+])
+
 export const timelineProcedures = {
+  'getTimelineWorkspace': procedure.input(workspaceTarget).query(({ ctx, input }) => ctx.runtime.getTimelineWorkspace(input)),
+  'readWorkspaceFile': procedure.input(workspaceTarget.extend({ entryId: z.string() })).query(async ({ ctx, input }) => {
+    const result = await ctx.runtime.readWorkspaceFile(input)
+    return { revisionId: result.revisionId, bytes: Array.from(result.bytes) }
+  }),
+  'mutateTimelineWorkspace': procedure.input(workspaceTarget.extend({ expectedRevisionId: z.string(), operations: z.array(workspaceMutation).min(1) })).mutation(({ ctx, input }) =>
+    ctx.runtime.mutateTimelineWorkspace({ ...input, operations: input.operations.map(operation => operation.kind === 'write'
+      ? { ...operation, content: typeof operation.content === 'string' ? operation.content : new Uint8Array(operation.content) } : operation) }, ctx.request)),
   'importNarrativeHistory': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['importNarrativeHistory']>[0] => {
     if (!isRecord(params) || !Array.isArray(params.messages)) throw new Error('Expected history messages array')
     return {
@@ -125,14 +147,13 @@ export const timelineProcedures = {
       raw: readString(params, 'raw'),
     }
   })).mutation(({ ctx, input }) => ctx.runtime.editNarrativeNode(input, ctx.request)),
-  'createNarrativeTimeline': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['createNarrativeTimeline']>[0] => {
-    return {
-      cardId: readString(params, 'cardId'),
-      expectedCardVersion: readOptionalNumber(params, 'expectedCardVersion'),
-      title: readOptionalString(params, 'title'),
-      openingId: readOptionalString(params, 'openingId'),
-      openingContent: readOptionalString(params, 'openingContent'),
-    }
+  'createNarrativeTimeline': procedure.input(z.strictObject({
+    cardId: z.string(),
+    extensionAdoptions: z.array(z.strictObject({ packageId: z.string(), target: z.enum(['global', 'card']) })).optional(),
+    expectedCardVersion: z.number().optional(),
+    title: z.string().optional(),
+    openingId: z.string().optional(),
+    openingContent: z.string().optional(),
   })).mutation(({ ctx, input }) => ctx.runtime.createNarrativeTimeline(input, ctx.request)),
   'getNarrativeTimeline': procedure.input(jsonInput((params: JsonValue | undefined): Parameters<ApplicationRuntime['getNarrativeTimeline']>[0] => {
     return {

@@ -566,6 +566,26 @@ describe('Timeline extension participation', () => {
     } finally { engine.close() }
   })
 
+  it('applies per-story extension selection atomically without changing Card defaults', async () => {
+    const { engine, runtime, card, initializations } = await setup()
+    try {
+      const before = (await runtime.getCard({ cardId: card.id })).card
+      const excluded = await runtime.createNarrativeTimeline({ cardId: card.id, extensionAdoptions: [] })
+      expect((await runtime.getTimelineExtensionParticipation({ timelineId: excluded.timeline.id })).entries).toEqual([])
+      expect(initializations()).toBe(2)
+      await runtime.updateCard({ cardId: card.id, extensionAdoptions: [] })
+      const included = await runtime.createNarrativeTimeline({ cardId: card.id,
+        extensionAdoptions: [{ packageId: 'example.memory', target: 'global' }],
+      })
+      expect((await runtime.getTimelineExtensionParticipation({ timelineId: included.timeline.id })).entries[0]!.enabled).toBe(true)
+      expect((await runtime.getStateSnapshot({ target: {
+        scope: 'timeline', timelineId: included.timeline.id, branchId: included.branch.id,
+      } })).snapshot.value).toMatchObject({ memory: { count: 3 } })
+      expect((await runtime.getCard({ cardId: card.id })).card.extensionAdoptions).toEqual([])
+      expect(before.extensionAdoptions).toEqual([{ packageId: 'example.memory', target: 'global' }])
+    } finally { engine.close() }
+  })
+
   it('leaves neither a Timeline nor adoption metadata when initialization fails', async () => {
     const { engine, documents, runtime, card, stateContributions } = await setup()
     try {

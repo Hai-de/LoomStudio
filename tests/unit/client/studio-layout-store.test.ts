@@ -222,9 +222,9 @@ describe('studio layout store', () => {
 })
 
 describe('sanitizeStudioLayout', () => {
-  it('opens the character tab when the old recent tab is restored', () => {
-    expect(sanitizeStudioLayout({ playTab: 'recent' }).playTab).toBe('character')
-    expect(sanitizeStudioLayout({ playTab: 'sessions' }).playTab).toBe('sessions')
+  it('ignores removed play tab preferences', () => {
+    expect(sanitizeStudioLayout({ playTab: 'recent' })).not.toHaveProperty('playTab')
+    expect(sanitizeStudioLayout({ playTab: 'sessions' })).not.toHaveProperty('playTab')
   })
 
   it('keeps valid preferences and rejects malformed persisted values', () => {

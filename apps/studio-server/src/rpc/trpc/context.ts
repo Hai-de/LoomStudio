@@ -1,7 +1,7 @@
 import type { ApplicationRuntime, RuntimeRequestContext } from '@loom-studio/application-runtime'
 import type { Logger } from '@loom-studio/logging'
 import type { JsonValue } from '@loom-studio/shared'
-import { initTRPC } from '@trpc/server'
+import { initTRPC, TRPCError } from '@trpc/server'
 import { z } from 'zod'
 import { isTechnicalRpc, summarizeRpc } from '../rpc-summary.js'
 import type { StudioRpcServices } from './services-context.js'
@@ -25,6 +25,16 @@ export const procedure = t.procedure.use(async ({ ctx, path, next }) => {
   ctx.request.abortSignal?.throwIfAborted()
   const startedAt = performance.now()
   const result = await next()
+  if (!result.ok) {
+    const cause = result.error.cause
+    const domainCode = cause && 'code' in cause ? cause.code : undefined
+    if (domainCode === 'narrative.timeline_list_limit_invalid') {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: cause!.message, cause })
+    }
+    if (domainCode === 'prompt_resource.conflict') {
+      throw new TRPCError({ code: 'CONFLICT', message: cause!.message, cause })
+    }
+  }
   const method = path.includes('.') ? path : `application.${path}`
   const fields = {
     correlationId: ctx.request.correlationId,

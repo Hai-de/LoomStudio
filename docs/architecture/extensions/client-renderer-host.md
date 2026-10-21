@@ -31,6 +31,19 @@ Client Module 必须导出 `activate(ctx)`。Manifest 中声明的 Renderer 必�
 
 Client Module 当前是受信任的同源 JavaScript。即使某个 Renderer 使用 sandbox iframe，模块本身仍已在 Studio 主页面执行；iframe 只隔离该 Renderer 的 frame 内容，不能把整个 Client Module 描述成不可信代码沙箱。
 
+### 宿主共享前端模块
+
+同文档 Client Module 可直接导入 `react`、`react-dom`、`react-dom/client`、
+`react/jsx-runtime`、`react/jsx-dev-runtime` 与 `@loom-studio/ui`。
+扩展构建须将这些模块标记为 external，保留 ESM 裸导入，不把框架打进扩展产物。
+宿主在 HTML 中提供 import map：开发环境映射到 Vite facade，发布构建映射到共享 chunk，
+两者都使用宿主的 React 实例。扩展采用宿主支持的 React API 版本，不能自行选择不同运行时版本。
+
+宿主为所有 Shadow Renderer 复用一份官方 UI 的 constructed stylesheet；扩展只携带自身样式。
+原生 DOM 扩展不必依赖 React。iframe 是独立文档，不继承此 import map 或运行时共享合同。
+参考 `official/extensions/story-memory/build.mjs` 与
+`apps/studio-client/build/extension-shared-modules.ts`。
+
 ### Timeline 参与
 
 Manifest 声明 `participation: "timeline"` 的 Client Module 还须通过当前 Timeline 的采用校验。
@@ -133,6 +146,7 @@ ctx.timeline.target
 ctx.state.get/subscribe
 ctx.history.project/extract
 ctx.rpc.call
+ctx.imports.commit
 ctx.assets.url
 ctx.files.url
 ctx.notifications.show

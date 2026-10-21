@@ -29,6 +29,7 @@ export function createClientExtensionDataApi(api: Pick<StudioApi, 'extensionRunt
       project: async (query, extensionTarget) => (await api.textTransforms.project({ ...query, extensionTarget: extensionTarget ?? { kind: 'global' } })).snapshot as never,
       extract: async (query, extensionTarget) => await api.textTransforms.extract({ ...query, extensionTarget: extensionTarget ?? { kind: 'global' } }) as never,
     },
+    imports: { commit: (sessionId, owner) => api.extensionRuntime.importConvertedBatch({ ...owner, sessionId }) },
     rpc: {
       call: (method, params, owner) => api.extensionRuntime.callInstalled({ ...owner, method, params: params as never }),
     },

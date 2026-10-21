@@ -20,6 +20,7 @@ function fixture() {
     route: { panel: 'character', cardId: 'browsed-card', timelineId: 'playing-timeline', branchId: 'playing-branch' },
     searchParams: new URLSearchParams(),
     openPanel: vi.fn(),
+    setSearchParams: vi.fn(),
     openNarrative: vi.fn(),
     openCardPreview: vi.fn(),
     clearDeletedTimeline: vi.fn(),
@@ -29,17 +30,23 @@ function fixture() {
   const panels = createStudioPanels({
     state, navigation, resourcePanels: {},
   } as unknown as Parameters<typeof createStudioPanels>[0])
-  const props = (panels.character(true) as ReactElement<{
+  function panelElement(id: 'character' | 'sessions' | 'recent') {
+    const boundary = panels[id](true) as ReactElement<{ children: ReactElement<{
+      render(active: boolean): ReactElement
+    }> }>
+    return boundary.props.children.props.render(true)
+  }
+  const props = (panelElement('character') as ReactElement<{
     onSelectCard(id: string): void
     onPreviewCard(id: string): void
     onCreateTimelineFromCard(id: string): Promise<void>
     onOpenTimeline(timeline: { id: string }, cardId: string): void
   }>).props
-  const sessionsProps = (panels.sessions(true) as ReactElement<{
+  const sessionsProps = (panelElement('sessions') as ReactElement<{
     onDeleteTimeline(id: string): Promise<boolean>
     onArchiveImported(id: string): Promise<void>
   }>).props
-  const recentProps = (panels.recent(true) as ReactElement<{
+  const recentProps = (panelElement('recent') as ReactElement<{
     onOpenCard(card: { id: string; validationError?: string }): void
   }>).props
   return { props, sessionsProps, recentProps, state, navigation }
@@ -134,6 +141,16 @@ describe('Character browsing versus playing', () => {
     expect(state.setSelectedCardId).not.toHaveBeenCalled()
     expect(state.activateTimeline).not.toHaveBeenCalled()
     expect(navigation.openNarrative).not.toHaveBeenCalled()
+  })
+
+  it('keeps gallery selection inside the Play panel without changing play context', () => {
+    const { props, state, navigation } = fixture()
+    navigation.route.panel = 'play'
+    props.onSelectCard('external-card')
+    expect(navigation.openPanel).not.toHaveBeenCalled()
+    expect(navigation.setSearchParams.mock.calls[0]?.[0].get('characterCard')).toBe('external-card')
+    expect(state.setSelectedCardId).not.toHaveBeenCalled()
+    expect(state.activateTimeline).not.toHaveBeenCalled()
   })
 
   it('starts a session for the explicitly browsed card, not the current playing card', async () => {

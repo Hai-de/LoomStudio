@@ -115,20 +115,21 @@ Content 原文保留 JS 换行、引号与反斜杠，但仍受 `loom-content-v1
 
 `agents/codeact/` 使用 `quickjs-emscripten@0.32.0`，每次 Invocation 新建 Worker 与独立 QuickJS Runtime/Context。没有宿主 fs、process、require、fetch、模块导入、后台定时器或跨调用 JS 变量。
 
-当前固定上限：10 秒墙钟时间、16 MiB QuickJS 堆、512 KiB guest 栈、40 Ki 字符源码、32 Ki 字符结果、128 次 ctx 调用、最多 8 次在途调用。WASM 内存与整个 Node 进程占用不等同于 guest 堆限制；Worker 是执行和终止边界，不是 OS 安全沙箱，也不构成第三方安全审计证明。
+Guest 执行预算为 10 秒，宿主 ctx 操作（包括 API 与审批）等待不计入该预算；保留 16 MiB QuickJS 堆、512 KiB guest 栈、40 Ki 字符源码及 32 Ki 字符结果边界。ctx 调用不设累计次数上限；最多 8 次桥接调用同时在途，其余在 Guest 内排队，正常批量调用不再因并发超过 8 次而报 `codeact.call_limit`。WASM 内存与整个 Node 进程占用不等同于 guest 堆限制；Worker 是执行和终止边界，不是 OS 安全沙箱，也不构成第三方安全审计证明。
 
 当前实际方法：
 
-- `ctx.ls(path?, { offset?, limit? }?)`：一层文本目录与状态，默认 50 项。
+- `ctx.ls(path?, { offset?, limit?, format? }?)`：默认一层文本目录与状态，默认 50 项；`format: "json"` 返回完整路径、类型、状态、total、offset、hasMore 和可选 nextOffset。空目录与翻到末尾在文本中分别提示。
 - `ctx.search({ path?, terms, match?, limit? })`：同一文件内 all/any 字面匹配，返回路径、行范围和少量原文。
 - `ctx.read(path, { startLine?, endLine? }?)`：纯正文字符串，每次最多 16384 字符；读取路径/行范围另外显示在结果中。
 - `ctx.readNarrative({ selection, maxNodes?, maxCharacters? })`：采样读取当前授权 Timeline 的历史节点，返回结构化 JSON 对象（节点列表、拼接正文与截断标记），受节点上限和字符预算保护。
 - `ctx.appendNarrative({ content })`：向当前绑定的 Timeline/Branch 追加非空剧情正文；不能传目标 ID，返回 `{ path }`。路径可用于 `ctx.read`，完整读取后可用 `ctx.write` 替换，替换成功返回新节点路径。无绑定或非法参数明确失败。追加不推进默认投影 Head；即使后续脚本失败或取消，结果仍保留已提交路径，不能盲目重试。
 - 宿主方法返回值支持结构化 `JsonValue`，不强制将对象转换为扁平字符串。其余写方法（`write`, `patch`, `create`, `delete` 等）按授权受控提供。
-- `ctx.write(path, value, { mode: "replace" })`：必须先完整读取同一路径；支持作者模式下的 Prompt Resource、State 属性及 Narrative 节点正文替换。使用资源版本、State Revision 或正文读取基线做冲突检查。
+- `ctx.readValue(path)`：直接读取 State 值文件为 JSON 值，并建立完整读后写基线；只支持 `/state/current.yaml` 和属性的 `@value.yaml`，不解析其他资源的 YAML。完整 JSON 超过 16384 字符则拒绝，不返回部分对象；普通 `ctx.read` 继续返回文本。
+- `ctx.write(path, value, { mode: "replace", allowTypeChange?: boolean })`：必须先完整读取同一路径；支持作者模式下的 Prompt Resource、State 属性及 Narrative 节点正文替换。使用资源版本、State Revision 或正文读取基线做冲突检查。State 对象/数组改为其他类型默认报 `vfs.type_change`，有意改变类型需显式 `allowTypeChange: true`；该选项不跳过审批、CAS 或领域 Schema 校验，也不适用于文本资源。字符串不会自动解析成 YAML/JSON。
 - `ctx.patch(path, unifiedDiff)`：必须先读取覆盖所有修改上下文的正文范围；当前只允许 Prompt Resource 单文件 unified diff，按唯一旧文本上下文定位，不依赖行号，不支持模糊匹配、创建、删除或移动。
 
-写入支持宿主 `approveMutation(preview, signal)` 回调：预览提供前后文本，State 使用 YAML 并附带目标与 Pointer；只返回 allow 或 deny/reason。审批期间取消不再写入，通过后仍由领域 CAS 拒绝过期版本。Agent Run 已将预览转为等待事件，Studio Agent Panel 提供允许/拒绝弹窗并回传决定；未提供 Run 回调的直接 Runtime 调用仍沿用此前直接写入行为。
+写入支持宿主 `approveMutation(preview, signal)` 回调：预览提供前后文本，State 使用 YAML 并附带目标与 Pointer；只返回 allow 或 deny/reason。审批期间取消不再写入，通过后仍由领域 CAS 拒绝过期版本。 Agent Preset 的 `approvalPolicy` 按共享工作区写入、设定资源写入、State 写入、剧情正文修改、历史读取及作者模式分别选择 `ask / allow / deny`，缺省为询问。策略只处理已有审批点，不扩大挂载或读取范围，也不替代工具挂载与 Registry 权限；不经过这些审批点的操作（如剧情追加）不因此新增审批。策略随后续 Run 读取的 Preset 生效。Agent Run 已将预览转为等待事件，Studio Agent Panel 提供允许/拒绝弹窗并回传决定；关闭弹窗只隐藏预览，可从当前 Session 的“查看审批”重新打开。订阅每轮返回待审批快照，刷新后重新观察存活 Run 可以恢复预览；未提供 Run 回调的直接 Runtime 调用仍沿用此前直接写入行为。
 
 Narrative 追加复用 `ToolExecutionScope.narrative.appendNode`，与官方 `append_narrative` 共用当前 Run 的宿主目标绑定和 Head CAS；不经过 VFS 的资源/State 变更审批，也不新增单独的追加审批。工具本身仍须经现有挂载、调用验证与 Registry 审批。`/resources/.../@body.md` 是世界书节点正文，不是剧情；`/state` 是结构化状态，不能通过 `ctx.write` 代替剧情追加。
 
@@ -182,7 +183,7 @@ Studio 将 URI 渲染为可点击引用查看器。查看器按 URI 中的身份
 
 ### 稳定提示词
 
-默认教程由 CodeAct Tool Definition 的现有 `prompt.guidance` 持久化，仍可在工具编辑能力中修改；初始化不覆盖作者编辑。公共说明及各方法使用统一的用途、签名、参数、返回、示例与限制模板。
+默认教程由 CodeAct Tool Definition 的现有 `prompt.guidance` 持久化。当前初始化会同步无扩展来源的官方 Tool Definition；带 origin 的扩展工具按各自来源管理，不能据此声称所有编辑都会跨初始化保留。公共说明及各方法使用统一的用途、签名、参数、返回、示例与限制模板。
 
 无论采用哪种传输，教程只作为一份 `runtime.codeact.instructions` Contribution 投影到 `@chat.tools` 或挂载指定位置。Native `tools[]` 保留必要 schema 和简短说明，Content 协议说明也不再重复整本教程；同时启用两个别名时使用编译顺序中第一个入口的教程。缺少/禁用目标锚点时，Preview 中记录 `codeact.instructions_unmounted`，不另找位置强行注入。
 
@@ -202,3 +203,11 @@ Studio 将 URI 渲染为可点击引用查看器。查看器按 URI 中的身份
 - [`packages/application-runtime/src/agents/tool-prompt-build.ts`](../../../../packages/application-runtime/src/agents/tool-prompt-build.ts)
 - [`packages/application-runtime/src/agents/tool-loop.ts`](../../../../packages/application-runtime/src/agents/tool-loop.ts)
 - [`packages/application-data/src/prompt-resource/types.ts`](../../../../packages/application-data/src/prompt-resource/types.ts)
+
+### VFS 使用契约补充（2026-10-21）
+
+`write / patch / move / delete / create / copy` 的 CodeAct 回执统一为 JSON 对象，直接使用字段，不再返回包含 JSON 的字符串。写入立即生效，后续失败或取消不回滚已提交修改。State 优先结构化读最小目标属性后修改字段，避免手工重建父对象。
+
+字面搜索保留原有范围、all/any 和遍历顺序，增加实际命中词与分离片段，每文件最多六行，省略位置明确标记；不宣称语义检索或相关性排序。路径由目录/搜索原样复用，不对整条路径额外 URL 编码或解码。State patch 在读基线检查前明确报告不支持，不引导模型通过重读反复尝试。
+
+教程将独立探索改为 `Promise.allSettled`，依赖操作顺序 await；能力探测限明确测试目标或临时 Workspace 文件，不以修改真实 State/设定/剧情来检查可用性。Workspace 结构操作不套用 Prompt Resource 的 Metadata 前置要求。

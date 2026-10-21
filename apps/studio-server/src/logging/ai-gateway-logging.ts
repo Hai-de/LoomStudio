@@ -28,7 +28,7 @@ export function withAiGatewayLogging(gateway: AiGateway, logger: Logger): AiGate
           ...input,
           // Do not force streaming on callers that did not request event delivery.
           ...(input.onEvent ? { onEvent: event => {
-            if (firstOutputMs === undefined && (event.type === 'text-delta' || event.type === 'tool-input-delta')) {
+            if (firstOutputMs === undefined && (event.type === 'text-delta' || event.type === 'reasoning-delta' || event.type === 'tool-input-delta')) {
               firstOutputMs = readDurationMs(startedAt)
             }
             input.onEvent!(event)

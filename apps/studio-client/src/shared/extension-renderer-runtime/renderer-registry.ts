@@ -31,6 +31,7 @@ export const rendererSurfacePolicies: Record<RendererSurface, RendererConflictPo
   'shell.background': 'exclusive',
   'narrative.entry.inline': 'anchored-projection',
   'narrative.timeline.tail': 'collection',
+  'memory.panel': 'collection',
   'agent.message.inline': 'anchored-projection',
   'agent.session.tail': 'collection',
   'composer.sheet': 'exclusive',

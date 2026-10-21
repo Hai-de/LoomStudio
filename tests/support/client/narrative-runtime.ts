@@ -98,7 +98,7 @@ export function fixture() {
   const createSession = vi.fn<StudioApi['agentSessions']['create']>(async () => ({
     session, mutation: { changesetId: 'create-session' },
   }))
-  const createRun = vi.fn(async () => ({ runId: 'run' }))
+  const createRun = vi.fn<StudioApi['agentSessions']['createRun']>(async () => ({ runId: 'run' }))
   const subscribeRun = vi.fn<StudioApi['agentSessions']['subscribeRun']>(async () => ({
     events: [{ type: 'completed', runId: 'run', result }], nextCursor: 1, done: true, state: 'completed',
   }))

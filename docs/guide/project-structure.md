@@ -6,7 +6,7 @@ Loom Studio 使用 `pnpm` workspace 构建 Monorepo。核心代码区域是 `pac
 
 ## Workspace 工具链
 
-- Node.js 固定为 `22.18.0`，pnpm 固定为 `9.15.0`；版本来源分别是 `.node-version` / `.nvmrc` 与根 `package.json`。
+- Node.js 固定为 `24.22.0`，pnpm 固定为 `9.15.0`；版本来源分别是 `.node-version` / `.nvmrc` 与根 `package.json`。
 - 新依赖默认保存精确版本，所有依赖都禁止使用 `latest` 或 `*`。安装与 CI 使用 `pnpm install --frozen-lockfile`。
 - 内部 packages 的运行时入口位于各自 `dist/`。根目录的 `dev:server` 和 `dev:client` 会先构建并持续监听这些 packages，避免 workspace 链接正确但产物过期。
 - `pnpm run check:workspace` 会先构建内部 packages，再检查工具链版本、依赖确定性、lockfile 和关键跨包运行时导出。
@@ -124,12 +124,14 @@ Loom Studio 使用 `pnpm` workspace 构建 Monorepo。核心代码区域是 `pac
 
 ## 🧩 扩展内容
 
-- `official/extensions/`: 随主程序发行的轻量官方内容。
+- `official/extensions/`: 主仓库维护的官方内容与主题示例，源码以这里为基准；“官方”不等于内置。当前发行包只携带 `loom-assistant`，具体以发布清单为准，见[目录约定](../../official/extensions/README.md)。
 - `extensions/`: 独立发行扩展的安装和本地开发目录，官方与第三方使用同一位置；主仓库忽略此目录。
 - `extensions/st-data-compat/`: 官方 SillyTavern 数据兼容扩展（专属测试夹具位于其 `fixtures/data/` 下）。
 - `extensions/the-world/`: 独立发行的官方 The World 扩展。
 - `tests/fixtures/extensions/echo/`: 测试扩展，覆盖 RPC、Macro、State、Text Pipeline 与 Renderer 贡献。
 - `tests/fixtures/extensions/weather-station/`: Server Extension 生命周期、事件与文档能力测试样本。
+
+STBridge 与 The World 的开发基准分别为各自的独立仓库；用户确认后下载安装，`official/extensions/` 不保留它们的副本。Git 安装不执行构建，因此独立仓库同时交付源码及由其生成的完整 `dist/`，不把构建产物作为第二份可独立编辑的实现。
 
 ---
 

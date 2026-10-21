@@ -58,4 +58,27 @@ describe('RendererSurfaceHost', () => {
     }))
     expect(html).toBe('')
   })
+  it('renders Timeline memory contributions only while their installation is available', () => {
+    const host = createClientRendererHost()
+    host.setScopeSnapshot({ workspace: 'workspace', cardId: 'card-a', timelineId: 'timeline-a', branchId: 'branch-a' })
+    let adoptedAndEnabled = true
+    const registration = host.register({
+      owner: { kind: 'extension', packageId: 'example.memory', moduleId: 'client', target: { kind: 'card', cardId: 'card-a' } },
+      definition: { id: 'memory', name: 'Memory', surface: 'memory.panel', instanceScope: 'timeline', adapter: 'shadow' },
+      isAvailable: () => adoptedAndEnabled,
+      mount: vi.fn(),
+    })
+    const render = () => renderToStaticMarkup(createElement(RendererSurfaceHost, {
+      host, scope: { kind: 'timeline', key: 'timeline-a' }, surface: 'memory.panel',
+    }))
+    expect(render()).toContain('data-renderer-surface="memory.panel"')
+    adoptedAndEnabled = false
+    expect(render()).toBe('')
+    adoptedAndEnabled = true
+    host.setScopeSnapshot({ workspace: 'workspace', cardId: 'other', timelineId: 'other', branchId: 'other' })
+    expect(render()).toBe('')
+    registration.dispose()
+    expect(render()).toBe('')
+  })
+
 })

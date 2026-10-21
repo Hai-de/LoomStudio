@@ -22,6 +22,7 @@ const MarkdownPreview = lazy(async () => {
 })
 
 type LongTextEditorBaseProps = {
+  hideLabel?: boolean
   headerExtra?: ReactNode
   clearLabel: string
   clearedLabel: string
@@ -154,7 +155,7 @@ export const LongTextEditor = forwardRef<LongTextEditorHandle, LongTextEditorPro
     >
       <header className={styles.toolbar}>
         <div className={styles.heading}>
-          <span className={styles.label} id={labelId}>{props.label}</span>
+          <span className={props.hideLabel ? styles.hiddenLabel : styles.label} id={labelId}>{props.label}</span>
           {props.headerExtra}
         </div>
         <div className={styles.actions}>

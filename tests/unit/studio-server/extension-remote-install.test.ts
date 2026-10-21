@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { zipSync } from 'fflate'
@@ -75,16 +75,24 @@ async function manager(configure?: (root: string) => Promise<Partial<Parameters<
   const importPackageResources = vi.fn(async (_input: Parameters<Parameters<typeof createServerExtensionManager>[0]['importPackageResources']>[0]) => ({ installationId: 'fixture-installation', promptResources: [], agentTools: [], transformRules: [], textExtractors: [] }))
   const listInstallations = vi.fn<Parameters<typeof createServerExtensionManager>[0]['listInstallations']>(async () => ({ installations: [] }))
   const diagnostics = createInMemoryDiagnosticsRegistry()
-  const runtime = createServerExtensionManager({
+  const managerOptions: Parameters<typeof createServerExtensionManager>[0] = {
     host, stateStore: state, diagnostics,
     installedDirectory: join(root, 'app', 'extensions'), devLinksFile: join(root, 'data', 'dev-links.json'),
     officialSetupFile: join(root, 'data', 'setup.json'), deleteData,
     readCardPackage: async () => { throw new Error('Unused') }, listInstallations,
     importPackageResources, removePackageResources: async () => ({ packageId: 'fixture-package', promptResourceIds: [], agentToolIds: [], textTransformRuleIds: [], textExtractorIds: [], detachedReferences: { cards: 0, timelines: 0, presetToolMounts: 0 } }),
     ...await configure?.(root),
-  })
+  }
+  const runtime = createServerExtensionManager(managerOptions)
   await runtime.initialize()
-  return { root, runtime, host, state, deleteData, importPackageResources, listInstallations, diagnostics }
+  return { root, runtime, host, state, deleteData, importPackageResources, listInstallations, diagnostics,
+    restart: async () => {
+      const restarted = createServerExtensionManager({ ...managerOptions,
+        stateStore: createExtensionStateStore({ filename: join(root, 'data', 'state.json'), now: () => '2026-10-02T00:00:00Z' }) })
+      await restarted.initialize()
+      return restarted
+    },
+  }
 }
 
 async function install(runtime: Awaited<ReturnType<typeof manager>>['runtime'], source: ReturnType<typeof fixture>) {
@@ -414,4 +422,45 @@ it('isolates malformed bundled manifests and failed resource imports during init
   expect(runtime.listPackages().find(item => item.packageId === 'test.bad-source')?.available).toBe(false)
   expect(diagnostics.list().some(item => item.code === 'extension.bundled_setup_failed')).toBe(true)
   expect(JSON.parse(await readFile(join(root, 'data/setup.json'), 'utf8')).bundled).toEqual(['test.healthy'])
+})
+
+
+it('installs bundled Markdown presets once and preserves explicit module disablement across restart', async () => {
+  const packageId = 'official.story-memory'
+  const f = await manager(async root => {
+    const directory = join(root, 'bundled', packageId)
+    await mkdir(directory, { recursive: true })
+    await cp('official/extensions/story-memory/resources', join(directory, 'resources'), { recursive: true })
+    await writeFile(join(directory, 'manifest.json'), JSON.stringify({
+      manifestVersion: 2, id: packageId, version: '1.0.0', displayName: 'Story Memory', engines: { studio: '*' },
+      modules: [{ id: 'server', runtime: 'server', entry: './server.js' }, { id: 'client', runtime: 'client', entry: './client.js' }],
+      contributes: { promptResources: [{ id: 'official.story-memory.summary', resourceKind: 'preset', source: './resources/summary/index.json' }] },
+    }))
+    await writeFile(join(directory, 'server.js'), 'export function activate() {}')
+    await writeFile(join(directory, 'client.js'), 'export function activate() {}')
+    return { bundledDirectories: [directory], bundledEnabledModules: { [packageId]: ['server', 'client'] } }
+  })
+  expect(f.runtime.listPackages().find(item => item.packageId === packageId)?.available).toBe(true)
+  expect(f.importPackageResources).toHaveBeenCalledOnce()
+  expect(f.importPackageResources.mock.calls[0]![0].promptResources[0]!.artifact).toMatchObject({
+    resourceKind: 'preset', rootNode: { id: 'official.story-memory.summary', category: 'preset', children: [
+      { children: [{ body: expect.stringContaining('剧情记忆整理助手') }, { body: expect.stringContaining('LV1') }, { body: expect.stringContaining('LV2') }] },
+      {}, {},
+    ] },
+  })
+  expect(f.state.get(packageId, 'server')?.enabled).toBe(true)
+  expect(f.state.get(packageId, 'client')?.enabled).toBe(true)
+  expect(f.host.activate).toHaveBeenCalledWith(packageId, 'server')
+  await f.runtime.disableModule(packageId, 'server')
+  await f.runtime.disableModule(packageId, 'client')
+  vi.mocked(f.host.activate).mockClear()
+  const restarted = await f.restart()
+  expect(f.host.activate).not.toHaveBeenCalled()
+  expect(f.importPackageResources).toHaveBeenCalledOnce()
+  const persisted = createExtensionStateStore({ filename: join(f.root, 'data/state.json'), now: () => '' })
+  await persisted.load()
+  expect(persisted.get(packageId, 'server')?.enabled).toBe(false)
+  expect(persisted.get(packageId, 'client')?.enabled).toBe(false)
+  await restarted.uninstallPackage(packageId)
+  expect((await f.restart()).listPackages().some(item => item.packageId === packageId)).toBe(false)
 })

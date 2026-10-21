@@ -1,3 +1,5 @@
+import { createNarrativeActivityRegistry } from '../extensions/narrative-activity.js'
+import { createExtensionReadonlyFilesRegistry } from '../extensions/readonly-files.js'
 import type { AgentStore } from '@loom-studio/application-data'
 import { createOfficialProviderAdapterRegistry, type ProviderAdapterRegistry } from '@loom-studio/ai-gateway'
 import type { SqliteDataEngine } from '@loom-studio/data-engine'
@@ -6,7 +8,7 @@ import type { Logger } from '@loom-studio/logging'
 import type { NarrativeStore } from '@loom-studio/application-data'
 import type { PromptResourceStore } from '@loom-studio/application-data'
 import { createId as createSharedId, nowIso } from '@loom-studio/shared'
-import { createStateStore, createNarrativeSwipeStore, type StateStore, type NarrativeSwipeStore } from '@loom-studio/application-data'
+import { createStateStore, createWorkspaceStore, type WorkspaceStore, createNarrativeSwipeStore, type StateStore, type NarrativeSwipeStore } from '@loom-studio/application-data'
 import { createDocumentBackedAiGateway } from '../providers/gateway.js'
 import { createAgentToolRegistry, type AgentToolRegistry } from '../agents/tool-registry.js'
 import type { AiGateway, ApplicationRuntimeOptions, BlobStorage, MediaAssetLookup, SourceArtifactStorage } from '../types.js'
@@ -28,8 +30,11 @@ export type ApplicationRuntimeContext = {
   logger?: Logger
   runtimeLogger?: Logger
   narratives?: NarrativeStore
+  narrativeActivity: ReturnType<typeof createNarrativeActivityRegistry>
+  extensionReadonlyFiles: ReturnType<typeof createExtensionReadonlyFilesRegistry>
   narrativeContext: NarrativeContextRegistry
   promptResources: PromptResourceStore
+  workspaces: WorkspaceStore
   states: StateStore
   swipes: NarrativeSwipeStore
   sourceArtifacts?: SourceArtifactStorage
@@ -68,8 +73,11 @@ export function createApplicationRuntimeContext(options: ApplicationRuntimeOptio
     logger: options.logger,
     runtimeLogger: options.runtimeLogger,
     narratives: options.narratives,
+    narrativeActivity: createNarrativeActivityRegistry(),
+    extensionReadonlyFiles: createExtensionReadonlyFilesRegistry(),
     narrativeContext: options.narrativeContext ?? createNarrativeContextRegistry(),
     promptResources: options.promptResources,
+    workspaces: createWorkspaceStore({ engine: options.dataEngine, createId: runtimeCreateId, now: runtimeNow }),
     states: options.states ?? createStateStore({
       engine: options.dataEngine,
       createId: runtimeCreateId,

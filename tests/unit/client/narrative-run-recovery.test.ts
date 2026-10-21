@@ -3,6 +3,36 @@ import { fixture, primaryFixture } from '../../support/client/narrative-runtime.
 import type { StudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
 
 describe('Narrative Run recovery', () => {
+  it('reuses a send request ID after its acknowledgement is lost', async () => {
+    const f = fixture()
+    f.createRun.mockRejectedValueOnce(new Error('Response was lost'))
+    f.render().setAgentInput('Draft')
+    await f.render().submitAgentTurn(f.event)
+    const first = f.createRun.mock.calls[0]![0]
+    expect(first.requestId).toEqual(expect.any(String))
+    expect(f.render().agentInput).toBe('Draft')
+    await f.render().submitAgentTurn(f.event)
+    expect(f.createRun.mock.calls[1]![0]).toEqual(first)
+  })
+
+  it('replaces streamed native reasoning with its committed transcript entry', async () => {
+    const f = fixture()
+    f.subscribeRun.mockResolvedValueOnce({ events: [{ type: 'reasoning-delta', runId: 'run', providerRunId: 'provider', providerStep: 1, reasoningId: 'r', delta: 'Thinking' }], nextCursor: 1, done: false, state: 'running' })
+    const finish = Promise.withResolvers<Awaited<ReturnType<StudioApi['agentSessions']['subscribeRun']>>>()
+    f.subscribeRun.mockReturnValueOnce(finish.promise)
+    f.render().setAgentInput('Draft')
+    const running = f.render().submitAgentTurn(f.event)
+    await vi.waitFor(() => expect(f.subscribeRun).toHaveBeenCalledTimes(2))
+    expect(f.render().agentMessages.filter(item => item.entry.kind === 'reasoning')).toHaveLength(1)
+    const terminal = Promise.withResolvers<Awaited<ReturnType<StudioApi['agentSessions']['subscribeRun']>>>()
+    f.subscribeRun.mockReturnValueOnce(terminal.promise)
+    finish.resolve({ events: [{ type: 'transcript-appended', runId: 'run', entries: [{ id: 'native', runId: 'run', agentSessionId: 'session', sequence: 2, createdAt: '', entry: { kind: 'reasoning', content: 'Thinking complete', source: 'provider-native', visibility: 'collapsed', replay: 'omit' } }] }], nextCursor: 2, done: false, state: 'running' })
+    await vi.waitFor(() => expect(f.subscribeRun).toHaveBeenCalledTimes(3))
+    expect(f.render().agentMessages.filter(item => item.entry.kind === 'reasoning')).toMatchObject([{ id: 'native', entry: { content: 'Thinking complete' } }])
+    terminal.resolve({ events: [{ type: 'suspended', runId: 'run' }], nextCursor: 3, done: true, state: 'suspended' })
+    await running
+  })
+
   it('reports pause rejection while preserving the active run and approval', async () => {
     const f = fixture()
     const finish = Promise.withResolvers<Awaited<ReturnType<StudioApi['agentSessions']['subscribeRun']>>>()
@@ -53,7 +83,7 @@ describe('Narrative Run recovery', () => {
       entry: { kind: 'message' as const, role: 'assistant' as const, content: 'Saved step' } }
     f.getTranscript.mockResolvedValue({ session: f.result.agentSession, entries: [user, assistant] })
     const expired: Awaited<ReturnType<StudioApi['agentSessions']['subscribeRun']>> = { events: [], nextCursor: 100, done: false, state: 'running' as const,
-      replayExpired: true, partialText: 'Recovered',
+      replayExpired: true, partialText: 'Recovered', partialReasoning: 'Recovered reasoning',
       pendingApprovals: [{ type: 'mutation-approval-requested', runId: 'run', requestId: 'approval', preview: { action: 'replace', path: '/test', kind: 'state', before: '1', after: '2' } }] }
     let resolve!: (value: Awaited<ReturnType<StudioApi['agentSessions']['subscribeRun']>>) => void
     f.subscribeRun.mockResolvedValueOnce({
@@ -63,14 +93,14 @@ describe('Narrative Run recovery', () => {
       ], nextCursor: 2, done: false, state: 'running',
     })
       .mockResolvedValueOnce(expired)
-      .mockResolvedValueOnce({ events: [], nextCursor: 100, done: false, state: 'running' })
+      .mockResolvedValueOnce({ events: [], nextCursor: 100, done: false, state: 'running', pendingApprovals: expired.pendingApprovals })
       .mockImplementationOnce(() => new Promise(accept => { resolve = accept }))
     f.render().setAgentInput('Draft')
     const pending = f.render().submitAgentTurn(f.event)
     await vi.waitFor(() => expect(f.subscribeRun).toHaveBeenCalledTimes(4))
     expect(f.getTranscript).toHaveBeenCalledOnce()
     expect(f.subscribeRun.mock.calls[3]).toEqual(['run', 100, 'session'])
-    expect(f.render().agentMessages.map(item => item.entry.content)).toEqual(['Draft', 'Saved step', 'Recovered'])
+    expect(f.render().agentMessages.map(item => item.entry.content)).toEqual(['Draft', 'Saved step', 'Recovered reasoning', 'Recovered'])
     expect(f.render().activeAgentRun?.approval?.requestId).toBe('approval')
     resolve({ events: [{ type: 'text-delta', runId: 'run', providerRunId: 'provider-run', providerStep: 1, delta: ' tail' }], nextCursor: 101, done: false, state: 'running' })
     let finish!: (value: Awaited<ReturnType<StudioApi['agentSessions']['subscribeRun']>>) => void

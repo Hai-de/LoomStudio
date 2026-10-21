@@ -10,29 +10,17 @@ describe('NarrativeTimeline.isTimelineNearBottom', () => {
 })
 
 describe('NarrativeTimeline.readNarrativeNodeRole', () => {
-  it('recognizes the user node in a persisted user-assistant Run pair', () => {
+  it('uses persisted input identity even when generation failed and no reply follows', () => {
+    expect(readNarrativeNodeRole([{ id: 'input', kind: 'user-input' } as NarrativeNode], 0)).toBe('user')
+  })
+
+  it('does not infer role from node IDs, sources, or neighboring nodes', () => {
     const nodes = [
-      {
-        id: 'user-node',
-        source: { agentSessionId: 'session-1', agentMessageId: 'message-user', runId: 'run-1' },
-      },
-      {
-        id: 'assistant-node',
-        parentNodeId: 'user-node',
-        source: { agentSessionId: 'session-1', agentMessageId: 'message-assistant', runId: 'run-1' },
-      },
+      { id: 'optimistic-looking', kind: 'narrative' },
+      { id: 'plain', kind: 'user-input', source: { runId: 'run', agentSessionId: 'session' } },
+      { id: 'reply', kind: 'narrative', parentNodeId: 'plain', source: { runId: 'run', agentSessionId: 'session' } },
     ] as NarrativeNode[]
-
-    expect(readNarrativeNodeRole(nodes, 0)).toBe('user')
-    expect(readNarrativeNodeRole(nodes, 1)).toBe('assistant')
-  })
-
-  it('keeps legacy standalone Narrative nodes as assistant content', () => {
-    expect(readNarrativeNodeRole([{ id: 'legacy-node' } as NarrativeNode], 0)).toBe('assistant')
-  })
-
-  it('recognizes optimistic narrative nodes as user content', () => {
-    expect(readNarrativeNodeRole([{ id: 'optimistic-narrative-node-1' } as NarrativeNode], 0)).toBe('user')
+    expect(nodes.map((_, index) => readNarrativeNodeRole(nodes, index))).toEqual(['assistant', 'user', 'assistant'])
   })
 })
 

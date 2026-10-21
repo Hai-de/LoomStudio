@@ -44,3 +44,16 @@ Package 主入口为 [`src/index.ts`](./src/index.ts)：
 - [Studio UI Architecture 设计规范](../../docs/architecture/ui/README.md)
 - [External Dependency Ownership 外部依赖所有权](../../docs/architecture/platform/external-dependency-ownership.md)
 - [Client FSD 规范与组件组合](../../apps/studio-client/README.md)
+
+## Dialog 关闭约定
+
+普通 `Dialog` 默认提供右上角关闭按钮、Esc 与遮罩点击关闭，统一调用 `onClose`；内容区点击及从内容拖到外部不会关闭。`closeOnBackdrop={false}` 可禁用遮罩关闭；`dismissible={false}` 同时禁止按钮、Esc 和遮罩退出，用于正在提交或必须明确作答的弹窗。`closeLabel` 可提供本地化的关闭文案。已有自定义关闭工具栏时设置 `showCloseButton={false}`，避免重复出口。
+
+
+## 工具工作台 Dialog
+
+`layout="workbench"` 提供固定标题栏、视口内约 960 × 680px 的居中容器和无外部滚动的填充内容区。调用方负责内部布局与滚动；标题栏支持 `titleIcon`，底部有内收分割线；遮罩点击、Esc 与关闭按钮沿用普通 Dialog，可显式禁用遮罩关闭。`id` 可连接入口的 `aria-controls`。
+
+可在内部使用普通 Dialog 确认操作。各层使用原生 Top Layer，cancel/close 事件在所属层终止；父层因导航关闭时同时关闭其 DOM 内的子 Dialog。业务请求是否可中断、失败反馈和草稿继续由调用方负责。
+
+Dialog 内的 ContextMenu / DropdownMenu 自动挂载到最近的所属 Dialog，并以其为碰撞边界；普通页面保持默认 Portal，无需业务方传入宿主 DOM。

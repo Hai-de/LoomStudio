@@ -1,12 +1,14 @@
+import { AgentMutationApprovalDialog } from '../../../apps/studio-client/src/widgets/agent-chat-panel/agent-mutation-approval-dialog.js'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ClientJsonValue } from '@loom-studio/client-bridge'
 import { isValidElement, type ReactElement } from 'react'
-import { AgentChatPanel, buildRenderItems, type AgentChatPanelProps } from '../../../apps/studio-client/src/widgets/agent-chat-panel/agent-chat-panel.js'
+import { AgentChatPanel, AgentToolActionItem, buildRenderItems, type AgentChatPanelProps } from '../../../apps/studio-client/src/widgets/agent-chat-panel/agent-chat-panel.js'
 import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/index.js'
 
 const hooks = vi.hoisted(() => ({ cursor: 0, values: [] as unknown[] }))
 vi.mock('react', async importOriginal => ({
   ...await importOriginal<typeof import('react')>(),
+  memo: (component: unknown) => component,
   useState: (initial: unknown) => {
     const index = hooks.cursor++
     if (!(index in hooks.values)) hooks.values[index] = typeof initial === 'function' ? initial() : initial
@@ -57,6 +59,24 @@ function panelElements(count: number, reply: boolean) {
   return elements(AgentChatPanel(props))
 }
 const panel = (count: number, reply: boolean) => panelElements(count, reply).find(element => Array.isArray(element.props.tools))!
+it('can close and reopen a pending approval from the Session without denying it', () => {
+  const props: AgentChatPanelProps = {
+    runRecoveryBusy: false, canRestoreRunInput: false, reconnectAgentRun: vi.fn(async () => {}), restoreRunInput: vi.fn(),
+    busy: true, input: '', profiles: [], providerAccounts: [], messages: [], selectedProfileId: 'preset',
+    activeRun: { runId: 'run', status: 'running', approval: { requestId: 'request',
+      preview: { kind: 'workspace', action: 'patch', path: '/workspace/probe.md', before: 'a', after: 'b' } } },
+    t: createTranslator('en-US'), onChangeInput: vi.fn(), onSelectProfile: vi.fn(), onSubmit: vi.fn(), onApproveMutation: vi.fn(),
+  }
+  const render = () => { hooks.cursor = 0; return elements(AgentChatPanel(props)) }
+  const dialog = render().find(element => element.type === AgentMutationApprovalDialog)!
+  ;(dialog.props.onClose as () => void)()
+  expect(render().some(element => element.type === AgentMutationApprovalDialog)).toBe(false)
+  const reopen = render().find(element => element.type === 'button' && JSON.stringify(element.props.children).includes('Review request'))!
+  ;(reopen.props.onClick as () => void)()
+  expect(render().some(element => element.type === AgentMutationApprovalDialog)).toBe(true)
+  expect(props.onApproveMutation).not.toHaveBeenCalled()
+})
+
 beforeEach(() => { hooks.cursor = 0; hooks.values = [] })
 
 describe('Agent tool group identity and collapse', () => {
@@ -73,6 +93,37 @@ describe('Agent tool group identity and collapse', () => {
     expect(retained.isOpen('tool-0')).toBe(false)
     const collapse = elements(render(returned)).find(element => typeof element.props.open === 'boolean')!
     expect(collapse.props.open).toBe(true)
+  })
+
+  it.each([
+    { result: 'ERR_SQLITE_ERROR: no such table', expected: 1 },
+    { result: 'Additional diagnostic output', expected: 2 },
+  ])('deduplicates identical tool errors without hiding distinct output: $expected blocks', ({ result, expected }) => {
+    const tree = elements(AgentToolActionItem({
+      id: 'failed', iconType: 'terminal', label: 'Tool', inputs: [], defaultOpen: true,
+      status: 'error', errorContent: 'ERR_SQLITE_ERROR: no such table', resultContent: result,
+      t: createTranslator('en-US'),
+    }))
+    const outputs = tree.filter(element => element.type === 'pre')
+    expect(outputs).toHaveLength(expected)
+    expect(outputs[0]?.props.children).toBe('ERR_SQLITE_ERROR: no such table')
+    if (expected === 2) expect(outputs[1]?.props.children).toBe(result)
+  })
+
+  it.each(['discarded', 'aborted', 'suspended', 'failed', 'completed'] as const)('stops the spinner for an unresolved tool after %s', state => {
+    const invocation = {
+      id: 'tool', runId: 'old-run', agentSessionId: 'session', sequence: 1, createdAt: '',
+      entry: { kind: 'tool-invocation' as const, toolId: 'codeact', invocationId: 'call', exposedName: 'codeact' },
+    }
+    const terminal = {
+      id: 'state', runId: 'old-run', agentSessionId: 'session', sequence: 2, createdAt: '',
+      entry: { kind: 'run-state' as const, state },
+    }
+    expect(buildRenderItems([invocation, terminal])).toMatchObject([{ tools: [{ status: 'interrupted' }] }])
+    expect(buildRenderItems([invocation], { runId: 'old-run', status: 'suspended' }))
+      .toMatchObject([{ tools: [{ status: 'interrupted' }] }])
+    expect(buildRenderItems([invocation], { runId: 'old-run', status: 'running' }))
+      .toMatchObject([{ tools: [{ status: 'running' }] }])
   })
 
   it('shows a pending invocation until its result arrives', () => {

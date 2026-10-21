@@ -5,8 +5,10 @@
 
 ## 下载与启动
 
-先安装 Node.js 22.18 或更新版本，确保 `node` 和 `npm` 能在当前账户使用。
+先安装 Node.js 24.22 或更新版本，确保 `node` 和 `npm` 能在当前账户使用。
 Release 不携带 Node.js 或 node_modules，需要联网安装生产依赖。
+
+macOS / Linux 发行启动器会启用 Node 原生模块编译缓存，改善后续启动。缓存使用 Node 默认临时目录，也可通过 `NODE_COMPILE_CACHE` 指定目录；`NODE_DISABLE_COMPILE_CACHE=1` 可禁用。缓存不可用时仍正常启动，删除缓存不影响业务数据。Windows 暂不自动启用，待验证当前 Node 的长路径行为后再调整。
 
 - Windows：运行根目录的 `start.bat`。
 - macOS：运行 `start.command`；系统执行权限或安全提示需要按本机设置处理。
@@ -68,8 +70,9 @@ Git 分支可检查更新、切换 ref 和回退到前一个代码快照，本�
 ZIP 由用户手动导入新版，不提供自动更新检查。
 独立扩展在应用根目录 `extensions/` 安装和开发，文件数据位于用户数据目录
 `extensions/<packageId>/`，源码和可执行产物不放入用户数据目录。
-首次官方选择可跳过；当前 STBridge 与 The World 的远程仓库仍缺完整可运行发行产物，
-不能把源码 ZIP 当作成品安装。助手等轻量内容随主程序发行。
+首次官方选择可跳过；STBridge 与 The World 从各自独立仓库下载，不预先放在发行包的
+`official/extensions/`。Git 安装不执行构建，扩展发布包须包含 Manifest、资源和已构建的完整
+`dist/`，不能把缺少运行产物的源码 ZIP 当作成品安装。当前内置扩展为 Loom Assistant。
 可执行 Server 扩展是可信同进程代码，不是安全沙箱；安装前确认来源和风险。
 
 ## 维护者发行命令

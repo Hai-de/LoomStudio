@@ -157,7 +157,9 @@ async function readEnabledResources(ctx: SearchContext, catalog: SearchCatalog, 
   const enabledResources = new Set(preset?.metadata.useCardLore === false ? []
     : catalog.cards.get(input.currentCardId ?? '')?.content.promptResourceIds ?? [])
   for (const mount of await ctx.promptResources.listLoreMounts()) {
-    if (mount.source.kind !== 'manual' && mount.source.id !== preset?.id) continue
+    if (mount.source.kind === 'manual'
+      ? mount.source.id !== 'global' || preset?.metadata.useGlobalLore === false
+      : mount.source.id !== preset?.id) continue
     if (mount.resolvedLoreResourceId !== null) enabledResources.add(mount.resolvedLoreResourceId ?? mount.loreResourceId)
   }
   if (preset) enabledResources.add(preset.id)

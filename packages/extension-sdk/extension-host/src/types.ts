@@ -93,6 +93,18 @@ export type ExtensionEventRegistration = {
 }
 
 export type ExtensionHostOptions = {
+  registerRecordArchive?(adapter: import('@loom-studio/extension-sdk').ExtensionRecordArchive, owner: { packageId: string; installationId: string; target: ExtensionInstallationTarget }): Disposable
+  readExtensionNarrative?(target: import('@loom-studio/extension-sdk').ExtensionTimelineTarget, input: import('@loom-studio/extension-sdk').ExtensionNarrativeRead, signal: AbortSignal): Promise<import('@loom-studio/extension-sdk').ExtensionNarrativeSnapshot>
+  validateExtensionNarrative?(target: import('@loom-studio/extension-sdk').ExtensionTimelineTarget, source: import('@loom-studio/extension-sdk').ExtensionNarrativeSource, signal: AbortSignal): Promise<boolean>
+  subscribeNarrativeActivity?(handler: (event: import('@loom-studio/extension-sdk').ExtensionNarrativeActivity) => void): Disposable
+  registerReadonlyFiles?(provider: import('@loom-studio/extension-sdk').ExtensionReadonlyFiles, owner: { target: ExtensionInstallationTarget; isAvailable(target: { timelineId: string; branchId: string }): Promise<boolean> }): Disposable
+  extensionAgentTasks?: {
+    create(owner: { packageId: string; installationId: string }, target: { timelineId: string; branchId: string }, input: { presetId: string; title?: string } | { presetContributionId: string; title?: string }, signal: AbortSignal): Promise<{ sessionId: string }>
+    invoke(owner: { packageId: string; installationId: string }, target: { timelineId: string; branchId: string }, input: { sessionId: string; input: string; activationFacts?: import('@loom-studio/shared').JsonObject }, signal: AbortSignal): Promise<{ sessionId: string; runId: string; state: string; text?: string }>
+    read(owner: { packageId: string; installationId: string }, target: { timelineId: string; branchId: string }, sessionId: string, signal: AbortSignal): Promise<{ sessionId: string; presetId: string; title?: string; state: string; lastOutput?: string }>
+    cancel(owner: { packageId: string; installationId: string }, target: { timelineId: string; branchId: string }, sessionId: string, signal: AbortSignal): Promise<unknown>
+  }
+
   documents: DocumentStore
   diagnostics: DiagnosticsRegistry
   logger?: ExtensionHostLogWriter

@@ -80,6 +80,26 @@ async function fixture(mode: 'content' | 'json', finishReason: GatewayChatResult
 }
 
 describe('CodeAct production tool loop', () => {
+  it.each(['ask', 'allow', 'deny'] as const)('persists and enforces the Preset author-mode approval policy: %s', async mode => {
+    const f = await fixture('json', 'tool_call', 'await ctx.setAuthorMode(true); print("author mode enabled");')
+    try {
+      const current = (await f.runtime.getAgentPreset({ agentPresetId: f.preset.id })).agentPreset
+      const saved = await f.runtime.updateAgentPreset({ agentPresetId: current.id, expectedVersion: current.version,
+        approvalPolicy: { authorMode: mode } })
+      expect((await f.runtime.getAgentPreset({ agentPresetId: current.id })).agentPreset.approvalPolicy).toEqual({ authorMode: mode })
+      let approvals = 0
+      const context = authorContext()
+      context.agentRun.onMutationApproval = async () => { approvals++; return { decision: 'allow' } }
+      await f.runtime.invokeAgentTurn({ agentSessionId: f.session.id, input: 'Read author resources.' }, context)
+      const { entries } = await f.agents.getEntryPage({ agentSessionId: f.session.id, limit: 100 })
+      const result = entries.find(entry => entry.entry.kind === 'tool-result')!.entry
+      expect(result).toMatchObject({ status: mode === 'deny' ? 'failed' : 'completed' })
+      expect(approvals).toBe(mode === 'ask' ? 1 : 0)
+      await expect(f.runtime.updateAgentPreset({ agentPresetId: current.id, expectedVersion: saved.agentPreset.version,
+        approvalPolicy: { authorMode: 'invalid' } as never })).rejects.toThrow('Invalid Agent approval policy')
+    } finally { f.engine.close() }
+  })
+
   it('returns a corrective error for JSON-wrapped Freeform code and continues the Run', async () => {
     const f = await fixture('content', 'stop', JSON.stringify({ code: 'throw new Error("MUST_NOT_EXECUTE")' }))
     try {
@@ -408,7 +428,7 @@ print(prompt.nodes[0].body.raw);
       expect(f.calls).toHaveLength(2)
       expect(f.calls[0]!.messages).toEqual(preview.messages)
       const text = f.calls[0]!.messages.map(message => message.content).join('\n')
-      expect(text.match(/### ctx\.read/g)).toHaveLength(1)
+      expect(text.match(/### ctx\.read\n/g)).toHaveLength(1)
       expect(text.indexOf('## CodeAct')).toBeLessThan(text.indexOf('KEY_SENTINEL'))
       expect(text.match(/### ctx\.write/g)).toHaveLength(1)
       expect(JSON.stringify(f.calls[0]!.tools ?? [])).not.toContain('### ctx.read')

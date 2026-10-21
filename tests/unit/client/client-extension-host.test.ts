@@ -536,6 +536,7 @@ describe('Client Extension Host', () => {
       records: { list: async () => [], get: async () => null },
       state: { get: async () => { throw new Error('not used') } },
       history: { project: async () => ({}), extract: async () => ({}) },
+      imports: { commit: async () => ({ imported: 0, skipped: [] }) },
       rpc: { call: async () => ({}) },
       assets: { url: assetId => `/assets/${assetId}` },
     }
@@ -755,11 +756,13 @@ describe('Client Extension Host', () => {
     const rendererHost = createClientRendererHost()
     const list = vi.fn(async () => [])
     const call = vi.fn(async () => ({ ok: true }))
+    const commitImport = vi.fn(async () => ({ imported: 1, skipped: [] }))
     const data: ClientExtensionDataApi = {
       configs: { list: async () => [], get: async () => null, upsert: async () => { throw new Error('not used') } },
       records: { list, get: async () => null },
       state: { get: async target => ({ scopeId: 'global', target, revisionId: 'rev-1', value: {}, createdAt: '2026-08-29T00:00:00.000Z' }) },
       history: { project: async () => ({}), extract: async () => ({}) },
+      imports: { commit: commitImport },
       rpc: { call },
       assets: { url: assetId => `/assets/${assetId}` },
     }
@@ -769,6 +772,7 @@ describe('Client Extension Host', () => {
       loadModule: async () => ({
         activate: async context => {
           await context.records.list({ recordType: 'image' })
+          await context.imports.commit('staged-import')
           expect(context.assets.url('asset 1')).toBe('/assets/asset 1')
           await context.rpc.call('example.client.refresh', {})
           await expect(context.rpc.call('application.getCard', {})).rejects.toThrow('must use package namespace')
@@ -783,6 +787,7 @@ describe('Client Extension Host', () => {
     await host.reconcile([extensionPackage()])
     expect(list).toHaveBeenCalledWith('example.client', { recordType: 'image' }, { kind: 'global' })
     expect(call).toHaveBeenCalledWith('example.client.refresh', {}, { packageId: 'example.client', target: { kind: 'global' } })
+    expect(commitImport).toHaveBeenCalledWith('staged-import', { packageId: 'example.client', target: { kind: 'global' } })
     expect(host.summaries()).toEqual([expect.objectContaining({ state: 'active' })])
   })
 
@@ -805,6 +810,7 @@ describe('Client Extension Host', () => {
       records: { list: async () => [], get: async () => null },
       state: { get: async target => ({ scopeId: 'global', target, revisionId: 'rev-1', value: {}, createdAt: '2026-08-29T00:00:00.000Z' }) },
       history: { project: async () => ({}), extract: async () => ({}) },
+      imports: { commit: async () => ({ imported: 0, skipped: [] }) },
       rpc: { call: async () => ({}) },
       assets: { url: assetId => `/assets/${assetId}` },
     }

@@ -83,7 +83,7 @@ function fixture(kind: 'timeline' | 'session') {
   const a = source('A')
   const b = source('B')
   const props: ComponentProps<typeof SessionsPanel> = {
-    api: a.api, timelines: kind === 'timeline' ? [timeline] : [], allAgentSessions: [session],
+    api: a.api, activeTimeline: timeline, timelines: kind === 'timeline' ? [timeline] : [], allAgentSessions: [session],
     branches: [], agentPresets: [], t: createTranslator('en-US'), onOpenTimeline: vi.fn(),
   }
   function render() {
@@ -92,6 +92,8 @@ function fixture(kind: 'timeline' | 'session') {
     for (const effect of hooks.effects.splice(0)) effect()
     return tree
   }
+  const allButton = render().find(element => text(element.props.children) === '显示全部' && typeof element.props.onClick === 'function')!
+  ;(allButton.props.onClick as () => void)()
   if (kind === 'session') {
     const select = render().find(element => element.type === 'button'
       && elements(element.props.children).some(child => child.type === 'strong'
@@ -118,6 +120,74 @@ function confirmDeletion(f: ReturnType<typeof fixture>) {
 }
 
 describe('Session panel preview source isolation', () => {
+  it.each(['timelines', 'sessions'] as const)('marks current use and the primary writer in the %s tab', view => {
+    const t = createTranslator('en-US')
+    const viewed = { ...session, id: 'viewed', title: 'VIEWED_SESSION', timelineId: timeline.id }
+    const writer = { ...session, id: 'writer', title: 'WRITER_SESSION', timelineId: timeline.id }
+    const props: ComponentProps<typeof SessionsPanel> = {
+      view, activeTimeline: { ...timeline, title: 'CURRENT_STORY', createdFrom: { cardId: 'current-card', cardVersion: 1 } }, agentChatSession: viewed, narrativeAgentSession: writer,
+      timelines: [{ ...timeline, title: 'CURRENT_STORY', createdFrom: { cardId: 'current-card', cardVersion: 1 } }], allAgentSessions: [viewed, writer],
+      agentPresets: [], branches: [], t, onOpenTimeline: vi.fn(),
+    }
+    function render() {
+      hooks.cursor = 0
+      const tree = elements(SessionsPanel(props))
+      for (const effect of hooks.effects.splice(0)) effect()
+      return tree
+    }
+    render()
+    if (view === 'timelines') {
+      const expand = render().find(element => element.props['aria-label'] === t('sessions.expandRelated'))!
+      if (!expand.props['aria-expanded']) {
+        ;(expand.props.onClick as (event: unknown) => void)({ stopPropagation: vi.fn() })
+      }
+    }
+    const rows = render().filter(element => element.type === 'div' && 'data-active' in element.props)
+    const viewedRow = rows.find(element => text(element.props.children).includes('VIEWED_SESSION'))!
+    const writerRow = rows.find(element => text(element.props.children).includes('WRITER_SESSION'))!
+    expect(viewedRow.props['aria-current']).toBe('true')
+    expect(writerRow.props['aria-current']).toBeUndefined()
+    expect(elements(viewedRow.props.children).some(element => element.props['aria-label'] === t('agent.primarySession'))).toBe(false)
+    expect(elements(writerRow.props.children).find(element => element.props.fill === 'currentColor')?.props['aria-label']).toBe(t('agent.primarySession'))
+    if (view === 'timelines') {
+      expect(rows.find(element => text(element.props.children).includes('CURRENT_STORY'))?.props['aria-current']).toBe('true')
+    }
+  })
+
+  it.each(['timelines', 'sessions'] as const)('shows only the current character in %s until all history is explicitly requested', view => {
+    const props: ComponentProps<typeof SessionsPanel> = {
+      view, selectedCardId: 'current-card', branches: [], agentPresets: [],
+      allAgentSessions: [
+        { ...session, id: 'current-session', title: 'CURRENT_SESSION', timelineId: 'current-timeline' },
+        { ...session, id: 'other-session', title: 'OTHER_SESSION', timelineId: 'other-timeline' },
+        { ...session, id: 'standalone-session', title: 'STANDALONE_SESSION', timelineId: undefined },
+      ],
+      t: createTranslator('en-US'), onOpenTimeline: vi.fn(),
+      timelines: [
+        { ...timeline, id: 'current-timeline', title: 'CURRENT_STORY', createdFrom: { cardId: 'current-card', cardVersion: 1 } },
+        { ...timeline, id: 'other-timeline', title: 'OTHER_STORY', createdFrom: { cardId: 'other-card', cardVersion: 1 } },
+      ],
+    }
+    const render = () => {
+      hooks.cursor = 0
+      const result = elements(SessionsPanel(props))
+      for (const effect of hooks.effects.splice(0)) effect()
+      return result
+    }
+    const current = render()
+    const currentTitle = view === 'timelines' ? 'CURRENT_STORY' : 'CURRENT_SESSION'
+    const otherTitle = view === 'timelines' ? 'OTHER_STORY' : 'OTHER_SESSION'
+    const currentText = current.map(element => text(element.props.children)).join(' ')
+    expect(currentText).toContain(currentTitle)
+    expect(currentText).not.toContain(otherTitle)
+    expect(currentText).not.toContain('STANDALONE_SESSION')
+    const toggle = current.find(element => text(element.props.children) === '显示全部' && typeof element.props.onClick === 'function')!
+    ;(toggle.props.onClick as () => void)()
+    const allText = render().map(element => text(element.props.children)).join(' ')
+    expect(allText).toContain(otherTitle)
+    if (view === 'sessions') expect(allText).toContain('STANDALONE_SESSION')
+  })
+
   it.each(['archive', 'chat'] as const)('retains a committed %s and retries only its post-import completion', async kind => {
     const f = fixture('timeline')
     const finish = vi.fn().mockRejectedValueOnce(new Error('Catalog offline')).mockResolvedValue(undefined)

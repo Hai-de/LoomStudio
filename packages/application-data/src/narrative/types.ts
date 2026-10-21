@@ -39,6 +39,7 @@ export type NarrativeBranch = {
   title?: string
   headNodeId?: string
   stateHeadRevisionId: string
+  workspaceHeadRevisionId: string
   parentBranchId?: string
   forkedFromNodeId?: string
   createdAt: string
@@ -46,10 +47,14 @@ export type NarrativeBranch = {
 }
 
 export type NarrativeNode = {
+  kind: 'user-input' | 'narrative'
+  /** Persistent position on a path; not a globally unique node identity. */
+  floor: number
   id: string
   timelineId: string
   parentNodeId?: string
   stateRevisionId: string
+  workspaceRevisionId: string
   body: NarrativeBody
   source?: NarrativeNodeSource
   createdAt: string
@@ -100,6 +105,7 @@ export type CreateNarrativeTimelineResult = {
 }
 
 export type AppendNarrativeNodeInput = NarrativeWriteContext & {
+  kind?: NarrativeNode['kind']
   timelineId: string
   branchId: string
   expectedHeadNodeId: string | null
@@ -137,7 +143,6 @@ export type ForkNarrativeBranchInput = NarrativeWriteContext & {
   fromNodeId: string
   branchId?: string
   title?: string
-  stateRevisionId: string
 }
 
 export type SetNarrativeBranchStateHeadInput = NarrativeWriteContext & {
@@ -195,12 +200,15 @@ export type EditNarrativeNodeResult = {
 }
 
 export type NarrativeTransaction = {
+  getRecoveryPoint(branchId: string, nodeId: string): NarrativeRecoveryPoint
+
   getBranch(id: string): NarrativeBranch | null
   getNode(id: string): NarrativeNode | null
-  restoreBranch(input: { timelineId: string; branchId: string; expectedHeadNodeId: string | null; expectedStateHeadRevisionId: string; headNodeId: string | null; stateRevisionId: string }): NarrativeBranch
+  restoreBranch(input: { timelineId: string; branchId: string; expectedHeadNodeId: string | null; expectedStateHeadRevisionId: string; headNodeId: string | null; stateRevisionId: string; workspaceRevisionId?: string; expectedWorkspaceHeadRevisionId?: string }): NarrativeBranch
+  setBranchWorkspaceHead(input: { timelineId: string; branchId: string; expectedRevisionId: string; revisionId: string }): NarrativeBranch
   replaceOpening(input: Omit<ReplaceNarrativeOpeningInput, keyof NarrativeWriteContext>): CreateNarrativeTimelineResultWithoutCommit
   getTimeline(id: string): NarrativeTimeline | null
-  restoreArchivePaths(input: { timelineId: string; nodes: NarrativeNode[]; branches: NarrativeBranch[] }): void
+  restoreArchivePaths(input: { timelineId: string; nodes: NarrativeNode[]; branches: NarrativeBranch[]; recoveryPoints?: NarrativeRecoveryPoint[] }): void
   editBranchNode(input: Omit<EditBranchNodeInput, keyof NarrativeWriteContext>): EditBranchNodeValue
   createTimeline(input: Omit<CreateNarrativeTimelineInput, keyof NarrativeWriteContext>): CreateNarrativeTimelineResultWithoutCommit
   appendNode(input: Omit<AppendNarrativeNodeInput, keyof NarrativeWriteContext>): AppendNarrativeNodeResultWithoutCommit
@@ -221,6 +229,7 @@ export type NarrativeSwipeCandidate = {
   editBaseRunCount?: number
   headNodeId?: string
   stateRevisionId: string
+  workspaceRevisionId?: string
   status: 'running' | 'suspended' | 'completed' | 'failed' | 'discarded'
   mode: 'initial' | 'swipe' | 'regenerate' | 'retry' | 'edit'
   replacesCandidateId?: string
@@ -236,6 +245,7 @@ export type NarrativeSwipeGroup = {
   inputNodeId: string
   input: string
   baselineStateRevisionId: string
+  baselineWorkspaceRevisionId?: string
   agentSessionId: string
   baseEntryCount: number
   candidates: NarrativeSwipeCandidate[]
@@ -243,6 +253,7 @@ export type NarrativeSwipeGroup = {
     nodeId: string
     input: string
     baselineStateRevisionId: string
+    baselineWorkspaceRevisionId?: string
     selectedCandidateId?: string
   }>
   selectedCandidateId?: string
@@ -259,7 +270,12 @@ export type NarrativeSwipeGroup = {
 export type CreateNarrativeTimelineResultWithoutCommit = Omit<CreateNarrativeTimelineResult, 'commit'>
 export type AppendNarrativeNodeResultWithoutCommit = Omit<AppendNarrativeNodeResult, 'commit'>
 
+export type NarrativeRecoveryPoint = { branchId: string; nodeId: string; stateRevisionId: string; workspaceRevisionId: string }
+
 export type NarrativeStore = {
+  getRecoveryPoint(branchId: string, nodeId: string): Promise<NarrativeRecoveryPoint>
+
+  listRecoveryPoints(timelineId: string): Promise<NarrativeRecoveryPoint[]>
   editBranchNode(input: EditBranchNodeInput): Promise<EditBranchNodeValue & { commit: DataCommitFact }>
   getTimeline(id: string, options?: { includeDeleted?: boolean }): Promise<NarrativeTimeline | null>
   listTimelines(input?: { createdFromCardId?: string; cursor?: string; limit?: number }): Promise<NarrativeTimelinePage>

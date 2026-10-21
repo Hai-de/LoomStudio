@@ -4,6 +4,8 @@ import { createPromptResourceStore } from '@loom-studio/application-data'
 import { createResourceVfs, type ResourceVfsOptions } from '../../../packages/application-runtime/src/vfs/resource-filesystem.js'
 import { createCodeActContext } from '../../../packages/application-runtime/src/agents/codeact/context.js'
 import type { ToolExecutionScope } from '../../../packages/application-runtime/src/agents/tool-registry.js'
+import { runCodeActSandbox } from '../../../packages/application-runtime/src/agents/codeact/sandbox.js'
+import type { VfsListing } from '../../../packages/application-runtime/src/vfs/read.js'
 import type { JsonObject, JsonValue } from '@loom-studio/shared'
 
 const signal = new AbortController().signal
@@ -255,7 +257,7 @@ describe('domain-backed resource VFS', () => {
       })
       expect(await f.fs.search([{ terms: ['second-card'] }], signal)).toContain('No matches')
       const fs = createResourceVfs({ projections: [], resources: { store: f.store, ids: [f.resource.id, second.id], access: f.access } })
-      const roots = (await fs.ls(['/resources'], signal)).split('\n').slice(1).map(line => `/resources/${line.trim().replace(/\/$/, '')}`)
+      const roots = ((await fs.ls(['/resources', { format: 'json' }], signal)) as VfsListing).entries.map(entry => entry.path)
       expect(roots).toHaveLength(2)
       expect(new Set(roots).size).toBe(2)
       expect((await fs.read([`${roots[1]}/人设.md`], signal)).text).toBe('second-card')
@@ -636,6 +638,74 @@ describe('domain-backed resource VFS', () => {
     expect((await fs.read([path], signal)).observation.binding).toMatchObject({ revisionId: 'r2' })
     allowed = false
     await expect(fs.read([path], signal)).rejects.toMatchObject({ code: 'vfs.not_found' })
+  })
+
+  it('edits typed State in the real CodeAct sandbox and returns an object receipt', async () => {
+    let value: JsonObject = { '环境 空格[1]': { 舒适度: 20, available: true, items: ['a'] }, sibling: 9 }
+    let revisionId = 'r1'
+    const scope: ToolExecutionScope = { context: [], vfs: [], state: {
+      defaultTarget: { scope: 'timeline', timelineId: 't', branchId: 'b' }, canAccess: () => true,
+      read: async () => ({ revisionId, value }), update: async () => { throw new Error('Not used') },
+      write: async input => {
+        expect(input.expectedRevisionId).toBe(revisionId)
+        expect(input.pointer).toBe('/环境 空格[1]')
+        value = { ...value, '环境 空格[1]': input.value }
+        revisionId = 'r2'
+        return { revisionId, changesetId: 'change' }
+      },
+    } }
+    const host = createCodeActContext(scope)
+    const result = await runCodeActSandbox({ methods: host.methods, signal, source: `
+      const listing = await ctx.ls("/state/data", { format: "json" });
+      const directory = listing.entries.find(entry => entry.path.endsWith("环境 空格[1]"));
+      const files = await ctx.ls(directory.path, { format: "json" });
+      const path = files.entries.find(entry => entry.path.endsWith("/@value.yaml")).path;
+      const data = await ctx.readValue(path);
+      data.舒适度 += 1;
+      const saved = await ctx.write(path, data);
+      print({ path: saved.path, modified: saved.modified, revision: saved.revisionId, type: typeof saved });
+    ` })
+    expect(result.status).toBe('completed')
+    expect(JSON.parse(result.output)).toEqual({ path: '/state/data/环境 空格[1]/@value.yaml', modified: true, revision: 'r2', type: 'object' })
+    expect(value).toEqual({ '环境 空格[1]': { 舒适度: 21, available: true, items: ['a'] }, sibling: 9 })
+  })
+
+  it('blocks accidental container replacement and preserves approval for explicit type changes', async () => {
+    let current: JsonValue = { comfort: 20 }
+    let revisionId = 'r1'
+    let approvals = 0
+    let allow = false
+    const fs = createResourceVfs({ projections: [], state: {
+      target: { scope: 'timeline', timelineId: 't', branchId: 'b' }, canAccess: () => true,
+      read: async () => ({ revisionId, value: { environment: current, scalar: 20 } }),
+      write: async input => { current = input.value; revisionId = 'r2'; return { revisionId } },
+    }, approveMutation: async () => { approvals++; return { decision: allow ? 'allow' : 'deny' } } })
+    const path = '/state/data/environment/@value.yaml'
+    const typed = await fs.readValue([path], signal)
+    ;(typed.value as JsonObject).comfort = 99
+    expect(current).toEqual({ comfort: 20 })
+    await expect(fs.write([path, 'comfort: 20'], signal)).rejects.toMatchObject({ code: 'vfs.type_change' })
+    expect(approvals).toBe(0)
+    await expect(fs.write([path, 'intentional', { allowTypeChange: true }], signal)).rejects.toMatchObject({ code: 'vfs.denied' })
+    expect(current).toEqual({ comfort: 20 })
+    allow = true
+    await fs.write([path, 'intentional', { allowTypeChange: true }], signal)
+    expect(current).toBe('intentional')
+    await expect(fs.write([path, 'again'], signal)).rejects.toMatchObject({ code: 'vfs.baseline_changed' })
+    expect((await fs.readValue(['/state/data/scalar/@value.yaml'], signal)).value).toBe(20)
+    await expect(fs.patch([path, 'not a diff'], signal)).rejects.toMatchObject({ code: 'vfs.write_unsupported' })
+  })
+
+  it('rejects oversized or non-State structured reads without accepting a partial baseline', async () => {
+    const fs = createResourceVfs({ projections: [{ path: '/text.md', kind: 'file', content: 'Text' }], state: {
+      target: { scope: 'timeline', timelineId: 't', branchId: 'b' }, canAccess: () => true,
+      read: async () => ({ revisionId: 'r1', value: { large: ['x'.repeat(17000)] } }),
+    } })
+    const path = '/state/data/large/@value.yaml'
+    await expect(fs.readValue([path], signal)).rejects.toMatchObject({ code: 'vfs.value_too_large' })
+    expect(fs.observation(path)).toBeUndefined()
+    await expect(fs.readValue(['/text.md'], signal)).rejects.toMatchObject({ code: 'vfs.value_unsupported' })
+    await expect(fs.readValue(['/state/data/large'], signal)).rejects.toMatchObject({ code: 'vfs.value_unsupported' })
   })
 
   it('writes a State property with revision compare-and-set, but not the complete snapshot', async () => {

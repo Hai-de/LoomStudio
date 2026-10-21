@@ -1,4 +1,5 @@
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
+import { DialogPortalContext } from './dialog-portal-context.js'
 import { Check } from 'lucide-react'
 import * as React from 'react'
 
@@ -9,6 +10,7 @@ export const DropdownMenuContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
 >(({ className, sideOffset = 4, children, ...props }, forwardedRef) => {
+  const portalContainer = React.useContext(DialogPortalContext)
   const contentRef = React.useRef<HTMLDivElement | null>(null)
   const [highlight, setHighlight] = React.useState<{ top: number; height: number; visible: boolean; moved: boolean }>({
     top: 0,
@@ -50,9 +52,10 @@ export const DropdownMenuContent = React.forwardRef<
   }
 
   return (
-    <DropdownMenuPrimitive.Portal>
+    <DropdownMenuPrimitive.Portal container={portalContainer}>
       <DropdownMenuPrimitive.Content
         {...props}
+        collisionBoundary={props.collisionBoundary ?? portalContainer}
         ref={setMergedRef}
         className={menuClass('loom-ui-menu', className)}
         data-menu-kind="dropdown"

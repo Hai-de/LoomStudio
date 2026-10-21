@@ -69,6 +69,8 @@ type NarrativeTimelineProps = {
 }
 
 export function NarrativeTimeline(props: NarrativeTimelineProps) {
+  const resolvedUserName = renderTemplateMacros('{{user}}', props.macroContext).trim()
+  const userName = resolvedUserName && resolvedUserName !== '{{user}}' ? resolvedUserName : props.t('timeline.role.user')
   const tokenScope = props.timelineId ?? props.timeline[0]?.timelineId ?? ''
   const tokenMultiplier = useTokenDisplaySettings(state => state.multiplier)
   const nodeTokens = useTokenCounts(props.timeline.map(node => node.body.raw),
@@ -100,7 +102,7 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
   })
   const navigatorItems = useMemo<NarrativeTimelineNavigatorItem[]>(() => props.timeline.map((node, index) => ({
     id: node.id,
-    meta: `#${index + 1} · ${formatConversationTimestamp(node.createdAt)}`,
+    meta: `#${node.floor} · ${formatConversationTimestamp(node.createdAt)}`,
     preview: node.body.raw,
     role: props.t(readNarrativeNodeRole(props.timeline, index) === 'user' ? 'timeline.role.user' : 'timeline.role.assistant'),
   })), [props.t, props.timeline])
@@ -252,6 +254,7 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
         ref={timelineRef}
         onScroll={scheduleActiveEntryUpdate}
       >
+        <div className={styles.readingSurface}>
         <div ref={headerRef} className={styles.timelineHeader}>
           <DisplayProjectionStatus projection={props.displayProjection} retryLabel={props.t('textTransform.refresh')} />
           {anchorStatus === 'unavailable' ? <p role="status">{props.t('timeline.anchorUnavailable')}</p> : null}
@@ -268,6 +271,7 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
                 data-loom-role="narrative"
                 data-loom-state="draft"
               >
+                <NarrativeMessageHeader role="assistant" userName={userName} t={props.t} />
                 <div
                   className={styles.messageSurface}
                   data-loom-slot="message-content"
@@ -338,6 +342,7 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
                 id={`node-${encodeURIComponent(entry.id)}`}
                 key={entry.id}
               >
+                <NarrativeMessageHeader role={role} userName={userName} t={props.t} />
                 <div
                   className={styles.messageSurface}
                   data-loom-slot="message-content"
@@ -453,6 +458,7 @@ export function NarrativeTimeline(props: NarrativeTimelineProps) {
           <ConversationMessageChrome trailing={props.swipeControls.content} />
         </div> : null}
         {props.tail ? <div className={styles.tail} data-loom-surface="narrative.timeline.tail">{props.tail}</div> : null}
+        </div>
       </div>
       <NarrativeTimelineNavigator
         activeId={activeEntryId}
@@ -502,18 +508,14 @@ function NarrativeMessageBody(props: {
   ) : content
 }
 
-export function readNarrativeNodeRole(nodes: NarrativeNode[], index: number): 'user' | 'assistant' {
-  const node = nodes[index]
-  if (node?.id?.startsWith('optimistic-')) return 'user'
-  const next = nodes[index + 1]
-  if (!node?.source?.runId || !node.source.agentMessageId || !next?.source?.agentMessageId) return 'assistant'
+function NarrativeMessageHeader(props: { role: 'user' | 'assistant'; userName: string; t: Translator }) {
+  return <header className={styles.messageHeader}>
+    <span>{props.role === 'user' ? props.userName : props.t('timeline.role.assistant')}</span>
+  </header>
+}
 
-  // ponytail: Narrative Store 暂无持久化 role 字段；同一 Run 的连续父子节点当前固定为 user → assistant，新增其他多节点提交形态时应改为显式 role。
-  return next.parentNodeId === node.id
-    && next.source?.runId === node.source.runId
-    && next.source.agentSessionId === node.source.agentSessionId
-    ? 'user'
-    : 'assistant'
+export function readNarrativeNodeRole(nodes: NarrativeNode[], index: number): 'user' | 'assistant' {
+  return nodes[index].kind === 'user-input' ? 'user' : 'assistant'
 }
 
 export function resolveNarrativeDisplayText(

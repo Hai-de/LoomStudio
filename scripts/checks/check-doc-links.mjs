@@ -1,6 +1,5 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 
 import {
   findMarkdownLinks,
@@ -8,7 +7,7 @@ import {
   parseMarkdownTarget,
 } from '../lib/documentation-markdown.mjs'
 
-const scriptsRoot = path.dirname(fileURLToPath(import.meta.url))
+const scriptsRoot = import.meta.dirname
 const repositoryRoot = path.resolve(scriptsRoot, '../..')
 const docsRoot = path.join(repositoryRoot, 'docs')
 const workspaceRoots = ['apps', 'packages', 'extensions']

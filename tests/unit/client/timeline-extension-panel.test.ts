@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { isValidElement, type ReactElement } from 'react'
-import { Button, Dialog } from '@loom-studio/ui'
+import { Button, Checkbox, Dialog } from '@loom-studio/ui'
 import { extensionInstallationId } from '@loom-studio/extension-sdk'
 import { TimelineExtensionPanel, type TimelineExtensionPanelProps } from '../../../apps/studio-client/src/features/extension-renderers/ui/timeline-extension-panel.js'
-import { PanelTabs } from '../../../apps/studio-client/src/shared/ui/panel-tabs/index.js'
 import { createTranslator } from '../../../apps/studio-client/src/shared/i18n/index.js'
 
 const hooks = vi.hoisted(() => ({ cursor: 0, values: [] as unknown[], effects: [] as (() => void)[] }))
@@ -61,13 +60,14 @@ function fixture(adopted = false) {
     recover: vi.fn(async () => ({ participation: config, revisionId: 'state-2', mutation: { changesetId: 'change' } })),
   }
   const props: TimelineExtensionPanelProps = {
-    api, t, card: { id: 'card', version: 8, name: 'Card' },
+    packages: [],
+    api, t,
     timeline: { id: 'story', branchId: 'branch', cardId: 'card' },
     installations: [{
       id: installationId, version: 1, packageId, packageVersion: '1.0.0', participation: 'timeline',
       target: { kind: 'global' }, source, createdAt: '', updatedAt: '',
     }],
-    onSaveDefaults: vi.fn(async () => undefined), onChanged: vi.fn(),
+    onChanged: vi.fn(),
   }
   function render() {
     hooks.cursor = 0
@@ -152,29 +152,21 @@ describe('Timeline extension participation panel', () => {
     await f.settle()
     expect(f.button('participation.confirm').props.disabled).toBe(true)
     expect(f.api.recover).not.toHaveBeenCalled()
-    check(f.render().find(element => element.type === 'input')!, true)
+    check(f.render().find(element => element.type === Checkbox)!, true)
     expect(f.button('participation.confirm').props.disabled).toBe(false)
     click(f.button('participation.confirm'))
     await f.settle()
     expect(f.api.recover).toHaveBeenCalledWith(expect.objectContaining({ timelineId: 'story', acceptSourceChange: true, expectedVersion: 4 }))
   })
 
-  it('pauses only the current Timeline and edits card defaults separately', async () => {
+  it('pauses only the current story without changing other stories', async () => {
     const f = fixture(true)
     f.render()
     await f.settle()
-    check(f.render().find(element => element.type === 'input')!, false)
+    check(f.render().find(element => element.type === Checkbox)!, false)
     await f.settle()
     expect(f.api.update).toHaveBeenCalledExactlyOnceWith({ timelineId: 'story', installationId, expectedVersion: 4, enabled: false })
-    expect(f.props.onSaveDefaults).not.toHaveBeenCalled()
-    const tabs = f.render().find(element => element.type === PanelTabs)!
-    ;(tabs.props.onChange as (value: string) => void)('card')
-    check(f.render().find(element => element.type === 'input')!, true)
-    await f.settle()
-    expect(f.props.onSaveDefaults).toHaveBeenCalledExactlyOnceWith({
-      cardId: 'card', expectedVersion: 8, extensionAdoptions: [{ packageId, target: 'global' }],
-    })
-    expect(f.api.update).toHaveBeenCalledTimes(1)
+    expect(f.api.adopt).not.toHaveBeenCalled()
   })
 
   it('retains an uninstalled adoption as unavailable instead of deleting its row', async () => {
@@ -183,7 +175,7 @@ describe('Timeline extension participation panel', () => {
     f.render()
     await f.settle()
     expect(f.render().find(element => element.type === 'strong')?.props.children).toBe(packageId)
-    expect(f.render().find(element => element.type === 'input')?.props).toMatchObject({ checked: true, disabled: true })
+    expect(f.render().find(element => element.type === Checkbox)?.props).toMatchObject({ checked: true, disabled: true })
     expect(f.api.update).not.toHaveBeenCalled()
   })
 })

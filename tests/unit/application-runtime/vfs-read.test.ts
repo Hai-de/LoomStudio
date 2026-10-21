@@ -20,9 +20,28 @@ describe('CodeAct read-only VFS', () => {
     const result = searchVfs([
       files[0]!, files[1]!, { ...files[2]!, binding },
     ], [{ path: '/alice', terms: ['key'] }])
-    expect(result).toBe('Scope: /alice\n/alice/setting.md:1-3\n1: Alice\n2: The key belongs to C.\n3: Keep the gate closed.')
+    expect(result).toBe('Scope: /alice\nMatched terms: ["key"]\n/alice/setting.md:1-3\n1: Alice\n2: The key belongs to C.\n3: Keep the gate closed.')
     expect(result).not.toContain('Reference:')
     expect(result).not.toContain('loom-resource:')
+  })
+
+  it('provides reusable full paths and explicit pagination without changing normal text listings', () => {
+    expect(listVfs(files, ['/alice', { format: 'json' }])).toEqual({
+      path: '/alice', entries: [{ path: '/alice/setting.md', kind: 'file', state: 'injected' }], total: 1, offset: 0, hasMore: false,
+    })
+    expect(listVfs(files, ['/alice', { format: 'json', offset: 20 }])).toMatchObject({ entries: [], total: 1, offset: 20, hasMore: false })
+    expect(listVfs(files, ['/alice', { offset: 20 }])).toContain('No more entries')
+    expect(listVfs([{ path: '/', kind: 'directory' }], ['/'])).toContain('Empty directory')
+    expect(() => listVfs(files, ['/', { format: 'xml' }])).toThrow('format must be text or json')
+  })
+
+  it('shows separated keyword locations and identifies what matched', () => {
+    const entries = [...files.slice(0, 2), { ...files[2]!, content: ['key', ...Array(8).fill('gap'), 'dragon'].join('\n') }]
+    const result = searchVfs(entries, [{ path: '/alice', terms: ['key', 'dragon'], match: 'all' }])
+    expect(result).toContain('Matched terms: ["key","dragon"]')
+    expect(result).toContain('1: key')
+    expect(result).toContain('10: dragon')
+    expect(result).toContain('\n...\n')
   })
 
   it('preserves a URI that is part of the source text instead of stripping source content', () => {
@@ -110,7 +129,7 @@ describe('CodeAct read-only VFS', () => {
     await expect(ctx.methods.read!(['/state/current.yaml'], signal)).rejects.toThrow(/Path unavailable/)
     expect(reads).toBe(1)
     expect(Object.keys(ctx.methods)).toEqual([
-      'setAuthorMode', 'ls', 'search', 'read', 'write', 'patch', 'move', 'delete', 'create', 'copy', 'readNarrative', 'appendNarrative',
+      'setAuthorMode', 'ls', 'search', 'read', 'readValue', 'write', 'patch', 'move', 'delete', 'create', 'copy', 'readNarrative', 'appendNarrative',
     ])
     allowed = true
     await expect(ctx.methods.write!(['/state/current.yaml', '{}'], signal))

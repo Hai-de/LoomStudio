@@ -19,6 +19,7 @@ const rendererSurfaces = [
   'shell.background',
   'narrative.entry.inline',
   'narrative.timeline.tail',
+  'memory.panel',
   'agent.message.inline',
   'agent.session.tail',
   'composer.sheet',
@@ -37,6 +38,7 @@ const rendererSurfaceScopes: Record<(typeof rendererSurfaces)[number], readonly 
   'shell.background': ['workspace'],
   'narrative.entry.inline': ['node'],
   'narrative.timeline.tail': ['timeline'],
+  'memory.panel': ['timeline'],
   'agent.message.inline': ['message'],
   'agent.session.tail': ['agent-session'],
   'composer.sheet': ['workspace', 'timeline', 'agent-session'],
@@ -287,7 +289,7 @@ function validateManifest(manifest: Partial<ExtensionManifest>): void {
     if (eventCapabilities !== undefined && (!Array.isArray(eventCapabilities) || !eventCapabilities.every(value => typeof value === 'string'))) {
       throw new Error(`Module capabilities.events.subscribe must be a string array: ${moduleManifest.id}`)
     }
-    for (const capability of ['assets.publish', 'assets.read', 'ai.invoke', 'macros.provide', 'prompt.process', 'narrative.context.provide', 'state.contribute', 'state.read', 'state.write', 'state.processContent', 'ui.notify'] as const) {
+    for (const capability of ['assets.publish', 'assets.read', 'ai.invoke', 'macros.provide', 'prompt.process', 'narrative.context.provide', 'narrative.read', 'agent.tasks', 'vfs.provide', 'state.contribute', 'state.read', 'state.write', 'state.processContent', 'ui.notify'] as const) {
       const requested = moduleManifest.capabilities?.[capability]
       if (requested !== undefined && typeof requested !== 'boolean') {
         throw new Error(`Module capabilities.${capability} must be a boolean: ${moduleManifest.id}`)

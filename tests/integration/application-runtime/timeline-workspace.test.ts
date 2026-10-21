@@ -1,0 +1,139 @@
+import { randomUUID } from 'node:crypto'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { describe, expect, it } from 'vitest'
+import { createSqliteDataEngine } from '@loom-studio/data-engine'
+import { createSqliteDocumentStore } from '@loom-studio/document-store'
+import { createBlobStore } from '@loom-studio/blob-store'
+import { createNarrativeStore, createPromptResourceStore } from '@loom-studio/application-data'
+import { createApplicationRuntime } from '@loom-studio/application-runtime'
+import { createNarrativeSampler } from '../../../packages/application-runtime/src/narrative/sampling.js'
+import { createResourceVfs } from '../../../packages/application-runtime/src/vfs/resource-filesystem.js'
+import type { VfsEntry } from '../../../packages/application-runtime/src/vfs/types.js'
+
+async function setup() {
+  const directory = await mkdtemp(join(tmpdir(), 'loom-timeline-workspace-'))
+  const engine = createSqliteDataEngine({ filename: ':memory:', createId: prefix => `${prefix}-${randomUUID()}`, now: () => new Date().toISOString() })
+  const narratives = createNarrativeStore({ engine })
+  const runtime = createApplicationRuntime({ dataEngine: engine, narratives,
+    documents: createSqliteDocumentStore({ engine }), promptResources: createPromptResourceStore({ engine }),
+    blobs: createBlobStore({ engine, rootDirectory: directory, createId: prefix => `${prefix}-${randomUUID()}`, now: () => new Date().toISOString() }),
+  })
+  const { card } = await runtime.createCard({ name: 'Workspace' })
+  const story = await runtime.createNarrativeTimeline({ cardId: card.id, openingContent: 'Opening' })
+  const target = { timelineId: story.timeline.id, branchId: story.branch.id }
+  const mutate = async (operations: Parameters<typeof runtime.mutateTimelineWorkspace>[0]['operations']) =>
+    runtime.mutateTimelineWorkspace({ ...target, expectedRevisionId: (await runtime.getTimelineWorkspace(target)).id, operations })
+  return { engine, narratives, runtime, story, target, mutate, close: async () => { engine.close(); await rm(directory, { recursive: true, force: true }) } }
+}
+
+describe('Timeline Workspace foundation', () => {
+  it('recovers the complete tree at a departed floor, isolates forks, and rejects stale writes and deleted targets', async () => {
+    const f = await setup()
+    try {
+      const initial = await f.runtime.getTimelineWorkspace(f.target)
+      expect(initial.entries[0]).toMatchObject({ name: 'MEMORY.md' })
+      await f.mutate([{ kind: 'create', entry: { id: 'drafts', kind: 'directory', name: 'drafts' } },
+        { kind: 'create', entry: { id: 'script', parentId: 'drafts', name: 'helper.js', kind: 'file', content: { text: 'return 1' } } }])
+      const stateTarget = { scope: 'timeline' as const, ...f.target }
+      const state = (await f.runtime.getStateSnapshot({ target: stateTarget })).snapshot
+      await f.runtime.applyStateMutation({ target: stateTarget, expectedRevisionId: state.revisionId, operations: [{ op: 'set', path: '/phase', value: 1 }] })
+      const atOne = await f.runtime.getTimelineWorkspace(f.target)
+      const input = await f.runtime.appendNarrativeInput({ ...f.target, nodeId: 'two', expectedHeadNodeId: f.story.nodes[0]!.id, content: 'Continue' })
+      await f.mutate([{ kind: 'delete', entryId: 'drafts' }, { kind: 'write', entryId: 'memory', content: 'Later' }])
+      const stateAfter = (await f.runtime.getStateSnapshot({ target: stateTarget })).snapshot
+      await f.runtime.applyStateMutation({ target: stateTarget, expectedRevisionId: stateAfter.revisionId, operations: [{ op: 'set', path: '/phase', value: 2 }] })
+      const fork = await f.runtime.forkNarrativeBranch({ timelineId: f.target.timelineId, fromBranchId: f.target.branchId, fromNodeId: f.story.nodes[0]!.id })
+      expect((await f.runtime.getTimelineWorkspace({ ...f.target, branchId: fork.branch.id })).entries).toEqual(atOne.entries)
+      expect((await f.runtime.getStateSnapshot({ target: { ...stateTarget, branchId: fork.branch.id } })).snapshot.value).toMatchObject({ phase: 1 })
+      expect(input.node.floor).toBe(2)
+      const scoped = createNarrativeSampler(f.narratives, { ...f.target, afterNodeId: f.story.nodes[0]!.id, throughNodeId: input.node.id })
+      await expect(scoped.sample({ ...f.target, selection: { kind: 'floors', from: 1, through: 2 } })).rejects.toMatchObject({ code: 'narrative.read_out_of_range' })
+      expect((await scoped.sample({ ...f.target, selection: { kind: 'floors', from: 2, through: 2 } })).nodes[0]!.id).toBe(input.node.id)
+      const replacement = await f.runtime.appendNarrativeInput({ timelineId: f.target.timelineId, branchId: fork.branch.id, expectedHeadNodeId: f.story.nodes[0]!.id, nodeId: 'fork-two', content: 'Other' })
+      expect(replacement.node.floor).toBe(2)
+      await expect(f.runtime.mutateTimelineWorkspace({ ...f.target, expectedRevisionId: atOne.id, operations: [{ kind: 'write', entryId: 'memory', content: 'stale' }] })).rejects.toThrow('changed')
+      const before = await f.runtime.getTimelineWorkspace(f.target)
+      await expect(f.mutate([{ kind: 'create', entry: { id: 'bad', parentId: 'bad', kind: 'directory', name: 'bad' } }])).rejects.toThrow('parent or cycle')
+      expect(await f.runtime.getTimelineWorkspace(f.target)).toEqual(before)
+      const edited = await f.runtime.editNarrativeNode({ ...f.target, nodeId: f.story.nodes[0]!.id, expectedHeadNodeId: input.node.id, expectedRaw: 'Opening', raw: 'Edited opening' })
+      expect(edited.replacements.map(item => item.node.floor)).toEqual([1, 2])
+      const editedArchive = await f.runtime.exportTimelineArchive({ timelineId: f.target.timelineId })
+      await expect(f.runtime.importTimelineArchive({ source: JSON.stringify(editedArchive.archive) })).resolves.toMatchObject({ participantFailures: [] })
+      await f.runtime.deleteNarrativeTimeline({ timelineId: f.target.timelineId })
+      await expect(f.runtime.getTimelineWorkspace(f.target)).rejects.toThrow('unavailable')
+    } finally { await f.close() }
+  })
+
+  it('carries historical binary bytes and recovery points through an archive and preserves gaps in floor reads', async () => {
+    const f = await setup()
+    try {
+      await f.mutate([{ kind: 'create', entry: { id: 'image', name: 'oc.png', kind: 'file', content: { text: '' } } },
+        { kind: 'write', entryId: 'image', content: new Uint8Array([0, 255, 128, 42]), mediaType: 'image/png' }])
+      const beforeOversize = await f.runtime.getTimelineWorkspace(f.target)
+      await expect(f.mutate([{ kind: 'write', entryId: 'image', content: new Uint8Array(32 * 1024 * 1024 + 1) }])).rejects.toThrow()
+      expect(await f.runtime.getTimelineWorkspace(f.target)).toEqual(beforeOversize)
+      await f.runtime.appendNarrativeInput({ ...f.target, expectedHeadNodeId: f.story.nodes[0]!.id, nodeId: 'next', content: 'Next' })
+      await f.mutate([{ kind: 'delete', entryId: 'image' }])
+      const { archive } = await f.runtime.exportTimelineArchive({ timelineId: f.target.timelineId })
+      const imported = await f.runtime.importTimelineArchive({ source: JSON.stringify(archive) })
+      const importedStory = await f.runtime.getNarrativeTimeline({ timelineId: imported.timelineId })
+      const original = (await f.runtime.getNarrativePage({ timelineId: imported.timelineId })).nodes[0]!
+      const fork = await f.runtime.forkNarrativeBranch({ timelineId: imported.timelineId, fromBranchId: importedStory.timeline.activeBranchId, fromNodeId: original.id })
+      const binary = await f.runtime.readWorkspaceFile({ timelineId: imported.timelineId, branchId: fork.branch.id, entryId: 'image' })
+      expect([...binary.bytes]).toEqual([0, 255, 128, 42])
+      const legacy = JSON.parse(JSON.stringify(archive))
+      delete legacy.workspace
+      delete legacy.recoveryPoints
+      for (const node of legacy.nodes) { delete node.floor; delete node.workspaceRevisionId }
+      for (const branch of legacy.branches) delete branch.workspaceHeadRevisionId
+      const legacyImport = await f.runtime.importTimelineArchive({ source: JSON.stringify(legacy) })
+      expect((await f.runtime.getNarrativePage({ timelineId: legacyImport.timelineId })).nodes.map(node => node.floor)).toEqual([1, 2])
+      // A pruned archive can carry sparse stable positions; it never renumbers surviving nodes.
+      archive.nodes[0]!.floor = 728
+      archive.nodes[1]!.floor = 730
+      const sparse = await f.runtime.importTimelineArchive({ source: JSON.stringify(archive) })
+      const sample = await createNarrativeSampler(f.narratives).sample({ timelineId: sparse.timelineId, selection: { kind: 'floors', from: 728, through: 730 } })
+      expect(sample.nodes.map(node => node.floor)).toEqual([728, 730])
+      expect(sample.missingFloors).toEqual([729])
+      await expect(createNarrativeSampler(f.narratives).sample({ timelineId: sparse.timelineId, selection: { kind: 'floors', from: 729, through: 729 } })).rejects.toThrow('unavailable')
+    } finally { await f.close() }
+  })
+
+  it('uses the regular VFS for text operations and preserves read-version checks', async () => {
+    const f = await setup()
+    try {
+      const fs = createResourceVfs({ projections: [], workspace: {
+        snapshot: async () => {
+          const revision = await f.runtime.getTimelineWorkspace(f.target)
+          const paths = new Map<string, string>()
+          const pathOf = (id: string): string => {
+            const entry = revision.entries.find(entry => entry.id === id)!
+            const path = `${entry.parentId ? paths.get(entry.parentId) ?? pathOf(entry.parentId) : '/workspace'}/${entry.name}`
+            paths.set(id, path); return path
+          }
+          return [{ path: '/workspace', kind: 'directory', binding: { kind: 'workspace', entryId: '', revisionId: revision.id } }, ...revision.entries.map(entry => ({
+            path: pathOf(entry.id), kind: entry.kind, content: entry.kind === 'file' && 'text' in entry.content ? entry.content.text : undefined,
+            binding: { kind: 'workspace', entryId: entry.id, revisionId: revision.id },
+          }))] as VfsEntry[]
+        },
+        mutate: async (expectedRevisionId, operations) => (await f.runtime.mutateTimelineWorkspace({ ...f.target, expectedRevisionId, operations })).mutation,
+      } })
+      const signal = new AbortController().signal
+      await fs.create(['/workspace', { name: 'drafts', kind: 'directory' }], signal)
+      await fs.create(['/workspace/drafts', { name: 'test.js', kind: 'file', content: 'const a = 1;\n' }], signal)
+      await fs.read(['/workspace/drafts/test.js'], signal)
+      await fs.patch(['/workspace/drafts/test.js', '--- /workspace/drafts/test.js\n+++ /workspace/drafts/test.js\n@@ -1 +1 @@\n-const a = 1;\n+const a = 2;\n'], signal)
+      await expect(fs.write(['/workspace/drafts/test.js', 'stale'], signal)).rejects.toMatchObject({ code: 'vfs.baseline_changed' })
+      await fs.move(['/workspace/drafts/test.js', '/workspace/helper.js'], signal)
+      expect((await fs.read(['/workspace/helper.js'], signal)).text).toBe('const a = 2;\n')
+      await fs.copy(['/workspace/helper.js', '/workspace/copy.js'], signal)
+      await fs.delete(['/workspace/drafts'], signal)
+      expect(await fs.ls(['/workspace'], signal)).toContain('copy.js')
+      const copied = (await f.runtime.getTimelineWorkspace(f.target)).entries.find(entry => entry.name === 'copy.js')!
+      await f.mutate([{ kind: 'delete', entryId: copied.id }, { kind: 'create', entry: { id: 'replacement', name: 'copy.js', kind: 'file', content: { text: 'Other work' } } }])
+      await expect(fs.delete(['/workspace/copy.js'], signal)).rejects.toMatchObject({ code: 'vfs.path_rebound' })
+    } finally { await f.close() }
+  })
+})

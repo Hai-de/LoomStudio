@@ -89,7 +89,7 @@ describe('Narrative sampling', () => {
           })
           const fork = await fixture.narratives.forkBranch({
             actor: fixture.actor, timelineId: fixture.timeline.id, fromBranchId: fixture.branch.id,
-            fromNodeId: fixture.nodes[1]!.id, stateRevisionId: 'fork-state',
+            fromNodeId: fixture.nodes[1]!.id,
           })
           await fixture.narratives.switchBranch({
             actor: fixture.actor, timelineId: fixture.timeline.id, branchId: fork.branch.id,
@@ -147,7 +147,7 @@ describe('Narrative sampling', () => {
       })).rejects.toThrow(/not an ancestor/)
       const fork = await fixture.narratives.forkBranch({
         actor: fixture.actor, timelineId: fixture.timeline.id, fromBranchId: fixture.branch.id,
-        fromNodeId: fixture.nodes[0]!.id, stateRevisionId: 'fork',
+        fromNodeId: fixture.nodes[0]!.id,
       })
       await expect(sampler.sample({
         ...request, branchId: fork.branch.id, selection: { kind: 'tail', count: 3, throughNodeId: nodeId },

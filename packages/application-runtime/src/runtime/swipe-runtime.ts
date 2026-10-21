@@ -1,3 +1,4 @@
+import { summaryRetiredThrough } from '../agents/session-history.js'
 import type { AgentTranscriptEntry, NarrativeBranch, NarrativeNode, NarrativeSwipeCandidate, NarrativeSwipeGroup } from '@loom-studio/application-data'
 import type { SqliteDataTransaction } from '@loom-studio/data-engine'
 import type { ApplicationRuntimeContext } from '../foundation/application-context.js'
@@ -97,7 +98,7 @@ async function view(ctx: SwipeContext, group: NarrativeSwipeGroup): Promise<Narr
   const suspended = Boolean(group.activeRunId && active?.status === 'suspended')
   const originalSession = await ctx.agents?.getSession(group.agentSessionId)
   const summary = originalSession ? await ctx.agents!.getLatestWorkSummary(originalSession.id) : undefined
-  const requiresRegeneration = !originalSession || Boolean(summary && summary.sequence > group.baseEntryCount)
+  const requiresRegeneration = !originalSession || Boolean(summary && summaryRetiredThrough(summary) > group.baseEntryCount)
   const reason = group.closed ? 'This reply is no longer the latest selectable reply.'
     : busy ? 'The writing Agent is still working on this reply.'
     : suspended ? 'Continue or abandon the suspended writing run first.'
@@ -159,6 +160,7 @@ export function createSwipeRuntimeMethods(ctx: SwipeContext) {
         if (old.status === 'completed') {
           old.headNodeId = branch.headNodeId
           old.stateRevisionId = branch.stateHeadRevisionId
+          old.workspaceRevisionId = branch.workspaceHeadRevisionId
         }
         const next = current.candidates.find(item => item.id === input.candidateId && (item.status === 'completed' || item.status === 'failed'))
         if (!next) throw swipeError('candidate_missing', 'Selectable candidate not found')
@@ -168,12 +170,14 @@ export function createSwipeRuntimeMethods(ctx: SwipeContext) {
           current.inputNodeId = nextInput.nodeId
           current.input = nextInput.input
           current.baselineStateRevisionId = nextInput.baselineStateRevisionId
+          current.baselineWorkspaceRevisionId = nextInput.baselineWorkspaceRevisionId
         }
         const updated = narratives.restoreBranch({
           timelineId: current.timelineId, branchId: current.branchId,
           expectedHeadNodeId: branch.headNodeId ?? null, expectedStateHeadRevisionId: branch.stateHeadRevisionId,
           headNodeId: next.status === 'failed' ? current.inputNodeId : next.headNodeId!,
           stateRevisionId: next.status === 'failed' ? current.baselineStateRevisionId : next.stateRevisionId,
+          workspaceRevisionId: next.status === 'failed' ? current.baselineWorkspaceRevisionId : next.workspaceRevisionId,
         })
         current.selectedCandidateId = next.id
         rememberInputSelection(current)
@@ -220,7 +224,7 @@ export async function beginNarrativeSwipeRun(
     if (!availability.canGenerate) throw swipeError('unavailable', availability.reason ?? 'Swipe is unavailable')
     if (existing!.revision !== command.expectedRevision) throw swipeError('conflict', 'Swipe group changed; refresh before generating')
     const summary = await requireAgents(ctx).getLatestWorkSummary(session.id)
-    const originalContext = session.id === existing!.agentSessionId && (!summary || summary.sequence <= existing!.baseEntryCount)
+    const originalContext = session.id === existing!.agentSessionId && (!summary || summaryRetiredThrough(summary) <= existing!.baseEntryCount)
     if (!originalContext && !command.allowSessionChange)
       throw swipeError('session_changed', 'The original writing context is unavailable. Confirm regeneration with the current writing Session.')
     if (!originalContext && command.mode !== 'regenerate')
@@ -255,6 +259,7 @@ export async function beginNarrativeSwipeRun(
         throw swipeError('conflict', 'The selected candidate changed before editing')
       candidate.headNodeId = branch.headNodeId
       candidate.stateRevisionId = branch.stateHeadRevisionId
+      candidate.workspaceRevisionId = branch.workspaceHeadRevisionId
       candidate.editBaseRunCount = candidate.runIds.length
       candidate.runIds.push(runId)
       candidate.status = 'running'
@@ -271,7 +276,7 @@ export async function beginNarrativeSwipeRun(
       if (group && !group.closed) store.closeLatest(branch.id)
       group = {
         id: ctx.createId('swipe'), timelineId, branchId: branch.id, inputNodeId: node.id, input: node.body.raw,
-        baselineStateRevisionId: branch.stateHeadRevisionId, agentSessionId: session.id,
+        baselineStateRevisionId: branch.stateHeadRevisionId, baselineWorkspaceRevisionId: branch.workspaceHeadRevisionId, agentSessionId: session.id,
         baseEntryCount: session.entryCount, candidates: [], generation: 0, revision: 0,
         closed: false, createdAt: ctx.now(), updatedAt: ctx.now(),
       }
@@ -284,6 +289,7 @@ export async function beginNarrativeSwipeRun(
         if (selected.status === 'completed') {
           selected.headNodeId = branch.headNodeId
           selected.stateRevisionId = branch.stateHeadRevisionId
+          selected.workspaceRevisionId = branch.workspaceHeadRevisionId
         }
       } else if (branch.headNodeId !== group.inputNodeId) {
         throw swipeError('conflict', 'The input baseline changed')
@@ -295,7 +301,7 @@ export async function beginNarrativeSwipeRun(
     if (command?.input !== undefined) {
       if (!group.inputs) {
         group.inputs = [{ nodeId: group.inputNodeId, input: group.input,
-          baselineStateRevisionId: group.baselineStateRevisionId, selectedCandidateId: group.selectedCandidateId }]
+          baselineStateRevisionId: group.baselineStateRevisionId, baselineWorkspaceRevisionId: group.baselineWorkspaceRevisionId, selectedCandidateId: group.selectedCandidateId }]
         for (const previous of group.candidates) previous.inputNodeId = group.inputNodeId
       }
       const original = narratives.getNode(group.inputs[0]!.nodeId)
@@ -303,9 +309,10 @@ export async function beginNarrativeSwipeRun(
       const baseline = narratives.restoreBranch({
         timelineId, branchId: branch.id, expectedHeadNodeId: branch.headNodeId ?? null,
         expectedStateHeadRevisionId: branch.stateHeadRevisionId,
-        headNodeId: original.parentNodeId ?? null, stateRevisionId: original.stateRevisionId,
+        headNodeId: original.parentNodeId ?? null, stateRevisionId: original.stateRevisionId, workspaceRevisionId: original.workspaceRevisionId,
       })
       const appended = narratives.appendNode({
+        kind: 'user-input',
         timelineId, branchId: branch.id, expectedHeadNodeId: baseline.headNodeId ?? null,
         stateRevisionId: original.stateRevisionId, body: { format: 'loom-markdown.v1', raw: command.input },
       })
@@ -313,8 +320,9 @@ export async function beginNarrativeSwipeRun(
       group.inputNodeId = appended.node.id
       group.input = command.input
       group.baselineStateRevisionId = original.stateRevisionId
+      group.baselineWorkspaceRevisionId = original.workspaceRevisionId
       group.selectedCandidateId = undefined
-      group.inputs.push({ nodeId: group.inputNodeId, input: group.input, baselineStateRevisionId: group.baselineStateRevisionId })
+      group.inputs.push({ nodeId: group.inputNodeId, input: group.input, baselineStateRevisionId: group.baselineStateRevisionId, baselineWorkspaceRevisionId: group.baselineWorkspaceRevisionId })
     }
     if (command && command.mode !== 'swipe') {
       for (const previous of group.candidates) previous.status = 'discarded'
@@ -323,13 +331,13 @@ export async function beginNarrativeSwipeRun(
     }
     const candidate: NarrativeSwipeCandidate = {
       id: ctx.createId('candidate'), inputNodeId: group.inputNodeId, agentSessionId: session.id, runIds: [runId],
-      stateRevisionId: group.baselineStateRevisionId, status: 'running', mode: command?.mode ?? 'initial',
+      workspaceRevisionId: group.baselineWorkspaceRevisionId, stateRevisionId: group.baselineStateRevisionId, status: 'running', mode: command?.mode ?? 'initial',
       replacesCandidateId: command?.mode === 'regenerate' ? group.selectedCandidateId : undefined, createdAt: ctx.now(),
     }
     if (command && command.input === undefined) restored = narratives.restoreBranch({
       timelineId, branchId: branch.id, expectedHeadNodeId: branch.headNodeId ?? null,
       expectedStateHeadRevisionId: branch.stateHeadRevisionId,
-      headNodeId: group.inputNodeId, stateRevisionId: group.baselineStateRevisionId,
+      headNodeId: group.inputNodeId, stateRevisionId: group.baselineStateRevisionId, workspaceRevisionId: group.baselineWorkspaceRevisionId,
     })
     group.candidates.push(candidate)
     group.activeCandidateId = candidate.id
@@ -375,6 +383,7 @@ export async function finishNarrativeSwipeRun(
         candidate.status = 'completed'
         candidate.headNodeId = branch.headNodeId
         candidate.stateRevisionId = branch.stateHeadRevisionId
+        candidate.workspaceRevisionId = branch.workspaceHeadRevisionId
         candidate.editBaseRunCount = undefined
         group.selectedCandidateId = candidate.id
         if (candidate.replacesCandidateId) {
@@ -389,6 +398,7 @@ export async function finishNarrativeSwipeRun(
           expectedHeadNodeId: branch.headNodeId ?? null, expectedStateHeadRevisionId: branch.stateHeadRevisionId,
           headNodeId: editing ? prior.headNodeId! : group.inputNodeId,
           stateRevisionId: editing ? prior.stateRevisionId : group.baselineStateRevisionId,
+          workspaceRevisionId: editing ? prior.workspaceRevisionId : group.baselineWorkspaceRevisionId,
         })
         if (candidate.editBaseRunCount !== undefined && prior?.id === candidate.id) {
           candidate.status = 'completed'
@@ -398,6 +408,7 @@ export async function finishNarrativeSwipeRun(
           candidate.status = 'failed'
           candidate.headNodeId = undefined
           candidate.stateRevisionId = group.baselineStateRevisionId
+          candidate.workspaceRevisionId = group.baselineWorkspaceRevisionId
           group.selectedCandidateId = candidate.id
         }
         group.generation += 1

@@ -38,11 +38,12 @@ export function SettingsPanel(props: {
   onChangeCustomCss(value: string): void
   onChangeLocale(locale: Locale): void
   onChangeUiScale(value: number): void
-  onUpdateNetworkSettings(value: { proxyMode: NetworkSettings['proxyMode']; proxyUrl?: string }): void
+  onUpdateNetworkSettings(value: { proxyMode: NetworkSettings['proxyMode']; proxyUrl?: string }): Promise<void>
   t: Translator
 }) {
   const [category, setCategory] = useState<SettingsCategory>('general')
   const [mobilePane, setMobilePane] = useState<'master' | 'detail'>('master')
+  const [networkError, setNetworkError] = useState<string>()
   const [proxyMode, setProxyMode] = useState(props.networkSettings.proxyMode)
   const [proxyUrl, setProxyUrl] = useState(props.networkSettings.proxyUrl ?? '')
   const tokenMultiplier = useTokenDisplaySettings(state => state.multiplier)
@@ -108,14 +109,20 @@ export function SettingsPanel(props: {
     setProxyUrl(props.networkSettings.proxyUrl ?? '')
   }, [props.networkSettings.proxyMode, props.networkSettings.proxyUrl])
 
-  function saveNetworkSettings(event: FormEvent) {
+  async function saveNetworkSettings(event: FormEvent) {
     event.preventDefault()
-    props.onUpdateNetworkSettings(resolveNetworkSettingsPayload(proxyMode, proxyUrl))
+    setNetworkError(undefined)
+    try {
+      await props.onUpdateNetworkSettings(resolveNetworkSettingsPayload(proxyMode, proxyUrl))
+    } catch (error) {
+      setNetworkError(error instanceof Error ? error.message : String(error))
+    }
   }
 
   return (
     <section className={styles.settingsPanel} data-loom-component="settings-panel">
       <MasterDetailWorkbench
+        navigationScope="local"
         className={styles.workbench}
         defaultMasterWidth={200}
         masterMinWidth={160}
@@ -165,7 +172,7 @@ export function SettingsPanel(props: {
               </section>
             </>
           ) : category === 'network' ? (
-            <form className={styles.settingSection} onSubmit={saveNetworkSettings}>
+            <form className={styles.settingSection} onSubmit={event => { void saveNetworkSettings(event) }}>
               <label className={styles.settingRow}>
                 <span>{props.t('settings.proxyMode')}</span>
                 <select disabled={props.busy} value={proxyMode}
@@ -182,6 +189,7 @@ export function SettingsPanel(props: {
                     value={proxyUrl} onChange={event => setProxyUrl(event.target.value)} />
                 </label>
               ) : null}
+              {networkError ? <p role="alert">{networkError}</p> : null}
               <p className={styles.networkStatus}>
                 {props.networkSettings.systemProxyDetected ? props.t('settings.systemProxyDetected') : props.t('settings.systemProxyNotDetected')}
               </p>

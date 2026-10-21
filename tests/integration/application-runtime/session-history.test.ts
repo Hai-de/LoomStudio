@@ -29,6 +29,46 @@ const replay = (entries: AgentTranscriptEntry[]) => projectSessionHistory(entrie
 ))).flatMap(block => block.messages)
 
 describe('Session tool history projection', () => {
+  it('retains buffered work and selects an older valid summary without losing its tail', async () => {
+    let id = 0
+    const createId = (prefix: string) => `${prefix}-${++id}`
+    const now = () => '2026-10-20T00:00:00.000Z'
+    const engine = createSqliteDataEngine({ filename: ':memory:', createId, now })
+    const store = createAgentStore({ engine, createId, now })
+    const actor = { kind: 'system' as const, id: 'test' }
+    try {
+      const { session } = await store.createSession({ actor, agentPresetId: 'profile' })
+      await store.appendEntries({ actor, agentSessionId: session.id, expectedEntryCount: 0, entries: [
+        { runId: 'one', entry: { kind: 'message', role: 'user', content: 'OLD' } },
+        { runId: 'one', entry: { kind: 'run-state', state: 'completed' } },
+        { runId: 'two', entry: { kind: 'message', role: 'user', content: 'BUFFER' } },
+        { runId: 'two', entry: { kind: 'run-state', state: 'completed' } },
+      ] })
+      await expect(store.appendEntries({ actor, agentSessionId: session.id, expectedEntryCount: 4,
+        entries: [{ entry: { kind: 'work-summary', content: 'invalid', boundary: {
+          sourceThroughSequence: 4, retiredThroughSequence: 3,
+        } } }],
+      })).rejects.toThrow(/splits a Run/)
+      const first = await store.appendEntries({ actor, agentSessionId: session.id, expectedEntryCount: 4,
+        entries: [{ entry: { kind: 'work-summary', content: 'CURRENT AT TWO', boundary: {
+          sourceThroughSequence: 4, retiredThroughSequence: 2,
+        } } }],
+      })
+      const buffered = await readSessionHistory(store, session.id)
+      expect(buffered.entries.map(entry => entry.sequence)).toEqual([5, 3, 4])
+      expect(replay(buffered.entries)).toEqual([{ role: 'user', content: 'BUFFER' }])
+      await store.appendEntries({ actor, agentSessionId: session.id, expectedEntryCount: 5,
+        entries: [{ entry: { kind: 'work-summary', content: 'LATER', boundary: {
+          sourceThroughSequence: 5, retiredThroughSequence: 4,
+        } } }],
+      })
+      const restored = await readSessionHistory(store, session.id, entry => entry.id === first.entries[0]!.id)
+      expect(restored.entries.map(entry => entry.sequence)).toEqual([5, 3, 4])
+      const noSummary = await readSessionHistory(store, session.id, () => false)
+      expect(noSummary.entries.map(entry => entry.sequence)).toEqual([1, 2, 3, 4])
+      expect((await store.getSession(session.id))!.entryCount).toBe(6)
+    } finally { engine.close() }
+  })
   it('preserves a native batch and its result IDs inside a system-wrapped Session anchor', () => {
     const entries = records([observation, call('a'), call('b'), result('a'), result('b', 'denied')])
     const blocks = projectSessionHistory(entries, new Map())

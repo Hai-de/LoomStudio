@@ -19,6 +19,22 @@ describe('State content registrations', () => {
     expect(input.value).toEqual({ data: { hp: 1 } })
   })
 
+  it('updates the persisted legacy address without creating the new binding', async () => {
+    const registry = createStateContentRegistry()
+    registry.register({
+      id: 'example/update', contributionId: 'example.data', path: '/mvu', legacyPaths: ['/old/data'],
+      async process({ value }) { return { value: { hp: Number(value.hp) - 3 } } },
+    }, { packageId: 'example', target: { kind: 'global' } })
+    const process = (value: import('@loom-studio/shared').JsonObject) => registry.process({
+      text: 'damage', value, contributionIds: ['example.data'], signal: new AbortController().signal,
+    })
+    expect((await process({ old: { data: { hp: 10 } } })).operations)
+      .toEqual([{ op: 'set', path: '/old/data', value: { hp: 7 } }])
+    expect((await process({ mvu: { hp: 5 }, old: { data: { hp: 10 } } })).operations)
+      .toEqual([{ op: 'set', path: '/mvu', value: { hp: 2 } }])
+    await expect(process({ mvu: null, old: { data: { hp: 10 } } })).rejects.toThrow('data is missing: /mvu')
+  })
+
   it('does not accept results from an unloaded handler', async () => {
     const registry = createStateContentRegistry()
     let complete!: () => void

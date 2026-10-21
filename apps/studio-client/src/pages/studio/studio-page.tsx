@@ -9,6 +9,9 @@ import type { useStudioNavigation } from '../../shared/studio-shell/use-studio-n
 import { StudioPanelHost } from './studio-panel-host.js'
 import { readAssetLayoutId, StudioWindowHeader } from './studio-window-header.js'
 import { StudioWindowHeaderProvider } from '../../shared/studio-shell/studio-window-header-context.js'
+import { STUDIO_TOOL_IDS } from '../../shared/studio-shell/studio-tool.js'
+import { STUDIO_PANEL_PRESENTATION } from '../../shared/studio-shell/studio-panel-presentation.js'
+import { StudioToolDialog } from './studio-tool-dialog.js'
 import { StudioRail } from './studio-rail.js'
 import { useStudioShortcuts } from './use-studio-shortcuts.js'
 import { useStudioLayoutAnchors } from './use-studio-layout-anchors.js'
@@ -38,7 +41,7 @@ type StudioPageProps = {
   panelHeaderActions?: Partial<Record<StudioPanelId, ReactNode>>
   panelHeaderMain?: Partial<Record<StudioPanelId, ReactNode>>
   headerActions?: ReactNode
-  panels: Record<StudioPanelId, (active: boolean) => ReactNode>
+  panels: Record<StudioPanelId, (active: boolean, surface?: 'tool') => ReactNode>
   preloadPanel?(panel: StudioPanelId): void
   recentSessions?: ReactNode
   t: Translator
@@ -137,7 +140,7 @@ export function StudioPage(props: StudioPageProps) {
       controller.abort()
       delete element.dataset.historyDirection
     }
-  }, [activePanel, displayedPanel, panelMotion, effectiveMotion, props.navigation.locationKey, props.navigation.historyAction])
+  }, [activePanel, displayedPanel, panelMotion, effectiveMotion])
 
   const handleMouseEnter = () => {
     if (leaveTimerRef.current) {
@@ -380,7 +383,7 @@ export function StudioPage(props: StudioPageProps) {
         )}
       </header>
       <StudioRail
-        activePanel={activePanel}
+        activePanel={props.navigation.route.tool ?? activePanel}
         modelConfigured={props.modelConfigured}
         recentSessions={props.recentSessions}
         t={props.t}
@@ -583,6 +586,13 @@ export function StudioPage(props: StudioPageProps) {
         </StudioWindowHeaderProvider>
 
       </section>
+      {STUDIO_TOOL_IDS.map(tool => {
+        const { Icon, labelKey } = STUDIO_PANEL_PRESENTATION[tool]
+        return <StudioToolDialog key={tool} id={`studio-${tool}-panel`}
+          open={props.navigation.route.tool === tool} onClose={() => { void props.navigation.closeTool() }}
+          title={props.t(labelKey)} icon={<Icon />} closeLabel={props.t('agentTasks.close')}
+          render={active => props.panels[tool](active, 'tool')} />
+      })}
     </main>
   )
 }

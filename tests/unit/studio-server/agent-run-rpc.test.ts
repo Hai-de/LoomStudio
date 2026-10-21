@@ -3,6 +3,31 @@ import { describe, expect, it, vi } from 'vitest'
 import { callApplicationRpc as handleAgentsRpc } from '../../support/trpc-caller.js'
 
 describe('application Agent Run RPC', () => {
+  it('deduplicates concurrent and completed sends while rejecting changed payloads for the same ID', async () => {
+    let calls = 0
+    const finish = Promise.withResolvers<void>()
+    const runtime = {
+      findAgentRunCheckpoint: async () => null,
+      invokeAgentTurn: async (_input: unknown, context: RuntimeRequestContext) => {
+        calls++
+        await finish.promise
+        return { runId: context.agentRun!.runId, entries: {}, mutation: {} }
+      },
+    } as unknown as ApplicationRuntime
+    const request = { requestId: 'lost-acknowledgement', agentSessionId: 'session', input: 'Only once' }
+    const [first, retry] = await Promise.all([
+      handleAgentsRpc(runtime, 'application.agent.run.create', request),
+      handleAgentsRpc(runtime, 'application.agent.run.create', request),
+    ])
+    expect(retry).toEqual(first)
+    expect(calls).toBe(1)
+    await expect(handleAgentsRpc(runtime, 'application.agent.run.create', { ...request, input: 'Different' })).rejects.toThrow('different input')
+    finish.resolve()
+    await new Promise<void>(resolve => setImmediate(resolve))
+    expect(await handleAgentsRpc(runtime, 'application.agent.run.create', request)).toEqual(first)
+    expect(calls).toBe(1)
+  })
+
   it('protects undelivered completion across byte and metadata pressure, but expires it', async () => {
     vi.useFakeTimers()
     const largeResult = { runId: 'large', projection: { text: 'context '.repeat(1200 * 1024) } }
@@ -137,16 +162,18 @@ describe('application Agent Run RPC', () => {
       const delta = 'x'.repeat(8_192)
       for (let index = 0; index < 200; index++)
         emit({ type: 'text-delta', runId, providerRunId: 'provider', providerStep: 1, delta })
+      emit({ type: 'reasoning-delta', runId, providerRunId: 'provider', providerStep: 1, reasoningId: 'r', delta: 'Thinking' })
       const reset = await handleAgentsRpc(runtime, 'application.agent.run.subscribe', { runId, cursor: 0 }) as {
         replayExpired: boolean; partialText: string; events: unknown[]; nextCursor: number
       }
-      expect(reset).toMatchObject({ replayExpired: true, events: [], nextCursor: 201 })
+      expect(reset).toMatchObject({ replayExpired: true, events: [], nextCursor: 202 })
       expect(reset.partialText).toBe(delta.repeat(200))
+      expect(reset).toMatchObject({ partialReasoning: 'Thinking' })
       expect(await handleAgentsRpc(runtime, 'application.agent.run.subscribe', { runId, cursor: reset.nextCursor }))
-        .toMatchObject({ events: [], nextCursor: 201, done: false })
+        .toMatchObject({ events: [], nextCursor: 202, done: false })
       emit({ type: 'text-delta', runId, providerRunId: 'provider', providerStep: 1, delta: 'tail' })
-      expect(await handleAgentsRpc(runtime, 'application.agent.run.subscribe', { runId, cursor: 201 }))
-        .toMatchObject({ events: [{ type: 'text-delta', delta: 'tail' }], nextCursor: 202 })
+      expect(await handleAgentsRpc(runtime, 'application.agent.run.subscribe', { runId, cursor: 202 }))
+        .toMatchObject({ events: [{ type: 'text-delta', delta: 'tail' }], nextCursor: 203 })
     } finally { release() }
   })
 
@@ -361,6 +388,9 @@ describe('application Agent Run RPC', () => {
       requestId = batch.events.find(event => event.type === 'mutation-approval-requested')?.requestId ?? ''
     }
     expect(requestId).toBeTruthy()
+    const snapshot = await handleAgentsRpc(runtime, 'application.agent.run.subscribe', { runId, cursor: 0 }) as { nextCursor: number }
+    await expect(handleAgentsRpc(runtime, 'application.agent.run.subscribe', { runId, cursor: snapshot.nextCursor }))
+      .resolves.toMatchObject({ events: [], pendingApprovals: [{ requestId }] })
     await expect(handleAgentsRpc(runtime, 'application.agent.run.mutation-approval', {
       runId, requestId, allow: true,
     })).resolves.toMatchObject({ accepted: true })
@@ -368,6 +398,28 @@ describe('application Agent Run RPC', () => {
     for (let attempt = 0; attempt < 20 && !approved; attempt += 1)
       await new Promise(resolve => setTimeout(resolve, 0))
     expect(approved).toBe(true)
+    await expect(handleAgentsRpc(runtime, 'application.agent.run.subscribe', { runId, cursor: snapshot.nextCursor }))
+      .resolves.toMatchObject({ pendingApprovals: [] })
+  })
+
+  it('does not leave an approval pending when cancellation arrives before it is requested', async () => {
+    let enterApproval!: () => void
+    const gate = new Promise<void>(resolve => { enterApproval = resolve })
+    const runtime = {
+      invokeAgentTurn: async (_input: unknown, context: RuntimeRequestContext) => {
+        await gate
+        await context.agentRun!.onMutationApproval!({
+          kind: 'prompt-resource', path: '/resources/probe.md', action: 'replace', before: 'a', after: 'b',
+        }, context.abortSignal!)
+        throw new Error('Cancelled approval must not complete')
+      },
+    } as unknown as ApplicationRuntime
+    const { runId } = await handleAgentsRpc(runtime, 'application.agent.run.create', { agentSessionId: 'cancel-before-approval', input: 'Write' }) as { runId: string }
+    await handleAgentsRpc(runtime, 'application.agent.run.cancel', { runId })
+    enterApproval()
+    await new Promise<void>(resolve => setImmediate(resolve))
+    await expect(handleAgentsRpc(runtime, 'application.agent.run.subscribe', { runId, cursor: 0 }))
+      .resolves.toMatchObject({ done: true, state: 'cancelled', pendingApprovals: [] })
   })
 
   it('pauses with a checkpoint and resumes without a new user input', async () => {

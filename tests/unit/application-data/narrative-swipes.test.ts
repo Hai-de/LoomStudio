@@ -41,7 +41,7 @@ describe('narrative Swipe storage', () => {
       expect(await c.swipes.listForSession('old-session')).toEqual([closed])
       expect(await createNarrativeSwipeStore({ engine: c.engine }).get(saved.id)).toEqual(closed)
       const fork = await c.narrative.forkBranch({ actor: c.actor, timelineId: c.target.timelineId, fromBranchId: c.target.branchId,
-        fromNodeId: 'input', stateRevisionId: saved.baselineStateRevisionId })
+        fromNodeId: 'input',})
       expect(await c.swipes.getLatest(fork.branch.id)).toBeNull()
       await c.engine.transact({ actor: c.actor }, tx => {
         expect(c.swipes.transaction(tx).get(saved.id)).toEqual(closed)

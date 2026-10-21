@@ -11,6 +11,7 @@ type StudioNavigation = ReturnType<typeof useStudioNavigation>
 
 export function StudioResourcePanels(props: {
   state: StudioState
+  currentCard?: StudioState['selectedCardDetails']
   uiState: StudioUiState
   navigation: StudioNavigation
   assetWorkspaceId: string
@@ -87,6 +88,8 @@ export function StudioResourcePanels(props: {
         onLoomScriptsChanged={uiState.bumpLoomScriptRefreshToken}
         onSaveMacros={state.updatePresetMacros}
         modelProfiles={state.modelProfiles}
+        onCreateModel={state.createModelProfile}
+        onListModels={state.listProviderModels}
         providerAccounts={state.providerAccounts}
         onSaveModel={state.updatePresetModel}
         selectedResourceId={uiState.selectedPresetId}
@@ -103,7 +106,7 @@ export function StudioResourcePanels(props: {
         previewBranchId={state.branch?.id}
         routeResourceId={navigation.route.panel === 'agent' ? navigation.route.resourceId : undefined}
         timelinePromptResourceIds={state.narrativeTimeline?.promptResourceIds}
-        card={state.selectedCardDetails}
+        card={props.currentCard}
         loreMounts={state.loreMounts}
         tools={state.agentTools}
         toolsReady={state.startup.ready('tools')}
@@ -129,7 +132,7 @@ export function StudioResourcePanels(props: {
           if (resource) navigation.openResource('resource', id, resource.rootNode.id, replace)
           else void navigation.openUri(formatEntityReference({ kind: 'entity', type: 'resource', id }), replace)
         }}
-        card={state.selectedCardDetails}
+        card={props.currentCard}
         loreMounts={state.loreMounts}
         onReplaceLoreMounts={state.replaceLoreMounts}
         onReplaceCardResources={state.replaceCardPromptResources}

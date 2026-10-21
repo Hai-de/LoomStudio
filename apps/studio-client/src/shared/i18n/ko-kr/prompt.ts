@@ -1,6 +1,8 @@
 import type { messages as zhCN } from '../zh-cn/prompt.js'
 
 export const messages = {
+  'provider.confirmDeleteAccount': '“{{name}}” 계정을 삭제할까요? 모델 설정도 삭제되며 되돌릴 수 없습니다.',
+  'provider.cancelDelete': '취소',
   'tokens.messageAndToolEstimate': '메시지: {{messages}} · 도구: {{tools}}',
   'tokens.uncounted': '미포함: {{items}}',
   'tokens.modelMultiplierHelp': 'o200k_base 기본 계산의 추정 계수',
@@ -77,6 +79,7 @@ export const messages = {
   'provider.aiLabNoProfile': '먼저 이 Capability의 Profile을 생성하세요.',
   'provider.aiLabUnavailable': 'Provider 마운트 안 됨',
   'provider.aiLabSave': '설정 저장',
+  'inspector.previewTruncated': '미리보기가 잘렸습니다. 데이터의 일부만 표시됩니다.',
   'inspector.cardSnapshot': '캐릭터 카드 스냅샷',
   'inspector.run': 'Run Inspector',
   'inspector.agentTranscript': 'Agent 기록',

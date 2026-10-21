@@ -123,8 +123,14 @@ describe('Swipe regeneration confirmation and footer order', () => {
     const p = props()
     if (key === 'swipe.retry') { p.swipe.selectedCandidateId = undefined; p.swipe.candidates = [] }
     const render = () => { hooks.cursor = 0; return NarrativeSwipePicker(p) }
-    const command = elements(render()).find(item => item.props.label === p.t(key))!
-    ;(command.props.onClick as () => void)()
+    const tree = elements(render())
+    if (key === 'swipe.generate') {
+      const control = tree.find(item => item.type === SwipeControl)!
+      ;(control.props.onGenerateNext as () => void)()
+    } else {
+      const command = tree.find(item => item.props.label === p.t(key))!
+      ;(command.props.onClick as () => void)()
+    }
     expect(p.onGenerate).not.toHaveBeenCalled()
     const dialog = elements(render()).find(item => item.type === Dialog && item.props.open === true)!
     expect(dialog).toBeDefined()
@@ -140,8 +146,9 @@ describe('Swipe regeneration confirmation and footer order', () => {
       actions: createElement('button', null, 'Existing tool'),
       trailing: createElement(NarrativeSwipePicker, p),
     }))
+    expect(markup).not.toContain('lucide-plus')
     const position = markup.indexOf('Choose a candidate')
-    for (const label of ['Existing tool', 'Writing unavailable', 'Generate another version', 'Regenerate'])
+    for (const label of ['Existing tool', 'Writing unavailable', 'Regenerate'])
       expect(markup.indexOf(label)).toBeLessThan(position)
   })
 })

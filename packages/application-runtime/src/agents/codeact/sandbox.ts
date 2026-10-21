@@ -40,8 +40,8 @@ export async function runCodeActSandbox(input: {
   let stopped = false
   const pending = new Set<Promise<void>>()
   let deadline = Date.now() + limits.timeoutMs
-  let approvalWaiters = 0
-  let approvalStarted = 0
+  let hostWaiters = 0
+  let hostWaitStarted = 0
   // Node >=22.18 runs erasable TS in the source checkout; built deployments load the emitted JS.
   const extension = import.meta.url.endsWith('.ts') ? 'ts' : 'js'
   const worker = new Worker(new URL(`./sandbox-worker.${extension}`, import.meta.url), {
@@ -54,8 +54,7 @@ export async function runCodeActSandbox(input: {
     execArgv: [],
     resourceLimits: { maxOldGenerationSizeMb: 64, maxYoungGenerationSizeMb: 16, stackSizeMb: 2 },
   })
-  let settle!: (result: CodeActExecution) => void
-  const completion = new Promise<CodeActExecution>(resolve => { settle = resolve })
+  const { promise: completion, resolve: settle } = Promise.withResolvers<CodeActExecution>()
   const finish = (result: Omit<CodeActExecution, 'output'>) => {
     if (stopped) return
     stopped = true
@@ -69,23 +68,22 @@ export async function runCodeActSandbox(input: {
     code: 'codeact.timeout', message: 'CodeAct exceeded its execution deadline. Reduce the work per invocation.',
   } })
   let timer = setTimeout(expire, limits.timeoutMs)
-  const control: CodeActHostControl = {
-    async waitForUser(operation) {
-      controller.signal.throwIfAborted()
-      if (approvalWaiters++ === 0) {
-        approvalStarted = Date.now()
-        clearTimeout(timer)
+  async function waitForHost<T>(operation: () => Promise<T>): Promise<T> {
+    controller.signal.throwIfAborted()
+    if (hostWaiters++ === 0) {
+      hostWaitStarted = Date.now()
+      clearTimeout(timer)
+    }
+    try {
+      return await operation()
+    } finally {
+      if (--hostWaiters === 0) {
+        deadline += Date.now() - hostWaitStarted
+        if (!stopped) timer = setTimeout(expire, Math.max(0, deadline - Date.now()))
       }
-      try {
-        return await operation()
-      } finally {
-        if (--approvalWaiters === 0) {
-          deadline += Date.now() - approvalStarted
-          if (!stopped) timer = setTimeout(expire, Math.max(0, deadline - Date.now()))
-        }
-      }
-    },
+    }
   }
+  const control: CodeActHostControl = { waitForUser: waitForHost }
   input.signal.addEventListener('abort', abort, { once: true })
   if (input.signal.aborted) abort()
 
@@ -109,7 +107,7 @@ export async function runCodeActSandbox(input: {
     }
     if (message.type !== 'call' || !Object.hasOwn(input.methods, message.method)
       || !Number.isSafeInteger(message.id) || message.id !== ++calls
-      || calls > limits.maxCalls || pending.size >= limits.maxPendingCalls
+      || pending.size >= limits.maxPendingCalls
       || typeof message.argumentsJson !== 'string' || message.argumentsJson.length > limits.bridgeChars) {
       finish({ status: 'failed', error: { code: 'codeact.invalid_call', message: 'Invalid or excessive ctx request.' } })
       return
@@ -143,7 +141,7 @@ export async function runCodeActSandbox(input: {
     try {
       const args: unknown = JSON.parse(message.argumentsJson)
       if (!Array.isArray(args)) throw new Error('ctx arguments must be an array.')
-      const value = await input.methods[message.method]!(args, controller.signal, control)
+      const value = await waitForHost(async () => input.methods[message.method]!(args, controller.signal, control))
       const valueJson = JSON.stringify(value)
       if (valueJson.length > limits.bridgeChars) throw new Error('Result too large. Request a smaller range.')
       reply = { id: message.id, valueJson }
@@ -155,7 +153,7 @@ export async function runCodeActSandbox(input: {
         message: (error instanceof Error ? error.message : 'ctx operation failed.').slice(0, 1500),
       } satisfies CodeActError }
     }
-    if (!stopped) worker.postMessage({ ...reply, deadline })
+    if (!stopped) worker.postMessage({ ...reply, deadline: deadline + (hostWaiters ? Date.now() - hostWaitStarted : 0) })
   }
 }
 

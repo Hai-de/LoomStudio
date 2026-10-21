@@ -9,6 +9,7 @@ export type AgentRunRecoveryCheckpoint = {
   phase: 'provider' | 'tools' | 'content'
   executor: { pid: number; id: string }
   request: InvokeAgentTurnInput
+  sendRequestDigest?: string
   narrativeSource?: NarrativeExecutionSource
   model: ProviderModelSelection
   toolContract: string
@@ -76,6 +77,7 @@ function parseCheckpoint(value: JsonObject): AgentRunRecoveryCheckpoint {
     || typeof value.executor.id !== 'string' || !value.executor.id
     || !isRecord(value.request) || typeof value.request.agentSessionId !== 'string' || typeof value.request.input !== 'string'
     || !isRecord(value.model) || typeof value.model.providerProfileId !== 'string' || typeof value.model.modelId !== 'string'
+    || (value.sendRequestDigest !== undefined && (typeof value.sendRequestDigest !== 'string' || !/^[a-f0-9]{64}$/.test(value.sendRequestDigest)))
     || typeof value.toolContract !== 'string' || typeof value.userEntryId !== 'string'
     || !Number.isSafeInteger(value.nextProviderStep) || Number(value.nextProviderStep) < 1
     || !Array.isArray(value.messages) || !value.messages.length || !value.messages.every(message => isRecord(message)
@@ -153,21 +155,51 @@ function parseCheckpoint(value: JsonObject): AgentRunRecoveryCheckpoint {
   return value as unknown as AgentRunRecoveryCheckpoint
 }
 
-export async function readAgentRunRecovery(
-  agents: AgentStore,
-  input: { agentSessionId: string; runId?: string },
-): Promise<AgentRunRecovery | undefined> {
+async function readRecoveryTranscript(agents: AgentStore, agentSessionId: string) {
   const entries: AgentTranscriptEntry[] = []
   let cursor: string | undefined
   let entryCount = 0
   do {
-    const page = await agents.getEntryPage({ agentSessionId: input.agentSessionId, cursor, limit: 100 })
+    const page = await agents.getEntryPage({ agentSessionId, cursor, limit: 100 })
     if (cursor && page.session.entryCount !== entryCount) throw recoveryError('conflict', 'Agent transcript changed while reading its checkpoint')
     entryCount = page.session.entryCount
     entries.push(...page.entries)
     cursor = page.nextCursor
   } while (cursor)
   entries.sort((left, right) => left.sequence - right.sequence)
+  return { entries, entryCount }
+}
+
+export async function readAgentRunState(agents: AgentStore, input: { agentSessionId: string; runId: string }): Promise<{
+  runId: string; state: 'running' | 'suspended' | 'completed' | 'failed' | 'cancelled'; entryCount: number
+}> {
+  const { entries, entryCount } = await readRecoveryTranscript(agents, input.agentSessionId)
+  const newest = [...entries].reverse()
+  const latest = newest.find(item => item.entry.kind === 'run-state')
+  if (!latest || latest.entry.kind !== 'run-state' || latest.runId !== input.runId)
+    throw recoveryError('superseded', 'This is no longer the latest Agent Run')
+  if (activeExecutors.has(input.runId)) return { runId: input.runId, state: 'running', entryCount }
+  const state = latest.entry.state
+  if (state === 'completed' || state === 'failed') return { runId: input.runId, state, entryCount }
+  if (state === 'discarded' || state === 'aborted') return { runId: input.runId, state: 'cancelled', entryCount }
+  const checkpoint = newest.find(item => item.runId === input.runId && item.entry.kind === 'run-state' && item.entry.recovery)?.entry
+  const executor = checkpoint?.kind === 'run-state' && isRecord(checkpoint.recovery) ? checkpoint.recovery.executor : undefined
+  if (isRecord(executor) && Number.isSafeInteger(executor.pid) && typeof executor.id === 'string') {
+    try { assertExecutorStopped({ pid: Number(executor.pid), id: executor.id }) }
+    catch (error) {
+      if (isRecord(error) && error.code === 'agent.recovery_executor_active') return { runId: input.runId, state: 'running', entryCount }
+      throw error
+    }
+  }
+  // Inspecting or abandoning stopped work does not replay tools and needs no complete resume checkpoint.
+  return { runId: input.runId, state: 'suspended', entryCount }
+}
+
+export async function readAgentRunRecovery(
+  agents: AgentStore,
+  input: { agentSessionId: string; runId?: string },
+): Promise<AgentRunRecovery | undefined> {
+  const { entries, entryCount } = await readRecoveryTranscript(agents, input.agentSessionId)
   const newestFirst = [...entries].reverse()
   const latestState = newestFirst.find(item => item.entry.kind === 'run-state')
   if (!latestState || latestState.entry.kind !== 'run-state') return undefined

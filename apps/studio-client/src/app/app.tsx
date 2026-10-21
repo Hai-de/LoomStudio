@@ -1,3 +1,5 @@
+import { SessionSummaryActivity, type SummaryControl, type SummaryRow, type SummaryCoverage } from '../widgets/memory-panel/session-summary-activity.js'
+import { useExtensionCardContext } from '../features/extension-renderers/model/use-extension-card-context.js'
 import { StartupReady } from './startup-curtain.js'
 import { useRecentCharacters } from '../features/recent-characters/model/use-recent-characters.js'
 import type { RecentCharacter } from '../features/recent-characters/model/recent-characters.js'
@@ -78,6 +80,9 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
   const appearance = useAppearanceStore()
   const state = useStudioState(props.transportLogger)
   const [onboardingComplete, setOnboardingComplete] = useState(readOnboardingComplete)
+  const [summaryCoverage, setSummaryCoverage] = useState<{ sessionId: string; coverage?: SummaryCoverage }>()
+  const [summaryRows, setSummaryRows] = useState<{ sessionId: string; rows: SummaryRow[] }>()
+  const [summaryControl, setSummaryControl] = useState<SummaryControl>()
   const [assistantGuide, setAssistantGuide] = useState(false)
   const queryClient = useQueryClient()
   useEffect(() => {
@@ -91,6 +96,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
     notify[input.level ?? 'info'](input.message, { description: owner, duration: 4000 })
   }), [])
   const clientExtensions = useClientExtensionRuntime({ api: state.clientExtensionApi, rendererHost, logger: props.extensionLogger, clientLogs: props.clientLogs, notify: notifications.show })
+  const extensionCardContext = useExtensionCardContext(state.api, appearanceCardId, state.selectedCardDetails, `${clientExtensions.refreshSequence}:${state.cards.find(card => card.id === appearanceCardId)?.version ?? ''}`)
   const themeController = useThemeRuntime({ packages: clientExtensions.packages, ready: clientExtensions.refreshSequence > 0 || !!clientExtensions.error, authorize: clientExtensions.enable })
   const reportedExtensionError = useRef<string | undefined>(undefined)
   const extensionConnectionError = clientExtensions.connectionError?.message
@@ -180,6 +186,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
       void navigation.updateNarrativeContext(activated.session.timelineId, activated.branchId ?? '')
     }
     uiState.setAgentPanelOpen(true)
+    if (navigation.route.tool) void navigation.closeTool()
   }
   function onTextTransformsChanged() {
     uiState.bumpLoomScriptRefreshToken()
@@ -463,11 +470,11 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
     })
     return () => { timelineRouteRequestRef.current++ }
   }, [narrativeTarget, navigation.route.targetUri, navigationRetry])
-  const resourcePanels = StudioResourcePanels({ state, uiState, navigation, assetWorkspaceId,
+  const resourcePanels = StudioResourcePanels({ state, currentCard: extensionCardContext.card, uiState, navigation, assetWorkspaceId,
     globalSearchQuery: globalSearch.query,
     searchMatch: !globalSearch.query.trim() ? undefined : searchMatch?.query === globalSearch.query ? searchMatch
       : navigation.route.resourceId && navigation.route.assetId ? { resourceId: navigation.route.resourceId, nodeId: navigation.route.assetId, query: globalSearch.query, requestId: 0 } : undefined })
-  const panels = createStudioPanels({ state, uiState, navigation, rendererHost, clientExtensions, themeController, clientLogs: props.clientLogs, resourcePanels, assetWorkspaceId, cardsBusy, providerBusy, agentPresetBusy, activePresetId, sourceCardId, sessionBusy, openStateSource, openAgentSession, onTextTransformsChanged, uiScale, setUiScale, backgrounds: clientExtensions.host.backgrounds() })
+  const panels = createStudioPanels({ state, extensionCardContext, uiState, navigation, rendererHost, clientExtensions, themeController, clientLogs: props.clientLogs, resourcePanels, assetWorkspaceId, cardsBusy, providerBusy, agentPresetBusy, activePresetId, sourceCardId, sessionBusy, openStateSource, openAgentSession, onTextTransformsChanged, uiScale, setUiScale, backgrounds: clientExtensions.host.backgrounds() })
 
   const studio = (
     <StudioPage
@@ -500,6 +507,9 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
         initialCreatePresetId={assistantGuide ? assistantPresetId : undefined}
         active={uiState.agentPanelOpen}
       busy={agentChatBusy}
+      summaryCoverage={summaryCoverage?.sessionId === state.agentChatSession?.id ? summaryCoverage?.coverage : undefined}
+      summaryRows={summaryRows?.sessionId === state.agentChatSession?.id ? summaryRows?.rows : undefined}
+      summaryControl={summaryControl?.sessionId === state.agentChatSession?.id ? summaryControl : undefined}
       activeRun={state.agentActiveRun}
       runRecovery={state.runRecovery}
       runRecoveryBusy={state.runRecoveryBusy}
@@ -510,18 +520,22 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
       input={state.agentChatInput}
       messages={state.agentChatMessages}
       displayProjection={agentDisplay}
+      onOpenMemory={() => { if (state.agentChatSession) void navigation.openSessionSummary(state.agentChatSession.id) }}
       session={state.agentChatSession}
       sessions={state.agentChatSessions}
       cards={state.cards}
       timelines={state.allTimelines}
       sessionReady={state.agentChatSessionReady}
       profiles={state.agentPresets}
-      sessionTail={state.agentChatSession ? (
+      sessionTail={state.agentChatSession ? (<>
+        <SessionSummaryActivity key={state.agentChatSession.id} api={state.api} sessionId={state.agentChatSession.id}
+          onCoverage={setSummaryCoverage} historyVersion={agentChatBusy ? undefined : state.agentChatMessages.at(-1)?.id} onRows={setSummaryRows} onControl={setSummaryControl} title={state.agentChatSession.title ?? '当前会话'} onUpdate={state.refreshTaskSession}
+          onOpen={() => { void navigation.openSessionSummary(state.agentChatSession!.id) }} />
         <RendererSurfaceHost
           host={rendererHost}
           scope={{ kind: 'agent-session', key: state.agentChatSession.id }}
           surface="agent.session.tail"
-        />
+        /></>
       ) : undefined}
       onChangeInput={state.setAgentChatInput}
       onSelectProfile={state.selectAgentPreset}
@@ -764,6 +778,7 @@ export function App(props: { clientLogs: MemoryLogSink; transportLogger: Logger;
           }}>{state.t('navigation.returnToWorkspace')}</button>
         </>} />
       ) : studio}
+      {state.newStoryExtensionsDialog}
       <ResourceReferenceDialog t={state.t} api={state.api} uri={navigation.referenceUri}
         onClose={() => { void navigation.closeReference() }}
         onNavigate={uri => { void navigation.openUri(uri) }}

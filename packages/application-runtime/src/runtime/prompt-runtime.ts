@@ -222,6 +222,7 @@ export function createPromptRuntimeMethods(ctx: PromptRuntimeContext) {
         ...(artifact.macros !== undefined ? { macros: normalizeMacros(artifact.macros, 'Preset') } : {}),
         ...(artifact.macroOptions !== undefined ? { macroOptions: normalizeMacroOptions(artifact.macroOptions) } : {}),
         ...(artifact.useCardLore !== undefined ? { useCardLore: artifact.useCardLore } : {}),
+        ...(artifact.useGlobalLore !== undefined ? { useGlobalLore: artifact.useGlobalLore } : {}),
         ...(artifact.textUses !== undefined ? { textUses: structuredClone(artifact.textUses) } : {}),
         createdAt: ctx.now(),
         updatedAt: ctx.now(),
@@ -244,6 +245,7 @@ export function createPromptRuntimeMethods(ctx: PromptRuntimeContext) {
           ...(resource.macros !== undefined ? { macros: structuredClone(resource.macros) } : {}),
           ...(resource.macroOptions !== undefined ? { macroOptions: structuredClone(resource.macroOptions) } : {}),
           ...(resource.useCardLore !== undefined ? { useCardLore: resource.useCardLore } : {}),
+          ...(resource.useGlobalLore !== undefined ? { useGlobalLore: resource.useGlobalLore } : {}),
           ...(resource.textUses !== undefined ? { textUses: resource.textUses.map(use => ({
             ...structuredClone(use),
             reference: use.reference ?? { kind: 'external' as const, resourceId: use.id },

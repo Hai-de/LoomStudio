@@ -1,3 +1,4 @@
+import type { WorkspaceMutation } from '../runtime/workspace-runtime.js'
 import { createHash, randomUUID } from 'node:crypto'
 import type {
   PromptResourceNodePatch,
@@ -20,6 +21,10 @@ import type {
 } from './types.js'
 
 export type ResourceVfsOptions = {
+  workspace?: {
+    snapshot(): Promise<VfsEntry[]>
+    mutate(expectedRevisionId: string, operations: WorkspaceMutation[]): Promise<{ changesetId: string }>
+  }
   projections: readonly VfsEntry[]
   resourceMode?: 'play' | 'author'
   narrative?: {
@@ -96,7 +101,7 @@ export type VfsTextAttachment = {
   read(signal: AbortSignal): Promise<string>
 }
 
-type File = VfsEntry & { identity: string; load?(signal: AbortSignal): Promise<string> }
+type File = VfsEntry & { identity: string; stateValue?: JsonValue; load?(signal: AbortSignal): Promise<string> }
 type ObservedRead = {
   observation: VfsReadObservation
   ranges: Array<[number, number]>
@@ -109,6 +114,49 @@ export function createResourceVfs(options: ResourceVfsOptions) {
   const pathOwners = new Map<string, string>()
   const observed = new Map<string, ObservedRead>()
   let authorMode = options.resourceMode === 'author'
+
+  async function workspaceStructure(action: 'create' | 'move' | 'delete' | 'copy', args: unknown[], signal: AbortSignal, control?: VfsApprovalControl) {
+    if (!options.workspace) throw vfsError('vfs.not_found', 'Workspace is unavailable')
+    const path = vfsPath(args[0])
+    const files = await snapshot(path, signal)
+    const source = files.find(file => file.path === path)
+    if (!source || source.binding?.kind !== 'workspace') throw vfsError('vfs.not_found', 'Workspace entry is unavailable')
+    claim(path, source.identity)
+    const binding = source.binding
+    const operations: WorkspaceMutation[] = []
+    let resultPath = path
+    if (action === 'create') {
+      const draft = args[1] as { name?: unknown; kind?: unknown; content?: unknown } | undefined
+      if (args.length !== 2 || source.kind !== 'directory' || !draft || typeof draft.name !== 'string'
+        || (draft.kind !== 'file' && draft.kind !== 'directory') || (draft.content !== undefined && typeof draft.content !== 'string'))
+        throw vfsError('vfs.invalid_arguments', 'Use ctx.create(directory, { name, kind: "file" | "directory", content?: string }).')
+      operations.push({ kind: 'create', entry: { id: randomUUID(), parentId: binding.entryId || undefined, name: draft.name,
+        ...(draft.kind === 'directory' ? { kind: 'directory' } : { kind: 'file', content: { text: draft.content as string ?? '' } }) } })
+      resultPath = `${path}/${draft.name}`
+    } else {
+      if (!binding.entryId) throw vfsError('vfs.write_unsupported', 'The Workspace root cannot be changed')
+      if (action === 'delete') {
+        if (args.length !== 1) throw vfsError('vfs.invalid_arguments', 'Use ctx.delete(path).')
+        operations.push({ kind: 'delete', entryId: binding.entryId })
+      } else {
+        if (args.length !== 2) throw vfsError('vfs.invalid_arguments', 'Use ctx.move(source, destination) or ctx.copy(source, destination).')
+        resultPath = vfsPath(args[1])
+        const parentPath = resultPath.slice(0, resultPath.lastIndexOf('/'))
+        const parent = files.find(file => file.path === parentPath)
+        if (parent?.kind !== 'directory' || parent.binding?.kind !== 'workspace') throw vfsError('vfs.not_directory', 'Destination parent must be inside this Workspace')
+        claim(parentPath, parent.identity)
+        const name = resultPath.slice(resultPath.lastIndexOf('/') + 1)
+        if (action === 'move') operations.push({ kind: 'move', entryId: binding.entryId, parentId: parent.binding.entryId || undefined, name })
+        else operations.push({ kind: 'copy', entryId: binding.entryId, parentId: parent.binding.entryId || undefined, name })
+      }
+    }
+    const before = source.content ?? files.filter(file => file.path === path || file.path.startsWith(`${path}/`)).map(file => file.path).join('\n')
+    const created = operations[0]?.kind === 'create' ? operations[0].entry : undefined
+    const after = action === 'delete' ? '' : created?.kind === 'file' && 'text' in created.content ? `${resultPath}\n${created.content.text}` : resultPath
+    await approveMutation({ action, path, kind: 'workspace', before, after }, signal, control)
+    const result = await options.workspace.mutate(binding.revisionId, operations)
+    return { path: resultPath, parentPath: path, sourcePath: path, modified: true, changesetId: result.changesetId }
+  }
 
   function claim(path: string, identity: string) {
     const owner = pathOwners.get(path)
@@ -125,6 +173,9 @@ export function createResourceVfs(options: ResourceVfsOptions) {
     if (options.narrative && (path === '/' || path === '/narrative' || path.startsWith('/narrative/'))) {
       const entries = await options.narrative.snapshot(path, signal, control)
       files.push(...entries.map(entry => ({ ...entry, identity: `narrative:${entry.path}` })))
+    }
+    if (options.workspace && (path === '/' || path === '/workspace' || path.startsWith('/workspace/'))) {
+      files.push(...(await options.workspace.snapshot()).map(entry => ({ ...entry, identity: `workspace:${entry.binding?.kind === 'workspace' ? entry.binding.entryId : entry.path}` })))
     }
     if (!files.some(entry => entry.path === '/')) files.unshift({ path: '/', kind: 'directory', identity: 'root' })
     if (options.resources) {
@@ -222,7 +273,7 @@ export function createResourceVfs(options: ResourceVfsOptions) {
         const binding = (pointer: string): VfsBinding => ({
           kind: 'state', target: state.target, revisionId: snapshot.revisionId, pointer,
         })
-        files.push({ path: '/state/current.yaml', kind: 'file', identity: 'state:', load: async () => stringify(snapshot.value), state: 'current', binding: binding('') })
+        files.push({ path: '/state/current.yaml', kind: 'file', identity: 'state:', stateValue: snapshot.value, load: async () => stringify(snapshot.value), state: 'current', binding: binding('') })
         const visit = (value: JsonValue, parent: string, pointer: string, depth = 0) => {
           if (depth > 128 || files.length > 20_000) throw vfsError('vfs.view_limit', 'State view exceeds the traversal budget. Narrow the State path.')
           if (value === null || typeof value !== 'object' || Array.isArray(value)) return
@@ -235,7 +286,7 @@ export function createResourceVfs(options: ResourceVfsOptions) {
             files.push({ path: childPath, kind: 'directory', identity: `state-dir:${childPointer}` })
             files.push({
               path: `${childPath}/@value.yaml`, kind: 'file', identity: `state:${childPointer}`,
-              load: async () => stringify(child), state: 'current', binding: binding(childPointer),
+              stateValue: child, load: async () => stringify(child), state: 'current', binding: binding(childPointer),
             })
             if (includeRootContent || path === childPath || path.startsWith(`${childPath}/`)) visit(child, childPath, childPointer, depth + 1)
           }
@@ -332,6 +383,25 @@ export function createResourceVfs(options: ResourceVfsOptions) {
       })
       return result
     },
+    async readValue(args: unknown[], signal: AbortSignal, control?: VfsApprovalControl) {
+      if (args.length !== 1) throw vfsError('vfs.invalid_arguments', 'Use ctx.readValue(path) for a State value.')
+      const path = vfsPath(args[0])
+      const files = await snapshot(path, signal, false, control)
+      const file = files.find(item => item.path === path)
+      if (!file) throw vfsError('vfs.not_found', `Path unavailable: ${path}. Use ctx.ls to discover the value file.`)
+      claim(path, file.identity)
+      if (file.state === 'locked') throw vfsError('vfs.locked', 'This resource is not readable in the current scope.')
+      if (file.binding?.kind !== 'state')
+        throw vfsError('vfs.value_unsupported', 'readValue supports State value files only. Use ctx.read for text; choose @value.yaml inside a State property directory.')
+      const value = file.stateValue!
+      if (JSON.stringify(value).length > 16 * 1024)
+        throw vfsError('vfs.value_too_large', 'This State value exceeds the structured read budget. Choose a smaller property; no partial value was returned.')
+      const totalLines = (await file.load!(signal)).split('\n').length
+      signal.throwIfAborted()
+      const observation = { path, startLine: 1, endLine: totalLines, totalLines, binding: file.binding }
+      observed.set(path, { observation: structuredClone(observation), ranges: [[1, totalLines]] })
+      return { value: structuredClone(value), observation }
+    },
     async write(
       args: unknown[],
       signal: AbortSignal,
@@ -339,13 +409,14 @@ export function createResourceVfs(options: ResourceVfsOptions) {
       approvalControl?: VfsApprovalControl,
     ) {
       if (args.length < 2 || args.length > 3)
-        throw vfsError('vfs.invalid_arguments', 'Use ctx.write(path, value, { mode?: "replace" }).')
+        throw vfsError('vfs.invalid_arguments', 'Use ctx.write(path, value, { mode?: "replace", allowTypeChange?: boolean }).')
       const path = vfsPath(args[0])
       const rawOptions = args[2] === undefined ? {} : args[2]
       if (typeof rawOptions !== 'object' || rawOptions === null || Array.isArray(rawOptions)
-        || Object.keys(rawOptions).some(key => key !== 'mode')
+        || Object.keys(rawOptions).some(key => key !== 'mode' && key !== 'allowTypeChange')
+        || ((rawOptions as { allowTypeChange?: unknown }).allowTypeChange !== undefined && typeof (rawOptions as { allowTypeChange?: unknown }).allowTypeChange !== 'boolean')
         || ((rawOptions as { mode?: unknown }).mode !== undefined && (rawOptions as { mode?: unknown }).mode !== 'replace')) {
-        throw vfsError('vfs.invalid_options', 'The only supported write mode is replace.')
+        throw vfsError('vfs.invalid_options', 'Use mode: replace and an optional boolean allowTypeChange for State values only.')
       }
       const observedValue = observed.get(path)
       if (!observedValue?.observation.binding)
@@ -361,6 +432,14 @@ export function createResourceVfs(options: ResourceVfsOptions) {
         || observedValue.ranges[0]![1] !== observedValue.observation.totalLines)
         throw vfsError('vfs.full_read_required', 'A full resource read is required before replace. Use a narrower read only for inspection.')
       const binding = file.binding
+      if ('allowTypeChange' in rawOptions && binding?.kind !== 'state')
+        throw vfsError('vfs.invalid_options', 'allowTypeChange is only supported for State values.')
+      if (binding?.kind === 'workspace') {
+        if (typeof args[1] !== 'string') throw vfsError('vfs.value_invalid', 'Workspace text must be a string.')
+        await approveMutation({ action: 'replace', path, kind: 'workspace', before: file.content!, after: args[1] }, signal, approvalControl)
+        const result = await options.workspace!.mutate(binding.revisionId, [{ kind: 'write', entryId: binding.entryId, content: args[1] }])
+        return { path, modified: true, changesetId: result.changesetId }
+      }
       if (binding?.kind === 'narrative') {
         if (typeof args[1] !== 'string' || !args[1].trim())
           throw vfsError('vfs.value_invalid', 'Narrative content must be nonempty text.')
@@ -408,6 +487,13 @@ export function createResourceVfs(options: ResourceVfsOptions) {
       if (binding?.kind === 'state') {
         if (!binding.pointer) throw vfsError('vfs.write_unsupported', 'Write a State property under /state/data, not the complete State snapshot.')
         if (!options.state?.write) throw vfsError('vfs.write_unavailable', 'State writing is unavailable in this scope.')
+        const previous = file.stateValue!
+        const kind = (value: unknown) => value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value
+        const previousKind = kind(previous)
+        const nextKind = kind(args[1])
+        if ((previousKind === 'object' || previousKind === 'array') && nextKind !== previousKind
+          && !(rawOptions as { allowTypeChange?: boolean }).allowTypeChange)
+          throw vfsError('vfs.type_change', `State value is ${previousKind}, but the replacement is ${nextKind}. Pass the actual JavaScript value, not serialized YAML/JSON. Use allowTypeChange: true only for an intentional type change; approval and Schema checks still apply.`)
         const before = await file.load!(signal)
         await approveMutation({
           action: 'replace', path, kind: binding.kind,
@@ -433,25 +519,25 @@ export function createResourceVfs(options: ResourceVfsOptions) {
       if (args.length !== 2 || typeof args[1] !== 'string')
         throw vfsError('vfs.invalid_arguments', 'Use ctx.patch(path, unifiedDiff).')
       const path = vfsPath(args[0])
-      const observedValue = observed.get(path)
-      if (!observedValue?.observation.binding)
-        throw vfsError('vfs.read_required', 'Read the target range first. The read result provides the patch baseline.')
       const files = await snapshot(path, signal)
       const file = files.find(item => item.path === path)
       if (!file) throw vfsError('vfs.not_found', `Path unavailable: ${path}.`)
       claim(path, file.identity)
       if (file.state === 'locked') throw vfsError('vfs.locked', 'This resource is visible but not writable in the current scope.')
+      if (file.binding?.kind !== 'prompt-resource' && file.binding?.kind !== 'workspace')
+        throw vfsError('vfs.write_unsupported', 'Patch supports Workspace text and Prompt Resource bodies only. For State, readValue the exact @value.yaml path and write a JavaScript value.')
+      const observedValue = observed.get(path)
+      if (!observedValue?.observation.binding)
+        throw vfsError('vfs.read_required', 'Read the target range first. The read result provides the patch baseline.')
       if (!sameBindingVersion(observedValue.observation.binding, file.binding))
         throw vfsError('vfs.baseline_changed', 'The resource changed after it was read. Read the path again before applying the patch.')
-      if (file.binding?.kind !== 'prompt-resource')
-        throw vfsError('vfs.write_unsupported', 'Patch is currently available only for Prompt Resource bodies.')
-      if (file.binding.field !== 'body')
+      if (file.binding.kind === 'prompt-resource' && file.binding.field !== 'body')
         throw vfsError('vfs.write_unsupported', 'Patch is only available for Prompt Resource bodies; write Metadata as YAML.')
-      if (!options.resources?.write)
+      if (file.binding.kind === 'prompt-resource' && !options.resources?.write)
         throw vfsError('vfs.write_unavailable', 'Prompt Resource writing is unavailable in this scope.')
       if (typeof file.content !== 'string')
         throw vfsError('vfs.not_file', 'The target does not contain writable text.')
-      requireAuthorMode()
+      if (file.binding.kind === 'prompt-resource') requireAuthorMode()
 
       let patches: ReturnType<typeof parsePatch>
       try {
@@ -507,7 +593,11 @@ export function createResourceVfs(options: ResourceVfsOptions) {
       await approveMutation({
         action: 'patch', path, kind: file.binding.kind, before, after,
       }, signal, approvalControl)
-      const result = await options.resources.write({
+      if (file.binding.kind === 'workspace') {
+        const result = await options.workspace!.mutate(file.binding.revisionId, [{ kind: 'write', entryId: file.binding.entryId, content: after }])
+        return { path, modified: true, changesetId: result.changesetId, mode: 'patch' }
+      }
+      const result = await options.resources!.write!({
         resourceId: file.binding.resourceId,
         nodeId: file.binding.nodeId,
         expectedVersion: file.binding.version,
@@ -519,6 +609,7 @@ export function createResourceVfs(options: ResourceVfsOptions) {
       }
     },
     async move(args: unknown[], signal: AbortSignal, approvalControl?: VfsApprovalControl) {
+      if (typeof args[0] === 'string' && (args[0] === '/workspace' || args[0].startsWith('/workspace/'))) return workspaceStructure('move', args, signal, approvalControl)
       if (args.length !== 3 || typeof args[1] !== 'string' || typeof args[2] !== 'number'
         || !Number.isSafeInteger(args[2]) || args[2] < 0)
         throw vfsError('vfs.invalid_arguments', 'Use ctx.move(path, parentPath, orderIndex).')
@@ -551,6 +642,7 @@ export function createResourceVfs(options: ResourceVfsOptions) {
       }
     },
     async delete(args: unknown[], signal: AbortSignal, approvalControl?: VfsApprovalControl) {
+      if (typeof args[0] === 'string' && (args[0] === '/workspace' || args[0].startsWith('/workspace/'))) return workspaceStructure('delete', args, signal, approvalControl)
       if (args.length !== 1) throw vfsError('vfs.invalid_arguments', 'Use ctx.delete(path).')
       const path = vfsPath(args[0])
       const target = await resolveStructuralTarget(path, signal)
@@ -575,6 +667,7 @@ export function createResourceVfs(options: ResourceVfsOptions) {
       }
     },
     async create(args: unknown[], signal: AbortSignal, approvalControl?: VfsApprovalControl) {
+      if (typeof args[0] === 'string' && (args[0] === '/workspace' || args[0].startsWith('/workspace/'))) return workspaceStructure('create', args, signal, approvalControl)
       if (args.length !== 2 || typeof args[1] !== 'object' || args[1] === null || Array.isArray(args[1]))
         throw vfsError('vfs.invalid_arguments', 'Use ctx.create(parentPath, { label, kind?, body?, ...metadata }).')
       const parentPath = vfsPath(args[0])
@@ -601,6 +694,7 @@ export function createResourceVfs(options: ResourceVfsOptions) {
       }
     },
     async copy(args: unknown[], signal: AbortSignal, approvalControl?: VfsApprovalControl) {
+      if (typeof args[0] === 'string' && (args[0] === '/workspace' || args[0].startsWith('/workspace/'))) return workspaceStructure('copy', args, signal, approvalControl)
       if (args.length < 2 || args.length > 3 || typeof args[1] !== 'string')
         throw vfsError('vfs.invalid_arguments', 'Use ctx.copy(sourcePath, destinationPath, { name? }).')
       const sourcePath = vfsPath(args[0])
@@ -861,6 +955,8 @@ function sameBindingVersion(
   current: VfsBinding | undefined,
 ): boolean {
   if (!observed || !current || observed.kind !== current.kind) return false
+  if (observed.kind === 'workspace' && current.kind === 'workspace')
+    return observed.entryId === current.entryId && observed.revisionId === current.revisionId
   if (observed.kind === 'narrative' && current.kind === 'narrative')
     return observed.nodeId === current.nodeId && observed.timelineId === current.timelineId
       && observed.branchId === current.branchId && observed.raw === current.raw

@@ -45,7 +45,7 @@ export function AgentSessionCreateDialog(props: {
 
   return <Dialog open title={props.t('agent.createSession')} className={styles.dialog} dismissible={!busy}
     onClose={props.onClose}
-    headerActions={<IconButton aria-label={props.t('agent.closeCreateSession')} title={props.t('agent.close')} disabled={busy} onClick={props.onClose}>
+    showCloseButton={false} headerActions={<IconButton aria-label={props.t('agent.closeCreateSession')} title={props.t('agent.close')} disabled={busy} onClick={props.onClose}>
       <X size={16} aria-hidden="true" />
     </IconButton>}
     actions={<>

@@ -1,12 +1,13 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
+import { enableCompileCache } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const [major, minor] = process.versions.node.split('.').map(Number)
-if (major < 22 || (major === 22 && minor < 18)) {
-  console.error('Loom Studio requires Node.js 22.18 or newer. Install Node.js, then start again.')
+if (major < 24 || (major === 24 && minor < 22)) {
+  console.error('Loom Studio requires Node.js 24.22 or newer. Install Node.js, then start again.')
   process.exit(1)
 }
 
@@ -32,6 +33,8 @@ try {
     run('npm', ['exec', '--yes', '--package=pnpm@9.15.0', '--', 'pnpm', 'build:app'])
   }
   process.env.NODE_ENV = 'production'
+  // ponytail: Node #66438 reports Windows long-path hangs; verify the pinned Node before enabling it there.
+  if (manifest.loomStudioRelease && process.platform !== 'win32') enableCompileCache()
   const { main } = await import('../apps/studio-server/dist/main.js')
   await main()
 } catch (error) {

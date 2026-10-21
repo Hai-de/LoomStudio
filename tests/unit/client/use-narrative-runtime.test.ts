@@ -105,6 +105,13 @@ describe('resolveNarrativeBranch', () => {
 })
 
 describe('inspectSessionRunStatus', () => {
+  it('keeps a running transcript state distinct from suspension', () => {
+    expect(inspectSessionRunStatus([{
+      id: 'state', agentSessionId: 'session', sequence: 1, runId: 'live', createdAt: '',
+      entry: { kind: 'run-state', state: 'running' },
+    }])).toEqual({ runId: 'live', status: 'running' })
+  })
+
   it('identifies completed turns as idle', () => {
     const status = inspectSessionRunStatus([
       { id: '1', agentSessionId: 's', sequence: 1, entry: { kind: 'message', role: 'user', content: 'hello' }, createdAt: '' },

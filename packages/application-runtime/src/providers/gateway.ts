@@ -250,6 +250,8 @@ function toApplicationGatewayResult(result: Awaited<ReturnType<ReturnType<typeof
   return {
     message: result.message,
     text: result.text,
+    ...(result.reasoning ? { reasoning: result.reasoning } : {}),
+    ...(result.toolCallErrors ? { toolCallErrors: result.toolCallErrors } : {}),
     provider: result.provider,
     model: result.model,
     ...(result.finishReason ? { finishReason: result.finishReason } : {}),

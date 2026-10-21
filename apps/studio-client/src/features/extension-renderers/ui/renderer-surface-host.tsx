@@ -1,3 +1,4 @@
+import { adoptSharedUiStyles } from '../../../shared/extension-renderer-runtime/shared-ui-styles.js'
 import type { ClientDisplayPart, ClientRendererFrameHostMessage, RendererSurface } from '@loom-studio/extension-sdk'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { rendererContributionKey, rendererSurfacePolicies } from '../../../shared/extension-renderer-runtime/renderer-registry.js'
@@ -218,6 +219,7 @@ export function RendererInstanceRoot(props: {
     let mountRoot = root
     if (adapter === 'shadow') {
       const shadow = root.shadowRoot ?? root.attachShadow({ mode: 'open' })
+      adoptSharedUiStyles(shadow)
       const style = document.createElement('style')
       style.textContent = ':host{display:block;min-width:0;color:var(--loom-color-text);font:inherit}*,*::before,*::after{box-sizing:border-box}'
       mountRoot = document.createElement('div')

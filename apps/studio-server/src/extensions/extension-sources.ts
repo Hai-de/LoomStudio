@@ -1,7 +1,8 @@
+import { loadPromptResourceFiles } from '../codecs/prompt-resource-files.js'
 import { parseExtensionManifest, type ExtensionManifest } from '@loom-studio/extension-host'
 import { isRecord } from '@loom-studio/shared'
-import { access, readFile, readdir, realpath } from 'node:fs/promises'
-import { isAbsolute, relative, resolve } from 'node:path'
+import { access, readFile, readdir, realpath, stat } from 'node:fs/promises'
+import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import { writeJsonAtomically } from '../platform/atomic-json.js'
 
 type ExtensionSourceKind = 'repository' | 'dev-link' | 'installed'
@@ -73,6 +74,21 @@ export async function discoverExtensionSources(options: {
       }
       for (const resource of manifest.contributes?.promptResources ?? []) {
         await assertEntryInsideDirectory(directory, resource.source)
+        const sourcePath = resolve(directory, resource.source)
+        // Missing build outputs remain discoverable; installation reports the existing actionable error.
+        try {
+          const sourceStat = await stat(sourcePath)
+          if (sourceStat.size > 16 * 1024 * 1024) throw new Error('Prompt Resource exceeds maximum size')
+          await loadPromptResourceFiles(JSON.parse(await readFile(sourcePath, 'utf8')), async path => {
+            const candidate = resolve(dirname(sourcePath), path)
+            await assertEntryInsideDirectory(directory, relative(directory, candidate))
+            const info = await stat(candidate)
+            if (!info.isFile() || info.size > 16 * 1024 * 1024) throw new Error('Invalid Prompt Resource file size or type')
+            return readFile(candidate)
+          })
+        } catch (error) {
+          if (!isNodeError(error, 'ENOENT')) throw error
+        }
       }
       for (const tool of manifest.contributes?.agentTools ?? []) {
         await assertEntryInsideDirectory(directory, tool.source)

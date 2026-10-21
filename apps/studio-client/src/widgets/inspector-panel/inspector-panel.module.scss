@@ -9,7 +9,16 @@
 
 .section {
   padding: 12px;
-  border-bottom: 1px solid var(--loom-color-border);
+
+  > summary {
+    cursor: pointer;
+    font-weight: var(--loom-font-weight-6);
+  }
+}
+
+.previewNotice {
+  color: var(--loom-color-text-muted);
+  font-size: var(--loom-font-size-3);
 }
 .json {
   max-height: 330px;

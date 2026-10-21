@@ -49,6 +49,7 @@ import { createStudioHttpServer } from './http/http-server.js'
 import type { StudioRpcServices } from './rpc/trpc/services-context.js'
 import { createServerExtensionManager } from './extensions/extension-manager.js'
 import { createExtensionStateStore } from './extensions/extension-state-store.js'
+import { createExtensionBatchImporter } from './extensions/import-batch.js'
 import { createExtensionImportConversions } from './extensions/import-conversion.js'
 import { createOfficialContentService, installBuiltinStarterContent } from './official/official-content.js'
 import { createCardDirectoryService } from './resource-directories/card-directory.js'
@@ -271,8 +272,13 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
     devLinksFile: options.extensionStateDirectory ? join(extensionStateDirectory, 'dev-links.json') : localPaths.extensionDevLinksFile,
     deleteData: extensionFileData.removeGlobal,
     officialSetupFile: join(localPaths.configRoot, 'official-extension-setup.json'),
-    bundledDirectories: options.runtimeMode === 'production' && !options.extensionInstalledDirectory
-      ? [join(installationRoot, 'official/extensions/loom-assistant')] : [],
+    bundledDirectories: (options.runtimeMode === 'production' || options.runtimeMode === 'development')
+      && !options.extensionInstalledDirectory && !options.extensionRootDirectory
+      ? [
+        ...(options.runtimeMode === 'production' ? [join(installationRoot, 'official/extensions/loom-assistant')] : []),
+        join(installationRoot, 'official/extensions/story-memory'),
+      ] : [],
+    bundledEnabledModules: { 'official.story-memory': ['server', 'client'] },
     readCardPackage: input => applicationRuntime.getCardExtensionPackage(input),
     listInstallations: () => applicationRuntime.listExtensionInstallations(),
     importPackageResources: input => applicationRuntime.importExtensionPackageResources(input, {
@@ -341,6 +347,7 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
   })
   const rpcServices: StudioRpcServices = {
     directoryCatalog, directoryResources: resourceDirectories, directoryImporter, startupDirectoryScan,
+    batchImporter: createExtensionBatchImporter({ kernel, runtime: applicationRuntime, assets, saveImportedCard }),
     convertPromptResource: importConversions.promptResource,
     applicationRuntime,
     officialContent: createOfficialContentService(applicationRuntime, resolve(officialContentDirectory)),

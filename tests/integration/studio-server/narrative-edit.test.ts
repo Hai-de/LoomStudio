@@ -32,8 +32,9 @@ describe('branch-local Narrative text editing', () => {
       }
       const fork = await store.forkBranch({
         actor, timelineId: created.timeline.id, fromBranchId: created.branch.id,
-        fromNodeId: created.nodes[2]!.id, stateRevisionId: 'state-sibling',
+        fromNodeId: created.nodes[2]!.id,
       })
+      await store.setBranchStateHead({ actor, timelineId: created.timeline.id, branchId: fork.branch.id, expectedStateHeadRevisionId: 'state-initial', stateRevisionId: 'state-sibling' })
       await store.setBranchStateHead({
         actor, timelineId: created.timeline.id, branchId: created.branch.id,
         expectedStateHeadRevisionId: 'state-initial', stateRevisionId: 'state-later',

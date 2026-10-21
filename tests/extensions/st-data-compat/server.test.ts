@@ -81,11 +81,10 @@ async function withMigrationHost(run: (fixture: {
 }
 
 describe('SillyTavern migration lifecycle', () => {
-  it('imports every chat message through the dedicated history RPC with original bodies and timestamps', async () => {
+  it('prepares native history with original bodies and timestamps without calling host write APIs', async () => {
     const handlers = new Map<string, ExtensionRpcHandler>()
     const rpcCalls: Array<{ method: string; params?: JsonValue }> = []
     const disposers: Array<() => unknown> = []
-    // Isolate migration mapping from the host's application-namespace permission policy.
     await activate!({
       rpc: {
         register: (name: string, handler: ExtensionRpcHandler) => { handlers.set(name, handler) },
@@ -115,17 +114,17 @@ describe('SillyTavern migration lifecycle', () => {
           { is_user: false, mes: 'Last body' },
         ].map(message => JSON.stringify(message)).join('\n') },
       ] })
-      expect(await call(instanceId, 'commit', { sessionId })).toEqual({ imported: 2 })
-      expect(rpcCalls.filter(call => call.method === 'application.importNarrativeHistory')).toEqual([{
-        method: 'application.importNarrativeHistory', params: {
-          cardId: 'imported-hero', title: 'Imported history', messages: [
-            { content: 'First\nbody', createdAt: '2026-10-01T00:00:00.000Z' },
-            { content: 'User body', createdAt: '2026-10-01T00:01:00.000Z' },
-            { content: 'Last body' },
-          ],
-        },
-      }])
-      expect(rpcCalls.some(call => call.method === 'application.createNarrativeTimeline')).toBe(false)
+      expect(await call(instanceId, 'prepare', { sessionId, index: 0 })).toMatchObject({ kind: 'card', key: 'characters/Hero.json' })
+      expect(await call(instanceId, 'prepare', { sessionId, index: 1 })).toEqual({
+        kind: 'history', key: 'chats/Hero/history.jsonl', cardKey: 'characters/Hero.json',
+        title: 'Imported history', messages: [
+          { content: 'First\nbody', createdAt: '2026-10-01T00:00:00.000Z' },
+          { content: 'User body', createdAt: '2026-10-01T00:01:00.000Z' },
+          { content: 'Last body' },
+        ],
+      })
+      expect(await call(instanceId, 'prepare', { sessionId, index: 2 })).toBeNull()
+      expect(rpcCalls).toEqual([])
     } finally {
       for (const dispose of disposers) await dispose()
     }
@@ -350,11 +349,11 @@ describe('studio server SillyTavern silent import pipeline', () => {
       )
       const target = { scope: 'timeline', timelineId: story.timeline.id, branchId: story.branch.id }
       await expect(callRpc(port, 'application.getStateSnapshot', { target })).resolves.toMatchObject({
-        snapshot: { value: { entities: { stCompatibility: { mvu: { components: { data: { stat_data: { hp: 10 } } } } } } } },
+        snapshot: { value: { mvu: { stat_data: { hp: 10 } } } },
       })
       await callRpc(port, 'extensions.disableModule', module)
       await expect(callRpc(port, 'application.getStateSnapshot', { target })).resolves.toMatchObject({
-        snapshot: { value: { entities: { stCompatibility: { mvu: { components: { data: { stat_data: { hp: 10 } } } } } } } },
+        snapshot: { value: { mvu: { stat_data: { hp: 10 } } } },
       })
       await expect(callRpc(port, 'application.createNarrativeTimeline', { cardId: card.id })).rejects.toThrow('not registered')
     })

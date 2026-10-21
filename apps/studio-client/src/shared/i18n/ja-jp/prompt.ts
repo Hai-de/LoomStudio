@@ -1,6 +1,8 @@
 import type { messages as zhCN } from '../zh-cn/prompt.js'
 
 export const messages = {
+  'provider.confirmDeleteAccount': 'アカウント「{{name}}」を削除しますか？モデル設定も削除されます。この操作は取り消せません。',
+  'provider.cancelDelete': 'キャンセル',
   'tokens.messageAndToolEstimate': 'メッセージ: {{messages}} · ツール: {{tools}}',
   'tokens.uncounted': '未計上: {{items}}',
   'tokens.modelMultiplierHelp': 'o200k_base 基礎カウントの見積もり係数',
@@ -77,6 +79,7 @@ export const messages = {
   'provider.aiLabNoProfile': 'まずこの Capability の Profile を作成してください。',
   'provider.aiLabUnavailable': 'Provider 未マウント',
   'provider.aiLabSave': '設定を保存',
+  'inspector.previewTruncated': 'プレビューは省略されています。データの一部のみ表示しています。',
   'inspector.cardSnapshot': 'キャラクターカードスナップショット',
   'inspector.run': 'Run Inspector',
   'inspector.agentTranscript': 'Agent トランスクリプト',

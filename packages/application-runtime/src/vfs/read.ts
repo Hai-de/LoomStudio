@@ -37,22 +37,40 @@ function find(entries: readonly VfsEntry[], path: string): VfsEntry {
   return entry
 }
 
-export function listVfs(entries: readonly VfsEntry[], args: unknown[]): string {
-  if (args.length > 2) throw vfsError('vfs.invalid_arguments', 'Use ctx.ls(path?, { offset?, limit? }?).')
+export type VfsListing = {
+  path: string
+  entries: Array<{ path: string; kind: VfsEntry['kind']; state?: VfsEntry['state'] }>
+  total: number
+  offset: number
+  hasMore: boolean
+  nextOffset?: number
+}
+
+export function listVfs(entries: readonly VfsEntry[], args: unknown[]): string | VfsListing {
+  if (args.length > 2) throw vfsError('vfs.invalid_arguments', 'Use ctx.ls(path?, { offset?, limit?, format?: text | json }?).')
   const path = vfsPath(args[0] ?? '/')
-  const options = record(args[1], ['offset', 'limit'])
+  const options = record(args[1], ['offset', 'limit', 'format'])
   const offset = integer(options.offset, 0, 0, Number.MAX_SAFE_INTEGER)
   const limit = integer(options.limit, 50, 1, 100)
+  if (options.format !== undefined && options.format !== 'text' && options.format !== 'json')
+    throw vfsError('vfs.invalid_options', 'Listing format must be text or json.')
   const entry = find(entries, path)
   if (entry.kind !== 'directory') throw vfsError('vfs.not_directory', 'Use ctx.read for a file.')
   const prefix = path === '/' ? '/' : `${path}/`
   const children = entries.filter(item => item.path.startsWith(prefix)
     && item.path !== path && !item.path.slice(prefix.length).includes('/'))
-  const rows = children.slice(offset, offset + limit).map(item =>
+  const page = children.slice(offset, offset + limit)
+  const hasMore = offset + page.length < children.length
+  if (options.format === 'json') return {
+    path, entries: page.map(item => ({ path: item.path, kind: item.kind, ...(item.state ? { state: item.state } : {}) })),
+    total: children.length, offset, hasMore, ...(hasMore ? { nextOffset: offset + page.length } : {}),
+  }
+  const rows = page.map(item =>
     `  ${item.path.slice(prefix.length)}${item.kind === 'directory' ? '/' : ''}${item.state ? ` [${item.state}]` : ''}`,
   )
   return [
     path, ...rows,
+    ...(!page.length ? [children.length ? `No more entries; offset: ${offset}, total: ${children.length}.` : 'Empty directory.'] : []),
     ...(offset + limit < children.length ? [`More entries: ctx.ls(${JSON.stringify(path)}, { offset: ${offset + limit} })`] : []),
   ].join('\n')
 }
@@ -107,15 +125,25 @@ export function searchVfs(entries: readonly VfsEntry[], args: unknown[]): string
     const content = entry.content!.toLocaleLowerCase()
     if (!(match === 'all' ? terms.every(term => content.includes(term)) : terms.some(term => content.includes(term)))) continue
     const lines = entry.content!.split('\n')
-    const lineIndex = lines.findIndex(line => terms.some(term => line.toLocaleLowerCase().includes(term)))
-    const start = Math.max(0, lineIndex - 1)
-    const end = Math.min(lines.length, lineIndex + 2)
+    const matched = terms.map((term, index) => ({ term, original: (options.terms as string[])[index]! }))
+      .filter(item => content.includes(item.term))
     if (hits.length >= limit) {
       more = true
       break
     }
-    hits.push(`${entry.path}:${start + 1}-${end}\n${lines.slice(start, end).map((line, index) =>
-      `${start + index + 1}: ${line.slice(0, 240)}${line.length > 240 ? ' [line truncated]' : ''}`).join('\n')}`)
+    const selected = new Set<number>()
+    for (const { term } of matched) {
+      const at = content.slice(0, content.indexOf(term)).split('\n').length - 1
+      for (let line = Math.max(0, at - 1); line <= Math.min(lines.length - 1, at + 1); line++) selected.add(line)
+    }
+    const indexes = [...selected].sort((a, b) => a - b).slice(0, 6)
+    const excerpts: string[] = []
+    indexes.forEach((line, index) => {
+      if (index && line > indexes[index - 1]! + 1) excerpts.push('...')
+      excerpts.push(`${line + 1}: ${lines[line]!.slice(0, 240)}${lines[line]!.length > 240 ? ' [line truncated]' : ''}`)
+    })
+    hits.push(`Matched terms: ${JSON.stringify(matched.map(item => item.original))}\n${entry.path}:${indexes[0]! + 1}-${indexes.at(-1)! + 1}\n${excerpts.join('\n')}`
+      + (selected.size > indexes.length ? '\n[Additional matching locations omitted; read the file.]' : ''))
   }
   return [`Scope: ${path}`, ...(hits.length ? hits : ['No matches in the accessible view.']),
     ...(more ? ['More matching files; narrow path or terms.'] : [])].join('\n')

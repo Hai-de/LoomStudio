@@ -38,6 +38,9 @@ type ExtensionWorkspaceSelection =
   | { kind: 'command'; packageId: string; moduleId: string; id: string }
 
 export function RendererWorkspacePanel(props: {
+  mode: 'management' | 'workspace'
+  onOpenWorkspace(): void
+  onCloseWorkspace(): void
   extensionHost: ClientExtensionHost
   host: ClientRendererHost
   packages: readonly ManagedExtensionPackage[]
@@ -82,11 +85,17 @@ export function RendererWorkspacePanel(props: {
     if (packageId) setSelection({ kind: 'package', packageId })
   }, [searchParams])
   const [mobilePane, setMobilePane] = useState<'master' | 'detail'>('master')
+  const [actionError, setActionError] = useState<string>()
   const [busyKey, setBusyKey] = useState<string>()
   const [removal, setRemoval] = useState<{ packageId: string; version: string }>()
   const [deleteData, setDeleteData] = useState(false)
   const [installOpen, setInstallOpen] = useState(false)
-  const [view, setView] = useState<'packages' | 'participation'>('packages')
+  const view = searchParams.get('extensionView') === 'participation' ? 'participation' : 'packages'
+  const setView = (next: 'packages' | 'participation') => {
+    const params = new URLSearchParams(searchParams)
+    params.set('extensionView', next)
+    navigate(`/studio/extensions?${params}`)
+  }
   const [expandedIds, setExpandedIds] = useState<string[]>(() => [...props.packages, ...props.cardPackages].flatMap(item => {
     const prefix = `${item.target?.kind === 'card' ? item.target.cardId : 'global'}:${item.packageId}:`
     return [`${prefix}resources`, `${prefix}modules`, ...['prompt', 'tool', 'rule', 'extractor'].map(kind => `${prefix}resources:${kind}`)]
@@ -98,22 +107,32 @@ export function RendererWorkspacePanel(props: {
   const activeOwner = active?.owner
   const activePackage = activeOwner?.kind === 'extension' ? props.packages.find(item => item.packageId === activeOwner.packageId) : undefined
   const activeIconUrl = activePackage ? extensionIconUrl(activePackage) : undefined
-  const runtimeAlert = props.runtimeError ? <div role="alert" className={styles.runtimeAlert}>
+  const runtimeAlert = props.runtimeError || actionError ? <div role="alert" className={styles.runtimeAlert}>
+    {actionError ? <p>{actionError}</p> : null}
+    {props.runtimeError ? <>
     <p>{props.t('renderer.runtimeUnavailable')}</p>
     <p>{props.runtimeError}</p>
     <Button disabled={!!busyKey} onClick={() => {
       setBusyKey('refresh')
+      setActionError(undefined)
       void props.onRefreshExtensions().catch(error => {
-        notify.error(error instanceof Error ? error.message : String(error))
+        setActionError(error instanceof Error ? error.message : String(error))
       }).finally(() => setBusyKey(undefined))
     }}><RefreshCw aria-hidden="true" size={16} />{props.t('renderer.retryRuntime')}</Button>
+    </> : null}
   </div> : null
 
-  if (active) {
+  if (props.mode === 'workspace' && !active) {
+    return <section className={styles.panel}><Button onClick={props.onCloseWorkspace}>{props.t('renderer.back')}</Button></section>
+  }
+  if (props.mode === 'workspace' && active) {
     return (
       <section className={styles.panel} data-runtime-error={Boolean(props.runtimeError)} data-loom-component="renderer-workspace-panel">
         <header className={styles.header}>
-          <button type="button" onClick={() => props.host.release('shell.workspace-panel', WORKSPACE_SCOPE_KEY, activeKey)}>
+          <button type="button" onClick={() => {
+            props.host.release('shell.workspace-panel', WORKSPACE_SCOPE_KEY, activeKey)
+            props.onCloseWorkspace()
+          }}>
             <ArrowLeft aria-hidden="true" />
             <span>{props.t('renderer.back')}</span>
           </button>
@@ -154,11 +173,12 @@ export function RendererWorkspacePanel(props: {
   }
 
   async function run(key: string, operation: () => Promise<unknown>) {
+    setActionError(undefined)
     setBusyKey(key)
     try {
       await operation()
     } catch (error) {
-      notify.error(error instanceof Error ? error.message : String(error))
+      setActionError(error instanceof Error ? error.message : String(error))
     } finally {
       setBusyKey(undefined)
     }
@@ -173,6 +193,7 @@ export function RendererWorkspacePanel(props: {
       capabilities: extensionPackage.modules.filter(module => !module.desired.enabled)
         .map(module => `${module.moduleId} (${module.runtimeKind}): ${JSON.stringify(module.requestedCapabilities ?? {})}`).join('\n'),
     }))) return
+    setActionError(undefined)
     setBusyKey(key)
     setToggleReport(undefined)
     try {
@@ -182,7 +203,7 @@ export function RendererWorkspacePanel(props: {
       })
       setToggleReport({ key, ...report })
       if (report.failed.length) {
-        notify.error(props.t('renderer.packagePartial'))
+        setActionError(props.t('renderer.packagePartial'))
       } else {
         notify.success(enabled ? props.t('notify.success.enabled') : props.t('notify.success.disabled'))
       }
@@ -192,44 +213,48 @@ export function RendererWorkspacePanel(props: {
   }
 
   async function importResources(packageId: string) {
+    setActionError(undefined)
     try {
       await props.onImportResources(packageId)
       notify.success(props.t('renderer.resourcesImported'))
     } catch (error) {
-      notify.error(error instanceof Error ? error.message : String(error))
+      setActionError(error instanceof Error ? error.message : String(error))
     }
   }
 
   async function removeResources(packageId: string) {
     if (!window.confirm(props.t('renderer.removeResourcesConfirm'))) return
+    setActionError(undefined)
     try {
       await props.onRemoveResources(packageId)
       notify.success(props.t('renderer.resourcesRemoved'))
     } catch (error) {
-      notify.error(error instanceof Error ? error.message : String(error))
+      setActionError(error instanceof Error ? error.message : String(error))
     }
   }
 
   async function uninstallPackage(packageId: string, version: string) {
+    setActionError(undefined)
     setDeleteData(false)
     setRemoval({ packageId, version })
   }
   async function confirmUninstall() {
     if (!removal) return
+    setActionError(undefined)
     setBusyKey('uninstall')
     try {
       await props.onUninstall(removal.packageId, removal.version, deleteData)
       setRemoval(undefined)
       notify.success(props.t('renderer.uninstalled'))
     } catch (error) {
-      notify.error(error instanceof Error ? error.message : String(error))
+      setActionError(error instanceof Error ? error.message : String(error))
     } finally {
       setBusyKey(undefined)
     }
   }
 
   return (
-    <section className={`${styles.panel} ${styles.management}`} data-runtime-error={Boolean(props.runtimeError)} data-loom-component="renderer-workspace-panel">
+    <section className={`${styles.panel} ${styles.management}`} data-runtime-error={Boolean(props.runtimeError || actionError)} data-loom-component="renderer-workspace-panel">
       {runtimeAlert}
       {installOpen ? <RemoteExtensionInstall api={props.extensionApi} t={props.t}
         onClose={() => setInstallOpen(false)} onInstalled={props.onRefreshExtensions} /> : null}
@@ -238,10 +263,12 @@ export function RendererWorkspacePanel(props: {
           <Button disabled={!!busyKey} onClick={() => setRemoval(undefined)}>{props.t('renderer.remote.cancel')}</Button>
           <Button variant="danger" disabled={!!busyKey} onClick={() => void confirmUninstall()}><Trash2 size={16} aria-hidden="true" />{props.t('renderer.uninstall')}</Button>
         </>}>
+        {actionError ? <p role="alert">{actionError}</p> : null}
         <p>{removal.packageId} · {removal.version}</p>
         <label><input type="checkbox" checked={deleteData} disabled={!!busyKey} onChange={event => setDeleteData(event.target.checked)} /> {props.t('renderer.remote.deleteData')}</label>
       </Dialog> : null}
       <MasterDetailWorkbench
+        navigationScope="local"
         masterWidth="minmax(210px, 0.24fr)"
         mobilePane={mobilePane}
         onMobilePaneChange={setMobilePane}
@@ -276,7 +303,9 @@ export function RendererWorkspacePanel(props: {
             <div className={styles.packageTreeBody}>
               {view === 'participation' ? (
                 <div className={styles.participationSidebarNotice}>
-                  <p>{props.t('participation.title')}</p>
+                  <strong>{props.embeddedPackageCard?.name ?? props.t('participation.timeline')}</strong>
+                  <p>{props.timelineParticipation.timeline?.title ?? props.timelineParticipation.timeline?.id ?? props.t('participation.noTimeline')}</p>
+                  <small>管理此故事的扩展；新叙事开始时会单独选择。</small>
                 </div>
               ) : props.packages.length === 0 ? <p className={styles.empty}>{props.t('renderer.workspaceEmpty')}</p> : props.packages.map(extensionPackage => {
               const isEnabled = extensionPackage.modules.length > 0 && extensionPackage.modules.every(module => module.desired.enabled)
@@ -324,7 +353,7 @@ export function RendererWorkspacePanel(props: {
                 ) : null}
               </section>
             )})}
-            {props.embeddedPackageCard ? (
+            {view === 'packages' && props.embeddedPackageCard ? (
               <details className={styles.embeddedPackages} key={props.embeddedPackageCard.id}>
                 <summary>{props.t('renderer.embeddedPackages', { name: props.embeddedPackageCard.name })}</summary>
                 {(props.embeddedPackageCard.extensionPackages ?? []).map(archive => {
@@ -397,7 +426,7 @@ export function RendererWorkspacePanel(props: {
             {props.cardPackages.length > 0 ? (
               <details className={styles.embeddedPackages} open>
                 <summary>{props.t('renderer.cardInstallations')}</summary>
-                {props.cardPackages.map(extensionPackage => {
+                {(view === 'packages' ? props.cardPackages : []).filter(item => item.target?.kind === 'card' && item.target.cardId === props.embeddedPackageCard?.id).map(extensionPackage => {
                   const target = extensionPackage.target
                   if (target?.kind !== 'card') return null
                   const installed = props.installations.find(item => item.packageId === extensionPackage.packageId
@@ -440,7 +469,7 @@ export function RendererWorkspacePanel(props: {
       >
         {view === 'participation' ? (
           <TimelineExtensionPanel
-            key={JSON.stringify([props.timelineParticipation.timeline?.id, props.timelineParticipation.timeline?.branchId, props.timelineParticipation.card?.id])}
+            key={JSON.stringify([props.timelineParticipation.timeline?.id, props.timelineParticipation.timeline?.branchId, props.embeddedPackageCard?.id])}
             {...props.timelineParticipation}
             installations={props.installations}
             t={props.t}
@@ -599,6 +628,7 @@ export function RendererWorkspacePanel(props: {
                 module={selectedModule}
                 packageId={selected.packageId}
                 sessionHost={props.sessionHost}
+                onOpenWorkspace={props.onOpenWorkspace}
                 t={props.t}
               />
             ) : null
@@ -904,6 +934,7 @@ function ClientCommandRow(props: {
   t: Translator
   onBusyChange(busy: boolean): void
 }) {
+  const [commandError, setCommandError] = useState<string>()
   const scopes = props.host.scopeSnapshot()
   const invocationContext = {
     sourceSurface: 'extension.workbench.actions' as const,
@@ -917,6 +948,7 @@ function ClientCommandRow(props: {
 
   async function execute() {
     props.onBusyChange(true)
+    setCommandError(undefined)
     try {
       const result = await props.extensionHost.executeCommand({
         packageId: props.packageId,
@@ -925,7 +957,9 @@ function ClientCommandRow(props: {
         target: props.target,
         sourceSurface: 'extension.workbench.actions',
       })
-      if (result.status === 'failed') notify.error(result.message)
+      if (result.status === 'failed') setCommandError(result.message)
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
     } finally {
       props.onBusyChange(false)
     }
@@ -935,6 +969,7 @@ function ClientCommandRow(props: {
     <article className={styles.contribution} data-command-state={props.registered ? 'registered' : 'declared'}>
       <div className={styles.contributionMain}>
         <strong>{props.command.title}</strong>
+        {commandError ? <p role="alert">{commandError}</p> : null}
         <small>{props.command.id} · {props.t(props.registered ? 'renderer.commandRegistered' : 'renderer.commandDeclared')}</small>
         <small>{props.actions.map(action => action.surface).join(' · ') || props.t('renderer.commandNoPlacements')}</small>
         {props.diagnostics.map((diagnostic, index) => <p key={`${diagnostic.code}-${index}`}>{diagnostic.code}: {diagnostic.message}</p>)}
@@ -952,6 +987,7 @@ function ClientCommandRow(props: {
 }
 
 function RendererContributionRow(props: {
+  onOpenWorkspace(): void
   claims: ReturnType<ClientRendererHost['activeClaims']>
   definition: RendererContributionDefinition
   diagnostics: Array<{ code: string; message: string; contributionKey?: string }>
@@ -990,7 +1026,8 @@ function RendererContributionRow(props: {
       props.sessionHost.open(registration, { kind: props.definition.instanceScope, key: scopeKey })
       return
     }
-    props.host.claim(props.definition.surface, scopeKey, key, { replace })
+    const result = props.host.claim(props.definition.surface, scopeKey, key, { replace })
+    if (result.accepted && props.definition.surface === 'shell.workspace-panel') props.onOpenWorkspace()
   }
 
   const occupied = scopeKey ? props.host.activeContributionKey(props.definition.surface, scopeKey) : undefined

@@ -141,6 +141,7 @@ export function createStudioApi(trpc: StudioTrpcClient = createStudioTrpcClient(
       }),
     },
     extensionRuntime: {
+      importConvertedBatch: (input: { packageId: string; target: ExtensionInstallationTarget; sessionId: string }) => trpc.extensions.importConvertedBatch.mutate(input),
       listConfigs: (input: { packageId: string; target?: ExtensionInstallationTarget; scope?: ExtensionStorageScope }) => trpc.application['listExtensionConfigs'].query(input),
       getConfig: (input: { packageId: string; target?: ExtensionInstallationTarget; scope: ExtensionStorageScope; key: string }) => trpc.application['getExtensionConfig'].query(input),
       upsertConfig: (input: { packageId: string; target?: ExtensionInstallationTarget; scope: ExtensionStorageScope; key: string; value: ClientJsonValue; expectedVersion?: number }) => trpc.application['upsertExtensionConfig'].mutate(input),
@@ -242,7 +243,19 @@ export function createStudioApi(trpc: StudioTrpcClient = createStudioTrpcClient(
       saveDirectory: (cardId: string, token: string) => trpc.directories.saveCard.mutate({ cardId, token }),
       recoverDirectory: (cardId: string) => trpc.directories.recoverCard.mutate({ cardId }),
     },
+    workspace: {
+      get: (input: StudioRpcInputs['application']['getTimelineWorkspace']) => trpc.application.getTimelineWorkspace.query(input),
+      read: (input: StudioRpcInputs['application']['readWorkspaceFile']) => trpc.application.readWorkspaceFile.query(input),
+      mutate: (input: StudioRpcInputs['application']['mutateTimelineWorkspace']) => trpc.application.mutateTimelineWorkspace.mutate(input),
+    },
     agentSessions: {
+      summaryTasks: (agentSessionId: string) => trpc.application.listAgentSessionSummaryTasks.query({ agentSessionId }),
+      summaryStatus: (agentSessionId: string) => trpc.application.getAgentSessionSummaryStatus.query({ agentSessionId }),
+      updateSummary: (input: { agentSessionId: string; branchId?: string; expectedSummaryId: string; expectedEntryCount: number; content: string }) => trpc.application.updateAgentSessionSummary.mutate({ ...input, branchId: input.branchId }),
+      memory: (input: { agentSessionId: string; branchId?: string }) => trpc.application.getAgentSessionMemory.query({ ...input, branchId: input.branchId }),
+      summarize: (input: { agentSessionId: string; branchId?: string }) => trpc.application.summarizeAgentSession.mutate({ ...input, branchId: input.branchId }),
+      cancelSummary: (agentSessionId: string) => trpc.application.cancelAgentSessionSummary.mutate({ agentSessionId }),
+
       listRuns: (input?: { timelineId?: string }) => trpc.application['agent.run.list'].query(input ?? {}),
       create: (input: CreateAgentSessionInput) => trpc.application['createAgentSession'].mutate({
         ...input, title: input.title ?? createDefaultTitle('session'),
@@ -267,7 +280,7 @@ export function createStudioApi(trpc: StudioTrpcClient = createStudioTrpcClient(
       runState: (runId: string, agentSessionId?: string) => trpc.application['agent.run.state'].query({ runId, agentSessionId }),
       preview: (input: PreviewAgentTurnInput) => trpc.application['previewAgentTurn'].query(input),
       delete: (agentSessionId: string) => trpc.application['deleteAgentSession'].mutate({ agentSessionId }),
-      update: (input: { agentSessionId: string; title?: string }) => trpc.application['updateAgentSession'].mutate(input),
+      update: (input: NonNullable<StudioRpcInputs['application']['updateAgentSession']>) => trpc.application['updateAgentSession'].mutate(input),
     },
     providerProfiles,
     providerAccounts: providerProfiles,

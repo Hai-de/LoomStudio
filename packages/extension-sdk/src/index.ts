@@ -1,3 +1,4 @@
+export type { ExtensionNarrativeSource, ExtensionNarrativeRead, ExtensionNarrativeSnapshot, ExtensionNarrativeActivity, ExtensionReadonlyFiles, ExtensionRecordArchive } from './narrative-work.js'
 import type { ClientStyleFactory, ExtensionStyleContribution } from './styles.js'
 export * from './styles.js'
 import type { TextTokenCounter } from '@loom-studio/tokenizer/contracts'
@@ -40,6 +41,9 @@ export type {
   ProfiledAiGateway,
   RegisteredAiGatewayProvider,
 } from '@loom-studio/ai-gateway'
+
+/** Result of explicitly committing a converter's staged batch through Studio. */
+export type ExtensionImportReport = { imported: number; skipped: Array<{ key: string; reason: string }> }
 
 export type EventVisibility = 'public' | 'protected' | 'internal'
 
@@ -133,6 +137,7 @@ export type RendererSurface =
   | 'shell.background'
   | 'narrative.entry.inline'
   | 'narrative.timeline.tail'
+  | 'memory.panel'
   | 'agent.message.inline'
   | 'agent.session.tail'
   | 'composer.sheet'
@@ -592,6 +597,10 @@ export type ClientExtensionActivationContext = {
     project(input: { source: ClientHistorySource; phase: 'classify' | 'prompt' | 'display' }): Promise<JsonValue>
     extract(input: { source: ClientHistorySource; phase?: 'classify' | 'prompt' | 'display'; extractorId: string }): Promise<JsonValue>
   }
+  imports: {
+    /** Commit this installation's prepared native data after the user's import action. */
+    commit(sessionId: string): Promise<ExtensionImportReport>
+  }
   rpc: {
     call<T extends JsonValue = JsonValue>(method: string, params?: JsonValue): Promise<T>
   }
@@ -731,6 +740,9 @@ export type ExtensionModuleManifest = {
     'macros.provide'?: boolean
     'prompt.process'?: boolean
     'narrative.context.provide'?: boolean
+    'narrative.read'?: boolean
+    'agent.tasks'?: boolean
+    'vfs.provide'?: boolean
     'state.contribute'?: boolean
     'state.read'?: boolean
     'state.write'?: boolean
@@ -977,6 +989,21 @@ export type ExtensionStateSubscription = {
 }
 
 export type ExtensionActivationContext = {
+  archives: { registerRecords(adapter: import('./narrative-work.js').ExtensionRecordArchive): ExtensionRegistrationHandle }
+  narrative: {
+    /** Reads require timeline.run and are bound to its target. */
+    read(input: import('./narrative-work.js').ExtensionNarrativeRead): Promise<import('./narrative-work.js').ExtensionNarrativeSnapshot>
+    validate(source: import('./narrative-work.js').ExtensionNarrativeSource): Promise<boolean>
+    subscribe(handler: (event: import('./narrative-work.js').ExtensionNarrativeActivity) => void | Promise<void>): ExtensionRegistrationHandle
+  }
+  agentTasks: {
+    create(input: { presetId: string; title?: string } | { presetContributionId: string; title?: string }): Promise<{ sessionId: string }>
+    invoke(input: { sessionId: string; input: string; activationFacts?: JsonObject }): Promise<{ sessionId: string; runId: string; state: string; text?: string }>
+    read(sessionId: string): Promise<{ sessionId: string; presetId: string; title?: string; state: string; lastOutput?: string }>
+    cancel(sessionId: string): Promise<void>
+  }
+  vfs: { register(provider: import('./narrative-work.js').ExtensionReadonlyFiles): ExtensionRegistrationHandle }
+
   timeline: {
     list(): Promise<import('./timeline.js').ExtensionTimelineTarget[]>
     subscribe(listener: () => void | Promise<void>): { dispose(): void }

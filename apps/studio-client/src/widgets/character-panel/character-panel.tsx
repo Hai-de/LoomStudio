@@ -917,7 +917,7 @@ function CharacterGroupDialog(props: {
     <Dialog
       className={styles.groupDialog}
       closeOnBackdrop
-      headerActions={<button aria-label={props.t('character.closeGroups')} autoFocus className={styles.toolbarButton} title={props.t('character.closeGroups')} type="button" onClick={props.onClose}><X aria-hidden="true" /></button>}
+      showCloseButton={false} headerActions={<button aria-label={props.t('character.closeGroups')} autoFocus className={styles.toolbarButton} title={props.t('character.closeGroups')} type="button" onClick={props.onClose}><X aria-hidden="true" /></button>}
       open
       title={props.t('character.groups')}
       onClose={props.onClose}

@@ -6,12 +6,22 @@ import type {
 import type { JsonObject, JsonValue } from '@loom-studio/shared'
 import type { TokenCount, TokenUsage } from '@loom-studio/tokenizer/contracts'
 
+export type SessionSummaryPolicy = {
+  enabled: boolean
+  maxTokens: number
+  bufferFloors: number
+  triggerFloors: number
+  triggerTokens: number
+  asynchronous: boolean
+}
+
 export type AgentSession = {
   id: string
   agentPresetId: string
   timelineId?: string
   title?: string
   headEntryId?: string
+  summaryPolicy?: SessionSummaryPolicy
   entryCount: number
   createdAt: string
   updatedAt: string
@@ -38,9 +48,16 @@ export type AgentToolResultStatus =
 
 export type AgentTranscriptEntryData =
   | {
-      /** Saved handoff; preceding entries remain stored but leave the active Prompt. */
+      /** Saved handoff; retired history stays stored. Legacy entries retire their preceding segment. */
       kind: 'work-summary'
       content: string
+      /** Host-selected boundaries; absent on legacy summaries. */
+      boundary?: {
+        sourceThroughSequence: number
+        retiredThroughSequence: number
+        adoptedWorkspaceRevisionId?: string
+        narrative?: { timelineId: string; branchId: string; nodeId: string | null; stateRevisionId?: string; workspaceRevisionId?: string }
+      }
     }
   | {
       kind: 'message'
@@ -169,6 +186,7 @@ export type UpdateAgentSessionInput = AgentWriteContext & {
   agentSessionId: string
   title?: string
   timelineId?: string | null
+  summaryPolicy?: SessionSummaryPolicy
 }
 export type AgentTranscriptPage = {
   session: AgentSession
@@ -202,7 +220,20 @@ export type AgentSessionRunSummary = {
   }
 }
 
+export type AgentSummaryTask = {
+  taskId: string
+  agentSessionId: string
+  state: 'preparing' | 'submitted' | 'adopted' | 'failed'
+  content: string
+  sourceThroughSequence: number
+  toolArguments?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export type AgentTransaction = {
+  writeSummaryTask(input: Omit<AgentSummaryTask, 'createdAt' | 'updatedAt'>): void
+  getLatestWorkSummary(agentSessionId: string): AgentTranscriptEntry | null
   getSession(id: string): AgentSession | null
   createSession(
     input: Omit<CreateAgentSessionInput, keyof AgentWriteContext>,
@@ -220,10 +251,13 @@ export type AgentTransaction = {
 }
 
 export type AgentStore = {
+  countSummaryMessages(agentSessionId: string, retiredThrough: number, sourceThrough: number): Promise<{ retired: number; source: number; total: number }>
+  listSummaryTasks(agentSessionId: string): Promise<AgentSummaryTask[]>
   listRunStates(): Promise<AgentSessionRunSummary[]>
   getSession(id: string): Promise<AgentSession | null>
   listSessions(input?: ListAgentSessionsInput): Promise<AgentSessionPage>
   getEntry(id: string): Promise<AgentTranscriptEntry | null>
+  findRunCheckpoint(input: { agentSessionId: string; runId: string }): Promise<AgentTranscriptEntry | null>
   getLatestWorkSummary(agentSessionId: string): Promise<AgentTranscriptEntry | null>
   getEntryPage(input: {
     agentSessionId: string

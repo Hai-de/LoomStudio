@@ -1,10 +1,14 @@
 import { isRecord } from '@loom-studio/shared'
 import { safeLocalStorage } from '../browser/safe-local-storage.js'
+import { isStudioTool, type StudioToolId } from './studio-tool.js'
 import { STUDIO_PANEL_IDS } from './studio-layout-store.js'
 import { readStudioNodeAnchor, readStudioRoute, type StudioRoute } from './studio-route.js'
 
 export type StudioWorkspace = StudioRoute & {
   search: string
+  tool?: StudioToolId
+  toolSearch?: string
+  extensionWorkspace?: true
   referenceUri?: string
   targetUri?: string
 }
@@ -22,6 +26,30 @@ export function readStudioWorkspace(value: unknown): StudioWorkspace | undefined
   }
   if (value.search !== undefined && typeof value.search !== 'string') return
   result.search = typeof value.search === 'string' ? value.search : ''
+  if (result.panel === 'sessions' || result.panel === 'play' && new URLSearchParams(result.search).has('sessionId')) {
+    const params = new URLSearchParams(result.search)
+    params.set('historyTab', params.has('sessionId') ? 'sessions' : 'timelines')
+    result.tool = 'recent'
+    result.toolSearch = params.toString()
+    result.panel = null
+    result.search = ''
+  }
+  if (value.extensionWorkspace !== undefined && value.extensionWorkspace !== true) return
+  if (value.extensionWorkspace === true && result.panel === 'extensions') result.extensionWorkspace = true
+  if (value.tool !== undefined) {
+    if (!isStudioTool(value.tool as StudioRoute['panel'])) return
+    result.tool = value.tool as StudioToolId
+  }
+  if (isStudioTool(result.panel) && !result.extensionWorkspace) {
+    result.tool = result.panel
+    if (result.search) result.toolSearch = result.search
+    result.search = ''
+    result.panel = null
+  }
+  if (value.toolSearch !== undefined) {
+    if (typeof value.toolSearch !== 'string') return
+    result.toolSearch = value.toolSearch
+  }
   if (result.branchId && !result.timelineId) return
   return result
 }
@@ -36,6 +64,8 @@ export function persistStudioWorkspace(endpoint: string, workspace: StudioWorksp
   // Pending external targets must not replace the last usable workspace.
   if (workspace.targetUri !== undefined) return
   const position = { ...workspace }
+  delete position.tool
+  delete position.toolSearch
   delete position.referenceUri
   safeLocalStorage.setItem(storageKey(endpoint), JSON.stringify(position))
 }
@@ -52,8 +82,14 @@ export function resolveStudioWorkspace(
   if (!isEntry || targetUri || referenceUri || location.search || location.hash) {
     params.delete('target')
     params.delete('resourceRef')
+    const route = readStudioRoute(location.pathname)
+    const legacySummary = route.panel === 'play' && params.has('sessionId')
+    const tool = route.panel === 'sessions' || legacySummary ? 'recent' : isStudioTool(route.panel) ? route.panel : undefined
+    if (legacySummary) params.set('historyTab', 'sessions')
     return {
-      ...readStudioRoute(location.pathname), search: params.toString(),
+      ...(tool ? { ...restored, tool, panel: restored?.panel ?? null,
+        ...(params.size ? { toolSearch: params.toString() } : {}) } : route),
+      search: tool ? restored?.search ?? '' : params.toString(),
       ...(targetUri !== null ? { targetUri } : {}),
       ...(referenceUri ? { referenceUri } : {}),
       ...(readStudioNodeAnchor(location.hash) ? { nodeId: readStudioNodeAnchor(location.hash) } : {}),

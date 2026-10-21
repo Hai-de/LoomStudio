@@ -18,8 +18,7 @@ let outputChars = 0
 let stopped = false
 let root: QuickJSHandle | undefined
 let job: ReturnType<typeof setImmediate> | undefined
-let resolveDone!: () => void
-const done = new Promise<void>(resolve => { resolveDone = resolve })
+const { promise: done, resolve: resolveDone } = Promise.withResolvers<void>()
 
 function send(message: SandboxMessage) {
   port.postMessage(message)
@@ -75,8 +74,8 @@ const call = vm.newFunction('__codeact_call', (methodValue, argsValue) => {
   const argumentsJson = vm.getString(argsValue)
   if (!input.methods.includes(method) || argumentsJson.length > limits.bridgeChars)
     return { error: errorValue({ code: 'codeact.invalid_call', message: 'Unknown ctx method or oversized arguments.' }) }
-  if (nextCallId >= limits.maxCalls || pending.size >= limits.maxPendingCalls)
-    return { error: errorValue({ code: 'codeact.call_limit', message: 'Too many ctx calls. Use a smaller batch and await pending operations.' }) }
+  if (pending.size >= limits.maxPendingCalls)
+    return { error: errorValue({ code: 'codeact.invalid_call', message: 'ctx bridge concurrency exceeded.' }) }
   const id = ++nextCallId
   const deferred = vm.newPromise()
   pending.set(id, deferred)
@@ -122,8 +121,23 @@ try {
     const stringify = JSON.stringify;
     const parse = JSON.parse;
     const ctx = Object.create(null);
+    const queue = [];
+    let active = 0;
+    function drain() {
+      while (active < ${limits.maxPendingCalls} && queue.length) {
+        const request = queue.shift();
+        active++;
+        call(request.method, request.args).then(parse).then(request.resolve, request.reject).finally(() => {
+          active--;
+          drain();
+        });
+      }
+    }
     for (const method of ${JSON.stringify(input.methods)}) {
-      ctx[method] = (...args) => call(method, stringify(args)).then(parse);
+      ctx[method] = (...args) => new Promise((resolve, reject) => {
+        queue.push({ method, args: stringify(args), resolve, reject });
+        drain();
+      });
     }
     Object.defineProperty(globalThis, "ctx", { value: Object.freeze(ctx) });
     Object.defineProperty(globalThis, "print", {

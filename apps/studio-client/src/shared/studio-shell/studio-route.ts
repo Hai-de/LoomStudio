@@ -29,7 +29,7 @@ const STUDIO_ROUTES: { path: string; read(params: RouteParams): StudioRoute }[] 
   { path: '/studio/presets/:cardId?/:assetId?', read: ({ cardId, assetId }) => ({ panel: 'agent', cardId, assetId }) },
   ...([
     ['models', 'model'], ['agents', 'agent'], ['user', 'user'], ['play', 'play'], ['recent', 'recent'],
-    ['history', 'sessions'], ['state', 'state'], ['macro', null], ['text-transforms', 'text-transform'],
+    ['memory', 'memory'], ['history', 'sessions'], ['state', 'state'], ['macro', null], ['text-transforms', 'text-transform'],
     ['debug', 'inspector'], ['logs', 'logs'], ['extensions', 'extensions'], ['settings', 'settings'],
   ] as const).map(([segment, panel]) => ({ path: `/studio/${segment}`, read: () => ({ panel }) })),
   { path: '/', read: () => ({ panel: null }) },

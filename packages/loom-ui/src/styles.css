@@ -432,12 +432,32 @@ input[type='radio'][data-loom-ui-radio]:disabled {
 [data-loom-ui-dialog-header] h2 { font-size: var(--loom-font-size-5); font-weight: var(--loom-font-weight-6); }
 [data-loom-ui-dialog-header] p { color: var(--loom-color-text-muted); font-size: var(--loom-font-size-3); line-height: var(--loom-line-height-body); }
 [data-loom-ui-dialog-title-row] { min-width: 0; display: flex; align-items: center; gap: 12px; }
-[data-loom-ui-dialog-title-row] h2 { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+[data-loom-ui-dialog-title-row] h2 { min-width: 0; flex: 1; display: flex; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+[data-loom-ui-dialog-title-icon] { display: inline-flex; flex: 0 0 auto; color: var(--loom-color-text-muted); }
+[data-loom-ui-dialog-title-icon] svg { width: var(--loom-icon-size-5); height: var(--loom-icon-size-5); }
 [data-loom-ui-dialog-header-actions] { display: flex; align-items: center; flex-shrink: 0; gap: 4px; }
 [data-loom-ui-dialog-body] { min-height: 0; overflow: auto; padding: 4px 16px 12px; }
 [data-loom-ui-dialog-actions] { display: flex; justify-content: flex-end; gap: 6px; padding: 10px 16px 14px; }
 [data-loom-ui-dialog-actions] > button { min-height: 28px; border: 0; padding: 4px 8px; color: var(--loom-color-text-muted); background: transparent; font-size: var(--loom-font-size-3); }
 [data-loom-ui-dialog-actions] > button:hover:not(:disabled) { border-color: transparent; color: var(--loom-color-text); background: transparent; }
+/* Tool workbenches keep a stable viewport; each content region owns its scroll. */
+[data-loom-ui-dialog][data-layout='workbench'] {
+  width: min(960px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  height: min(680px, calc(var(--loom-viewport-height, 100dvh) - 32px));
+  max-height: calc(var(--loom-viewport-height, 100dvh) - 32px);
+}
+[data-loom-ui-dialog][data-layout='workbench'] > [data-loom-ui-dialog-frame] { height: 100%; }
+[data-loom-ui-dialog][data-layout='workbench'] > [data-loom-ui-dialog-frame] > [data-loom-ui-dialog-header] { margin-inline: 16px; padding: 12px 4px; border-bottom: 1px solid var(--loom-color-divider); }
+[data-loom-ui-dialog][data-layout='workbench'] > [data-loom-ui-dialog-frame] > [data-loom-ui-dialog-body] { min-width: 0; overflow: hidden; padding: 0; }
+@media (max-width: 640px) {
+  [data-loom-ui-dialog][data-layout='workbench'] {
+    width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+    height: calc(var(--loom-viewport-height, 100dvh) - 16px);
+    max-height: calc(var(--loom-viewport-height, 100dvh) - 16px);
+  }
+}
 [data-loom-ui-dialog][data-layout='media'] {
   --loom-color-text: #eee;
   --loom-color-text-muted: #bbb;

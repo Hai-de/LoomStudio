@@ -2,6 +2,7 @@ import type { NarrativeNode, NarrativeStore } from '@loom-studio/application-dat
 import type { TextTransformDiagnostic, TextTransformPhase } from '../transforms/history-text.js'
 
 export type NarrativeSampleSelection =
+  | { kind: 'floors'; from: number; through: number; throughNodeId?: string }
   | {
       kind: 'tail'
       count: number
@@ -42,6 +43,7 @@ export type NarrativeSampleResult = {
   text: string
   complete: boolean
   nextBeforeNodeId?: string
+  missingFloors?: number[]
   processing?: {
     phase: TextTransformPhase
     rules: Array<{ id: string; version: number }>
@@ -76,6 +78,37 @@ async function sampleNarrative(
   validateBudget(maxNodes, maxCharacters)
   validateSelection(request.selection)
   signal?.throwIfAborted()
+  if (request.selection.kind === 'floors') {
+    const selection = request.selection
+    const first = await store.getPage({ timelineId: request.timelineId, branchId: request.branchId, limit: 1 })
+    const branchId = first.branch.id
+    const head = selection.throughNodeId ?? access?.throughNodeId ?? first.branch.headNodeId
+    if (access && (request.timelineId !== access.timelineId || branchId !== access.branchId || access.throughNodeId === null)) throw readRangeError()
+    const boundary = access?.afterNodeId ? await store.getNode(access.afterNodeId) : undefined
+    if (boundary && selection.from <= boundary.floor) throw readRangeError()
+    let cursor = head ?? undefined
+    const selected: NarrativeNode[] = []
+    while (cursor) {
+      signal?.throwIfAborted()
+      const page = await store.getPage({ timelineId: request.timelineId, branchId, cursor, limit: pageLimit })
+      for (const node of [...page.nodes].reverse()) {
+        if (node.floor >= selection.from && node.floor <= selection.through) selected.push(node)
+      }
+      if (page.nodes[0] && page.nodes[0].floor <= selection.from) break
+      cursor = page.nextCursor
+    }
+    const present = new Set(selected.map(node => node.floor))
+    const missingFloors = Array.from({ length: selection.through - selection.from + 1 }, (_, index) => selection.from + index).filter(floor => !present.has(floor))
+    if (selection.from === selection.through && !selected.length) throw new Error(`Narrative floor ${selection.from} is unavailable on this path`)
+    // Resolve floors once to real node identities before the normal permission and budget checks.
+    const last = selected[0]
+    const earliest = selected.at(-1)
+    if (!last || !earliest) return { timelineId: request.timelineId, branchId, nodes: [], text: '', complete: true, missingFloors }
+    const result = await sampleNarrative(store, { ...request, branchId, selection: {
+      kind: 'range', throughNodeId: last.id, ...(earliest.parentNodeId ? { afterNodeId: earliest.parentNodeId } : {}),
+    } }, signal, access)
+    return { ...result, missingFloors }
+  }
 
   if (access) {
     await assertReadRange(store, request, access, signal)
@@ -141,12 +174,15 @@ async function sampleNarrative(
   if (!foundAfter) throw new Error(`Narrative range start is not an ancestor of ${throughNodeId ?? 'empty branch'}: ${afterNodeId}`)
   const nodes = selected.reverse().map((node, index) => ({
     id: node.id,
+    kind: node.kind,
     timelineId: timeline.id,
     ...(node.parentNodeId ? { parentNodeId: node.parentNodeId } : {}),
     stateRevisionId: node.stateRevisionId,
+    workspaceRevisionId: node.workspaceRevisionId,
     body: node.body,
     ...(node.source ? { source: node.source } : {}),
     createdAt: node.createdAt,
+    floor: node.floor,
     position: index + 1,
     text: node.body.raw,
   }))
@@ -224,6 +260,12 @@ function validateSelection(selection: NarrativeSampleSelection): void {
         throw new Error(`Narrative ${name} must be a nonempty node ID`)
       }
     }
+  }
+  if (selection.kind === 'floors') {
+    if (!Number.isSafeInteger(selection.from) || !Number.isSafeInteger(selection.through) || selection.from < 1
+      || selection.through < selection.from || selection.through - selection.from >= defaultMaxNodes)
+      throw new Error(`Floor ranges must contain 1 to ${defaultMaxNodes} positive floor positions`)
+    return
   }
   if (selection.kind === 'tail') {
     if (!Number.isSafeInteger(selection.count) || selection.count < 1) {

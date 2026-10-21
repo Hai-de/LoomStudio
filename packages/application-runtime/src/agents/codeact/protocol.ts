@@ -7,11 +7,10 @@ export type CodeActLimits = {
   sourceChars: number
   outputChars: number
   bridgeChars: number
-  maxCalls: number
   maxPendingCalls: number
 }
 
-// ponytail: Fixed first-release budgets; expose policy settings only when a real caller needs overrides.
+// Guest execution and memory boundaries; host-operation wait time is excluded from the execution budget.
 export const codeActLimits: Readonly<CodeActLimits> = {
   timeoutMs: 10_000,
   memoryBytes: 16 * 1024 * 1024,
@@ -19,7 +18,6 @@ export const codeActLimits: Readonly<CodeActLimits> = {
   sourceChars: 40 * 1024,
   outputChars: 32 * 1024,
   bridgeChars: 64 * 1024,
-  maxCalls: 128,
   maxPendingCalls: 8,
 }
 

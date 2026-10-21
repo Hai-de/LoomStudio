@@ -62,7 +62,7 @@ Session 交接写入 `work-summary` 后，交接之前的整个工作段退出�
 正式合同与既有计划：
 
 - [默认剧情上下文来源](../../architecture/application/extension/narrative-context.md)
-- [剧情记忆与统一刷新策略](./narrative-memory-and-refresh-policy-plan.md)
+- [剧情记忆与统一刷新策略](../../archive/plans/narrative-memory-and-refresh-policy-plan.md)
 - [Agent 上下文骨架与 Session 生命周期](./agent-context-skeleton-and-memory-projection-plan.md)
 
 ## 5. 待讨论，不作为实施决定
@@ -422,7 +422,7 @@ Timeline 级变量仍须有明确的 Timeline 目标；独立 Session 是工作�
 
 **已核查事实**：`packages/data-engine/src/sqlite.ts` 在单次事务 COMMIT 后通知订阅者；`packages/kernel/src/kernel.ts` 转发 `data.changed`，文档变更另发 `docs.changed`，并不等待写作 Run 成功结束。因此正文成功写入后、Run 后续失败之前，下游可以已经启动。该事件是数据事实，不代表用户最终采用候选，也不是强制下游执行命令。当前核查不宣称自动生图 / 总结调度已完整实施。
 
-[剧情记忆计划](./narrative-memory-and-refresh-policy-plan.md) 已区分准备摘要与正式采用，要求运行中可取消、未完成不推进有效 Head；[默认剧情上下文合同](../../architecture/application/extension/narrative-context.md) 只消费已发布投影。继续沿用这些职责，不为 Swipe 建立第二套总结调度或统一回滚所有 Session。
+[剧情记忆计划](../../archive/plans/narrative-memory-and-refresh-policy-plan.md) 已区分准备摘要与正式采用，要求运行中可取消、未完成不推进有效 Head；[默认剧情上下文合同](../../architecture/application/extension/narrative-context.md) 只消费已发布投影。继续沿用这些职责，不为 Swipe 建立第二套总结调度或统一回滚所有 Session。
 
 **下列为最小衔接建议；来源绑定、后台任务不全局锁定及不可写回时保留产物已由 12.11 收束，摘要发布和长期 Session 策略仍待确认**：
 

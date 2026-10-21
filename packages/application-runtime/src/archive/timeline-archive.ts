@@ -1,5 +1,6 @@
+import { validateWorkspaceEntries, type WorkspaceRevision } from '@loom-studio/application-data'
 import { isRecord, normalizeMacroSelections, type JsonValue, type MacroSelectionMap } from '@loom-studio/shared'
-import type { NarrativeBranch, NarrativeNode, NarrativeTimeline } from '@loom-studio/application-data'
+import type { NarrativeBranch, NarrativeNode, NarrativeTimeline, NarrativeRecoveryPoint } from '@loom-studio/application-data'
 import type { StateRevision, StateScope } from '@loom-studio/application-data'
 
 export type TimelineArchive = {
@@ -8,10 +9,12 @@ export type TimelineArchive = {
   timeline: NarrativeTimeline
   branches: NarrativeBranch[]
   nodes: NarrativeNode[]
+  recoveryPoints?: NarrativeRecoveryPoint[]
   state: {
     scope: StateScope
     revisions: StateRevision[]
   }
+  workspace?: { revisions: WorkspaceRevision[]; blobs: Array<{ id: string; base64: string; mediaType?: string }> }
   participants: TimelineArchiveDataBlock[]
   macroConfigurations?: Array<{ presetId: string; macroSelections: MacroSelectionMap }>
 }
@@ -71,6 +74,8 @@ function validateTimelineArchive(value: unknown): asserts value is TimelineArchi
   }
   for (const node of value.nodes) {
     if (!isRecord(node)) throw new Error('Invalid Timeline archive node')
+    if (node.kind === undefined) node.kind = 'narrative'
+    if (node.kind !== 'user-input' && node.kind !== 'narrative') throw new Error('Invalid Timeline archive node kind')
     identifier(node.id)
     identifier(node.timelineId)
     identifier(node.stateRevisionId)
@@ -125,11 +130,61 @@ function validateTimelineArchive(value: unknown): asserts value is TimelineArchi
     if (node.timelineId !== archive.timeline.id) throw new Error('Timeline archive node belongs to another timeline')
     if (node.parentNodeId && !nodeIds.has(node.parentNodeId)) throw new Error('Timeline archive node parent is missing')
   }
+  const floors = new Map<string, number>()
+  const remaining = new Map(archive.nodes.map(node => [node.id, node]))
+  while (remaining.size) {
+    const before = remaining.size
+    for (const [id, node] of remaining) {
+      if (node.parentNodeId && !floors.has(node.parentNodeId)) continue
+      const parent = node.parentNodeId ? floors.get(node.parentNodeId)! : 0
+      if (node.floor === undefined) node.floor = parent + 1 // Older v1 archives had no persistent floors.
+      if (!Number.isSafeInteger(node.floor) || node.floor <= parent) throw new Error('Invalid archived Narrative floor')
+      floors.set(id, node.floor); remaining.delete(id)
+    }
+    if (before === remaining.size) throw new Error('Timeline archive contains a Narrative cycle')
+  }
+  if (!archive.workspace && (archive.nodes.some(node => node.workspaceRevisionId !== undefined) || archive.branches.some(branch => branch.workspaceHeadRevisionId !== undefined))) throw new Error('Timeline archive Workspace block is missing')
+  if (archive.recoveryPoints !== undefined && !archive.workspace) throw new Error('Recovery points require archived Workspace revisions')
+  if (archive.workspace) {
+    if (!Array.isArray(archive.workspace.revisions) || !Array.isArray(archive.workspace.blobs)) throw new Error('Invalid Workspace archive')
+    const ids = new Set<string>()
+    for (const revision of archive.workspace.revisions) {
+      identifier(revision.id)
+      if (revision.timelineId !== archive.timeline.id || ids.has(revision.id)) throw new Error('Invalid archived Workspace identity')
+      ids.add(revision.id); validateWorkspaceEntries(revision.entries)
+    }
+    for (const revision of archive.workspace.revisions) if (revision.parentRevisionId && !ids.has(revision.parentRevisionId)) throw new Error('Workspace parent is missing')
+    for (const branch of archive.branches) if (!ids.has(branch.workspaceHeadRevisionId)) throw new Error('Workspace branch revision is missing')
+    for (const node of archive.nodes) if (!ids.has(node.workspaceRevisionId)) throw new Error('Workspace node revision is missing')
+    if (archive.recoveryPoints !== undefined && !Array.isArray(archive.recoveryPoints)) throw new Error('Invalid recovery points')
+    for (const point of archive.recoveryPoints ?? []) if (!point || !branchIds.has(point.branchId) || !nodeIds.has(point.nodeId)
+      || !ids.has(point.workspaceRevisionId) || !archive.state.revisions.some(revision => revision.id === point.stateRevisionId)) throw new Error('Invalid recovery point reference')
+    const blobs = new Set<string>()
+    for (const blob of archive.workspace.blobs) {
+      identifier(blob.id); textValue(blob.base64)
+      if (blobs.has(blob.id) || Buffer.from(blob.base64, 'base64').toString('base64') !== blob.base64) throw new Error('Invalid archived Workspace bytes')
+      blobs.add(blob.id)
+    }
+    for (const revision of archive.workspace.revisions) for (const entry of revision.entries)
+      if (entry.kind === 'file' && 'blobId' in entry.content && !blobs.has(entry.content.blobId)) throw new Error('Workspace Blob is missing')
+  }
   if (archive.state.scope.kind !== 'timeline' || archive.state.scope.ownerId !== archive.timeline.id) {
     throw new Error('Timeline archive State scope does not belong to the timeline')
   }
   const revisions = new Set(archive.state.revisions.map(revision => revision.id))
   if (revisions.size !== archive.state.revisions.length) throw new Error('Timeline archive contains duplicate State revision IDs')
+  for (const block of archive.participants) {
+    if (block.idMap === undefined) continue
+    const map = block.idMap
+    if (!isRecord(map) || map.timelineId !== archive.timeline.id) throw new Error('Invalid participant timeline mapping')
+    for (const [field, allowed] of [['branchIds', branchIds], ['nodeIds', nodeIds], ['stateRevisionIds', revisions]] as const) {
+      if (!isRecord(map[field])) throw new Error('Invalid participant ID mapping')
+      for (const [source, target] of Object.entries(map[field])) {
+        identifier(source)
+        if (typeof target !== 'string' || !allowed.has(target)) throw new Error('Participant mapping target is outside the archive')
+      }
+    }
+  }
   if (new Set(archive.participants.map(block => block.namespace)).size !== archive.participants.length) throw new Error('Duplicate Timeline archive participant namespace')
   for (const branch of archive.branches) if (!revisions.has(branch.stateHeadRevisionId)) throw new Error('Timeline archive branch State head is missing')
   for (const node of archive.nodes) if (!revisions.has(node.stateRevisionId)) throw new Error('Timeline archive node State revision is missing')
@@ -199,12 +254,15 @@ export type TimelineArchiveParticipantRegistry = {
 }
 
 export type TimelineArchiveDataBlock = {
+  /** Original payload IDs mapped into this archive. */
+  idMap?: TimelineArchiveIdMap
   namespace: string
   version: number
   payload: JsonValue
 }
 
 export type TimelineArchivePendingContent = {
+  idMap?: TimelineArchiveIdMap
   timelineId: string
   blocks: TimelineArchiveDataBlock[]
   failures: Array<{ namespace: string; message: string }>
@@ -252,7 +310,7 @@ export function createTimelineArchiveParticipantRegistry(
           continue
         }
         try {
-          await participant.import({ timelineId: input.timelineId, idMap: input.idMap, payload: block.payload })
+          await participant.import({ timelineId: input.timelineId, payload: block.payload, idMap: composeTimelineArchiveIdMap(block.idMap, input.idMap) })
         } catch (error) {
           failures.push({ namespace: block.namespace, message: error instanceof Error ? error.message : String(error) })
         }
@@ -276,4 +334,16 @@ function registerParticipant(
     throw new Error(`Timeline archive participant namespace already registered: ${participant.namespace}`)
   }
   participants.set(participant.namespace, participant)
+}
+
+/** Compose original payload references through another archive import; never retain old targets. */
+export function composeTimelineArchiveIdMap(previous: TimelineArchiveIdMap | undefined, next: TimelineArchiveIdMap): TimelineArchiveIdMap {
+  if (!previous) return next
+  const remap = (before: Record<string, string>, after: Record<string, string>) => Object.fromEntries(Object.entries(before).map(([source, intermediate]) => {
+    const target = Object.hasOwn(after, intermediate) ? after[intermediate] : undefined
+    if (!target) throw new Error('Participant mapping target is outside the imported archive')
+    return [source, target]
+  }))
+  return { timelineId: next.timelineId, branchIds: remap(previous.branchIds, next.branchIds),
+    nodeIds: remap(previous.nodeIds, next.nodeIds), stateRevisionIds: remap(previous.stateRevisionIds, next.stateRevisionIds) }
 }

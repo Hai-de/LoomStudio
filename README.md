@@ -8,7 +8,7 @@
 *编织世界，交织故事*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
-[![Node Version](https://img.shields.io/badge/Node-%3E%3D22.18.0-339933.svg?style=flat-square&logo=node.js&logoColor=white)](package.json)
+[![Node Version](https://img.shields.io/badge/Node-%3E%3D24.22.0-339933.svg?style=flat-square&logo=node.js&logoColor=white)](package.json)
 [![Beta](https://img.shields.io/badge/status-Beta-e6ac35?style=flat-square)](docs/guide/beta-release.md)
 [![Build Status](https://github.com/The-LoomStudio/LoomStudio/actions/workflows/ci.yml/badge.svg)](https://github.com/The-LoomStudio/LoomStudio/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/The-LoomStudio/LoomStudio?include_prereleases&style=flat-square)](https://github.com/The-LoomStudio/LoomStudio/releases)
@@ -71,7 +71,7 @@
 
 ### 安装并启动
 
-先安装 **Node.js 22.18.0 或更新版本**，确保当前账户可以使用 `node` 和 `npm`。
+先安装 **Node.js 24.22.0 或更新版本**，确保当前账户可以使用 `node` 和 `npm`。
 程序不携带 Node.js 或依赖，首次启动需要联网。
 
 在 [Releases](https://github.com/The-LoomStudio/LoomStudio/releases) 查看可用的 Beta 成品包，下载后解压。
@@ -141,10 +141,10 @@ Server 扩展运行在服务端进程中，**不是安全沙箱**。安装前请
 
 ### 环境准备
 
-- **Node.js**: 开发工具链固定 `22.18.0`（`.node-version` / `.nvmrc`）
+- **Node.js**: 开发工具链固定 `24.22.0`（`.node-version` / `.nvmrc`）
 - **pnpm**: 开发工具链固定 `9.15.0`（`package.json` 的 `packageManager`）
 
-根 `package.json` 的最低运行要求为 Node `>=22.18.0`、pnpm `>=9.0.0`；开发环境按上述固定版本对齐。
+根 `package.json` 的最低运行要求为 Node `>=24.22.0`、pnpm `>=9.0.0`；开发环境按上述固定版本对齐。
 
 ### 1. 安装依赖
 

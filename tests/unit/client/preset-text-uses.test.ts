@@ -44,7 +44,7 @@ describe('Preset text use draft', () => {
     let rejectSave!: (error: Error) => void
     const onSave = vi.fn()
       .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectSave = reject }))
-      .mockResolvedValueOnce({ ...preset, version: 4, useCardLore: false,
+      .mockResolvedValueOnce({ ...preset, version: 4, useCardLore: false, useGlobalLore: false,
         textUses: [{ id: 'public-rule', kind: 'rule', enabled: false }] })
     const onOpen = vi.fn()
     const loreContent = vi.fn(() => null)
@@ -75,12 +75,13 @@ describe('Preset text use draft', () => {
       && element.props['aria-label'] === 'Lore')!
     expect(elements(lorePanel).some(element => element.props['aria-label'] === '使用角色世界书')).toBe(true)
     ;(control('使用角色世界书').props.onClick as () => void)()
+    ;(control('使用全局世界书').props.onClick as () => void)()
     switchTab('text')
     ;(control('启用规则：Public').props.onClick as () => void)()
     switchTab('tools')
     switchTab('lore')
     expect(control('使用角色世界书').props['aria-pressed']).toBe(false)
-    expect(loreContent).toHaveBeenLastCalledWith(false)
+    expect(loreContent).toHaveBeenLastCalledWith(false, false)
     switchTab('text')
     expect(control('启用规则：Public').props['aria-pressed']).toBe(false)
     const save = () => {
@@ -89,7 +90,7 @@ describe('Preset text use draft', () => {
     }
     save()
     await vi.waitFor(() => expect(onSave).toHaveBeenCalledExactlyOnceWith({
-      agentPresetId: 'preset', expectedVersion: 3, useCardLore: false,
+      agentPresetId: 'preset', expectedVersion: 3, useCardLore: false, useGlobalLore: false,
       textUses: [{ id: 'public-rule', kind: 'rule', enabled: false }],
     }))
     switchTab('tools')

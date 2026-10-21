@@ -9,6 +9,7 @@
 | Preset / Lore 文本条目 | 保存正文、树结构、来源与 Capability，参与 PromptBuild | PromptResourceStore |
 | State | 保存可校验、可结构化修改的运行数据，供 Agent、Prompt 与 UI 读取 | StateStore；Timeline Head 由 Narrative Branch 持有 |
 | VariableSnapshot / 宏 | 将本次构建中的值投影为文本，记录读取与诊断 | 构建时快照，不是另一套持久化存储 |
+| Timeline Workspace | 保存 Timeline 共同工作材料；文本、目录和文件元数据整树版本化，二进制引用 Blob | Workspace Store；当前版本由 Narrative Branch 持有，独立于作者 Lore |
 | Narrative Node / Agent Transcript | 保存已提交的正文或 Agent 执行记录 | NarrativeStore / AgentStore，二者不互相拥有 |
 | Extension Config / Record | 保存 Package-owned 配置与私有记录，按 Scope 和 Binding 查询 | DocumentStore 上的受控 Extension 数据合同 |
 
@@ -56,6 +57,8 @@ Document、Prompt Resource、State、Narrative 等 Store 共享 SQLite Data Engi
 | State | 不可变 Snapshot Revision、Parent、幂等键与 Head CAS；State Undo 生成补偿 Revision |
 | Narrative | 不可变 Node 与 Branch Head；Fork 引用既有 Node 和对应 State Revision，不是通用对象 revert |
 
+Narrative Node 持久化 `kind: 'user-input' | 'narrative'`，区分用户输入与剧情内容，独立于 Agent Transcript 的 `role` 和节点 `source`。正文输入及 Swipe 输入版本写为 `user-input`；开场白与正文追加默认写为 `narrative`。编辑复制、分支读取、采样与 Timeline 归档保留 kind，UI 不再根据邻居、Run 或 Swipe 状态推断身份。v8 迁移只按 `application.appendNarrativeInput` 提交记录和 Swipe 明确记录的输入节点回填；缺少证据的旧节点及缺少 kind 的旧归档保持默认剧情分类，不根据文本内容猜测。`narrative` 表达内容用途，不保证其作者一定是 AI。
+
 Timeline UI 正文编辑属于当前分支：以开始编辑时的 Branch Head 和原正文作为并发基线，在同一 Changeset 中复制目标节点至末节点的路径，仅替换目标正文，并切换该分支 Head。后续正文、节点 State Revision、分支 State Head 和来源信息保持不变；其他分支继续引用原路径。不触发回滚、生成或 State 重算。被替换路径使用新节点 ID，普通历史编辑保留原 ID 用于历史引用。唯一例外是仍开放且只有单个节点的初始化开场：同步更新 opening.nodeId、标记 custom 并保留作者候选 id，删除旧开场节点，使编辑后的自编开场仍可替换；已关闭窗口不重新打开。
 
 归档恢复按节点父链与分支记录分别恢复拓扑。`forkedFromNodeId` 是历史分叉来源，不保证仍处于父分支当前路径；正文编辑保留下来的历史节点允许一同归档。UI 保存失败保留草稿，分支 Head 或原文变化时拒绝旧保存，不自动强制覆盖。
@@ -78,6 +81,14 @@ Changeset 是提交事实，不是能够恢复任意领域对象的完整快照�
 
 当前没有独立的 Timeline 文件权威模型。Agent 已有受控领域工具与 CodeAct 读写入口，不等于可以任意写宿主文件；具体能力以[工具系统](agent/tool-system.md)及各领域 API 为准。
 
-Session 已能显式持久化 `work-summary` 并用它建立后续工作段，不应继续笼统描述为“没有 Summary 存储”。它不负责自动生成摘要，也不等于完整的 Narrative Memory 整理、Token 预算或 Server 重启恢复。已实现的交接及来源边界见[Agent Runtime](agent/runtime-and-session.md)；Session 历史仍不能直接当作 Timeline 文件。
+Session 已能显式持久化 `work-summary` 并用它建立后续工作段，不应继续笼统描述为“没有 Summary 存储”。Session 自我整理已接通临时工具、来源校验、缓冲与安全采用；它不等于完整的 Narrative Memory 整理或后台任务跨进程恢复。已实现的交接及来源边界见[Agent Runtime](agent/runtime-and-session.md)；Session 历史仍不能直接当作 Timeline 文件。
 
 运行文本、记忆、作者宏和跨类型版本协调的历史原则保留在 [数据能力与运行内容旧稿](../../archive/discussion/application/data-capabilities-and-runtime-content.md)，后续合同以 [Plan](../../workbench/plans/README.md) 为准，不以新建通用 Data / Binding / Lifecycle Manager 的方式提前实现。
+
+## Timeline Workspace 与稳定楼号
+
+每条 Timeline 初始化一个共享 `MEMORY.md`。Workspace 的文本和树结构保存在共享 SQLite 的不可变版本中，二进制复用 Blob Store；新版本与 Branch 引用更新参与同一 Data Engine 事务。读写使用 Timeline/Branch 与预期版本，不接受模型指定的任意 Blob ID。Agent 经已有来源守卫访问 `/workspace`；保存脚本文本不执行脚本、不扩大权限。当前 CodeAct 处理文本及结构操作，二进制字节由宿主 Runtime 读写；文件被动注入消费尚未接入。
+
+正文节点记录提交时的 Workspace 版本；推进到下一节点前，另外记录原末尾最终的 State/Workspace 恢复点。Swipe、重试、失败恢复采用候选或基线的三类引用。历史分支复制已有恢复点，Timeline Archive 携带工作树历史和所引用的二进制字节。删除 Timeline 后公共读写入口不可访问其工作树，历史版本和 Blob 随既有保留策略保留，不做孤立清理。
+
+`NarrativeNode.floor` 是路径内的持久位置，从 1 开始；新节点沿父节点加一，编辑复制和分支保持原值，存档允许保留缺号。楼号不是跨分支的身份；按楼号读取先固定实际节点，再应用原有范围授权和预算。采样返回 `floor` 以及 `missingFloors`，原 `position` 仍是返回窗口序号。旧数据库按既有祖先路径补号，旧存档缺少楼号时同样补齐；不重编号已有持久楼号。

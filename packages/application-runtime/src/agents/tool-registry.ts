@@ -138,6 +138,7 @@ export type ToolExecutionScope = {
   withNarrativeWrite?: <T>(work: () => T) => T
   requestHistoryApproval?: ApproveNarrativeHistory
   vfs?: readonly VfsEntry[]
+  workspace?: import('../vfs/resource-filesystem.js').ResourceVfsOptions['workspace']
   resourceVfs?: ResourceVfs
   vfsResourceIds?: readonly string[]
   vfsAttachments?: () => Promise<VfsTextAttachment[]>

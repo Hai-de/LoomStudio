@@ -438,3 +438,9 @@
     background: transparent;
   }
 }
+
+.sessionRow[aria-current='true'] .sessionInfo strong {
+  color: var(--loom-color-accent-strong);
+}
+
+.primaryIcon { color: var(--loom-color-accent-strong); }

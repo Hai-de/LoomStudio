@@ -31,7 +31,7 @@ export function inspectSessionRunStatus(entries: AgentTranscriptEntry[]): { runI
   const lastRunState = entries.slice().reverse().find(e => e.entry.kind === 'run-state')
   if (lastRunState && lastRunState.entry.kind === 'run-state') {
     if (lastRunState.entry.state === 'suspended' || lastRunState.entry.state === 'running') {
-      return { runId: lastRunState.runId, status: 'suspended' }
+      return { runId: lastRunState.runId, status: lastRunState.entry.state }
     }
     if (lastRunState.entry.state === 'completed' || lastRunState.entry.state === 'failed' || lastRunState.entry.state === 'aborted' || lastRunState.entry.state === 'discarded') {
       return { status: 'idle' }
@@ -54,6 +54,15 @@ export function inspectSessionRunStatus(entries: AgentTranscriptEntry[]): { runI
   }
 
   return { status: 'idle' }
+}
+
+export async function resolveSessionRun(api: StudioApi, sessionId: string, entries: AgentTranscriptEntry[]): Promise<ActiveAgentRun | undefined> {
+  const inspected = inspectSessionRunStatus(entries)
+  if (!inspected.runId || inspected.status === 'idle') return undefined
+  // Transcript records may describe an interrupted process or a still-running live task.
+  const state = await api.agentSessions.runState(inspected.runId, sessionId)
+  return state.state === 'running' || state.state === 'suspended'
+    ? { runId: state.runId, status: state.state } : undefined
 }
 
 export async function loadTranscript(api: StudioApi, agentSessionId: string, selectedCandidates = false) {
@@ -89,11 +98,11 @@ export async function runAgentTurn(
   onConnected: () => void,
 ): Promise<InvokeAgentTurnResult | undefined> {
   const { api, runId, streamingId } = run
+  let lastApprovalId: string | undefined
   while (isCurrent()) {
     let batch = await subscribeAgentRunWithRetry(api, runId, run.cursor, run.sessionId)
     if (!isCurrent()) return undefined
     const replayExpired = batch.replayExpired
-    const pendingApprovals = replayExpired ? batch.pendingApprovals ?? [] : []
     if (batch.replayExpired) {
       const snapshot = batch
       const transcript = await loadTranscript(api, run.sessionId, true)
@@ -109,7 +118,7 @@ export async function runAgentTurn(
       const committedDuringRead = batch !== snapshot && batch.events.some(event =>
         event.type === 'transcript-appended' && Array.isArray(event.entries)
         && event.entries.some(entry =>
-          entry.runId === runId && (entry.entry.kind === 'tool-invocation'
+          entry.runId === runId && (entry.entry.kind === 'tool-invocation' || entry.entry.kind === 'reasoning'
             || entry.entry.kind === 'message' && entry.entry.role === 'assistant')))
       updateMessages(current => {
         const committed = transcript.entries.filter(entry => entry.runId === runId)
@@ -120,6 +129,11 @@ export async function runAgentTurn(
             && entry.id !== run.optimisticEntryId && !committedIds.has(entry.id)),
           ...committed,
         ].sort((a, b) => a.sequence - b.sequence)
+        if (snapshot.partialReasoning && !committedDuringRead) entries.push({
+          id: `streaming-reasoning-${runId}`, runId, agentSessionId: run.sessionId,
+          sequence: (entries.at(-1)?.sequence ?? 0) + 1, createdAt: new Date().toISOString(),
+          entry: { kind: 'reasoning', content: snapshot.partialReasoning, source: 'provider-native', visibility: 'collapsed', replay: 'omit' },
+        })
         if (placeholder) entries.push({
           ...placeholder, sequence: (entries.at(-1)?.sequence ?? 0) + 1,
           entry: { kind: 'message', role: 'assistant', content: committedDuringRead ? '' : snapshot.partialText ?? '' },
@@ -130,10 +144,22 @@ export async function runAgentTurn(
     }
     onConnected()
     run.cursor = batch.nextCursor
-    for (const event of [...pendingApprovals, ...batch.events]) {
+    const pendingApprovals = batch.pendingApprovals
+    for (const event of [...batch.events, ...(pendingApprovals ?? [])]) {
       if (event.type === 'transcript-appended' && Array.isArray(event.entries)) {
         const appended = event.entries
         updateMessages(current => mergeAgentRunEntries(current, appended, run))
+      }
+      if (event.type === 'reasoning-delta' && streamingId) {
+        const id = `streaming-reasoning-${runId}`
+        updateMessages(entries => {
+          const existing = entries.find(entry => entry.id === id)
+          if (existing) return entries.map(entry => entry.id === id
+            ? { ...entry, entry: { ...entry.entry, content: `${entry.entry.content ?? ''}${event.delta}` } } : entry)
+          return [...entries, { id, agentSessionId: run.sessionId, runId,
+            sequence: (entries.at(-1)?.sequence ?? 0) + 1, createdAt: new Date().toISOString(),
+            entry: { kind: 'reasoning', content: event.delta, source: 'provider-native', visibility: 'collapsed', replay: 'omit' } }]
+        })
       }
       if (event.type === 'text-delta' && typeof event.delta === 'string' && streamingId) {
         updateMessages(entries => entries.map(entry => entry.id === streamingId
@@ -143,7 +169,10 @@ export async function runAgentTurn(
       if (event.type === 'mutation-approval-requested'
         && typeof event.requestId === 'string'
         && event.preview
-        && typeof event.preview === 'object') {
+        && typeof event.preview === 'object'
+        && (!pendingApprovals || pendingApprovals[0] && 'requestId' in pendingApprovals[0] && pendingApprovals[0].requestId === event.requestId)
+        && event.requestId !== lastApprovalId) {
+        lastApprovalId = event.requestId
         updateRun({
           runId,
           status: 'running',
@@ -154,7 +183,10 @@ export async function runAgentTurn(
         })
       }
       if (event.type === 'history-read-approval-requested'
-        && typeof event.requestId === 'string' && event.action && typeof event.action === 'object') {
+        && typeof event.requestId === 'string' && event.action && typeof event.action === 'object'
+        && (!pendingApprovals || pendingApprovals[0] && 'requestId' in pendingApprovals[0] && pendingApprovals[0].requestId === event.requestId)
+        && event.requestId !== lastApprovalId) {
+        lastApprovalId = event.requestId
         updateRun({
           runId, status: 'running',
           approval: {
@@ -186,6 +218,10 @@ export async function runAgentTurn(
         return undefined
       }
     }
+    if (pendingApprovals?.length === 0 && lastApprovalId) {
+      lastApprovalId = undefined
+      updateRun({ runId, status: batch.state })
+    }
     if (batch.done) {
       run.status = batch.state
       updateRun({ runId, status: batch.state })
@@ -206,9 +242,11 @@ export function mergeAgentRunEntries(
   const hasUser = appended.some(entry => entry.entry.kind === 'message' && entry.entry.role === 'user')
   const committedStep = appended.some(entry => entry.entry.kind === 'message' && entry.entry.role === 'assistant'
     || entry.entry.kind === 'tool-invocation')
+  const reasoningRuns = new Set(appended.filter(entry => entry.entry.kind === 'reasoning' && entry.entry.source === 'provider-native').map(entry => entry.runId))
   const placeholder = current.find(entry => entry.id === run.streamingId)
   const entries = [
     ...current.filter(entry => entry.id !== run.streamingId && !receivedIds.has(entry.id)
+      && !(entry.id.startsWith('streaming-reasoning-') && reasoningRuns.has(entry.runId))
       && (!hasUser || entry.id !== run.optimisticEntryId)),
     ...appended,
   ].sort((a, b) => a.sequence - b.sequence)

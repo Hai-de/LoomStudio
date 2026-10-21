@@ -2,7 +2,7 @@
 cd /d "%~dp0"
 where node >nul 2>nul
 if errorlevel 1 (
-  echo Install Node.js 22.18 or newer, then start again.
+  echo Install Node.js 24.22 or newer, then start again.
   pause
   exit /b 1
 )

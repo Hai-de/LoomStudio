@@ -1,0 +1,31 @@
+{
+  "manifestVersion": 2,
+  "id": "official.story-memory",
+  "version": "1.0.0",
+  "displayName": "剧情记忆",
+  "description": "按固定剧情范围准备摘要，确认后采用；支持分层压缩、来源回查与共享的记忆工作台。",
+  "author": "Loom Studio",
+  "engines": { "studio": "^0.1.0" },
+  "participation": "timeline",
+  "modules": [
+    {
+      "id": "server", "runtime": "server", "entry": "./server.js",
+      "capabilities": { "narrative.read": true, "narrative.context.provide": true, "agent.tasks": true, "vfs.provide": true },
+      "contributes": { "rpc": [
+        { "name": "official.story-memory.status" }, { "name": "official.story-memory.prepare" },
+        { "name": "official.story-memory.revise" }, { "name": "official.story-memory.confirm" },
+        { "name": "official.story-memory.discard" }, { "name": "official.story-memory.cancel" },
+        { "name": "official.story-memory.configure" }, { "name": "official.story-memory.source" }
+      ] }
+    },
+    {
+      "id": "client", "runtime": "client", "entry": "./client.js",
+      "contributes": { "renderers": [
+        { "id": "memory", "name": "剧情记忆", "surface": "memory.panel", "instanceScope": "timeline", "adapter": "shadow" }
+      ] }
+    }
+  ],
+  "contributes": { "promptResources": [
+    { "id": "official.story-memory.summary", "resourceKind": "preset", "source": "./resources/summary/index.json" }
+  ] }
+}

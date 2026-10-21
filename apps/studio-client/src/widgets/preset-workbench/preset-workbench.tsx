@@ -66,6 +66,8 @@ type PresetWorkbenchProps = {
   active: boolean
   modelProfiles: ModelProfile[]
   providerAccounts: ProviderAccount[]
+  onCreateModel(accountId: string, modelId: string): Promise<void>
+  onListModels(accountId: string): Promise<string[]>
   onSaveModel(input: Parameters<StudioApi['agentPresets']['update']>[0]): Promise<PromptResource>
   resourceBindings?: import('../../features/context-assets/ui/prompt-resource-toolbar/resource-bindings.js').ResourceBindingsSource
   extensionInstallations?: import('../../entities/index.js').ListExtensionInstallationsResult['installations']
@@ -436,6 +438,8 @@ export function PresetWorkbench(props: PresetWorkbenchProps) {
           installations={props.extensionInstallations}
           modelProfiles={props.modelProfiles}
           providerAccounts={props.providerAccounts}
+          onCreateModel={props.onCreateModel}
+          onListModels={props.onListModels}
           toolsReady={props.toolsReady}
           providersReady={props.providersReady}
           tools={props.tools}
@@ -534,6 +538,8 @@ export function AgentPresetOverview(props: {
   installations?: PresetWorkbenchProps['extensionInstallations']
   modelProfiles: ModelProfile[]
   providerAccounts: ProviderAccount[]
+  onCreateModel(accountId: string, modelId: string): Promise<void>
+  onListModels(accountId: string): Promise<string[]>
   tools: AgentToolDefinition[]
   toolsReady?: boolean
   providersReady?: boolean
@@ -621,14 +627,17 @@ export function AgentPresetOverview(props: {
     const resource = loreRowsById.get(nodeId)?.resource
     return Boolean(resource && cardLoreIds.has(resource.id))
   }
-  const loreNodes = (useCardLore: boolean) => usageFolders(
+  const globalLoreIds = new Set(props.loreMounts.filter(mount => mount.source.kind === 'manual' && mount.source.id === 'global' && mount.resolvedLoreResourceId !== null)
+    .map(mount => mount.resolvedLoreResourceId ?? mount.loreResourceId))
+  const isGlobalLore = (nodeId: string) => globalLoreIds.has(loreRowsById.get(nodeId)?.resource?.id ?? '')
+  const loreNodes = (useCardLore: boolean, useGlobalLore: boolean) => usageFolders(
     [...loreRows.filter(row => isCardLore(row.id)), ...loreRows.filter(row => !isCardLore(row.id))].map(row => ({
     source: isCardLore(row.id) ? `当前角色 · ${props.card!.name}`
       : row.resource ? usageSource(row.resource.origin, Boolean(row.resource.sourceArtifactRef)) : '不可用引用',
     node: {
       id: row.id, label: row.resource?.rootNode.label ?? `Lore 引用不可用：${row.mount!.loreResourceId}`,
       kind: 'entry' as const, meta: isCardLore(row.id) && useCardLore
-        ? '随角色默认采用' : row.mount ? row.resource ? '已采用' : '未解析' : '未采用',
+        ? '随角色默认采用' : isGlobalLore(row.id) && useGlobalLore ? '随全局默认采用' : row.mount ? row.resource ? '已采用' : '未解析' : '未采用',
     },
   })), loreQuery)
   const toolsByNodeId = new Map(props.tools.map(tool => [`tool:${tool.id}`, tool]))
@@ -724,6 +733,8 @@ export function AgentPresetOverview(props: {
           preset={props.preset}
           modelProfiles={props.modelProfiles}
           providerAccounts={props.providerAccounts}
+          onCreateModel={props.onCreateModel}
+          onListModels={props.onListModels}
           onSave={props.onSaveModel}
           t={props.t}
         />
@@ -731,10 +742,11 @@ export function AgentPresetOverview(props: {
 
       <PresetTextUses preset={props.preset} api={props.textTransformsApi} t={props.t}
         onSave={props.onSaveModel} onOpen={props.onOpenTextUse}
-        loreContent={useCardLore => {
-          const nodes = loreNodes(useCardLore)
+        loreContent={(useCardLore, useGlobalLore) => {
+          const inherited = (nodeId: string) => (isCardLore(nodeId) && useCardLore) || (isGlobalLore(nodeId) && useGlobalLore)
+          const nodes = loreNodes(useCardLore, useGlobalLore)
           const enabled = (nodeId: string) => Boolean(loreRowsById.get(nodeId)?.mount
-            || (isCardLore(nodeId) && useCardLore))
+            || inherited(nodeId))
           return <section className={styles.presetResourceList} aria-label="Lore 使用资源">
         <SearchField aria-label="搜索 Lore" placeholder="搜索名称或来源"
           clearLabel="清除搜索" value={loreQuery} onClear={() => setLoreQuery('')}
@@ -742,7 +754,7 @@ export function AgentPresetOverview(props: {
         {loreError ? <p role="alert">{loreError}</p> : null}
         <FileTree key={props.preset.id} ariaLabel="Lore 来源目录" nodes={nodes}
           batchDisabled={loreBusy}
-          canBatchSelect={node => node.kind !== 'folder' && !(isCardLore(node.id) && useCardLore)}
+          canBatchSelect={node => node.kind !== 'folder' && !inherited(node.id)}
           getBatchActions={selected => [
             { id: 'enable', label: props.t('common.batchEnable'), disabled: selected.some(node => !loreRowsById.get(node.id)?.resource), run: async selected => {
               const mounts: Array<{ id: string } | { loreResourceId: string }> = currentLoreMounts()
@@ -778,11 +790,11 @@ export function AgentPresetOverview(props: {
             const row = loreRowsById.get(node.id)
             if (!row) return null
             const { mount, resource } = row
-            const inherited = isCardLore(node.id) && useCardLore
+            const isInherited = inherited(node.id)
             return resource ? <button type="button" className={styles.declarationToggle}
                 aria-label={`${enabled(node.id) ? '停用' : '启用'} Lore：${resource.rootNode.label}`}
-                title={inherited ? '随角色默认采用，由“使用角色世界书”控制' : mount ? '停用条目' : '启用条目'}
-                aria-pressed={enabled(node.id)} disabled={loreBusy || inherited}
+                title={isInherited ? '随角色或全局采用，由对应继承开关控制' : mount ? '停用条目' : '启用条目'}
+                aria-pressed={enabled(node.id)} disabled={loreBusy || isInherited}
                 onClick={() => void saveLore(mount
                   ? currentLoreMounts().filter(item => item.id !== mount.id)
                   : [...currentLoreMounts(), { loreResourceId: resource.id }])}>
@@ -868,7 +880,7 @@ export function PresetTextUses(props: {
   api: StudioApi['textTransforms']
   onSave(input: Parameters<StudioApi['agentPresets']['update']>[0]): Promise<PromptResource>
   onOpen?: (kind: 'rule' | 'extractor', id: string) => void
-  loreContent?: ReactNode | ((useCardLore: boolean) => ReactNode)
+  loreContent?: ReactNode | ((useCardLore: boolean, useGlobalLore: boolean) => ReactNode)
   toolsContent?: ReactNode
 }) {
   type TextUse = NonNullable<PromptResource['textUses']>[number]
@@ -881,13 +893,15 @@ export function PresetTextUses(props: {
   const [draft, setDraft] = useState(() => ({
     textUses: editableUses(props.preset.textUses),
     useCardLore: props.preset.useCardLore ?? true,
+    useGlobalLore: props.preset.useGlobalLore ?? true,
   }))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const [activeTab, setActiveTab] = useState<'lore' | 'text' | 'tools'>('lore')
   const [textQuery, setTextQuery] = useState('')
   const [collapsedTextSources, setCollapsedTextSources] = useState<string[]>([])
-  const dirty = draft.useCardLore !== (props.preset.useCardLore ?? true)
+  const dirty = draft.useGlobalLore !== (props.preset.useGlobalLore ?? true)
+    || draft.useCardLore !== (props.preset.useCardLore ?? true)
     || JSON.stringify(draft.textUses) !== JSON.stringify(editableUses(props.preset.textUses))
 
   useEffect(() => {
@@ -923,8 +937,9 @@ export function PresetTextUses(props: {
         expectedVersion: props.preset.version,
         textUses: draft.textUses,
         useCardLore: draft.useCardLore,
+        useGlobalLore: draft.useGlobalLore,
       })
-      setDraft({ textUses: editableUses(saved.textUses), useCardLore: saved.useCardLore ?? true })
+      setDraft({ textUses: editableUses(saved.textUses), useCardLore: saved.useCardLore ?? true, useGlobalLore: saved.useGlobalLore ?? true })
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
@@ -970,6 +985,15 @@ export function PresetTextUses(props: {
     ]} activeId={activeTab} onChange={setActiveTab} ariaLabel="预设使用配置" size="compact" />
     <section role="tabpanel" aria-label="Lore" hidden={activeTab !== 'lore'} className={styles.presetUsagePanel}>
       <div className={styles.presetUsageOption}>
+        <span className={styles.presetResourceName}>使用全局世界书</span>
+        <button type="button" className={styles.declarationToggle} aria-label="使用全局世界书"
+          title={draft.useGlobalLore ? '停用全局世界书' : '启用全局世界书'}
+          aria-pressed={draft.useGlobalLore} disabled={busy}
+          onClick={() => setDraft(current => ({ ...current, useGlobalLore: !current.useGlobalLore }))}>
+          {draft.useGlobalLore ? <ToggleRight aria-hidden="true" /> : <ToggleLeft aria-hidden="true" />}
+        </button>
+      </div>
+      <div className={styles.presetUsageOption}>
         <span className={styles.presetResourceName}>使用角色世界书</span>
         <button type="button" className={styles.declarationToggle} aria-label="使用角色世界书"
           title={draft.useCardLore ? '停用角色世界书' : '启用角色世界书'}
@@ -978,7 +1002,7 @@ export function PresetTextUses(props: {
           {draft.useCardLore ? <ToggleRight aria-hidden="true" /> : <ToggleLeft aria-hidden="true" />}
         </button>
       </div>
-      {typeof props.loreContent === 'function' ? props.loreContent(draft.useCardLore) : props.loreContent}
+      {typeof props.loreContent === 'function' ? props.loreContent(draft.useCardLore, draft.useGlobalLore) : props.loreContent}
     </section>
     <section role="tabpanel" aria-label="正则 / 提取器" hidden={activeTab !== 'text'} className={styles.presetUsagePanel}>
       <SearchField aria-label="搜索正则与提取器" placeholder="搜索名称或来源"

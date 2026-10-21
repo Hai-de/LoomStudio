@@ -6,6 +6,7 @@ import type {
 import { createId, isRecord, nowIso, optionalString } from '@loom-studio/shared'
 import type { DatabaseSync } from 'node:sqlite'
 import type {
+  AgentSummaryTask,
   AgentSession,
   AgentSessionPage,
   AgentSessionRunSummary,
@@ -51,13 +52,30 @@ export function createAgentStore(options: CreateAgentStoreOptions): AgentStore {
       { version: 4, migrate: migrateVersionFour },
       { version: 5, migrate: migrateVersionFive },
       { version: 6, migrate: migrateVersionSix },
+      { version: 7, migrate: db => { db.exec('ALTER TABLE agent_sessions ADD COLUMN summary_policy_json TEXT') } },
+      { version: 8, migrate: db => { db.exec(`CREATE TABLE agent_summary_tasks (
+        task_id TEXT PRIMARY KEY, agent_session_id TEXT NOT NULL REFERENCES agent_sessions(id),
+        data_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE INDEX agent_summary_tasks_session ON agent_summary_tasks(agent_session_id, created_at);`) } },
     ],
   })
 
   function transaction(tx: SqliteDataTransaction): AgentTransaction {
     const { database } = tx
     return {
+      writeSummaryTask: input => {
+        requireSession(database, input.agentSessionId)
+        validateId(input.taskId, 'taskId')
+        const existing = database.prepare('SELECT agent_session_id FROM agent_summary_tasks WHERE task_id = ?').get(input.taskId)
+        if (existing && existing.agent_session_id !== input.agentSessionId) throw new AgentStoreError('agent.summary_owner_invalid', 'Summary task owner cannot change')
+        const timestamp = now()
+        database.prepare(`INSERT INTO agent_summary_tasks VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(task_id) DO UPDATE SET data_json=excluded.data_json, updated_at=excluded.updated_at`)
+          .run(input.taskId, input.agentSessionId, JSON.stringify(input), timestamp, timestamp)
+        tx.recordOperations([operation(existing ? 'update' : 'create', input.taskId, 'agent.summary-task')])
+      },
       getSession: id => readSession(database, id),
+      getLatestWorkSummary: id => readLatestWorkSummary(database, id),
       createSession: (input) => {
         validateId(input.agentPresetId, 'agentPresetId')
         validateOptionalText(input.title, 'title')
@@ -134,6 +152,36 @@ export function createAgentStore(options: CreateAgentStoreOptions): AgentStore {
         for (const item of input.entries) {
           validateOptionalId(item.runId, 'runId')
           if (item.entry.kind === 'work-summary') {
+            const boundary = item.entry.boundary
+            if (boundary) {
+              if (!Number.isSafeInteger(boundary.sourceThroughSequence)
+                || !Number.isSafeInteger(boundary.retiredThroughSequence)
+                || boundary.retiredThroughSequence < 0
+                || boundary.sourceThroughSequence < boundary.retiredThroughSequence
+                || boundary.sourceThroughSequence > session.entryCount) {
+                throw new AgentStoreError('agent.summary_boundary_invalid', 'Invalid summary source or retirement boundary')
+              }
+              for (const cutoff of [boundary.sourceThroughSequence, boundary.retiredThroughSequence]) {
+                const crossingRun = database.prepare(`
+                  SELECT 1 FROM agent_transcript_entries before
+                  JOIN agent_transcript_entries after ON after.agent_session_id = before.agent_session_id
+                    AND after.run_id = before.run_id
+                  WHERE before.agent_session_id = ? AND before.sequence <= ? AND after.sequence > ?
+                  LIMIT 1
+                `).get(session.id, cutoff, cutoff)
+                if (crossingRun) throw new AgentStoreError('agent.summary_boundary_invalid', 'Summary boundary splits a Run')
+                const crossingTool = database.prepare(`
+                  SELECT 1 FROM agent_transcript_entries call JOIN agent_transcript_entries result
+                    ON result.agent_session_id = call.agent_session_id
+                    AND json_extract(result.entry_json, '$.invocationId') = json_extract(call.entry_json, '$.invocationId')
+                  WHERE call.agent_session_id = ? AND call.sequence <= ? AND result.sequence > ?
+                    AND json_extract(call.entry_json, '$.kind') = 'tool-invocation'
+                    AND json_extract(result.entry_json, '$.kind') = 'tool-result'
+                  LIMIT 1
+                `).get(session.id, cutoff, cutoff)
+                if (crossingTool) throw new AgentStoreError('agent.summary_boundary_invalid', 'Summary boundary splits a tool protocol')
+              }
+            }
             if (input.entries.length !== 1 || item.runId !== undefined) {
               throw new AgentStoreError('agent.summary_boundary_invalid', 'A work summary must be committed separately after a Run')
             }
@@ -244,6 +292,17 @@ export function createAgentStore(options: CreateAgentStoreOptions): AgentStore {
             'Existing agent sessions cannot be rebound to another timeline',
           )
         }
+        if (input.summaryPolicy !== undefined) {
+          const policy = input.summaryPolicy
+          if (typeof policy.enabled !== 'boolean' || typeof policy.asynchronous !== 'boolean'
+            || !['maxTokens', 'bufferFloors', 'triggerFloors', 'triggerTokens'].every(key =>
+              Number.isSafeInteger(policy[key as keyof typeof policy]) && Number(policy[key as keyof typeof policy]) >= 0)
+            || policy.maxTokens < 1 || policy.triggerTokens <= policy.maxTokens
+            || policy.triggerFloors < 1 || policy.bufferFloors >= policy.triggerFloors)
+            throw new AgentStoreError('agent.summary_policy_invalid', 'Invalid Session summary policy')
+          database.prepare('UPDATE agent_sessions SET summary_policy_json = ? WHERE id = ?')
+            .run(JSON.stringify(policy), session.id)
+        }
         database
           .prepare(
             `UPDATE agent_sessions SET title = ?, timeline_id = CASE WHEN ? IS NULL THEN NULL ELSE timeline_id END, updated_at = ? WHERE id = ?`,
@@ -265,6 +324,23 @@ export function createAgentStore(options: CreateAgentStoreOptions): AgentStore {
   }
 
   return {
+    countSummaryMessages: (agentSessionId, retiredThrough, sourceThrough) => engine.read(database => {
+      const session = requireSession(database, agentSessionId)
+      const row = database.prepare(`WITH RECURSIVE history(id, parent_entry_id, sequence, entry_json) AS (
+        SELECT id, parent_entry_id, sequence, entry_json FROM agent_transcript_entries WHERE id = ? AND agent_session_id = ?
+        UNION ALL SELECT e.id, e.parent_entry_id, e.sequence, e.entry_json FROM agent_transcript_entries e
+          JOIN history h ON e.id = h.parent_entry_id
+      ) SELECT COUNT(*) AS total, COUNT(CASE WHEN sequence <= ? THEN 1 END) AS retired,
+        COUNT(CASE WHEN sequence <= ? THEN 1 END) AS source FROM history
+        WHERE json_extract(entry_json, '$.kind') = 'message' AND json_type(entry_json, '$.content') = 'text'
+      `).get(session.headEntryId ?? null, session.id, retiredThrough, sourceThrough)!
+      return { retired: Number(row.retired), source: Number(row.source), total: Number(row.total) }
+    }),
+    listSummaryTasks: agentSessionId => engine.read(database => {
+      requireSession(database, agentSessionId)
+      return database.prepare('SELECT data_json, created_at, updated_at FROM agent_summary_tasks WHERE agent_session_id = ? ORDER BY rowid DESC LIMIT 20')
+        .all(agentSessionId).map(row => ({ ...JSON.parse(String(row.data_json)), createdAt: String(row.created_at), updatedAt: String(row.updated_at) }) as AgentSummaryTask)
+    }),
     getSession: (id) => engine.read((database) => readSession(database, id)),
     listSessions: (input) =>
       engine.read((database) => readSessions(database, input)),
@@ -296,15 +372,15 @@ export function createAgentStore(options: CreateAgentStoreOptions): AgentStore {
       }))
     }),
     getEntry: (id) => engine.read((database) => readEntry(database, id)),
-    getLatestWorkSummary: (agentSessionId) => engine.read((database) => {
-      requireSession(database, agentSessionId)
-      const row = database.prepare(`
-        SELECT * FROM agent_transcript_entries
-        WHERE agent_session_id = ? AND json_extract(entry_json, '$.kind') = 'work-summary'
-        ORDER BY sequence DESC LIMIT 1
-      `).get(agentSessionId)
+    findRunCheckpoint: input => engine.read(database => {
+      requireSession(database, input.agentSessionId)
+      const row = database.prepare(`SELECT id, agent_session_id, parent_entry_id, sequence, run_id, entry_json, created_at
+        FROM agent_transcript_entries WHERE agent_session_id = ? AND run_id = ?
+        AND json_extract(entry_json, '$.kind') = 'run-state' AND json_type(entry_json, '$.recovery') = 'object'
+        ORDER BY sequence ASC LIMIT 1`).get(input.agentSessionId, input.runId)
       return row ? entryFromRow(row) : null
     }),
+    getLatestWorkSummary: (agentSessionId) => engine.read(database => readLatestWorkSummary(database, agentSessionId)),
     getEntryPage: (input) =>
       engine.read((database) => readEntryPage(database, input)),
     createSession: async (input) => {
@@ -506,7 +582,7 @@ function readSession(
 ): AgentSession | null {
   const row = database
     .prepare(
-      'SELECT id, agent_preset_id, timeline_id, title, head_entry_id, entry_count, created_at, updated_at, deleted_at FROM agent_sessions WHERE id = ?',
+      'SELECT id, agent_preset_id, timeline_id, title, head_entry_id, entry_count, created_at, updated_at, deleted_at, summary_policy_json FROM agent_sessions WHERE id = ?',
     )
     .get(id)
   if (!row) return null
@@ -549,6 +625,14 @@ function requireEntry(
     )
   return entry
 }
+function readLatestWorkSummary(database: DatabaseSync, agentSessionId: string): AgentTranscriptEntry | null {
+  requireSession(database, agentSessionId)
+  const row = database.prepare(`SELECT * FROM agent_transcript_entries
+    WHERE agent_session_id = ? AND json_extract(entry_json, '$.kind') = 'work-summary'
+    ORDER BY sequence DESC LIMIT 1`).get(agentSessionId)
+  return row ? entryFromRow(row) : null
+}
+
 function sessionFromRow(row: unknown): AgentSession {
   const value = row as Record<string, unknown>
   return {
@@ -557,6 +641,7 @@ function sessionFromRow(row: unknown): AgentSession {
     timelineId: optionalString(value.timeline_id),
     title: optionalString(value.title),
     headEntryId: optionalString(value.head_entry_id),
+    ...(value.summary_policy_json ? { summaryPolicy: JSON.parse(String(value.summary_policy_json)) as NonNullable<AgentSession['summaryPolicy']> } : {}),
     entryCount: Number(value.entry_count),
     createdAt: String(value.created_at),
     updatedAt: String(value.updated_at),
@@ -607,7 +692,7 @@ function readSessions(
 
   const rows = database
     .prepare(
-      `SELECT id, agent_preset_id, timeline_id, title, head_entry_id, entry_count, created_at, updated_at, deleted_at
+      `SELECT id, agent_preset_id, timeline_id, title, head_entry_id, entry_count, created_at, updated_at, deleted_at, summary_policy_json
        FROM agent_sessions
        WHERE ${conditions.join(' AND ')}
        ORDER BY updated_at DESC, id DESC
@@ -647,6 +732,23 @@ function validateTranscriptEntry(
     )
   if (value.kind === 'work-summary') {
     validateContent(value.content)
+    if (value.boundary !== undefined) {
+      const boundary = value.boundary
+      if (!isRecord(boundary) || !Number.isSafeInteger(boundary.sourceThroughSequence)
+        || !Number.isSafeInteger(boundary.retiredThroughSequence)
+        || Number(boundary.retiredThroughSequence) < 0
+        || Number(boundary.sourceThroughSequence) < Number(boundary.retiredThroughSequence)) {
+        throw new AgentStoreError('agent.summary_boundary_invalid', 'Invalid summary boundaries')
+      }
+      if (boundary.adoptedWorkspaceRevisionId !== undefined) validateId(boundary.adoptedWorkspaceRevisionId, 'adoptedWorkspaceRevisionId')
+      if (boundary.narrative !== undefined) {
+        if (!isRecord(boundary.narrative)) throw new AgentStoreError('agent.summary_boundary_invalid', 'Invalid summary Narrative source')
+        for (const key of ['timelineId', 'branchId']) validateId(boundary.narrative[key], key)
+        if (boundary.narrative.nodeId !== null) validateId(boundary.narrative.nodeId, 'nodeId')
+        if (boundary.narrative.stateRevisionId !== undefined) validateId(boundary.narrative.stateRevisionId, 'stateRevisionId')
+        if (boundary.narrative.workspaceRevisionId !== undefined) validateId(boundary.narrative.workspaceRevisionId, 'workspaceRevisionId')
+      }
+    }
     return
   }
   if (value.kind === 'message') {

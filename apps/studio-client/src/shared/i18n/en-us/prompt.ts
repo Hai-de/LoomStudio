@@ -1,6 +1,8 @@
 import type { messages as zhCN } from '../zh-cn/prompt.js'
 
 export const messages = {
+  'provider.confirmDeleteAccount': 'Delete account “{{name}}”? Its model configuration will also be removed. This cannot be undone.',
+  'provider.cancelDelete': 'Cancel',
   'tokens.messageAndToolEstimate': 'Messages: {{messages}} · Tools: {{tools}}',
   'tokens.uncounted': 'Not counted: {{items}}',
   'tokens.modelMultiplierHelp': 'Estimate multiplier for o200k_base token counts',
@@ -77,6 +79,7 @@ export const messages = {
   'provider.aiLabNoProfile': 'Create a profile for this capability first.',
   'provider.aiLabUnavailable': 'Provider unavailable',
   'provider.aiLabSave': 'Save configuration',
+  'inspector.previewTruncated': 'Preview truncated. Only part of the data is shown.',
   'inspector.cardSnapshot': 'Card Snapshot',
   'inspector.run': 'Run Inspector',
   'inspector.agentTranscript': 'Agent Transcript',

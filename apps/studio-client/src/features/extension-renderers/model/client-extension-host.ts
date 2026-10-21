@@ -115,6 +115,9 @@ export type ClientExtensionDataApi = {
     project(input: { source: ClientHistorySource; phase: 'classify' | 'prompt' | 'display' }, extensionTarget?: ExtensionInstallationTarget): Promise<JsonValue>
     extract(input: { source: ClientHistorySource; phase?: 'classify' | 'prompt' | 'display'; extractorId: string }, extensionTarget?: ExtensionInstallationTarget): Promise<JsonValue>
   }
+  imports: {
+    commit(sessionId: string, owner: { packageId: string; target: ExtensionInstallationTarget }): Promise<import('@loom-studio/extension-sdk').ExtensionImportReport>
+  }
   rpc: {
     call(method: string, params: JsonValue | undefined, owner: { packageId: string; target: ExtensionInstallationTarget }): Promise<JsonValue>
   }
@@ -839,6 +842,14 @@ function createActivationContext(input: {
       project: query => input.data.history.project(query, installationTarget),
       extract: query => input.data.history.extract(query, installationTarget),
     },
+    imports: {
+      commit: async sessionId => {
+        assertActive()
+        const report = await input.data.imports.commit(sessionId, { packageId: input.extensionPackage.packageId, target: installationTarget })
+        assertActive()
+        return report
+      },
+    },
     rpc: {
       call: async (method, params) => {
         assertActive()
@@ -996,6 +1007,7 @@ const unavailableClientExtensionDataApi: ClientExtensionDataApi = {
     project: () => Promise.reject(new Error('Client extension History API is unavailable')),
     extract: () => Promise.reject(new Error('Client extension History API is unavailable')),
   },
+  imports: { commit: () => Promise.reject(new Error('Client extension Import API is unavailable')) },
   rpc: {
     call: () => Promise.reject(new Error('Client extension RPC API is unavailable')),
   },

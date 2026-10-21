@@ -11,9 +11,27 @@ describe('tRPC wire contract', () => {
         method: 'POST', headers: { 'content-type': 'application/json', 'x-correlation-id': 'contract-correlation' }, body: JSON.stringify(input),
       })
       const payload = await response.json()
-      expect(response.ok).toBe(false)
+      expect(response.status).toBe(409)
       expect(payload.error.data).toMatchObject({ domainCode: 'prompt_resource.conflict', correlationId: 'contract-correlation', callId: response.headers.get('x-call-id') })
       expect(payload.error.data.stack).toBeUndefined()
+    })
+  })
+
+  it('rejects unknown timeline arguments and exposes actionable artifact and range errors', async () => {
+    await withStudioServer(async port => {
+      const post = (method: string, input: unknown) => authenticatedFetch(port, `/trpc/application.${method}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
+      })
+      const { card } = await callRpc<{ card: { id: string } }>(port, 'application.createCard', { name: 'Probe', opening: 'Opening' })
+      const unknown = await post('createNarrativeTimeline', { cardId: card.id, openingNodes: [{ content: 'History' }], nonsenseParam: 123 })
+      expect(unknown.status).toBe(400)
+      expect((await unknown.json()).error.message).toContain('openingNodes')
+      const invalidArtifact = await post('importCardBundle', { artifact: { schemaVersion: 3 } })
+      expect(invalidArtifact.status).toBe(400)
+      expect((await invalidArtifact.json()).error.message).toContain('Unsupported card bundle schemaVersion: 3')
+      const range = await post('listNarrativeTimelines', { limit: 200 })
+      expect(range.status).toBe(400)
+      expect((await range.json()).error.data.domainCode).toBe('narrative.timeline_list_limit_invalid')
     })
   })
 

@@ -13,7 +13,7 @@ describe('SillyTavern compatibility', () => {
   it('maps native regex scripts without changing replacement semantics', () => {
     const rules = convertSillyTavernRegexScripts([{
       scriptName: 'State',
-      findRegex: '/\\[state:(.*?)\\]/gi',
+      findRegex: '/\\[state:(.*?)\\]/gi  \n',
       replaceString: '<span>$1</span>',
       promptOnly: true,
       minDepth: 2,
@@ -157,6 +157,7 @@ describe('SillyTavern compatibility', () => {
     expect(normalizeScanPath('Data/default-user/OpenAI Settings/Preset.json', true)).toBe('OpenAI Settings/Preset.json')
     expect(normalizeScanPath('Data/backups/characters/Hero.png', true)).toBe('')
     expect(compatibleFileKind('characters/Hero.png')).toBe('card')
+    expect(compatibleFileKind('characters/folder/Hero.png')).toBe('card')
     expect(compatibleFileKind('chats/Hero/chat.jsonl')).toBe('chat')
     expect(compatibleFileKind('worlds/World.json')).toBe('world')
     expect(compatibleFileKind('OpenAI Settings/Preset.json')).toBe('preset')

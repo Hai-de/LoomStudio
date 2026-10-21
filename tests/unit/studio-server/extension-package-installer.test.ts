@@ -1,3 +1,4 @@
+import { projectPromptResourceFiles } from '../../../apps/studio-server/src/codecs/prompt-resource-files.js'
 import { mkdtemp, mkdir, readFile, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -16,6 +17,30 @@ afterEach(async () => {
 })
 
 describe('local Extension Package installer', () => {
+  it.each(['valid', 'missing', 'escape', 'symlink'])('validates indexed Prompt Resource files: %s', async mode => {
+    const root = await temporaryRoot()
+    const source = await writePackage(root, 'source', 'example.prompt-files', '1.0.0')
+    const manifest = JSON.parse(await readFile(join(source, 'manifest.json'), 'utf8'))
+    manifest.contributes = { promptResources: [{ id: 'preset', resourceKind: 'prompt', source: './preset/index.json' }] }
+    await writeFile(join(source, 'manifest.json'), JSON.stringify(manifest))
+    const files: Record<string, Uint8Array> = {}
+    const index = projectPromptResourceFiles({ format: 'loom.promptResource', schemaVersion: 2, resourceKind: 'prompt',
+      rootNode: { id: 'root', kind: 'module', label: 'Preset', body: 'Markdown body' } }, files)
+    await mkdir(join(source, 'preset/entries'), { recursive: true })
+    if (mode === 'escape') index.rootNode.body = '../../outside.md'
+    if (mode === 'valid') await writeFile(join(source, 'preset/entries/0.md'), files['entries/0.md']!)
+    if (mode === 'symlink') {
+      await writeFile(join(root, 'outside.md'), 'outside')
+      await symlink(join(root, 'outside.md'), join(source, 'preset/entries/0.md'))
+    }
+    await writeFile(join(source, 'preset/index.json'), JSON.stringify(index))
+    const installation = installExtensionPackageFromDirectory({ sourceDirectory: source, installedDirectory: join(root, 'installed') })
+    if (mode === 'valid') {
+      const installed = await installation
+      expect(await readFile(join(installed.directory, 'preset/entries/0.md'), 'utf8')).toBe('Markdown body')
+    } else await expect(installation).rejects.toThrow()
+  })
+
   it('installs a validated Package atomically by id and version', async () => {
     const root = await temporaryRoot()
     const source = await writePackage(root, 'source', 'example.install', '1.2.3')

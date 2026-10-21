@@ -1,3 +1,7 @@
+import { createHash } from 'node:crypto'
+import { createExtensionRecordArchiveParticipant } from './extension-record-archive.js'
+import { createExtensionAgentTasks } from './extension-agent-tasks.js'
+import { createExtensionNarrativeReader } from './extension-narrative-reader.js'
 import {
   applicationDocumentTypes,
   type createApplicationRuntime,
@@ -44,6 +48,12 @@ type Dependencies = {
 }
 
 type ApplicationAdapter = Pick<Parameters<typeof createExtensionHost>[0],
+  | 'registerRecordArchive'
+  | 'readExtensionNarrative'
+  | 'validateExtensionNarrative'
+  | 'subscribeNarrativeActivity'
+  | 'registerReadonlyFiles'
+  | 'extensionAgentTasks'
   | 'aiCapabilities'
   | 'assets'
   | 'portablePayloads'
@@ -80,6 +90,8 @@ export function createExtensionApplicationAdapter({
   aiCapabilities, profiledAiGateway, gateway, agentTools, macroProviders, promptProcessors,
   stateContent, narrativeContext, stateContributions,
 }: Dependencies): ApplicationAdapter {
+  const recordArchiveOwners = new Set<string>()
+  const narrativeReader = narratives ? createExtensionNarrativeReader(applicationRuntime, narratives) : undefined
   const toolScopes = new AsyncLocalStorage<ToolExecutionScope>()
   const timelineScopes = new AsyncLocalStorage<Pick<ToolExecutionScope, 'narrativeSource' | 'assertNarrativeSource' | 'withNarrativeWrite'> & { target: StateTarget }>()
 
@@ -109,6 +121,21 @@ export function createExtensionApplicationAdapter({
   }
 
   return {
+    registerRecordArchive: (adapter, owner) => {
+      if (recordArchiveOwners.has(owner.installationId)) throw new Error('An installation can register only one record archive adapter')
+      const namespace = `extension.${createHash('sha256').update(`${owner.installationId}:${adapter.id}`).digest('hex')}`
+      const handle = applicationRuntime.registerTimelineArchiveParticipant(createExtensionRecordArchiveParticipant({
+        namespace, version: adapter.version, packageId: owner.packageId,
+        ownerInstallationId: owner.target.kind === 'global' ? undefined : owner.installationId, documents, remapData: adapter.remap,
+      }))
+      recordArchiveOwners.add(owner.installationId)
+      return { dispose() { handle.unregister(); recordArchiveOwners.delete(owner.installationId) } }
+    },
+    readExtensionNarrative: narrativeReader?.read,
+    validateExtensionNarrative: narrativeReader?.validate,
+    subscribeNarrativeActivity: applicationRuntime.subscribeNarrativeActivity,
+    registerReadonlyFiles: applicationRuntime.registerReadonlyFiles,
+    extensionAgentTasks: createExtensionAgentTasks({ runtime: applicationRuntime, documents }),
     assets: assets
       ? {
           publish: async input => {

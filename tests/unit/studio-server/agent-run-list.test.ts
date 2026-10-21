@@ -16,7 +16,7 @@ function fixture() {
   const actor = { kind: 'system' as const, id: 'test' }
   const methods = createAgentsRuntimeMethods({ agents: store } as Parameters<typeof createAgentsRuntimeMethods>[0])
   const recover = vi.fn(async () => { throw new Error('Unknown tool outcome; refusing replay') })
-  const runtime = { listAgentRunStates: methods.listAgentRunStates, prepareAgentRunRecovery: recover } as unknown as ApplicationRuntime
+  const runtime = { listAgentRunStates: methods.listAgentRunStates, inspectAgentRunState: methods.inspectAgentRunState, prepareAgentRunRecovery: recover } as unknown as ApplicationRuntime
   async function seed(id: string, state?: Extract<AgentTranscriptEntryData, { kind: 'run-state' }>['state']) {
     await store.createSession({ id, actor, agentPresetId: 'preset', title: `Title ${id}`, timelineId: 'story' })
     if (state) await append(id, `${id}-run`, { kind: 'run-state', state })
@@ -110,7 +110,7 @@ describe('Agent task list', () => {
         await pending.promise
         return { runId: context!.agentRun!.runId } as never
       })
-      const { runId } = f.service.create({ agentSessionId: 'new', input: 'PRIVATE INPUT' })
+      const { runId } = await f.service.create({ agentSessionId: 'new', input: 'PRIVATE INPUT' })
       expect((await f.service.list()).tasks).toEqual([expect.objectContaining({
         runId, agentSessionId: 'new', title: 'Title new', timelineId: 'story', state: 'running', canPause: true,
       })])
@@ -140,7 +140,7 @@ describe('Agent task list', () => {
         }, { once: true }))
         return {} as never
       })
-      const original = f.service.create({ agentSessionId: 'paused', input: 'PRIVATE INPUT' })
+      const original = await f.service.create({ agentSessionId: 'paused', input: 'PRIVATE INPUT' })
       f.service.cancel(original.runId, 'user-pause')
       await new Promise<void>(resolve => setImmediate(resolve))
       expect((await f.service.list()).tasks).toEqual([expect.objectContaining({
@@ -174,7 +174,7 @@ describe('Agent task list', () => {
         }, { once: true }))
         return {} as never
       })
-      const source = f.service.create({ agentSessionId: 'retained', input: 'Private' })
+      const source = await f.service.create({ agentSessionId: 'retained', input: 'Private' })
       f.service.cancel(source.runId, 'user-pause')
       await new Promise<void>(resolve => setImmediate(resolve))
       await f.append('retained', source.runId, { kind: 'run-state', state: 'suspended' })
@@ -227,7 +227,7 @@ describe('Agent task list', () => {
       }
       expect((await f.service.abandon(tasks[0]!.runId, undefined, 'cold')).accepted).toBe(true)
       expect(prepare).toHaveBeenLastCalledWith({ runId: 'cold-run', agentSessionId: 'cold' })
-      expect(prepare).toHaveBeenCalledTimes(2)
+      expect(prepare).toHaveBeenCalledOnce()
       expect((await f.service.list()).tasks[0]).toMatchObject({ runId: 'cold-run', state: 'discarded', canResume: false, canAbandon: false })
     } finally { f.engine.close() }
   })
@@ -242,7 +242,7 @@ describe('Agent task list', () => {
         await pending.promise
         return { runId: context!.agentRun!.runId } as never
       })
-      const created = f.service.create({ agentSessionId: 'new-attempt', input: 'Private' })
+      const created = await f.service.create({ agentSessionId: 'new-attempt', input: 'Private' })
       const { tasks } = await f.service.list()
       expect(tasks[0]).toMatchObject({ runId: created.runId, state: 'running' })
       expect(tasks[0]).not.toHaveProperty('reason')

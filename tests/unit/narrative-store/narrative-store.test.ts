@@ -18,6 +18,105 @@ function createTestContext() {
 }
 
 describe('narrative store', () => {
+  it('migrates pre-Workspace histories once without changing identities or inventing past work', async () => {
+    const { engine, store, actor } = createTestContext()
+    try {
+      const story = await store.createTimeline({ actor, stateRevisionId: 'initial', openingNode: { body: { format: 'loom-markdown.v1', raw: 'Opening' } } })
+      await store.appendNode({ actor, timelineId: story.timeline.id, branchId: story.branch.id, expectedHeadNodeId: story.nodes[0]!.id,
+        stateRevisionId: 'initial', body: { format: 'loom-markdown.v1', raw: 'Second' } })
+      const ids = (await store.listNodes(story.timeline.id)).map(node => node.id)
+      engine.database.exec(`
+        ALTER TABLE narrative_nodes DROP COLUMN kind;
+        DROP TABLE narrative_recovery_points;
+        ALTER TABLE narrative_nodes DROP COLUMN workspace_revision_id;
+        ALTER TABLE narrative_branches DROP COLUMN workspace_head_revision_id;
+        DROP INDEX narrative_nodes_floor;
+        ALTER TABLE narrative_nodes DROP COLUMN floor;
+        DROP TABLE workspace_revisions;
+        DELETE FROM schema_migrations WHERE namespace = 'application.workspace';
+        UPDATE schema_migrations SET version = 4 WHERE namespace = 'application.narrative';
+      `)
+      const migrated = createNarrativeStore({ engine })
+      const nodes = await migrated.listNodes(story.timeline.id)
+      expect(nodes.map(node => node.id)).toEqual(ids)
+      expect(nodes.map(node => node.floor)).toEqual([1, 2])
+      expect(new Set(nodes.map(node => node.workspaceRevisionId)).size).toBe(1)
+      expect((await migrated.getBranch(story.branch.id))!.workspaceHeadRevisionId).toBe(nodes[0]!.workspaceRevisionId)
+      expect((await createNarrativeStore({ engine }).listNodes(story.timeline.id))).toEqual(nodes)
+    } finally { engine.close() }
+  })
+
+  it.each([true, false])('upgrades a v6 history without losing data (recovery table missing: %s)', async missing => {
+    const { engine, store, actor } = createTestContext()
+    try {
+      const story = await store.createTimeline({ actor, stateRevisionId: 'initial',
+        openingNode: { body: { format: 'loom-markdown.v1', raw: 'Opening' } } })
+      const appended = await store.appendNode({ actor, timelineId: story.timeline.id, branchId: story.branch.id,
+        expectedHeadNodeId: story.nodes[0]!.id, stateRevisionId: 'initial', body: { format: 'loom-markdown.v1', raw: 'Existing input' } })
+      const before = await store.getPage({ timelineId: story.timeline.id })
+      if (missing) engine.database.exec('DROP TABLE narrative_recovery_points')
+      const points = missing ? [] : await store.listRecoveryPoints(story.timeline.id)
+      engine.database.exec("ALTER TABLE narrative_nodes DROP COLUMN kind; UPDATE schema_migrations SET version = 6 WHERE namespace = 'application.narrative'")
+
+      const migrated = createNarrativeStore({ engine })
+      expect(await migrated.getPage({ timelineId: story.timeline.id })).toEqual(before)
+      expect(await migrated.listRecoveryPoints(story.timeline.id)).toEqual(points)
+      await expect(migrated.appendNode({ actor, timelineId: story.timeline.id, branchId: story.branch.id,
+        expectedHeadNodeId: appended.node.id, stateRevisionId: 'initial', body: { format: 'loom-markdown.v1', raw: 'New reply' } }))
+        .resolves.toMatchObject({ node: { parentNodeId: appended.node.id } })
+      expect((await migrated.listRecoveryPoints(story.timeline.id)).some(point => point.nodeId === appended.node.id)).toBe(true)
+      expect(engine.database.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    } finally { engine.close() }
+  })
+
+  it('persists user input identity before a reply exists and preserves it through edits', async () => {
+    const { engine, store, actor } = createTestContext()
+    try {
+      const story = await store.createTimeline({ actor, stateRevisionId: 'initial',
+        openingNode: { body: { format: 'loom-markdown.v1', raw: 'Opening' } } })
+      expect(story.nodes[0]!.kind).toBe('narrative')
+      const input = { actor, timelineId: story.timeline.id, branchId: story.branch.id,
+        nodeId: 'user-input', expectedHeadNodeId: story.nodes[0]!.id, reason: 'application.appendNarrativeInput',
+        body: { format: 'loom-markdown.v1' as const, raw: 'Hide' } }
+      expect((await store.appendInput(input)).node.kind).toBe('user-input')
+      expect((await store.appendInput(input)).node.kind).toBe('user-input')
+      const reopened = createNarrativeStore({ engine })
+      expect((await reopened.getNode('user-input'))?.kind).toBe('user-input')
+      expect((await reopened.getPage({ timelineId: story.timeline.id })).nodes.map(node => node.kind)).toEqual(['narrative', 'user-input'])
+      expect((await reopened.listNodes(story.timeline.id)).find(node => node.id === 'user-input')?.kind).toBe('user-input')
+      const reply = await reopened.appendNode({ ...input, nodeId: undefined, expectedHeadNodeId: 'user-input',
+        stateRevisionId: 'initial', body: { format: 'loom-markdown.v1', raw: 'Reply' } })
+      expect(reply.node.kind).toBe('narrative')
+      const edited = await reopened.editBranchNode({ actor, timelineId: story.timeline.id, branchId: story.branch.id,
+        nodeId: 'user-input', expectedHeadNodeId: reply.node.id, expectedBody: { format: 'loom-markdown.v1', raw: 'Hide' }, body: { format: 'loom-markdown.v1', raw: 'Hide again' } })
+      expect(edited.replacements.map(item => item.node.kind)).toEqual(['user-input', 'narrative'])
+    } finally { engine.close() }
+  })
+
+  it('backfills v7 node kinds from input receipts and recorded Swipe inputs without guessing text', async () => {
+    const { engine, store, actor } = createTestContext()
+    try {
+      const story = await store.createTimeline({ actor, stateRevisionId: 'initial' })
+      const target = { actor, timelineId: story.timeline.id, branchId: story.branch.id }
+      const receiptInput = await store.appendInput({ ...target, nodeId: 'receipt-input', expectedHeadNodeId: null,
+        reason: 'application.appendNarrativeInput', body: { format: 'loom-markdown.v1', raw: 'Receipt input' } })
+      const swipeInput = await store.appendNode({ ...target, expectedHeadNodeId: receiptInput.node.id,
+        stateRevisionId: 'initial', body: { format: 'loom-markdown.v1', raw: 'Swipe input' } })
+      const unknown = await store.appendNode({ ...target, expectedHeadNodeId: swipeInput.node.id,
+        stateRevisionId: 'initial', body: { format: 'loom-markdown.v1', raw: 'I look like user input but have no evidence' } })
+      engine.database.prepare('INSERT INTO narrative_swipe_groups (id, timeline_id, branch_id, metadata_json, revision) VALUES (?, ?, ?, ?, ?)')
+        .run('legacy-group', story.timeline.id, story.branch.id, JSON.stringify({ inputNodeId: swipeInput.node.id,
+          inputs: [{ nodeId: receiptInput.node.id }] }), 1)
+      engine.database.exec("ALTER TABLE narrative_nodes DROP COLUMN kind; UPDATE schema_migrations SET version = 7 WHERE namespace = 'application.narrative'")
+      const migrated = createNarrativeStore({ engine })
+      expect((await migrated.getNode(receiptInput.node.id))?.kind).toBe('user-input')
+      expect((await migrated.getNode(swipeInput.node.id))?.kind).toBe('user-input')
+      expect((await migrated.getNode(unknown.node.id))?.kind).toBe('narrative')
+      expect((await createNarrativeStore({ engine }).listNodes(story.timeline.id)).map(node => node.id))
+        .toEqual((await migrated.listNodes(story.timeline.id)).map(node => node.id))
+    } finally { engine.close() }
+  })
+
   it('rejects stale State and locks opening replacement after path mutations', async () => {
     const { engine, store, actor } = createTestContext()
     try {
@@ -51,7 +150,7 @@ describe('narrative store', () => {
         const node = story.nodes[0]!
         const body = { format: 'loom-markdown.v1' as const, raw: 'Keep this content' }
         if (mutation === 'append') await store.appendNode({ ...ids, actor, expectedHeadNodeId: node.id, stateRevisionId: 'initial', body })
-        if (mutation === 'fork') await store.forkBranch({ timelineId: story.timeline.id, actor, fromBranchId: story.branch.id, fromNodeId: node.id, stateRevisionId: 'initial' })
+        if (mutation === 'fork') await store.forkBranch({ timelineId: story.timeline.id, actor, fromBranchId: story.branch.id, fromNodeId: node.id,})
         const page = await store.getPage(ids)
         expect(page.timeline.opening).toEqual({ id: 'default', nodeId: node.id, locked: true })
         await expect(replace({ ...ids, expectedHeadNodeId: page.branch.headNodeId!, expectedStateHeadRevisionId: 'initial', openingNode: undefined }))
@@ -138,6 +237,7 @@ describe('narrative store', () => {
     expect(listed.timelines[0]?.openingPreview).toBe('Opening one')
     expect(listed.timelines[0]?.latestPreview).toBe('Opening one')
     expect(created.commit.operations.map(operation => operation.entityType)).toEqual([
+      'workspace.revision',
       'narrative.timeline',
       'narrative.branch',
       'narrative.node',
@@ -286,7 +386,6 @@ describe('narrative store', () => {
       timelineId: created.timeline.id,
       fromBranchId: created.branch.id,
       fromNodeId: created.nodes[0]!.id,
-      stateRevisionId: 'state-root',
       title: 'Alternative',
     })
     const forkAppend = await store.appendNode({
@@ -313,7 +412,6 @@ describe('narrative store', () => {
       timelineId: created.timeline.id,
       fromBranchId: created.branch.id,
       fromNodeId: forkAppend.node.id,
-      stateRevisionId: 'state-invalid-fork',
     })).rejects.toMatchObject({ code: 'narrative.node_not_in_branch' })
     await expect(store.getPage({
       timelineId: created.timeline.id,
@@ -349,7 +447,6 @@ describe('narrative store', () => {
       timelineId: newer.timeline.id,
       fromBranchId: newer.branch.id,
       fromNodeId: newer.nodes[0]!.id,
-      stateRevisionId: 'state-newer-fork',
       title: 'Alternative',
     })
 
@@ -379,6 +476,7 @@ describe('narrative store', () => {
     })
 
     expect(result.commit.operations.map(operation => operation.store)).toEqual([
+      'workspace',
       'narrative',
       'narrative',
       'narrative',
@@ -429,7 +527,7 @@ describe('narrative store', () => {
         .get('application.narrative')
       const changesets = database.prepare('SELECT COUNT(*) AS count FROM changesets').get()
       database.close()
-      expect(migration).toEqual({ version: 4 })
+      expect(migration).toEqual({ version: 8 })
       expect(changesets).toEqual({ count: 1 })
     } finally {
       await rm(directory, { recursive: true, force: true })

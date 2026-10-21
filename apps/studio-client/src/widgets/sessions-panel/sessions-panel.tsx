@@ -8,9 +8,11 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
   Dialog,
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   Toggle,
 } from '@loom-studio/ui'
 import {
+  MoreHorizontal,
   ArrowDownUp,
   ArrowRight,
   Bot,
@@ -29,6 +31,7 @@ import {
   Plus,
   Play,
   RefreshCw,
+  Star,
   Trash2,
   Upload,
   X,
@@ -68,6 +71,7 @@ import {
   toggleSelectAllSessions,
   toggleSelectAllTimelines,
 } from './sessions-panel-model.js'
+import { SessionMemory } from './session-memory.js'
 import { useHistoryPreviews } from '../../features/sessions/model/use-history-previews.js'
 import { deleteHistoryItems } from '../../features/sessions/model/delete-history-items.js'
 import styles from './sessions-panel.module.scss'
@@ -78,6 +82,7 @@ type SelectedHistoryItem =
   | { kind: 'session'; id: string }
 
 type SessionsPanelProps = {
+  view?: 'timelines' | 'sessions'
   activeBranch?: NarrativeBranch
   activeTimeline?: NarrativeTimeline
   agentChatSession?: AgentSession
@@ -87,6 +92,10 @@ type SessionsPanelProps = {
   branches: NarrativeBranch[]
   cards?: CardSummary[]
   narrativeAgentSession?: AgentSession
+  selectedCardId?: string
+  requestedSessionId?: string
+  requestedSessionView?: 'summary' | 'transcript'
+  onSessionUpdated?(sessionId: string): Promise<void>
   selectedCardName?: string
   t: Translator
   timelines: NarrativeTimeline[]
@@ -103,7 +112,12 @@ type SessionsPanelProps = {
 
 export function SessionsPanel(props: SessionsPanelProps) {
   const mediaRevision = useCardMediaRevision()
-  const [filter, setFilter] = useState<SessionFilter>('all')
+  const [showAll, setShowAll] = useState(false)
+  const cardId = props.activeTimeline?.createdFrom?.cardId ?? props.selectedCardId
+  const scopedTimelines = useMemo(() => showAll ? props.timelines : props.timelines.filter(item => !!cardId && item.createdFrom?.cardId === cardId), [props.timelines, showAll, cardId])
+  const scopedSessions = useMemo(() => showAll ? props.allAgentSessions : props.allAgentSessions.filter(item => scopedTimelines.some(timeline => timeline.id === item.timelineId)), [props.allAgentSessions, scopedTimelines, showAll])
+  const [localFilter, setFilter] = useState<SessionFilter>('all')
+  const filter = props.view ?? localFilter
   const [mobilePane, setMobilePane] = useState<'master' | 'detail'>('master')
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedTimelines, setExpandedTimelines] = useState<Set<string>>(new Set())
@@ -124,21 +138,44 @@ export function SessionsPanel(props: SessionsPanelProps) {
 
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc')
 
-  const sortedTimelines = useMemo(() => sortTimelines(props.timelines, sortOrder), [props.timelines, sortOrder])
+  const sortedTimelines = useMemo(() => sortTimelines(scopedTimelines, sortOrder), [scopedTimelines, sortOrder])
 
   const initialSelectedId = props.activeTimeline?.id ?? sortedTimelines[0]?.id
   const [selectedItem, setSelectedItem] = useState<SelectedHistoryItem | undefined>(
-    initialSelectedId ? { kind: 'timeline', id: initialSelectedId } : undefined,
+    props.requestedSessionId ? { kind: 'session', id: props.requestedSessionId } : initialSelectedId ? { kind: 'timeline', id: initialSelectedId } : undefined,
   )
+
+  useEffect(() => {
+    if (!props.view) return
+    setMobilePane('master')
+    setSelectedItem(undefined)
+    setSelectedTimelineIds(new Set())
+    setSelectedSessionIds(new Set())
+    setIsSelectionMode(false)
+  }, [props.view])
 
   // 区分绑定会话与独立会话并应用排序
   const { sessionsByTimelineId, standaloneSessions } = useMemo(() => {
-    const partitioned = partitionSessions(props.allAgentSessions)
+    const partitioned = partitionSessions(scopedSessions)
     return {
       sessionsByTimelineId: partitioned.sessionsByTimelineId,
       standaloneSessions: sortSessions(partitioned.standaloneSessions, sortOrder),
     }
-  }, [props.allAgentSessions, sortOrder])
+  }, [scopedSessions, sortOrder])
+
+  const lastRequested = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    const requestKey = props.requestedSessionId ? `${props.requestedSessionId}:${props.requestedSessionView}` : undefined
+    if (!requestKey) { lastRequested.current = undefined; return }
+    if (requestKey === lastRequested.current) return
+    const requested = props.allAgentSessions.find(item => item.id === props.requestedSessionId)
+    if (!requested) return
+    lastRequested.current = requestKey
+    setSelectedItem({ kind: 'session', id: requested.id })
+    setMobilePane('detail')
+    const owner = props.timelines.find(item => item.id === requested.timelineId)
+    if (!cardId || owner?.createdFrom?.cardId !== cardId) setShowAll(true)
+  }, [props.requestedSessionId, props.requestedSessionView, cardId, props.allAgentSessions, props.timelines])
 
   // 构建角色快速检索映射表
   const cardMap = useMemo(() => {
@@ -153,9 +190,9 @@ export function SessionsPanel(props: SessionsPanelProps) {
 
   const filteredSessions = useMemo(() => {
     if (filter === 'timelines') return []
-    const sessions = filter === 'sessions' ? sortSessions(props.allAgentSessions, sortOrder) : standaloneSessions
+    const sessions = filter === 'sessions' ? sortSessions(scopedSessions, sortOrder) : standaloneSessions
     return filterAgentSessions(sessions, props.agentPresets, searchQuery)
-  }, [filter, searchQuery, standaloneSessions, props.allAgentSessions, props.agentPresets, sortOrder])
+  }, [filter, searchQuery, standaloneSessions, scopedSessions, props.agentPresets, sortOrder])
 
   const expandableTimelineIds = useMemo(() => {
     return getExpandableTimelineIds(filteredTimelines.map(t => t.id), sessionsByTimelineId)
@@ -314,13 +351,13 @@ export function SessionsPanel(props: SessionsPanelProps) {
   // 当前选中的 Timeline 或 Session 实体
   const selectedTimeline = useMemo(() => {
     if (selectedItem?.kind !== 'timeline') return undefined
-    return props.timelines.find(t => t.id === selectedItem.id) ?? sortedTimelines[0]
-  }, [props.timelines, selectedItem, sortedTimelines])
+    return scopedTimelines.find(t => t.id === selectedItem.id)
+  }, [scopedTimelines, selectedItem])
 
   const selectedSession = useMemo(() => {
     if (selectedItem?.kind !== 'session') return undefined
-    return props.allAgentSessions.find(s => s.id === selectedItem.id)
-  }, [props.allAgentSessions, selectedItem])
+    return scopedSessions.find(s => s.id === selectedItem.id)
+  }, [scopedSessions, selectedItem])
 
   const { timelinePreview, sessionPreview, retryPreview } = useHistoryPreviews({
     api: props.api, branches: props.branches, selectedTimeline, selectedSession,
@@ -411,12 +448,13 @@ export function SessionsPanel(props: SessionsPanelProps) {
   return (
     <div className={styles.panel} data-loom-component="sessions-panel">
       <MasterDetailWorkbench
+        navigationScope={props.view ? 'local' : 'workspace'}
         mobilePane={mobilePane}
         onMobilePaneChange={setMobilePane}
         master={(
           <div className={styles.masterContainer}>
             <div className={styles.filterNav}>
-              <PanelTabs<SessionFilter>
+              {!props.view ? <PanelTabs<SessionFilter>
                 activeId={filter}
                 ariaLabel={props.t('sessions.views')}
                 items={[
@@ -428,7 +466,7 @@ export function SessionsPanel(props: SessionsPanelProps) {
                   setFilter(nextFilter)
                   setMobilePane('master')
                 }}
-              />
+              /> : null}
 
               <button
                 aria-label={isSelectionMode ? props.t('sessions.exitBatchManage') : props.t('sessions.batchManage')}
@@ -447,6 +485,8 @@ export function SessionsPanel(props: SessionsPanelProps) {
                 <span>{isSelectionMode ? props.t('sessions.exitBatchManage') : props.t('sessions.batchManage')}</span>
               </button>
             </div>
+            <div className={styles.scopeRow}><span>{showAll ? '全部角色与独立会话' : props.selectedCardName || '当前角色'}</span>
+              <Button size="small" variant="ghost" onClick={() => { setShowAll(value => !value); setSelectedTimelineIds(new Set()); setSelectedSessionIds(new Set()) }}>{showAll ? '仅当前角色' : '显示全部'}</Button></div>
             <nav aria-label={props.t('sessions.views')} className={styles.masterNav}>
             {isSelectionMode ? (
               <div className={styles.batchToolbar}>
@@ -597,6 +637,7 @@ export function SessionsPanel(props: SessionsPanelProps) {
                             <div
                               className={styles.itemRow}
                               data-active={isSelected ? 'true' : 'false'}
+                              aria-current={timeline.id === props.activeTimeline?.id ? 'true' : undefined}
                               data-selected={isTimelineChecked ? 'true' : 'false'}
                               onClick={isSelectionMode ? (e) => handleToggleTimelineSelect(timeline.id, e) : undefined}
                             >
@@ -749,6 +790,7 @@ export function SessionsPanel(props: SessionsPanelProps) {
                                     <div
                                       className={styles.childItemRow}
                                       data-active={isSessionSelected ? 'true' : 'false'}
+                                      aria-current={session.id === props.agentChatSession?.id ? 'true' : undefined}
                                       data-selected={isSessionChecked ? 'true' : 'false'}
                                       onClick={e => {
                                         if (isSelectionMode) {
@@ -771,10 +813,11 @@ export function SessionsPanel(props: SessionsPanelProps) {
                                           />
                                         </div>
                                       ) : null}
-                                      <Bot aria-hidden="true" />
+                                      {session.id === props.narrativeAgentSession?.id
+                                        ? <Star className={styles.primaryIcon} fill="currentColor" aria-label={props.t('agent.primarySession')} />
+                                        : <Bot aria-hidden="true" />}
                                       <span className={styles.childItemBody}>
                                         <strong title={session.title || profile?.rootNode.label || props.t('sessions.untitledAgentSession')}>{session.title || profile?.rootNode.label || props.t('sessions.untitledAgentSession')}
-                                          {session.id === props.narrativeAgentSession?.id ? ` · ${props.t('agent.primarySession')}` : ''}
                                         </strong>
                                         <small title={sessionPresetName(session, props.agentPresets, props.t)}>{sessionPresetName(session, props.agentPresets, props.t)} · {formatDateTime(session.updatedAt)}</small>
                                       </span>
@@ -889,6 +932,7 @@ export function SessionsPanel(props: SessionsPanelProps) {
                           <div
                             className={styles.itemRow}
                             data-active={isSessionSelected ? 'true' : 'false'}
+                            aria-current={session.id === props.agentChatSession?.id ? 'true' : undefined}
                             data-selected={isSessionChecked ? 'true' : 'false'}
                             onClick={isSelectionMode ? (e) => handleToggleSessionSelect(session.id, e) : undefined}
                             onDoubleClick={() => {
@@ -919,11 +963,12 @@ export function SessionsPanel(props: SessionsPanelProps) {
                               }}
                             >
                               <div className={styles.avatarPlaceholder}>
-                                <Bot aria-hidden="true" />
+                                {session.id === props.narrativeAgentSession?.id
+                                  ? <Star className={styles.primaryIcon} fill="currentColor" aria-label={props.t('agent.primarySession')} />
+                                  : <Bot aria-hidden="true" />}
                               </div>
                               <span className={styles.itemBody}>
                                 <strong title={session.title || profile?.rootNode.label || props.t('sessions.untitledAgentSession')}>{session.title || profile?.rootNode.label || props.t('sessions.untitledAgentSession')}
-                                  {session.id === props.narrativeAgentSession?.id ? ` · ${props.t('agent.primarySession')}` : ''}
                                 </strong>
                                 <small title={sessionSourceLabel(session, props.timelines, props.cards ?? [], props.t)}>{sessionSourceLabel(session, props.timelines, props.cards ?? [], props.t)}</small>
                                 <small title={sessionPresetName(session, props.agentPresets, props.t)}>{sessionPresetName(session, props.agentPresets, props.t)} · {formatDateTime(session.updatedAt)}</small>
@@ -1022,6 +1067,9 @@ export function SessionsPanel(props: SessionsPanelProps) {
             />
           ) : selectedItem?.kind === 'session' && selectedSession ? (
             <SessionDetail
+              key={`${selectedSession.id}:${selectedSession.id === props.requestedSessionId ? props.requestedSessionView : 'transcript'}`}
+              api={props.api} initialView={selectedSession.id === props.requestedSessionId ? props.requestedSessionView : undefined}
+              onSessionUpdated={props.onSessionUpdated}
               entries={sessionPreview?.status === 'ready' ? sessionPreview.data : []}
               previewLoading={Boolean(props.api) && (!sessionPreview || sessionPreview.status === 'loading')}
               previewError={sessionPreview?.status === 'error' ? sessionPreview.error : undefined}
@@ -1379,6 +1427,9 @@ function TimelineDetail(props: {
 }
 
 function SessionDetail(props: {
+  api?: StudioApi
+  initialView?: 'summary' | 'transcript'
+  onSessionUpdated?(sessionId: string): Promise<void>
   entries: AgentTranscriptEntry[]
   previewLoading: boolean
   previewError?: string
@@ -1392,55 +1443,51 @@ function SessionDetail(props: {
   onRename?(): void
   onSetPrimary?(): void
 }) {
+  const [view, setView] = useState<'summary' | 'transcript'>(props.initialView ?? 'transcript')
+  const [sessionDetailsOpen, setSessionDetailsOpen] = useState(false)
+  const tabs = <PanelTabs activeId={view} ariaLabel="会话详情" items={[{ id: 'transcript', label: '对话记录' }, { id: 'summary', label: '摘要' }]} onChange={setView} />
+
+  const [summaryProgress, setSummaryProgress] = useState<{ through?: number; error?: string }>()
+  useEffect(() => {
+    if (view !== 'transcript' || !props.api) return
+    let active = true
+    setSummaryProgress(undefined)
+    void props.api.agentSessions.memory({ agentSessionId: props.session.id }).then(memory => {
+      if (active) setSummaryProgress({ through: memory.summary ? memory.coverage.messages.retired : undefined })
+    }, error => {
+      if (active) setSummaryProgress({ error: error instanceof Error ? error.message : String(error) })
+    })
+    return () => { active = false }
+  }, [props.api, props.session.id, props.session.updatedAt, view])
+
   const profile = props.profiles.find(p => p.id === props.session.agentPresetId)
   const renderItems = buildRenderItems(props.entries)
 
   return (
     <>
-      <header className={styles.detailHeader}>
-        <div className={styles.detailTitleBlock}>
-          <div className={styles.detailAvatarPlaceholder}>
-            <Bot aria-hidden="true" />
-          </div>
-          <div className={styles.detailTitleMeta}>
-            <h3>{props.session.title || profile?.rootNode.label || 'Agent Session'}</h3>
-            <span>{profile?.rootNode.label ?? props.session.agentPresetId} · {props.session.id}</span>
-            {props.isPrimary ? <span>{props.t('agent.primarySession')}</span> : null}
-          </div>
-        </div>
-
-        <div className={styles.detailActions}>
-          {!props.isPrimary && props.onSetPrimary ? <Button size="small" variant="secondary"
-            onClick={props.onSetPrimary}>{props.t('agent.makePrimary')}</Button> : null}
-          {props.onRename ? (
-            <button
-              aria-label={props.t('sessions.rename')}
-              className={styles.detailIconButton}
-              title={props.t('sessions.rename')}
-              type="button"
-              onClick={props.onRename}
-            >
-              <Pencil aria-hidden="true" size={14} />
-            </button>
-          ) : null}
-          {props.onDelete ? (
-            <button
-              aria-label={props.t('sessions.delete')}
-              className={styles.detailDeleteButton}
-              title={props.t('sessions.delete')}
-              type="button"
-              onClick={props.onDelete}
-            >
-              <Trash2 aria-hidden="true" size={14} />
-            </button>
-          ) : null}
+      <header className={styles.sessionHeader}>
+        <Bot size={22} aria-hidden="true" />
+        <h3>{props.session.title || profile?.rootNode.label || 'Agent Session'}</h3>
+        {props.isPrimary && <span className={styles.sessionRole}>{props.t('agent.primarySession')}</span>}
+        <div className={styles.sessionActions}>
           <button className={styles.primaryButton} type="button" onClick={props.onOpenSidebar}>
-            <span>{props.t('sessions.openInSidebar')}</span>
-            <ArrowRight aria-hidden="true" size={13} />
+            <span>{props.t('sessions.openInSidebar')}</span><ArrowRight aria-hidden="true" size={13} />
           </button>
+          <DropdownMenu><DropdownMenuTrigger asChild><Button size="small" variant="ghost" aria-label="更多会话操作"><MoreHorizontal size={18} /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent>
+              {!props.isPrimary && props.onSetPrimary && <DropdownMenuItem onSelect={props.onSetPrimary}>{props.t('agent.makePrimary')}</DropdownMenuItem>}
+              {props.onRename && <DropdownMenuItem icon={<Pencil size={14} />} onSelect={props.onRename}>{props.t('sessions.rename')}</DropdownMenuItem>}
+              <DropdownMenuItem onSelect={() => setSessionDetailsOpen(true)}>会话详情</DropdownMenuItem>
+              {props.onDelete && <DropdownMenuItem tone="danger" icon={<Trash2 size={14} />} onSelect={props.onDelete}>{props.t('sessions.delete')}</DropdownMenuItem>}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
-
+      <Dialog open={sessionDetailsOpen} title="会话详情" onClose={() => setSessionDetailsOpen(false)}>
+        <p>{profile?.rootNode.label ?? props.session.agentPresetId}</p><p style={{ overflowWrap: 'anywhere' }}>{props.session.id}</p>
+      </Dialog>
+      {view === 'summary' ? props.api ? <div className={styles.summaryPane}><SessionMemory api={props.api} sessionId={props.session.id} onSaved={props.onSessionUpdated} navigation={tabs} /></div> : <>{tabs}<p>会话服务不可用。</p></> : <>
+      {tabs}
       <div className={styles.infoGrid}>
         <div className={styles.infoCard}>
           <span>Agent Preset</span>
@@ -1449,6 +1496,12 @@ function SessionDetail(props: {
         <div className={styles.infoCard}>
           <span>{props.t('sessions.messageCountLabel')}</span>
           <strong>{props.session.entryCount}</strong>
+        </div>
+        <div className={styles.infoCard}>
+          <span>上次总结 · Session 消息</span>
+          <strong title={summaryProgress?.error}>{!props.api ? '会话服务不可用' : !summaryProgress ? '正在加载…'
+            : summaryProgress.error ? '摘要状态加载失败'
+            : summaryProgress.through === undefined ? '尚未总结' : `已总结至消息 #${summaryProgress.through}`}</strong>
         </div>
         <div className={styles.infoCard}>
           <span>{props.t('sessions.affiliation')}</span>
@@ -1474,6 +1527,8 @@ function SessionDetail(props: {
           <div className={styles.transcriptList}>
             {renderItems.map(item => item.kind === 'tool-group' ? (
               <AgentToolGroupBlock key={item.id} label={item.label} tools={item.tools} t={props.t} />
+            ) : item.kind === 'summary' ? (
+              <details className={styles.transcriptReasoning} key={item.id}><summary>{item.label}</summary><p className={styles.transcriptEntryContent}>{item.content}</p></details>
             ) : item.kind === 'reasoning' ? (
               <details className={styles.transcriptReasoning} key={item.id}>
                 <summary>{props.t('agent.reasoning')}</summary>
@@ -1491,6 +1546,7 @@ function SessionDetail(props: {
           </div>
         )}
       </section>
+      </>}
     </>
   )
 }

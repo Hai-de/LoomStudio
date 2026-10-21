@@ -49,8 +49,6 @@ import { prepareStateContent } from '../state/process-state-content.js'
 import { beginTimelineExtensionWork, assertTimelineExtensionLease } from '../extensions/timeline-participation.js'
 import { collectPromptExtensionDependencies } from '../extensions/prompt-dependencies.js'
 
-const maximumProviderSteps = 8
-const toolTimeoutMs = 30_000
 const safeToolCodes = new Set(['tool.unknown', 'tool.transport_mismatch', 'tool.approval_failed', 'tool.denied', 'tool.timeout', 'tool.aborted', 'codeact.source_transformed', 'codeact.incomplete_step'])
 
 export type AgentRunProgress = {
@@ -370,7 +368,10 @@ async function runToolLoop(
   function recovery(phase: AgentRunRecoveryCheckpoint['phase'], messages: ChatMessage[], nextProviderStep: number) {
     return encodeRunRecovery({
       version: 1, phase, executor: { pid: process.pid, id: input.runId },
-      request: input.recoveryRequest, model: input.model, toolContract,
+      request: input.recoveryRequest,
+      ...(input.requestContext?.agentRun?.sendRequestDigest ?? continuation?.recovery?.sendRequestDigest
+        ? { sendRequestDigest: input.requestContext?.agentRun?.sendRequestDigest ?? continuation?.recovery?.sendRequestDigest } : {}),
+      model: input.model, toolContract,
       ...(input.toolExecutionScope?.narrativeSource ? { narrativeSource: input.toolExecutionScope.narrativeSource } : {}),
       messages, userEntryId, nextProviderStep,
       promptExtensionLeases: input.promptExtensionLeases ?? [],
@@ -384,6 +385,7 @@ async function runToolLoop(
     tools.map((tool) => [tool.definition.name, tool] as const),
   )
   let streamedText = ''
+  let streamedReasoning = ''
   const streamedToolInputs = new Map<string, { toolName?: string; input: string }>()
   const pendingTools = new Map<string, { invocation: ToolInvocation; render: (result: ToolResult) => ChatMessage }>()
 
@@ -401,7 +403,7 @@ async function runToolLoop(
 
   try {
     if (acceptedContent) return await finishAcceptedContent()
-    for (let step = continuation?.recovery?.nextProviderStep ?? 1; step <= maximumProviderSteps; step += 1) {
+    for (let step = continuation?.recovery?.nextProviderStep ?? 1; ; step += 1) {
       nextRecoveryStep = step
       progress.providerStep = step
       progress.stage = 'provider'
@@ -454,6 +456,7 @@ async function runToolLoop(
           : {}),
         delivery: input.delivery ?? 'stream',
         onEvent: event => {
+          if (event.type === 'reasoning-delta') streamedReasoning += event.delta
           if (event.type === 'text-delta') streamedText += event.delta
           if (event.type === 'tool-input-delta') {
             const existing = streamedToolInputs.get(event.toolCallId)
@@ -462,7 +465,7 @@ async function runToolLoop(
               input: `${existing?.input ?? ''}${event.delta}`,
             })
           }
-          if (event.type !== 'text-delta' && event.type !== 'tool-input-delta' && event.type !== 'usage') return
+          if (event.type !== 'text-delta' && event.type !== 'reasoning-delta' && event.type !== 'tool-input-delta' && event.type !== 'usage') return
           input.requestContext?.agentRun?.onEvent({
             ...event,
             runId: input.requestContext.agentRun.runId,
@@ -475,13 +478,20 @@ async function runToolLoop(
       await assertPromptDependencies()
       progress.stage = 'response'
       await append([{ ...providerObservation(providerResult), measurementId, providerStep: step }])
-      const { classified, contentScan, invocationPairs } = decodeToolResponse({
+      const { classified, contentScan, invocationPairs, providerMessage } = decodeToolResponse({
         providerResult, sessionId: session.id, classificationRules: input.classificationRules ?? [],
         byExposedName, contentTools, createInvocationId: () => input.ctx.createId('tool-invocation'),
       })
-      checkpointMessages = [...stepMessages, providerResult.message]
+      checkpointMessages = [...stepMessages, providerMessage]
 
       const stepEntries: AgentTranscriptEntryData[] = []
+      streamedReasoning = providerResult.reasoning ?? streamedReasoning
+      if (streamedReasoning) stepEntries.push({ kind: 'reasoning', content: streamedReasoning,
+        source: 'provider-native', visibility: 'collapsed', replay: 'omit',
+        ...(providerResult.providerCallId ? { providerCallId: providerResult.providerCallId } : {}),
+      })
+      if (!invocationPairs.length && providerResult.finishReason === 'length' && !providerResult.message.content?.trim())
+        throw Object.assign(new Error('Provider reached its output limit without assistant text or tool calls; automatic continuation stopped.'), { code: 'agent.provider_no_progress' })
       for (const reasoning of classified.reasoning) {
         stepEntries.push({
           kind: 'reasoning',
@@ -547,6 +557,7 @@ async function runToolLoop(
           // Once accepted, replay commits these exact operations, never re-runs extension code.
           await append([{ kind: 'run-state', state: 'running', recovery: recovery('content', checkpointMessages, step) }])
           streamedText = ''
+          streamedReasoning = ''
           streamedToolInputs.clear()
           return await finishAcceptedContent()
         }
@@ -568,6 +579,7 @@ async function runToolLoop(
         })
       }
       streamedText = ''
+      streamedReasoning = ''
       streamedToolInputs.clear()
 
       if (invocationPairs.length === 0) {
@@ -578,7 +590,7 @@ async function runToolLoop(
             entry.entry.kind === 'message' && entry.entry.role === 'assistant',
           )
           if (partialEntry) continuationAssistantEntryId = partialEntry.id
-          providerMessages.push(providerResult.message)
+          providerMessages.push(providerMessage)
           nextRecoveryStep = step + 1
           completeStep('Output limit reached · continuing')
           continue
@@ -603,7 +615,7 @@ async function runToolLoop(
         }
       }
 
-      providerMessages.push(providerResult.message)
+      providerMessages.push(providerMessage)
       for (const pair of invocationPairs) {
         progress.stage = 'tool'
         progress.toolCount += 1
@@ -619,7 +631,9 @@ async function runToolLoop(
         })
         const incompleteCodeAct = codeActToolIds.has(pair.invocation.toolId)
           && (providerResult.finishReason === 'length' || providerResult.finishReason === 'error')
-        const result = 'sourceChanged' in pair && pair.sourceChanged ? failedResult(
+        const result = 'validationError' in pair && pair.validationError ? failedResult(
+          pair.invocation, pair.validationError.code, pair.validationError.message,
+        ) : 'sourceChanged' in pair && pair.sourceChanged ? failedResult(
           pair.invocation,
           'codeact.source_transformed',
           'CodeAct was not executed: an assistant-content transformation changed its source. Exclude tool code from the rule or choose the JSON CodeAct transport.',
@@ -663,10 +677,6 @@ async function runToolLoop(
       }
       completeStep(`${invocationPairs.length} tools processed · continuing`)
     }
-    progress.stage = 'step-limit'
-    throw new Error(
-      `Agent Provider step limit exceeded: ${maximumProviderSteps}`,
-    )
   } catch (error) {
     // Whitespace from a provider is not a valid partial assistant message.
     if (!streamedText.trim()) streamedText = ''
@@ -703,6 +713,8 @@ async function runToolLoop(
       }
       if (suspended || !aborted || acceptedContent) {
         const checkpointEntries: AgentTranscriptEntryData[] = []
+        if (streamedReasoning) checkpointEntries.push({ kind: 'reasoning', content: streamedReasoning,
+          source: 'provider-native', visibility: 'collapsed', replay: 'omit' })
         if (streamedText && !acceptedContent) checkpointEntries.push({
           kind: 'message',
           role: 'assistant',
@@ -1051,12 +1063,8 @@ async function executeInvocation(
       status: 'aborted',
       content: [],
       error: {
-        code:
-          signal.reason === 'tool-timeout' ? 'tool.timeout' : 'tool.aborted',
-        message:
-          signal.reason === 'tool-timeout'
-            ? 'Tool execution timed out'
-            : 'Tool execution was aborted',
+        code: 'tool.aborted',
+        message: 'Tool execution was aborted',
       },
     }
   } finally {
@@ -1069,18 +1077,12 @@ function createToolSignal(externalSignal?: AbortSignal): {
   dispose(): void
 } {
   const controller = new AbortController()
-  // ponytail: Phase 4 uses one fixed per-tool timeout; move this into Agent Runtime Policy when profile-level budgets are introduced.
-  const timeout = setTimeout(
-    () => controller.abort('tool-timeout'),
-    toolTimeoutMs,
-  )
   const abort = () => controller.abort(externalSignal?.reason)
   externalSignal?.addEventListener('abort', abort, { once: true })
   if (externalSignal?.aborted) abort()
   return {
     signal: controller.signal,
     dispose: () => {
-      clearTimeout(timeout)
       externalSignal?.removeEventListener('abort', abort)
     },
   }

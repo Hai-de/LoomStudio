@@ -1,8 +1,9 @@
+import { loadPromptResourceFiles } from '../codecs/prompt-resource-files.js'
 import { parseExtensionManifest, type ExtensionManifest } from '@loom-studio/extension-host'
 import { unzipSync, zipSync } from 'fflate'
 import { randomUUID } from 'node:crypto'
 import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, rmdir, writeFile } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, posix, relative, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 
 const maxPackageFiles = 10_000
@@ -188,6 +189,15 @@ export async function exportExtensionPackageZip(directory: string, expected: Ext
   ]) {
     if (!files[entry.replace(/^\.\//, '')]) throw new Error(`Extension Package entry is missing: ${entry}`)
   }
+  for (const resource of manifest.contributes?.promptResources ?? []) {
+    const source = resource.source.replace(/^\.\//, '')
+    await loadPromptResourceFiles(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(files[source])), async path => {
+      const entry = posix.join(posix.dirname(source), path)
+      const bytes = files[entry]
+      if (!bytes) throw new Error(`Extension Package entry is missing: ${entry}`)
+      return bytes
+    })
+  }
   return zipSync(files)
 }
 
@@ -199,7 +209,7 @@ async function visitPackageFiles(
 ): Promise<void> {
   const entries = await readdir(sourceDirectory, { withFileTypes: true })
   for (const entry of entries) {
-    if (!prefix && ['.git', '.loom-source.json', '.loom-zip-install'].includes(entry.name)) continue
+    if (!prefix && ['.git', 'node_modules', '.loom-source.json', '.loom-zip-install'].includes(entry.name)) continue
     const source = join(sourceDirectory, entry.name)
     const path = `${prefix}${entry.name}`
     assertSafeZipEntryName(path)
@@ -248,6 +258,19 @@ async function validateInstalledPackage(directory: string, expected: ExtensionMa
       throw error
     })
     if (!stat.isFile()) throw new Error(`Extension Package entry must be a file: ${entry}`)
+  }
+  for (const resource of copied.contributes?.promptResources ?? []) {
+    const source = resolve(directory, resource.source)
+    if ((await lstat(source)).size > 16 * 1024 * 1024) throw new Error('Prompt Resource exceeds maximum size')
+    await loadPromptResourceFiles(JSON.parse(await readFile(source, 'utf8')), async path => {
+      const candidate = resolve(dirname(source), path)
+      const actual = await realpath(candidate)
+      const inside = relative(resolve(directory), actual)
+      if (!inside || inside.startsWith('..') || isAbsolute(inside)) throw new Error('Extension Package path escapes its root')
+      const info = await lstat(actual)
+      if (!info.isFile() || info.size > 16 * 1024 * 1024) throw new Error('Invalid Prompt Resource file size or type')
+      return readFile(actual)
+    })
   }
 }
 

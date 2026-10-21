@@ -1,3 +1,4 @@
+import type { AgentApprovalPolicy } from '../agents/approval-policy.js'
 import type { JsonObject, StateArtifact, TimelineStateBinding } from '@loom-studio/shared'
 import type {
   AgentDelivery,
@@ -83,8 +84,10 @@ export type PromptResourceContent = {
   resourceKind: PromptResourceKind
   rootNode: PromptResourceNode
   useCardLore?: boolean
+  useGlobalLore?: boolean
   textUses?: Array<{ id: string; kind: 'rule' | 'extractor'; enabled: boolean; orderIndex?: number; reference?: NonNullable<import('@loom-studio/extension-sdk').ExtensionPromptResourceContribution['textUses']>[number]['reference'] }>
   historyPolicy?: AgentHistoryPolicy
+  approvalPolicy?: AgentApprovalPolicy
   model?: ProviderModelSelection
   delivery?: AgentDelivery
   origin?: {
@@ -108,6 +111,7 @@ export type PromptResourceArtifact = {
   macros?: Record<string, string>
   macroOptions?: import("@loom-studio/shared").MacroOptions
   useCardLore?: boolean
+  useGlobalLore?: boolean
   textUses?: PromptResourceContent['textUses']
   loreMounts?: Array<NonNullable<import('@loom-studio/shared').LoreMount['reference']>>
   textTransformRules?: Array<Omit<TextTransformRuleDraft, 'owner'>>

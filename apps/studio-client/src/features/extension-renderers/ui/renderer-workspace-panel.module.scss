@@ -129,7 +129,6 @@
   gap: 8px;
   padding: 8px 12px 0 12px;
   margin-bottom: 4px;
-  border-bottom: 1px solid var(--loom-color-divider);
 }
 
 .packageTreeBody {
@@ -606,3 +605,6 @@
   small { display: block; color: var(--loom-color-text-muted); }
   button { flex-shrink: 0; }
 }
+
+.participationSidebarNotice strong { display: block; color: var(--loom-color-text); overflow-wrap: anywhere; }
+.participationSidebarNotice small { display: block; line-height: 1.6; color: var(--loom-color-text-muted); }

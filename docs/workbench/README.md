@@ -12,6 +12,7 @@
 - [`adr/`](adr/) — 架构决策记录；权威状态表见 [`adr/README.md`](adr/README.md)。
 - `issues/` — 已知缺陷与待确认事项。
 - `plans/` — 演进计划与改进路线图；统一状态入口见 [`plans/README.md`](plans/README.md)。
+- [`drafts/`](drafts/README.md) — 暂不实施、未来按明确需求重新评估的构想，不属于当前施工路线。
 - `reference/` — 外部参考材料（如 SillyTavern 架构总结等）。
 - [`../archive/`](../archive/) — 唯一历史归档库；Workbench 内不再维护第二套 Archive。
 
@@ -20,6 +21,7 @@
 - **Architecture**：已经由当前代码验证的正式事实；
 - **Active Plan / Issue**：当前仍有明确未完成工作；
 - **Deferred / Roadmap**：方向保留，但不是当前施工入口；
+- **Draft**：暂存构想，只有明确新需求或重新授权才会重启，不作为既定实施方向；
 - **Closing**：实现已完成，但仍有明确的最小验收或收尾项；
 - **Closed / Implemented**：当前工作已经完成，正文移入 `docs/archive/`；
 - **Historical / Superseded**：只用于理解设计演进，不得恢复为当前合同。

@@ -1,3 +1,5 @@
+import { useMemo, useState, type ReactNode } from 'react'
+import { buildInspectorJsonPreview } from './inspector-json-preview.js'
 import type { ClientJsonValue } from '@loom-studio/client-bridge'
 import { formatNumber, type Translator } from '../../shared/i18n/index.js'
 import type {
@@ -57,7 +59,7 @@ export function InspectorPanel(props: InspectorPanelProps) {
   return (
     <aside className={styles.inspector} data-loom-component="overlay-utility-layer" data-loom-object="inspector-panel">
       {props.aiProviders && props.onInvokeAiCapability ? (
-        <section className={styles.section}>
+        <InspectorSection title={props.t('provider.aiLabTitle')}>
           <AiCapabilityLab
             providers={props.aiProviders}
             providerAccounts={props.providerAccounts ?? []}
@@ -70,30 +72,24 @@ export function InspectorPanel(props: InspectorPanelProps) {
             onRefresh={props.onRefreshAiProviders ?? (async () => {})}
             t={props.t}
           />
-        </section>
+        </InspectorSection>
       ) : null}
-      <section className={styles.section}>
-        <h2>{props.t('inspector.cardSnapshot')}</h2>
-        <JsonBlock value={props.cardSnapshot} />
-      </section>
-      <section className={styles.section}>
-        <h2>{props.t('inspector.run')}</h2>
-        <JsonBlock value={props.runDetails} />
-      </section>
-      <section className={styles.section}>
-        <h2>{props.t('inspector.agentTranscript')}</h2>
-        <JsonBlock value={props.agentTranscript} />
-      </section>
-      <section className={styles.section}>
-        <h2>{props.t('inspector.promptBuildFlow')}</h2>
+      <InspectorSection title={props.t('inspector.cardSnapshot')}>
+        <JsonBlock truncatedLabel={props.t('inspector.previewTruncated')} value={props.cardSnapshot} />
+      </InspectorSection>
+      <InspectorSection title={props.t('inspector.run')}>
+        <JsonBlock truncatedLabel={props.t('inspector.previewTruncated')} value={props.runDetails} />
+      </InspectorSection>
+      <InspectorSection title={props.t('inspector.agentTranscript')}>
+        <JsonBlock truncatedLabel={props.t('inspector.previewTruncated')} value={props.agentTranscript} />
+      </InspectorSection>
+      <InspectorSection title={props.t('inspector.promptBuildFlow')}>
         <PromptBuildFlow steps={props.promptBuildSteps} />
-      </section>
-      <section className={styles.section}>
-        <h2>PromptBuild Trace</h2>
-        <JsonBlock value={props.promptBuildTrace} />
-      </section>
-      <section className={styles.section}>
-        <h2>{props.t('inspector.prompt')}</h2>
+      </InspectorSection>
+      <InspectorSection title="PromptBuild Trace">
+        <JsonBlock truncatedLabel={props.t('inspector.previewTruncated')} value={props.promptBuildTrace} />
+      </InspectorSection>
+      <InspectorSection title={props.t('inspector.prompt')}>
         {props.tokenEstimate ? <details>
           <summary>{props.t('tokens.requestEstimate')} · {formatNumber(props.tokenEstimate.estimatedTokens)} tokens</summary>
           <p>{props.tokenEstimate.basis.encoding} × {props.tokenEstimate.basis.multiplier} · {props.tokenEstimate.scope}</p>
@@ -102,16 +98,27 @@ export function InspectorPanel(props: InspectorPanelProps) {
           })}</p>
           <p>{props.t('tokens.uncounted', { items: props.tokenEstimate.uncounted.join(', ') })}</p>
         </details> : null}
-        <JsonBlock value={props.promptMessages} />
-      </section>
-      <section className={styles.section}>
-        <h2>Provider Payload</h2>
-        <JsonBlock value={props.providerPayloadPreview} />
-      </section>
+        <JsonBlock truncatedLabel={props.t('inspector.previewTruncated')} value={props.promptMessages} />
+      </InspectorSection>
+      <InspectorSection title="Provider Payload">
+        <JsonBlock truncatedLabel={props.t('inspector.previewTruncated')} value={props.providerPayloadPreview} />
+      </InspectorSection>
     </aside>
   )
 }
 
-function JsonBlock(props: { value: unknown }) {
-  return <pre className={styles.json}>{props.value === null || props.value === undefined ? 'null' : JSON.stringify(props.value, null, 2)}</pre>
+function InspectorSection(props: { title: string; children: ReactNode }) {
+  const [expanded, setExpanded] = useState(false)
+  return <details className={styles.section} onToggle={event => setExpanded(event.currentTarget.open)}>
+    <summary>{props.title}</summary>
+    {expanded ? props.children : null}
+  </details>
+}
+
+function JsonBlock(props: { value: unknown; truncatedLabel: string }) {
+  const preview = useMemo(() => buildInspectorJsonPreview(props.value), [props.value])
+  return <>
+    {preview.truncated ? <p className={styles.previewNotice}>{props.truncatedLabel}</p> : null}
+    <pre className={styles.json}>{preview.text}</pre>
+  </>
 }

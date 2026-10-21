@@ -4,6 +4,41 @@ import type { StudioApi } from '../../../apps/studio-client/src/shared/api/studi
 import type { DataOperation } from '../../../apps/studio-client/src/shared/api/data-commit-events.js'
 
 describe('Narrative primary Session lifecycle', () => {
+  it('reconnects a live Session and restores its pending approval instead of reporting suspension', async () => {
+    const f = await primaryFixture()
+    const entries = [{ id: 'running', agentSessionId: 'session', runId: 'live-run', sequence: 1,
+      createdAt: '', entry: { kind: 'run-state' as const, state: 'running' as const } }]
+    f.getTranscript.mockResolvedValue({ session: f.result.agentSession, entries })
+    f.input.api.agentSessions.runState = vi.fn(async () => ({ runId: 'live-run', state: 'running' as const }))
+    const stopped = Promise.withResolvers<Awaited<ReturnType<StudioApi['agentSessions']['subscribeRun']>>>()
+    f.subscribeRun.mockResolvedValueOnce({ events: [], nextCursor: 10, done: false, state: 'running',
+      pendingApprovals: [{ type: 'mutation-approval-requested', runId: 'live-run', requestId: 'pending-patch',
+        preview: { action: 'patch', path: '/workspace/probe.md', kind: 'workspace', before: 'a', after: 'b' } }] })
+      .mockReturnValueOnce(stopped.promise)
+    await f.render().activateAgentSession('session')
+    await vi.waitFor(() => expect(f.render().activeAgentRun?.approval?.requestId).toBe('pending-patch'))
+    expect(f.render().activeAgentRun?.status).toBe('running')
+    expect(f.render().runRecovery?.status).not.toBe('suspended')
+    f.input.api.agentSessions.pauseRun = vi.fn(async () => ({ runId: 'live-run', accepted: true, state: 'running' as const }))
+    await f.render().pauseAgentRun()
+    expect(f.input.api.agentSessions.pauseRun).toHaveBeenCalledWith('live-run')
+    expect(f.render().activeAgentRun?.status).toBe('running')
+    stopped.resolve({ events: [{ type: 'suspended', runId: 'live-run' }], nextCursor: 11, done: true, state: 'suspended' })
+    await vi.waitFor(() => expect(f.render().activeAgentRun?.status).toBe('suspended'))
+    expect(f.input.api.agentSessions.runState).toHaveBeenCalledWith('live-run', 'session')
+  })
+
+  it('uses the server checkpoint state when a stored running Session was interrupted', async () => {
+    const f = await primaryFixture()
+    f.getTranscript.mockResolvedValue({ session: f.result.agentSession, entries: [{ id: 'running', agentSessionId: 'session',
+      runId: 'interrupted', sequence: 1, createdAt: '', entry: { kind: 'run-state', state: 'running' } }] })
+    f.input.api.agentSessions.runState = vi.fn(async () => ({ runId: 'interrupted', state: 'suspended' as const }))
+    f.subscribeRun.mockClear()
+    await f.render().activateAgentSession('session')
+    expect(f.render().activeAgentRun).toMatchObject({ runId: 'interrupted', status: 'suspended' })
+    expect(f.subscribeRun).not.toHaveBeenCalled()
+  })
+
   it('does not reset an active Timeline Session when mount effects replay', async () => {
     const f = await primaryFixture()
     const before = f.render()

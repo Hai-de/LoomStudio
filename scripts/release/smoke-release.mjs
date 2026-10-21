@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
-import { cp, mkdtemp, readFile, rm, stat } from 'node:fs/promises'
+import { cp, mkdtempDisposable, readFile, stat } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -12,7 +12,8 @@ const require = createRequire(join(root, 'apps/studio-client/package.json'))
 const { parse } = require('parse5')
 const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
 const source = resolve(process.argv[2] ?? join(root, '.artifacts', `loom-studio-${manifest.version}`))
-const sandbox = await mkdtemp(join(tmpdir(), 'loom release smoke '))
+await using temporaryDirectory = await mkdtempDisposable(join(tmpdir(), 'loom release smoke '))
+const sandbox = temporaryDirectory.path
 const directory = join(sandbox, 'application')
 const home = join(sandbox, 'user')
 const environment = {
@@ -147,9 +148,5 @@ try {
   await stop()
   console.log('Release smoke passed: default user data paths without Loom overrides, external cwd, static files, deep links, auth, starter, no dev extensions, restart and shutdown.')
 } finally {
-  try {
-    await stop(false)
-  } finally {
-    await rm(sandbox, { recursive: true, force: true })
-  }
+  await stop(false)
 }

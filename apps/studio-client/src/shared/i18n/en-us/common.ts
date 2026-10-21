@@ -1,6 +1,9 @@
 import type { messages as zhCN } from '../zh-cn/common.js'
 
 export const messages = {
+  'history.tabRecent': 'Recent',
+  'history.tabTimelines': 'Stories',
+  'history.tabSessions': 'Sessions',
   "recentCharacters.title": "Recent characters",
   "recentCharacters.empty": "Characters appear here after you visit their stories.",
   "recentCharacters.continue": "Continue: {{title}}",
@@ -110,12 +113,13 @@ export const messages = {
   'rail.agent': 'Agent Presets',
   'rail.user': 'My Resources',
   'rail.play': 'Play',
-  'rail.recent': 'Recent',
+  'rail.recent': 'History',
   'rail.sessions': 'History',
   'rail.resource': 'Resources',
   'rail.lore': 'Lore',
   'rail.inspector': 'Debug',
   'rail.logs': 'Logs',
+  'rail.memory': 'Memory',
   'rail.state': 'State Variables',
   'rail.macro': 'Macros',
   'rail.textTransform': 'Text Pipeline',

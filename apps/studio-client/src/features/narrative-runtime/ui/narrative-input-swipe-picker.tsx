@@ -1,10 +1,8 @@
 import { useId, useState } from 'react'
 import { Dialog } from '@loom-studio/ui'
-import { Plus } from 'lucide-react'
 import type { NarrativeSwipeView } from '../model/use-narrative-runtime.js'
 import type { Translator } from '../../../shared/i18n/index.js'
 import { SwipeControl } from '../../../shared/ui/swipe-control/swipe-control.js'
-import { ConversationMessageAction } from '../../../shared/ui/conversation-message-chrome/conversation-message-chrome.js'
 import styles from '../../cards/ui/opening-picker.module.scss'
 
 export function NarrativeInputSwipePicker(props: {
@@ -25,9 +23,6 @@ export function NarrativeInputSwipePicker(props: {
     if (candidateId) props.onSelect(candidateId)
   }
   return <>
-    <ConversationMessageAction disabled={disabled || !props.swipe.canGenerate} label={props.t('swipe.editInput')} onClick={props.onEdit}>
-      <Plus aria-hidden="true" />
-    </ConversationMessageAction>
     <SwipeControl index={index} count={inputs.length} disabled={disabled}
       previousLabel={props.t('swipe.previous')} nextLabel={props.t(index === inputs.length - 1 ? 'swipe.editInput' : 'swipe.next')}
       chooseLabel={props.t('swipe.chooseInput')}

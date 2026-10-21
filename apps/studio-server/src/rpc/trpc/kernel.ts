@@ -21,6 +21,10 @@ const updateCard = installCard.extend({ packageVersion: z.string(), expectedInst
 const removeCard = pkg.extend({ cardId: z.string(), expectedInstallationVersion: version })
 const source = z.discriminatedUnion('kind', [z.object({ kind: z.literal('git'), url: z.string(), ref: z.string().optional() }), z.object({ kind: z.literal('zip'), url: z.string() })])
 export const extensionsRouter = t.router({
+  importConvertedBatch: procedure.input(pkg.extend({ target, sessionId: z.string().min(1) }).strict()).mutation(({ ctx, input }) => {
+    if (!ctx.services.batchImporter) throw new Error('Batch import service unavailable')
+    return ctx.services.batchImporter.commit(input, ctx.request)
+  }),
   listPackages: procedure.input(z.object({ target: target.optional() }).optional()).query(async ({ ctx, input }) => {
     const result = await callBuiltin(ctx, 'extensions.listPackages', input)
     return {

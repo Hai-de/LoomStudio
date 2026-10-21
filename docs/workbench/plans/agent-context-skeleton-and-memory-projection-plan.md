@@ -8,13 +8,14 @@
 > **决策补充**：2026-09-20，确认 Anchor 负责独立注入，配置宏负责候选选择和局部文本替换；本轮不为 Anchor 增加通用替换机制。设置分工见 2.5～2.6；骨架仍为待讨论候选。
 > **实施切片**：2026-09-21，用户授权默认 JSON 骨架及原生输入接线，见第 12 节；其他开放设计不随本切片自动实施。
 > **生命周期验收**：2026-09-21，补充多轮仿真后确认两条目标合同仍失败，见第 13 节。第 12 节的接线完成不代表完整生命周期正确。
-> **职责拆分**：2026-09-21，记忆策略移至[剧情记忆与统一刷新策略计划](./narrative-memory-and-refresh-policy-plan.md)。本 Plan 保留投影、Session 生命周期和统一刷新执行；后述“两种记忆”指内容职责，不再指两套独立自动总结触发器。保留原文件名以避免破坏已有链接。
+> **职责拆分**：2026-09-21，记忆策略移至[剧情记忆与统一刷新策略计划](../../archive/plans/narrative-memory-and-refresh-policy-plan.md)。本 Plan 保留投影、Session 生命周期和统一刷新执行；后述“两种记忆”指内容职责，不再指两套独立自动总结触发器。保留原文件名以避免破坏已有链接。
 > **投影责任修正**：2026-09-21，确认当前不为 Agent Session 保存 Narrative 投影快照；Memory 指针与消费者采样参数由 Memory / Sampling 侧管理，PromptBuild 只消费贡献。后续三个生命周期问题见第 15 节。
 > **采样传参已确认**：采样参数与请求时机归消费者自己的生命周期，直接请求 Narrative 模块；Anchor 只接收结果并定位，不承载采样参数。具体分工和验收例见 6.6；本轮仅记录设计，不启动代码实施。
 > **CodeAct 采样切片**：2026-09-22，已实现只读 Narrative 采样器与 CodeAct `readNarrative` 入口，支持固定分支的最近 N 个节点、节点区间、读取 Head、来源节点和预算续读信息。默认 Prompt 的有效 Head、Memory 贡献、正文加工和完整生命周期仍未完成。
 > **共用正文加工**：2026-09-24，补齐 Runtime 无 Session 采样、CodeAct raw / prompt 视图和默认 Prompt 的共用采样 / 正则接线，修复续读与历史分页顺序。36 项定向测试及 Runtime build 通过，见第 16 节；默认有效 Head、Memory 和 Session 生命周期仍未完成。
 > **Session 回放修复**：2026-09-24，Native / Content 工具批次及结果已跨交互、跨 SQLite 重开投影；最近 100 条窗口按需补齐最早批次。第 13 节两条预期失败中的工具回放已修复，Narrative 基线采用仍未修复。见第 17 节。
 > **接收与交接补齐**：2026-09-24，记忆来源发布固定 Memory + Raw、Session 保存交接后通知采用；工作历史按交接边界读取，100 条只作分页。已配置来源的基线冻结目标转为正常通过，原 1～40 楼模型已有真实工具 / SQLite 仿真；自动调度与官方生产者仍非本次交付。见第 19 节。
+> **工作记忆决策修订**：2026-10-20，Session 自有摘要与 Timeline 共享 MEMORY 分开；固定注入一份当前摘要，配置缓冲可为 0，状态依据与历史压缩位置分离；正常游玩待下一条正式正文输入成功提交后触发，允许可选异步。完整决定、编辑/存储待定项见[记忆策略第 14 节](../../archive/plans/narrative-memory-and-refresh-policy-plan.md)。本次只更新 Plan，早期整段清理示例及第 19 节已实施的无缓冲接线不代表新方案已实现。
 
 ## 1. 背景
 
@@ -70,7 +71,7 @@ Session 记忆不能替代 Narrative 记忆；Narrative 摘要也不应携带某
 
 记忆压缩不删除 Narrative 原节点；用户显式删除与数据生命周期另行处理。LV1 / LV2 / LV3 等摘要、实体、事件和关系投影由记忆扩展或官方记忆扩展定义，不在本计划中固定具体算法。
 
-默认工作记忆采用 Agent 维护的记事板（Scratchpad），整理前完成交接、整理时携带已保存内容，不另建独立触发的 Session 总结任务；交接本身可以需要模型更新记事板。完整 Transcript 仍然保留为工作事实。剧情算法、次数阈值、缓冲策略及玩法配置归[独立记忆 Plan](./narrative-memory-and-refresh-policy-plan.md)。
+Session 摘要保存本会话任务进度、必要发现和接续位置，归各自 Session，固定注入一份当前有效文本；Timeline 共享 MEMORY 保存暗线、大纲和共同安排。当前 Agent 在交接任务中维护这两项产出，独立 Session 只保存自身摘要，不要求另一位总结 Agent。完整 Transcript 保留为工作事实。剧情算法、缓冲策略、正式输入触发与可选异步归[独立记忆 Plan 第 14 节](../../archive/plans/narrative-memory-and-refresh-policy-plan.md)，存储和编辑 API 仍待收束。
 
 当前不为 Agent Session 保存 Narrative 的摘要版本、`coveredThroughNodeId` 或 Raw 起点。主 Agent 默认消费由 Memory / Sampling 侧提供的“有效摘要 + 摘要之后的 Raw 缓冲”；其他消费者可以通过临时参数请求不同范围，例如最近 3 个节点。只有未来出现确实需要长期固定 Narrative 视图的消费者时，才另行设计消费者快照。
 
@@ -225,14 +226,17 @@ list / search
 
 ## 5. Narrative / Session 记忆投影
 
-剧情记忆与工作记事板保留不同语义，以同一套业务节奏协调准备与采用；可以在不同时间启动总结，例如第 32 楼准备剧情摘要、第 40 楼完成 Session 工作交接。这里不建立互不协调、各自改写 Prompt 前缀的两套刷新机制：
+剧情记忆与 Session 摘要保留不同语义，协调准备与采用；例如第 32 楼准备剧情摘要、第 40 楼检测交接条件，待 41 正式输入提交后再启动 Session 整理。Session 另有容量需求，不以楼层为唯一依据，不建立互不协调、各自改写 Prompt 前缀的刷新机制：
 
 | 投影 | 内容 | 典型范围 |
 | --- | --- | --- |
 | Narrative Memory | 剧情、实体、事件、关系 | 1~90、某个分支、某个记忆锚点前 |
-| 工作记事板 | Agent 主动保存的目标、决定、计划、待办与必要工作事实 | 当前 Session 的已保存记事内容，不另建多级摘要 |
+| Session 摘要 | 本会话的任务状态、已做工作、必要发现和接续位置 | 一个当前有效版本，固定进入 `@memory.session`，不另建多级摘要 |
+| Workspace MEMORY | 跨 Session 的暗线、剧情大纲和共同安排 | 当前 Timeline 工作树中的共享文件，沿文件消费配置注入 |
 
 ### 5.1 缓冲区与采用时点
+
+2026-10-20 修订：楼层/Token 整理条件仍在 Run 结束后的可整理边界检测，不因中途某次工具输出较长就插入总结。剧情保留近期原文；Session 独立配置工作历史缓冲，0 表示无配置缓冲。看完截至 40 的工作、压缩到 32 时，状态仍以 40 为依据，33～40 对应完整工作段保留。正常游玩待 41 主聊天输入成功持久化后触发；可选异步允许写完 42 再采用，继续保留准备期间新增工作。完整规则见[记忆策略第 14 节](../../archive/plans/narrative-memory-and-refresh-policy-plan.md)，原始 Transcript 及未完成工具组/暂停保护不变。
 
 Narrative 新节点立即持久化，但不必立即进入 Prompt 前方的 Narrative 基线。
 
@@ -240,7 +244,7 @@ Narrative 新节点立即持久化，但不必立即进入 Prompt 前方的 Narr
 
 本 Plan 负责安全交互边界、工作交接与 Prompt 输入段的重建。这里不再定义独立的 Session Narrative 快照或长期 `RefreshState`。Narrative Summary 和 Session Summary 是两项独立工作：Narrative Summary 完成只产生可采用结果，不立即推进默认有效指针；到 Session 总结采用边界，Memory 侧才发布已经准备好的摘要与 Raw 范围。Session Summary 完成后隐藏旧工作段并携带 Session 工作记录，不等待尚未完成的 Narrative Summary。
 
-已确认：第 40 楼工作流结束时，Session 无论 Narrative Summary 是否完成，都可以完成自己的工作交接与工作段重建；不逐条挖掉旧正文工具记录再拼接剩余历史。原始 Transcript 保留。若 Narrative Summary 尚未完成，下一次 Prompt 暂时没有新的默认 Narrative Raw 投影，模型可能遗忘 33～40 楼，这是已接受的失败代价。一次需要剧情总结的上下文整理示例：
+已确认独立提交规则：Session 在选定交接边界可独立完成，不等待尚未完成的 Narrative Summary；仅让压缩位置之前的完整工作段退出 Prompt，不逐条挖掉旧正文工具记录。原始 Transcript 保留。若 Narrative Summary 尚未完成，被移除工作段中的未总结剧情可能暂时缺席，不能把旧的“33～40 必然缺席”推到配置保留该尾段的新模式。一次需要剧情总结的上下文整理示例：
 
 ```text
 旧 Narrative Summary + 1~80 正文
@@ -397,7 +401,7 @@ Narrative 使用普通 Anchor 定位，不因采样引入带参数的特殊锚�
    - 明确旧 Session 恢复、新 Session 初始化和分支变化时的下一次投影请求。
 
 4. **记忆来源接线**
-   - 算法、次数阈值、配置、缓冲和摘要进度归[独立记忆 Plan](./narrative-memory-and-refresh-policy-plan.md)；
+   - 算法、次数阈值、配置、缓冲和摘要进度归[独立记忆 Plan](../../archive/plans/narrative-memory-and-refresh-policy-plan.md)；
    - 本计划只消费版本与覆盖范围，保证采用失败不丢旧状态，不重复建设记忆模块。
 
 5. **Runtime Notice / Workspace**
@@ -420,7 +424,7 @@ Narrative 使用普通 Anchor 定位，不因采样引入带参数的特殊锚�
 
 ## 10. 相关文档
 
-- [剧情记忆与统一刷新策略计划](./narrative-memory-and-refresh-policy-plan.md) — 总结策略、次数阈值、近期缓冲、记事板策略及玩法配置；本 Plan 承接刷新执行与投影采用。
+- [剧情记忆与统一刷新策略计划](../../archive/plans/narrative-memory-and-refresh-policy-plan.md) — 总结策略、次数阈值、近期缓冲、记事板策略及玩法配置；本 Plan 承接刷新执行与投影采用。
 - [CodeAct 与 VFS 工具实施计划](./codeact-vfs-tooling-plan.md) — 独立负责执行、路径、读取与写入合同；本计划负责 Skills / Notice / Workspace 锚点及上下文生命周期。LS 与 Notice 复用资源状态事实，不互相复制实现。
 - [`docs/archive/discussion/application/prompt/README.md`](../../archive/discussion/application/prompt/README.md)
 - [`docs/archive/discussion/application/agent/README.md`](../../archive/discussion/application/agent/README.md)
@@ -522,7 +526,7 @@ Narrative 使用普通 Anchor 定位，不因采样引入带参数的特殊锚�
 
 ## 14. 游玩过程与模块分工推演（2026-09-21）
 
-本节是目标行为推演，不是代码验收记录。记忆策略以[独立记忆 Plan](./narrative-memory-and-refresh-policy-plan.md) 为准；当前代码仍有第 13 节记录的工具历史回放和基线提前刷新缺口。
+本节是目标行为推演，不是代码验收记录。记忆策略以[独立记忆 Plan](../../archive/plans/narrative-memory-and-refresh-policy-plan.md) 为准；当前代码仍有第 13 节记录的工具历史回放和基线提前刷新缺口。
 
 ### 演示假设与骨架
 
@@ -609,13 +613,13 @@ Narrative 使用普通 Anchor 定位，不因采样引入带参数的特殊锚�
   新工作段的必要消息
 ```
 
-以 1～40 楼、保留 8 楼为例：第 32 楼结束时只是准备点，Memory 开始总结 1～32，Prompt 不变；33～40 楼继续通过 Tool Call / Tool Result 存在。第 40 楼当前工作流结束后，Session Summary 可以独立完成并隐藏旧工作段；若 Narrative Summary 已准备好，才在这个采用边界推进默认有效 Head，注入 Memory 与 33～40 Raw。摘要提前完成不提前采用；失败或仍在运行不会阻塞 Session Summary，但可能造成暂时的剧情遗忘。迟到摘要不会自行改写正在使用的前缀。
+以剧情 1～32 已准备、工作完成至 40 为例：33～40 继续通过 Tool 历史存在，待 41 正式输入持久化后才启动 Session 整理。若 Session 配置缓冲为 8，只压缩到 32，但摘要状态依据到 40；33～40 工作段保留，不能再重复注入同段 Raw。若缓冲为 0，可由已采用剧情摘要与 33～40 Raw 接替已退出的工作段。可选异步另保留 41～42 的完整新工作。剧情摘要失败不阻塞 Session 独立交接，可能造成已移除范围的暂时剧情遗忘；提前或迟到结果均不自行改写使用中的前缀。
 
 不能把旧工作段中的单条 Tool Call 或 Result 拆开删除。至少要以完整交互组、已完成 Run 或明确的 Session 工作边界为单位退出 Prompt。跨 Run 的 Tool Call / Result 事实回放已由第 17 节实现；工作交接后的整段退出、记事板携带尚未实现，不能由回放测试推定完成。
 
 Session 单独因为容量压力整理时，不自动推进 Memory 指针。此时它只能：
 
-1. 保存或更新 Scratchpad；
+1. 保存 Session 自有摘要；绑定 Timeline 时同时维护共享 MEMORY，独立 Session 不依赖工作区；
 2. 移除已经不承担当前工作的旧工作段；
 3. 不推进剧情摘要覆盖范围；Session Summary 仍可以隐藏旧工作段，即使未总结正文暂时没有进入默认 Narrative 区；
 4. 如果没有安全的交接结果，则暂停，不静默丢弃工作事实。
@@ -623,7 +627,7 @@ Session 单独因为容量压力整理时，不自动推进 Memory 指针。此�
 需要继续收束的不是“Session 应该保存哪份 Narrative”，而是：
 
 - 工作段边界以 Run、用户交互还是 Tool 组为单位；
-- Scratchpad 是 Tool、专用 Agent 能力还是 Runtime 生成入口；
+- Session 摘要的编辑/保存入口及其与交接采用的区分；
 - 未完成用户任务如何从旧工作段进入新工作段；
 - Provider 原生 Tool 消息在下一次 Prompt 中保留到什么程度。
 
@@ -674,7 +678,7 @@ Narrative 默认有效 Head
 
 建议的衔接方式：
 
-1. 达到剧情次数：例如第 32 楼启动 Narrative Summary；第 40 楼工作流结束后独立启动 Session Summary。Session Summary 不等待 Narrative Summary；Narrative Summary 成功时才推进默认有效 Head。
+1. 达到剧情次数：例如第 32 楼启动 Narrative Summary；第 40 楼工作流结束后检测交接条件，41 主聊天输入成功写入正式正文后才启动 Session Summary，同步/异步按已选模式采用。Session 不等待剧情生成；剧情结果只有已准备且范围相容才在采用边界推进默认视图。
 2. Session 工作内容过长但剧情未达条件：只请求 Session 整理，不推进 Memory 指针。
 3. Prompt 容量达到警戒线而剧情未达条件：只整理 Session；若仍无法容纳，按已确认规则暂停，不把“强制提前总结正文”作为隐式备用策略。
 4. 当前存在未完成 Tool 组：不在组内执行整理；等待完成、失败或显式中断边界。

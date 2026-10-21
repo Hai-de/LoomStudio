@@ -1,4 +1,5 @@
 import * as ContextMenuPrimitive from '@radix-ui/react-context-menu'
+import { DialogPortalContext } from './dialog-portal-context.js'
 import { Check } from 'lucide-react'
 import * as React from 'react'
 
@@ -8,11 +9,13 @@ export const ContextMenuTrigger = ContextMenuPrimitive.Trigger
 export const ContextMenuContent = React.forwardRef<
   React.ElementRef<typeof ContextMenuPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Content>
->(({ className, ...props }, ref) => (
-  <ContextMenuPrimitive.Portal>
-    <ContextMenuPrimitive.Content {...props} ref={ref} className={menuClass('loom-ui-menu', className)} data-menu-kind="context" />
+>(({ className, ...props }, ref) => {
+  const container = React.useContext(DialogPortalContext)
+  return <ContextMenuPrimitive.Portal container={container}>
+    <ContextMenuPrimitive.Content {...props} ref={ref} collisionBoundary={props.collisionBoundary ?? container}
+      className={menuClass('loom-ui-menu', className)} data-menu-kind="context" />
   </ContextMenuPrimitive.Portal>
-))
+})
 ContextMenuContent.displayName = ContextMenuPrimitive.Content.displayName
 
 type ContextMenuItemProps = React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Item> & {

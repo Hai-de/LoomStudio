@@ -90,6 +90,7 @@
         "label": "工作记忆",
         "capabilities": { "roleHint": "system" },
         "children": [
+          { "id": "default.workspace-memory", "kind": "virtual", "label": "共同工作记忆", "capabilities": { "targetAnchorId": "@memory.workspace" } },
           { "id": "default.memo", "kind": "virtual", "label": "Session 记忆", "capabilities": { "targetAnchorId": "@memory.session" } }
         ]
       },

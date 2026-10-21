@@ -320,12 +320,12 @@ describe('Published Narrative context', () => {
       f.failHandoff()
       const result = await complete(3)
       expect(result.memoryNotification).toEqual({ status: 'failed', error: 'SUMMARY_PUBLISH_FAILED' })
-      expect(result.entries[0]?.entry).toEqual({ kind: 'work-summary', content: 'Saved work' })
+      expect(result.entries[0]?.entry).toMatchObject({ kind: 'work-summary', content: 'Saved work' })
       expect((await f.registry.resolve(scope))?.version).toBe('initial')
       await expect(complete(3)).rejects.toThrow(/count conflict/)
       expect((await f.agents.getLatestWorkSummary(session.id))?.id).toBe(result.entries[0]!.id)
       await expect(handleAgentsRpc(f.runtime, 'application.agent.run.resume', { agentSessionId: session.id }))
-        .rejects.toMatchObject({ code: 'agent.recovery_checkpoint_missing' })
+        .rejects.toMatchObject({ cause: { code: 'agent.recovery_checkpoint_missing' } })
 
       const next = await f.agents.appendEntries({
         actor, agentSessionId: session.id, expectedEntryCount: 4,
@@ -335,10 +335,10 @@ describe('Published Narrative context', () => {
       })
       const history = await readSessionHistory(f.agents, session.id)
       expect(history.entries).toHaveLength(111)
-      expect(history.entries[0]!.entry).toEqual({ kind: 'work-summary', content: 'Saved work' })
+      expect(history.entries[0]!.entry).toMatchObject({ kind: 'work-summary', content: 'Saved work' })
       await complete(next.session.entryCount, 'Updated work')
       const replaced = await readSessionHistory(f.agents, session.id)
-      expect(replaced.entries.map(entry => entry.entry)).toEqual([{ kind: 'work-summary', content: 'Updated work' }])
+      expect(replaced.entries.map(entry => entry.entry)).toMatchObject([{ kind: 'work-summary', content: 'Updated work' }])
       expect((await f.agents.getSession(session.id))!.entryCount).toBe(115)
 
       const { session: unfinished } = await f.agents.createSession({ actor, agentPresetId: 'profile' })

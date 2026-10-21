@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import { Button, Dialog } from '@loom-studio/ui'
-import { MessageSquare, Plus, RefreshCw, RotateCcw } from 'lucide-react'
+import { MessageSquare, RefreshCw, RotateCcw } from 'lucide-react'
 import type { NarrativeSwipeView } from '../model/use-narrative-runtime.js'
 import type { Translator } from '../../../shared/i18n/index.js'
 import { SwipeControl } from '../../../shared/ui/swipe-control/swipe-control.js'
@@ -40,7 +40,6 @@ export function NarrativeSwipePicker(props: {
     </> : null}
     {swipe.reason ? <span role="status">{swipe.reason}</span> : null}
     {index >= 0 ? <>
-      <ConversationMessageAction disabled={!canGenerate} label={t('swipe.generate')} onClick={() => generate('swipe')}><Plus aria-hidden="true" /></ConversationMessageAction>
       <ConversationMessageAction disabled={!canGenerate} label={t('swipe.regenerate')} onClick={() => generate('regenerate')}><RefreshCw aria-hidden="true" /></ConversationMessageAction>
     </> : null}
     {canRetry ? <ConversationMessageAction disabled={!canGenerate} label={t('swipe.retry')} onClick={() => generate('retry')}><RotateCcw aria-hidden="true" /></ConversationMessageAction> : null}

@@ -124,7 +124,7 @@ export function ImageViewer(props: Props) {
     } finally { setBusy(false) }
   }
   const button = (label: Parameters<Translator>[0], icon: React.ReactNode, onClick: () => void, disabled = false) => <button type="button" title={props.t(label)} aria-label={props.t(label)} disabled={disabled} onClick={onClick}>{icon}</button>
-  return <Dialog open layout="media" title={props.title} onClose={props.onClose} headerActions={<div className={styles.toolbar}>
+  return <Dialog showCloseButton={false} open layout="media" title={props.title} onClose={props.onClose} headerActions={<div className={styles.toolbar}>
     {button('media.zoomIn', <ZoomIn />, () => zoom(transform.scale * 1.25), !ready || transform.scale >= maxScale)}
     {button('media.zoomOut', <ZoomOut />, () => zoom(transform.scale / 1.25), !ready || transform.scale <= minScale)}
     <output className={styles.scale}>{Math.round(transform.scale * 100)}%</output>

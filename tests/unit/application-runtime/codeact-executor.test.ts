@@ -20,6 +20,46 @@ describe('CodeAct isolated executor', () => {
     expect((await run('print(typeof fromPreviousCall);')).output).toBe('undefined')
   })
 
+  it('allows more than 128 sequential ctx calls', async () => {
+    const result = await run('for (let i = 0; i < 160; i++) await ctx.read(i); print("done");')
+    expect(result).toEqual({ status: 'completed', output: 'done' })
+  })
+
+  it('queues parallel batches beyond the bridge capacity', async () => {
+    let active = 0
+    let peak = 0
+    let completed = 0
+    const result = await runCodeActSandbox({
+      source: 'const results = await Promise.all(Array.from({length:24}, (_, i) => ctx.read(i))); print(results.length);',
+      signal: new AbortController().signal,
+      methods: { read: async args => {
+        active++
+        peak = Math.max(peak, active)
+        await new Promise(resolve => setTimeout(resolve, 5))
+        active--
+        completed++
+        return args[0] as number
+      } },
+    })
+    expect(result).toEqual({ status: 'completed', output: '24' })
+    expect(completed).toBe(24)
+    expect(peak).toBeLessThanOrEqual(codeActLimits.maxPendingCalls)
+  })
+
+  it('excludes long host-operation waits from the guest execution budget', async () => {
+    const timeoutMs = 1000
+    const result = await runCodeActSandbox({
+      source: 'await ctx.read(); print("after API");',
+      signal: new AbortController().signal,
+      limits: { ...codeActLimits, timeoutMs },
+      methods: { read: async () => {
+        await new Promise(resolve => setTimeout(resolve, timeoutMs + 100))
+        return 'result'
+      } },
+    })
+    expect(result).toEqual({ status: 'completed', output: 'after API' })
+  })
+
   it('does not expose Node, host bridges or module imports', async () => {
     expect((await run(`
       print(typeof process, typeof require, typeof fetch, typeof __codeact_call);

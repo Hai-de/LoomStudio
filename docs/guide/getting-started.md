@@ -6,7 +6,7 @@
 
 Loom Studio 固定使用下面的开发工具链，避免不同机器重新解析依赖或生成无关的 lockfile 变更：
 
-- **Node.js**: 22.18.0（见 `.node-version` 与 `.nvmrc`）
+- **Node.js**: 24.22.0（见 `.node-version` 与 `.nvmrc`）
 - **包管理器**: pnpm 9.15.0（见根 `package.json` 的 `packageManager`）
 
 ## 2. 安装与构建
@@ -49,6 +49,8 @@ Client 默认监听 `127.0.0.1:18011`。打开浏览器访问该地址即可；V
 若 Server 设置了不同的 `PORT`，启动 Client 时须同步设置 `STUDIO_SERVER_URL`（例如 `http://127.0.0.1:4174`）；代理目标不会自动跟随 Server 的端口环境变量。
 
 两个开发命令都会先构建内部 packages，再持续监听源码并更新产物。具有独立发布周期的扩展在根目录 `extensions/` 开发，自行构建后通过扩展中心重载；Server 不代为构建扩展。修改 `packages/` 下的源码后无需手动重新构建；Server 还会在 package 产物变化时自动重启。
+
+STBridge、The World 以各自独立仓库的源码为基准，修改及构建后的完整 `dist/` 一起交付到对应仓库；不要在 `official/extensions/` 再维护副本。主仓库维护的助手与主题内容则以 `official/extensions/` 为基准，根目录 `extensions/` 中的安装副本用于运行。详见[官方扩展目录约定](../../official/extensions/README.md)。
 
 开发脚本默认将持久数据放在仓库 `data/`，通过 `LOOM_STUDIO_DATA_ROOT` 指定；SQLite、Blob、Extension state/installed 等均使用这个根目录。运行日志（JSONL）与测试沙箱收拢在 `.loomstudio-dev/`。`/data/` 与 `.loomstudio-dev/` 均被主仓库 Git 忽略。
 

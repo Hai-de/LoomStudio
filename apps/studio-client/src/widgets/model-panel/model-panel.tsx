@@ -1,4 +1,4 @@
-import type { FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { TextInput } from '@loom-studio/ui'
 import type {
   ModelProfile,
@@ -36,6 +36,7 @@ export type ModelPanelProps = {
 }
 
 export function ModelPanel(props: ModelPanelProps) {
+  const [createError, setCreateError] = useState<string>()
   const chatProviderAccounts = props.providerAccounts.filter(account => legacyChatProviderIds.has(account.providerExtensionId))
   const chatEndpoint = readChatCompletionsEndpoint(props.providerAccountDraft.baseUrl)
   const endpointWarning = isLikelyProviderEndpoint(props.providerAccountDraft.baseUrl)
@@ -48,7 +49,10 @@ export function ModelPanel(props: ModelPanelProps) {
             <h2>{props.t('provider.title')}</h2>
             <span>{chatProviderAccounts.length}</span>
           </header>
-          <form autoComplete="off" className={`${styles.createAccountForm} loom-underlined-fields`} onSubmit={event => void props.onCreateProviderAccount(event).catch(() => undefined)}>
+          <form autoComplete="off" className={`${styles.createAccountForm} loom-underlined-fields`} onSubmit={event => {
+            setCreateError(undefined)
+            void props.onCreateProviderAccount(event).catch(error => setCreateError(error instanceof Error ? error.message : String(error)))
+          }}>
             <label>
               <span>{props.t('provider.name')}</span>
               <TextInput
@@ -102,20 +106,23 @@ export function ModelPanel(props: ModelPanelProps) {
             >
               {props.t('provider.createAccount')}
             </button>
+            {createError ? <p role="alert">{createError}</p> : null}
           </form>
         </div>
-        <ProviderAccountList
-          accounts={chatProviderAccounts}
-          busy={props.busy}
-          modelProfiles={props.modelProfiles}
-          onCreateModel={props.onCreateModelProfile}
-          onDelete={props.onDeleteProviderAccount}
-          onDeleteModel={props.onDeleteModelProfile}
-          onListModels={props.onListProviderModels}
-          onUpdateConnection={props.onUpdateProviderConnection}
-          onUpdateTokenMultiplier={props.onUpdateTokenMultiplier}
-          t={props.t}
-        />
+        <div className={styles.accountsPane}>
+          <ProviderAccountList
+            accounts={chatProviderAccounts}
+            busy={props.busy}
+            modelProfiles={props.modelProfiles}
+            onCreateModel={props.onCreateModelProfile}
+            onDelete={props.onDeleteProviderAccount}
+            onDeleteModel={props.onDeleteModelProfile}
+            onListModels={props.onListProviderModels}
+            onUpdateConnection={props.onUpdateProviderConnection}
+            onUpdateTokenMultiplier={props.onUpdateTokenMultiplier}
+            t={props.t}
+          />
+        </div>
       </section>
     </aside>
   )

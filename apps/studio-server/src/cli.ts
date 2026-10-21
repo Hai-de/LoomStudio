@@ -29,7 +29,9 @@ export async function main(): Promise<void> {
       createJsonlFileSink({ directory: localPaths.logRoot }),
       createConsoleLogSink({
         filter: shouldWriteServerConsoleLog,
-        colorize: Boolean(process.stdout.isTTY),
+        colorize: process.env.FORCE_COLOR !== undefined
+          ? process.env.FORCE_COLOR !== '0'
+          : process.env.NO_COLOR === undefined && Boolean(process.stdout.isTTY),
         verbose: process.env.LOOM_STUDIO_LOG_DETAILS === '1',
       }),
     ],

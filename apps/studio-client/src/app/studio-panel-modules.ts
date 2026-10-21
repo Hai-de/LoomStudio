@@ -1,6 +1,8 @@
+const loadMemoryPanel = () => import('../widgets/memory-panel/memory-panel.js')
 import { lazy } from 'react'
 import type { StudioPanelId } from '../shared/studio-shell/studio-layout-store.js'
 
+const loadHistoryPanel = () => import('../widgets/history-panel/history-panel.js')
 const loadModelPanel = () => import('../widgets/model-panel/model-panel.js')
 const loadPlayPanel = () => import('../widgets/play-panel/play-panel.js')
 const loadSessionsPanel = () => import('../widgets/sessions-panel/sessions-panel.js')
@@ -16,8 +18,9 @@ const loadRendererWorkspacePanel = () => import('../features/extension-renderers
 const loadSettingsPanel = () => import('../widgets/settings-panel/settings-panel.js')
 const loadUserResourcesPanel = () => import('../widgets/user-resources-panel/user-resources-panel.js')
 
+export const LazyMemoryPanel = lazy(async () => ({ default: (await loadMemoryPanel()).MemoryPanel }))
 export const LazyModelPanel = lazy(async () => ({ default: (await loadModelPanel()).ModelPanel }))
-export const LazyPlayPanel = lazy(async () => ({ default: (await loadPlayPanel()).PlayPanel }))
+export const LazyHistoryPanel = lazy(async () => ({ default: (await loadHistoryPanel()).HistoryPanel }))
 export const LazyRecentPlayPanel = lazy(async () => ({ default: (await loadPlayPanel()).RecentPlayPanel }))
 export const LazySessionsPanel = lazy(async () => ({ default: (await loadSessionsPanel()).SessionsPanel }))
 export const LazyCharacterPanel = lazy(async () => ({ default: (await loadCharacterPanel()).CharacterPanel }))
@@ -33,11 +36,12 @@ export const LazySettingsPanel = lazy(async () => ({ default: (await loadSetting
 export const LazyUserResourcesPanel = lazy(async () => ({ default: (await loadUserResourcesPanel()).UserResourcesPanel }))
 
 const panelLoaders: Record<StudioPanelId, () => Promise<unknown>> = {
+  memory: loadMemoryPanel,
   model: loadModelPanel,
   agent: loadPresetWorkbench,
   user: loadUserResourcesPanel,
-  play: () => Promise.all([loadPlayPanel(), loadCharacterPanel(), loadSessionsPanel()]),
-  recent: loadPlayPanel,
+  play: loadCharacterPanel,
+  recent: () => Promise.all([loadHistoryPanel(), loadPlayPanel(), loadSessionsPanel()]),
   sessions: loadSessionsPanel,
   character: loadCharacterPanel,
   preset: loadPresetWorkbench,

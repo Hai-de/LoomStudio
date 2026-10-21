@@ -5,7 +5,7 @@ import type { WindowSize } from './window-resize.js'
 import type { LongTextEditorMode } from '../ui/long-text-editor/long-text-editor-model.js'
 import { isRecord } from '@loom-studio/shared'
 
-export const STUDIO_PANEL_IDS = ['model', 'agent', 'user', 'play', 'recent', 'sessions', 'character', 'preset', 'resource', 'state', 'macro', 'text-transform', 'inspector', 'logs', 'extensions', 'settings'] as const
+export const STUDIO_PANEL_IDS = ['model', 'agent', 'user', 'play', 'recent', 'sessions', 'character', 'preset', 'resource', 'state', 'memory', 'macro', 'text-transform', 'inspector', 'logs', 'extensions', 'settings'] as const
 
 export type StudioPanelId = (typeof STUDIO_PANEL_IDS)[number]
 export type AssetLayoutId = 'preset' | 'resources'
@@ -38,7 +38,6 @@ type StudioLayoutData = {
   panelWindowMode: PanelWindowMode
   panelWindowSizes: Partial<Record<StudioPanelId, WindowSize>>
   presetView: PresetView
-  playTab: 'character' | 'sessions'
   playCalendarOpen: boolean
   playSelectedDate: string | undefined
   playRecentSessionsOpen: boolean
@@ -77,7 +76,6 @@ type StudioLayoutStore = StudioLayoutData & {
   toggleDockPinned(): void
   toggleComposerPinned(): void
   togglePanelWindowMode(): void
-  setPlayTab(tab: 'character' | 'sessions'): void
   setPlayCalendarOpen(open: boolean): void
   setPlaySelectedDate(date: string | undefined): void
   setPlayRecentSessionsOpen(open: boolean): void
@@ -143,7 +141,6 @@ export function createDefaultStudioLayout(): StudioLayoutData {
     textEditorMode: 'source',
     uiScale: UI_SCALE_DEFAULT,
     uiScaleOverridden: false,
-    playTab: 'character',
     playCalendarOpen: false,
     playSelectedDate: undefined,
     playRecentSessionsOpen: true,
@@ -179,7 +176,6 @@ export function sanitizeStudioLayout(value: unknown): StudioLayoutData {
     // ponytail: Legacy storage cannot distinguish an explicit default from an automatically saved default.
     uiScaleOverridden: typeof value.uiScaleOverridden === 'boolean'
       ? value.uiScaleOverridden : readUiScale(value.uiScale) !== UI_SCALE_DEFAULT,
-    playTab: value.playTab === 'sessions' ? 'sessions' : defaults.playTab,
     playCalendarOpen: value.playCalendarOpen === true,
     playSelectedDate: typeof value.playSelectedDate === 'string' ? value.playSelectedDate : undefined,
     playRecentSessionsOpen: value.playRecentSessionsOpen !== false,
@@ -245,7 +241,6 @@ export const useStudioLayoutStore = create<StudioLayoutStore>()(
         panelWindowSizes: { ...state.panelWindowSizes, [panel]: size },
       })),
       setPresetView: presetView => set({ presetView }),
-      setPlayTab: playTab => set({ playTab }),
       setPlayCalendarOpen: playCalendarOpen => set({ playCalendarOpen }),
       setPlaySelectedDate: playSelectedDate => set({ playSelectedDate }),
       setPlayRecentSessionsOpen: playRecentSessionsOpen => set({ playRecentSessionsOpen }),

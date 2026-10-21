@@ -4,11 +4,11 @@ import { createConsoleLogSink, createMemoryLogSink, createRootLogger } from '@lo
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Route, Routes, matchPath } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { App } from './app/app.js'
 import { AppErrorBoundary } from './app/app-error-boundary.js'
 import { NotFoundPage } from './app/not-found-page.js'
 import { STUDIO_ENTRY_PATHS } from './shared/studio-shell/studio-route.js'
 import { syncMobileViewport } from './shared/browser/mobile-viewport.js'
+import './styles/global.css'
 
 syncMobileViewport()
 
@@ -63,6 +63,11 @@ if (!root) {
 
 async function startStudioClient(rootElement: HTMLElement): Promise<void> {
   const reactRoot = createRoot(rootElement)
+  if (import.meta.env.DEV && window.location.pathname === '/dev/preview/narrative-session') {
+    const { DevPreview } = await import('./dev-preview/preview-entry.js')
+    reactRoot.render(<DevPreview pathname={window.location.pathname} />)
+    return
+  }
   if (!STUDIO_ENTRY_PATHS.some(path => matchPath(path, window.location.pathname))) {
     reactRoot.render(<><NotFoundPage /><StartupReady /></>)
     return
@@ -74,6 +79,7 @@ async function startStudioClient(rootElement: HTMLElement): Promise<void> {
     })
     if (!response.ok) throw new Error(`Application session bootstrap failed (${response.status})`)
 
+    const { App } = await import('./app/app.js')
     systemLogger.info('Studio client started', { event: 'client.started' })
     const studio = (
       <QueryClientProvider client={queryClient}>

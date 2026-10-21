@@ -1,11 +1,14 @@
-import { useRef, useState } from 'react'
-import { Button, Dialog } from '@loom-studio/ui'
+import { lazy, Suspense, useRef, useState } from 'react'
+import { Button, Dialog, LoadingText } from '@loom-studio/ui'
 import type { AgentMutationApproval } from '../../shared/api/studio-api.js'
 import type { Translator } from '../../shared/i18n/index.js'
 import styles from './agent-chat-panel.module.scss'
 
+const LazyReadOnlyDiff = lazy(async () => ({ default: (await import('../../shared/ui/read-only-diff/read-only-diff.js')).ReadOnlyDiff }))
+
 export function AgentMutationApprovalDialog(props: {
   approval: AgentMutationApproval
+  onClose?(): void
   onApprove?(allow: boolean, reason?: string): Promise<boolean>
   t: Translator
 }) {
@@ -30,7 +33,7 @@ export function AgentMutationApprovalDialog(props: {
       setBusy(false)
     }
   }
-  return <Dialog open dismissible={false} onClose={() => {}} className={styles.mutationApproval}
+  return <Dialog open dismissible={Boolean(props.onClose) && !busy} onClose={() => props.onClose?.()} className={styles.mutationApproval}
     title={t(approval.action ? 'agent.approvalReadTitle' : approval.preview.action === 'author-mode' ? 'agent.approvalAuthorTitle' : 'agent.approvalMutationTitle')}
     description={approval.action ? t('agent.approvalReadDescription') : `${approval.preview.action} · ${approval.preview.path}`}
     actions={<>
@@ -45,14 +48,17 @@ export function AgentMutationApprovalDialog(props: {
           `Branch: ${approval.action.branchId}`,
           approval.action.selection.kind === 'tail'
             ? t('agent.approvalTail', { count: approval.action.selection.count })
+            : approval.action.selection.kind === 'floors' ? `#${approval.action.selection.from}–#${approval.action.selection.through}`
             : t('agent.approvalAfter', { id: approval.action.selection.afterNodeId ?? t('agent.approvalBranchStart') }),
           t('agent.approvalThrough', { id: approval.action.selection.throughNodeId ?? t('agent.approvalPinnedHead') }),
           t('agent.approvalLimits', { nodes: approval.action.maxNodes, characters: approval.action.maxCharacters }),
         ].join('\n')}</pre>
-      </div> : <>
-        <div><span>{t(approval.preview.action === 'author-mode' ? 'agent.approvalCurrentScope' : 'agent.approvalBefore')}</span><pre>{approval.preview.before}</pre></div>
-        <div><span>{t(approval.preview.action === 'author-mode' ? 'agent.approvalRequestedScope' : 'agent.approvalAfterChange')}</span><pre>{approval.preview.after}</pre></div>
-      </>}
+      </div> : approval.preview.action === 'author-mode' ? <>
+        <div><span>{t('agent.approvalCurrentScope')}</span><pre>{approval.preview.before}</pre></div>
+        <div><span>{t('agent.approvalRequestedScope')}</span><pre>{approval.preview.after}</pre></div>
+      </> : <Suspense fallback={<LoadingText />}>
+        <LazyReadOnlyDiff before={approval.preview.before} after={approval.preview.after} t={t} />
+      </Suspense>}
     </div>
     {approval.preview?.kind === 'state' && approval.preview.pointer
       ? <code className={styles.mutationApprovalPointer}>{approval.preview.pointer}</code> : null}

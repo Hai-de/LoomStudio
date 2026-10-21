@@ -33,6 +33,10 @@ async function setup() {
       const target = scope!.state!.defaultTarget
       const snapshot = await scope!.state!.read(target)
       await scope!.state!.update({ target, expectedRevisionId: snapshot.revisionId, operations: [{ op: 'set', path: '/coins', value: coins }] })
+      const files = await scope!.workspace!.snapshot()
+      const memory = files.find(file => file.path === '/workspace/MEMORY.md')!
+      if (memory.binding?.kind !== 'workspace') throw new Error('Workspace binding missing')
+      await scope!.workspace!.mutate(memory.binding.revisionId, [{ kind: 'write', entryId: 'memory', content }])
       return { invocationId: invocation.id, toolId: tool.id, status: 'completed', content: [{ type: 'text', text: content }] }
     } }]),
     gateway: { invokeChat: async input => {
@@ -84,6 +88,7 @@ describe('runtime Narrative Swipe', () => {
       const a = await f.read()
       f.configure({ content: 'B_FIRST_REPLY', coins: 50, beforeGenerate: async input => {
         expect((await f.runtime.getStateSnapshot({ target: f.stateTarget })).snapshot.value).toMatchObject({ coins: 100 })
+        expect((await f.runtime.getTimelineWorkspace(f.target)).entries[0]).toMatchObject({ content: { text: expect.stringContaining('暂无共同工作记录') } })
         expect(JSON.stringify(input.request.messages)).not.toContain('A_SECOND_REPLY')
         expect(JSON.stringify(input.request.messages)).not.toContain('Go on.')
         expect(JSON.stringify(input.request.messages)).toContain('Try the other road.')
@@ -111,6 +116,7 @@ describe('runtime Narrative Swipe', () => {
       const selectedB = await select(b.selectedCandidateId!)
       expect(selectedB.page.nodes.slice(-2).map(node => node.body.raw)).toEqual(['Try the other road.', 'B_SECOND_REPLY'])
       expect((await f.runtime.getStateSnapshot({ target: f.stateTarget })).snapshot.value).toMatchObject({ coins: 40 })
+      expect((await f.runtime.getTimelineWorkspace(f.target)).entries[0]).toMatchObject({ content: { text: 'B_SECOND_REPLY' } })
       f.configure({ completeNext: true })
       await f.generate('swipe', 'Try the other road.')
       const empty = await f.read()
@@ -172,6 +178,9 @@ describe('runtime Narrative Swipe', () => {
       const head = (await f.narratives.getBranch(f.target.branchId))!.headNodeId!
       await f.runtime.appendNarrativeInput({ ...f.target, nodeId: 'next-input', expectedHeadNodeId: head, content: 'A different direction.' })
       await expect(f.scopes[0]!.state!.read(f.stateTarget)).rejects.toMatchObject({ code: 'narrative.swipe_source_changed' })
+      await expect(f.scopes[0]!.workspace!.snapshot()).rejects.toMatchObject({ code: 'narrative.swipe_source_changed' })
+      const workspace = await f.runtime.getTimelineWorkspace(f.target)
+      await expect(f.scopes[0]!.workspace!.mutate(workspace.id, [{ kind: 'write', entryId: 'memory', content: 'Late memory' }])).rejects.toMatchObject({ code: 'narrative.swipe_source_changed' })
       await expect(f.scopes[0]!.narrative!.appendNode({ content: 'Late background reply' })).rejects.toMatchObject({ code: 'narrative.swipe_source_changed' })
       f.configure({})
       await expect(f.runtime.invokeAgentTurn(recovery!.request, {

@@ -35,3 +35,17 @@
   color: var(--loom-color-danger-text, var(--loom-color-text));
   background: var(--loom-color-surface-subtle);
 }
+
+.surface[data-renderer-surface='memory.panel'] {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+
+  > .instance {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+}
