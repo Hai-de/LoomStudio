@@ -30,6 +30,7 @@ const rendererSurfaceScopes: Record<(typeof rendererSurfaces)[number], readonly 
   'composer.sheet': ['workspace', 'timeline', 'agent-session'],
   'shell.workspace-panel': ['workspace'],
   'shell.focus-surface': ['workspace', 'timeline', 'agent-session'],
+  'statistics.page': ['workspace'],
   'standalone.page': ['workspace', 'timeline', 'agent-session'],
 }
 

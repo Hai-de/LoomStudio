@@ -37,6 +37,7 @@ export const rendererSurfacePolicies: Record<RendererSurface, RendererConflictPo
   'composer.sheet': 'exclusive',
   'shell.workspace-panel': 'navigation',
   'shell.focus-surface': 'exclusive',
+  'statistics.page': 'navigation',
   'standalone.page': 'navigation',
 }
 

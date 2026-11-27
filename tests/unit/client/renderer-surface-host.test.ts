@@ -43,6 +43,24 @@ describe('RendererSurfaceHost', () => {
     expect(html).toContain('data-renderer-policy="navigation"')
   })
 
+  it('renders only the selected statistics page contribution without a claim', () => {
+    const host = createClientRendererHost()
+    host.register({
+      owner: { kind: 'extension', packageId: 'example.statistics', moduleId: 'client' },
+      definition: { id: 'statistics', name: 'Example Statistics', surface: 'statistics.page', instanceScope: 'workspace', adapter: 'shadow' },
+      mount: vi.fn(),
+    })
+    const html = renderToStaticMarkup(createElement(RendererSurfaceHost, {
+      host,
+      scope: { kind: 'workspace', key: 'workspace' },
+      surface: 'statistics.page',
+      activeContributionKey: 'extension:example.statistics/client/statistics',
+    }))
+    expect(html).toContain('data-renderer-surface="statistics.page"')
+    expect(html).toContain('extension:example.statistics/client/statistics')
+    expect(html).toContain('data-renderer-policy="navigation"')
+  })
+
   it('does not mount a contribution into a mismatched instance scope', () => {
     const host = createClientRendererHost()
     host.register({

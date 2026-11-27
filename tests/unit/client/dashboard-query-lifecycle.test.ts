@@ -8,6 +8,7 @@ import { StudioDashboard } from '../../../apps/studio-client/src/app/studio-dash
 import { useStudioLayoutStore } from '../../../apps/studio-client/src/shared/studio-shell/studio-layout-store.js'
 import { DashboardDialog } from '../../../apps/studio-client/src/widgets/dashboard/dashboard-panel.js'
 import type { StudioApi } from '../../../apps/studio-client/src/shared/api/studio-api.js'
+import { createClientRendererHost } from '../../../apps/studio-client/src/shared/extension-renderer-runtime/client-renderer-host.js'
 
 let root: ReturnType<typeof createRoot> | undefined
 let client: QueryClient | undefined
@@ -15,7 +16,7 @@ afterEach(async () => {
   await act(async () => root?.unmount())
   client?.clear()
   document.body.replaceChildren()
-  localStorage.clear()
+  globalThis.localStorage?.clear()
   useStudioLayoutStore.setState({ viewPreferences: {} })
   vi.useRealTimers()
   vi.unstubAllGlobals()
@@ -208,4 +209,34 @@ it('falls back to persisted dashboard.tab when DashboardDialog is mounted standa
   }))
 
   expect(document.body.textContent).toContain('应用存储')
+})
+
+it('mounts registered statistics page extensions only while their dynamic tab is selected', async () => {
+  const { api, render } = setup()
+  const rendererHost = createClientRendererHost()
+  const dispose = vi.fn()
+  rendererHost.register({
+    owner: { kind: 'extension', packageId: 'example.statistics', moduleId: 'client' },
+    definition: { id: 'statistics', name: '示例统计', surface: 'statistics.page', instanceScope: 'workspace', adapter: 'shadow' },
+    mount: (root: HTMLElement) => {
+      root.textContent = '扩展统计内容'
+      return { dispose }
+    },
+  })
+
+  expect(rendererHost.list('statistics.page')).toHaveLength(1)
+  await render(createElement(StudioDashboard, {
+    api, endpoint: 'one', open: true, rendererHost, onClose: vi.fn(), onAction: vi.fn(),
+  }))
+  const tab = [...document.querySelectorAll('button')].find(button => button.textContent === '示例统计')
+  expect(tab).toBeTruthy()
+  expect(document.body.textContent).not.toContain('扩展统计内容')
+
+  await act(async () => tab!.click())
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
+  const instance = document.querySelector<HTMLElement>('[data-renderer-id="extension:example.statistics/client/statistics"]')
+  expect(instance?.shadowRoot?.textContent).toContain('扩展统计内容')
+
+  await act(async () => [...document.querySelectorAll('button')].find(button => button.textContent === '概览')!.click())
+  expect(dispose).toHaveBeenCalledTimes(1)
 })

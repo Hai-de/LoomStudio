@@ -5,12 +5,14 @@ import { Button, Dialog, SearchField, Tabs } from '@loom-studio/ui'
 import { ArrowLeft, ArrowUpRight, Bot, ChartNoAxesCombined, ChevronRight, Database, HardDrive, Layers3, MessageSquare, Server, Sparkles } from 'lucide-react'
 import { resolveModelBrand, resolveProviderBrand } from '../../features/provider-settings/model/model-brand.js'
 import { ModelBrandIcon } from '../../features/provider-settings/ui/model-brand-icon.js'
-import type { DashboardAction, DashboardPeriod, DashboardSnapshot, DashboardTone, DashboardView, PlayRow, StorageGroup, UsageDay, UsageRow } from './dashboard-view.js'
+import { isDashboardExtensionView, type DashboardAction, type DashboardPeriod, type DashboardSnapshot, type DashboardTone, type DashboardView, type DashboardViewItem, type PlayRow, type StorageGroup, type UsageDay, type UsageRow } from './dashboard-view.js'
 import styles from './dashboard-panel.module.scss'
 
 type Props = {
   data: DashboardSnapshot
   period: DashboardPeriod
+  views?: readonly DashboardViewItem[]
+  extensionContent?: ReactNode
   onPeriodChange(period: DashboardPeriod): void
   onAction(action: DashboardAction): void
   onViewChange?(view: DashboardView): void
@@ -42,9 +44,11 @@ function CharacterAvatar({ row }: { row: PlayRow }) {
 }
 
 export function DashboardDialog(props: Props & { open: boolean; onClose(): void; view?: DashboardView; headerActions?: ReactNode; detailContent?: ReactNode }) {
-  const [storedView, setStoredView] = useWorkbenchView<DashboardView>('dashboard.tab', 'overview', dashboardViews.map(item => item.id))
+  const views = props.views ?? dashboardViews
+  const [storedView, setStoredView] = useWorkbenchView<DashboardView>('dashboard.tab', 'overview', views.map(item => item.id))
   const view = props.view ?? storedView
-  const snapshot = view === 'resources' || view === 'storage'
+  const extensionView = isDashboardExtensionView(view)
+  const snapshot = !extensionView && (view === 'resources' || view === 'storage')
   const rangeHelp = props.data.collectionStartedAt ? `用量与发送记录始于 ${new Date(props.data.collectionStartedAt).toLocaleDateString()}，此前的数据未补录。` : undefined
   const changeView = (next: DashboardView) => {
     if (props.view === undefined) setStoredView(next)
@@ -52,7 +56,7 @@ export function DashboardDialog(props: Props & { open: boolean; onClose(): void;
   }
   const hasLoaded = useRef(false)
   if (props.data.ready) hasLoaded.current = true
-  const initialLoading = !hasLoaded.current && props.data.ready === false
+  const initialLoading = !extensionView && !hasLoaded.current && props.data.ready === false
   const returnFocusRef = useRef<HTMLElement | null>(null)
   const wasOpenRef = useRef(false)
   const actionTriggeredRef = useRef(false)
@@ -79,14 +83,14 @@ export function DashboardDialog(props: Props & { open: boolean; onClose(): void;
     if (action.kind !== 'calls') actionTriggeredRef.current = true
     props.onAction(action)
   }
-  return <Dialog open={props.open} onClose={props.onClose} title={<span className={styles.dialogTitle}><span>统计</span><span className={styles.headerMeta} title={snapshot ? undefined : rangeHelp}>{snapshot ? '当前快照' : props.data.rangeLabel}</span></span>} titleIcon={<ChartNoAxesCombined size={19} />} layout="workbench" className={styles.dialog} headerActions={props.headerActions}>
+  return <Dialog open={props.open} onClose={props.onClose} title={<span className={styles.dialogTitle}><span>统计</span><span className={styles.headerMeta} title={snapshot || extensionView ? undefined : rangeHelp}>{extensionView ? '扩展统计' : snapshot ? '当前快照' : props.data.rangeLabel}</span></span>} titleIcon={<ChartNoAxesCombined size={19} />} layout="workbench" className={styles.dialog} headerActions={props.headerActions}>
     {initialLoading && <div className={styles.empty} role="status">{props.data.notices?.map(notice => <p key={notice}>{notice}</p>)}</div>}
     {props.detailContent}
-    <div style={initialLoading || props.detailContent ? { display: 'none' } : { height: '100%', minHeight: 0 }}><DashboardPanel view={view} data={props.data} period={props.period} onPeriodChange={props.onPeriodChange} onAction={handleAction} onViewChange={changeView} onCreateBackup={props.onCreateBackup} creatingBackup={props.creatingBackup} /></div>
+    <div style={initialLoading || props.detailContent ? { display: 'none' } : { height: '100%', minHeight: 0 }}><DashboardPanel view={view} views={views} extensionContent={props.extensionContent} data={props.data} period={props.period} onPeriodChange={props.onPeriodChange} onAction={handleAction} onViewChange={changeView} onCreateBackup={props.onCreateBackup} creatingBackup={props.creatingBackup} /></div>
   </Dialog>
 }
 
-export function DashboardPanel({ data, period, onPeriodChange, onAction, onViewChange, onCreateBackup, creatingBackup, view }: Props & { view: DashboardView }) {
+export function DashboardPanel({ data, period, views = dashboardViews, extensionContent, onPeriodChange, onAction, onViewChange, onCreateBackup, creatingBackup, view }: Props & { view: DashboardView; views?: readonly DashboardViewItem[] }) {
   const [detail, setDetail] = useState<Detail>()
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<'sends' | 'activeDays'>('sends')
@@ -180,6 +184,13 @@ export function DashboardPanel({ data, period, onPeriodChange, onAction, onViewC
   function open(next: Detail, button: HTMLButtonElement) { origin.current = button; setDetail(next) }
   function navigate(next: DashboardView) { setDetail(undefined); onViewChange?.(next) }
 
+  if (isDashboardExtensionView(view)) {
+    return <section className={styles.panel} aria-label="统计">
+      <div className={styles.navigation}><Tabs items={views} activeId={view} onChange={navigate} ariaLabel="Dashboard 视图" /></div>
+      <div className={`${styles.scroll} ${styles.extensionScroll}`}>{extensionContent ?? <Empty title="扩展统计不可用" description="对应的扩展页面没有注册或已被禁用。" />}</div>
+    </section>
+  }
+
   const providerList = (compact: boolean) => <div className={styles.providers}>{data.usage.map(row => {
     const brand = resolveModelBrand(row.model) ?? resolveProviderBrand(row.providerProfileId ?? row.provider)
     return <button type="button" key={row.id} className={styles.providerRow} onClick={event => open({ kind: 'provider', id: row.id }, event.currentTarget)} style={toneStyle(row.tone)}>
@@ -195,12 +206,12 @@ export function DashboardPanel({ data, period, onPeriodChange, onAction, onViewC
   </button>)}</div> : <Empty title={search ? '没有找到匹配的角色' : '还没有游玩记录'} description={search ? '试试角色名称或故事关键词。' : '开始一段故事后，在这里回看你的足迹。'} />
 
   return <section className={styles.panel} aria-label="统计">
-    <div className={styles.navigation}><Tabs items={dashboardViews} activeId={view} onChange={navigate} ariaLabel="Dashboard 视图" /><div className={styles.period}>{view === 'usage' && data.collectionStartedAt && <InfoDialog title="统计口径"><p>从 {new Date(data.collectionStartedAt).toLocaleDateString()} 开始记录，不补录此前用量。只统计提供商报告的 Token，包含重试和未采用的生成。</p></InfoDialog>}
+    <div className={styles.navigation}><Tabs items={views} activeId={view} onChange={navigate} ariaLabel="Dashboard 视图" /><div className={styles.period}>{view === 'usage' && data.collectionStartedAt && <InfoDialog title="统计口径"><p>从 {new Date(data.collectionStartedAt).toLocaleDateString()} 开始记录，不补录此前用量。只统计提供商报告的 Token，包含重试和未采用的生成。</p></InfoDialog>}
       {view === 'storage' || view === 'resources' ? null : <><span className={styles.periodLabel}>统计范围</span><select aria-label="统计时间范围" value={period} onChange={event => onPeriodChange(event.target.value as DashboardPeriod)}><option value="7">本周 (周一至周日)</option><option value="30">最近 30 天</option><option value="all">全部记录</option></select></>}
     </div></div>
     <div className={styles.scroll}>
       {detailTitle ? <div className={styles.detail}>
-        <Button size="small" variant="ghost" onClick={() => setDetail(undefined)}><ArrowLeft size={15} />返回{dashboardViews.find(item => item.id === view)?.label}</Button>
+        <Button size="small" variant="ghost" onClick={() => setDetail(undefined)}><ArrowLeft size={15} />返回{views.find(item => item.id === view)?.label}</Button>
         <div className={styles.detailHeading}><div><span className={styles.eyebrow}>{selectedStorage ? 'STORAGE' : selectedCard ? 'PLAY ACTIVITY' : 'MODEL USAGE'}</span><h2 tabIndex={-1} ref={heading}>{detailTitle}</h2><p>{selectedStorage?.description ?? selectedCard?.subtitle ?? selectedProvider?.model}</p></div>
           {(!selectedStorage || selectedStorage.action) && selectedCard?.canOpen !== false && <Button onClick={() => onAction({ kind: detail!.kind, id: selectedProvider?.providerProfileId ?? detail!.id, label: selectedStorage?.action ?? (selectedCard ? '打开角色' : '配置提供商') })}><ArrowUpRight size={16} />{selectedStorage?.action ?? (selectedCard ? '打开角色' : '配置提供商')}</Button>}
         </div>

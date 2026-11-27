@@ -951,7 +951,7 @@ export function App(props: {
       {dashboardVisited ? <ContentErrorBoundary resetKey={dashboardOpen} fallback={error => dashboardOpen ? (
         <Dialog open onClose={() => setDashboardOpen(false)} title={state.t('dashboard.open')}><p role="alert">{error.message}</p></Dialog>
       ) : null}><Suspense fallback={dashboardOpen ? <Dialog open onClose={() => setDashboardOpen(false)} title={state.t('dashboard.open')}><StudioPanelLoading /></Dialog> : null}>
-      <StudioDashboard api={state.api} endpoint={state.endpoint} open={dashboardOpen} onClose={() => setDashboardOpen(false)}
+      <StudioDashboard api={state.api} endpoint={state.endpoint} open={dashboardOpen} rendererHost={rendererHost} onClose={() => setDashboardOpen(false)}
         onAction={action => {
           setDashboardOpen(false)
           if (action.kind === 'story') { void navigation.openNarrative(action.id); return }

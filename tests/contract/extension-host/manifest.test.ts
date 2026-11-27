@@ -155,6 +155,16 @@ describe('extension manifest contract', () => {
         contributes: { renderers: [{ id: 'tail', name: 'Tail', surface: 'narrative.timeline.tail', instanceScope: 'timeline', adapter: 'unsafe-dom' }] },
       }],
     })).toThrow('adapter is invalid')
+
+    expect(parseExtensionManifest({
+      ...base,
+      modules: [{
+        id: 'client',
+        runtime: 'client',
+        entry: './dist/index.js',
+        contributes: { renderers: [{ id: 'statistics', name: 'Statistics', surface: 'statistics.page', instanceScope: 'workspace' }] },
+      }],
+    }).modules?.[0]?.contributes?.renderers?.[0]?.surface).toBe('statistics.page')
   })
 
   it('validates manifest-declared Client Commands and Action Placements', () => {

@@ -415,3 +415,20 @@ select.cleanSelect {
 
 .avatar { overflow:hidden; }
 .avatar img { width:100%; height:100%; object-fit:cover; }
+
+.extensionScroll {
+  padding: 0;
+  overflow: hidden;
+
+  > [data-loom-component='renderer-surface-host'] {
+    height: 100%;
+    min-height: 0;
+  }
+}
+
+.extensionScroll [data-renderer-surface='statistics.page'],
+.extensionScroll [data-renderer-surface='statistics.page'] [data-renderer-state] {
+  height: 100%;
+  min-height: 0;
+  pointer-events: auto;
+}

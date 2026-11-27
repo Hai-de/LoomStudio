@@ -113,6 +113,7 @@ Renderer 实例获得：
 | `composer.sheet` | Workspace / Timeline / Agent Session | Exclusive | Composer 上方 Sheet |
 | `shell.workspace-panel` | Workspace | Navigation | Studio 现有扩展工作台容器 |
 | `shell.focus-surface` | Workspace | Exclusive | Host 管理的 `<dialog>` Focus Surface；当前 App 只挂载 Workspace Scope |
+| `statistics.page` | Workspace | Navigation | Studio 统计浮层中的扩展统计 Tab；仅展示当前选中的统计页 Contribution |
 | `standalone.page` | 声明 Scope | Navigation | 新浏览器页面与 Renderer Session |
 
 Collection 排序为：用户内存态顺序 → `suggestedOrder` → 稳定 Contribution Key。当前用户顺序尚未持久化，刷新后恢复作者建议顺序。

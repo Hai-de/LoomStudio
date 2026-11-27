@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { parseDocument, stringify } from 'yaml'
 
-export const rendererSurfaces = ['shell.background', 'narrative.entry.inline', 'narrative.timeline.tail', 'memory.panel', 'agent.message.inline', 'agent.session.tail', 'composer.sheet', 'shell.workspace-panel', 'shell.focus-surface', 'standalone.page'] as const
+export const rendererSurfaces = ['shell.background', 'narrative.entry.inline', 'narrative.timeline.tail', 'memory.panel', 'agent.message.inline', 'agent.session.tail', 'composer.sheet', 'shell.workspace-panel', 'shell.focus-surface', 'statistics.page', 'standalone.page'] as const
 export const rendererInstanceScopes = ['workspace', 'timeline', 'agent-session', 'node', 'message'] as const
 export const loomScriptRuntimeSchema = z.enum(['declarative', 'client-sandbox', 'client', 'client-worker', 'server'])
 export type LoomScriptRuntime = z.infer<typeof loomScriptRuntimeSchema>

@@ -1,13 +1,16 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { Button } from '@loom-studio/ui'
 import { ArrowLeft, RefreshCw } from 'lucide-react'
 import { useDashboard } from '../features/dashboard/model/use-dashboard.js'
+import { useStatisticsExtensionPages } from './use-statistics-extension-pages.js'
+import { isDashboardExtensionView, type DashboardAction, type DashboardView, type DashboardViewItem } from '../widgets/dashboard/dashboard-view.js'
 import { notify } from '../shared/notifications/index.js'
 import { useWorkbenchView } from '../shared/studio-shell/use-workbench-view.js'
 import { DashboardDialog, dashboardViews } from '../widgets/dashboard/dashboard-panel.js'
-import type { DashboardAction, DashboardView } from '../widgets/dashboard/dashboard-view.js'
 import type { StudioApi } from '../shared/api/studio-api.js'
+import type { ClientRendererHost } from '../shared/extension-renderer-runtime/client-renderer-host.js'
+import { RendererSurfaceHost } from '../features/extension-renderers/ui/renderer-surface-host.js'
 import styles from '../widgets/dashboard/dashboard-panel.module.scss'
 
 function formatBackupSize(sizeBytes: number): string {
@@ -15,10 +18,21 @@ function formatBackupSize(sizeBytes: number): string {
   return `${Math.max(1, Math.round(sizeBytes / 1024))} KiB`
 }
 
-export function StudioDashboard(props: { api: StudioApi; endpoint: string; open: boolean; onClose(): void; onAction(action: DashboardAction): void }) {
-  const [view, setView] = useWorkbenchView<DashboardView>('dashboard.tab', 'overview', dashboardViews.map(item => item.id))
+export function StudioDashboard(props: { api: StudioApi; endpoint: string; open: boolean; rendererHost?: ClientRendererHost; onClose(): void; onAction(action: DashboardAction): void }) {
+  const statisticsExtensions = useStatisticsExtensionPages(props.rendererHost)
+  const views = useMemo<readonly DashboardViewItem[]>(() => [
+    ...dashboardViews,
+    ...statisticsExtensions.map(page => ({ id: page.id, label: page.label })),
+  ], [statisticsExtensions])
+  const [view, setView] = useWorkbenchView<DashboardView>('dashboard.tab', 'overview', views.map(item => item.id))
   const dashboard = useDashboard(props.api, props.endpoint, props.open, view)
   const [providerId, setProviderId] = useState<string>()
+  const extensionPage = isDashboardExtensionView(view)
+    ? statisticsExtensions.find(page => page.id === view)
+    : undefined
+  const extensionContent = props.rendererHost && extensionPage
+    ? <RendererSurfaceHost host={props.rendererHost} surface="statistics.page" scope={{ kind: 'workspace', key: 'workspace' }} activeContributionKey={extensionPage.contributionKey} />
+    : undefined
   const backupInFlightRef = useRef(false)
   const onAction = (action: DashboardAction) => {
     if (action.kind === 'calls') { setProviderId(action.id); return }
@@ -39,13 +53,14 @@ export function StudioDashboard(props: { api: StudioApi; endpoint: string; open:
     }
   }
   return <DashboardDialog open={props.open} onClose={props.onClose} view={view} data={dashboard.data} period={dashboard.period}
+    views={views} extensionContent={extensionContent}
     onPeriodChange={dashboard.setPeriod} onViewChange={setView} onAction={onAction}
     onCreateBackup={handleCreateBackup} creatingBackup={dashboard.creatingBackup}
     detailContent={providerId && <DashboardCalls api={props.api} endpoint={props.endpoint} open={props.open}
       providerId={providerId} range={dashboard.range} rangeLabel={dashboard.data.rangeLabel}
       providerName={dashboard.data.usage.find(row => row.providerProfileId === providerId)?.provider}
       onBack={() => setProviderId(undefined)} />}
-    headerActions={<Button aria-label="刷新统计" title="刷新统计" disabled={dashboard.refreshing} onClick={dashboard.refresh}><RefreshCw size={15} /></Button>} />
+    headerActions={isDashboardExtensionView(view) ? undefined : <Button aria-label="刷新统计" title="刷新统计" disabled={dashboard.refreshing} onClick={dashboard.refresh}><RefreshCw size={15} /></Button>} />
 }
 
 function DashboardCalls(props: {

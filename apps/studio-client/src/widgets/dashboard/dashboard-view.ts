@@ -1,6 +1,12 @@
 /** Presentation inputs only; not a persistence or RPC contract. */
 export type DashboardPeriod = '7' | '30' | 'all'
-export type DashboardView = 'overview' | 'usage' | 'play' | 'resources' | 'storage'
+export type DashboardBuiltinView = 'overview' | 'usage' | 'play' | 'resources' | 'storage'
+export type DashboardExtensionView = `extension:${string}`
+export type DashboardView = DashboardBuiltinView | DashboardExtensionView
+export type DashboardViewItem = { id: DashboardView; label: string }
+export function isDashboardExtensionView(view: DashboardView): view is DashboardExtensionView {
+  return view.startsWith('extension:')
+}
 export type DashboardTone = 'accent' | 'info' | 'success' | 'warning' | 'pink' | 'muted' | 'cyan'
 
 export type UsageRow = {
