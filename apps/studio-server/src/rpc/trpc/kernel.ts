@@ -51,7 +51,7 @@ const installCard = pkg.extend({ cardId: z.string(), expectedCardVersion: versio
 const updateCard = installCard.extend({ packageVersion: z.string(), expectedInstallationVersion: version, expectedPreviewFingerprint: z.string().min(1).optional(), keepPromptResourceIds: z.array(z.string().min(1)).max(1000).optional() })
 const removeCard = pkg.extend({ cardId: z.string(), expectedInstallationVersion: version })
 const source = z.discriminatedUnion('kind', [z.object({ kind: z.literal('git'), url: z.string(), ref: z.string().optional() }), z.object({ kind: z.literal('zip'), url: z.string() })])
-const capabilityGrants = z.object({ ui: z.array(z.literal('ui.notify')).optional(), 'events.subscribe': z.array(z.union([z.enum(['documents', 'narrative', 'agent', 'diagnostics', 'platform-data', 'state']), z.templateLiteral(['extension:', z.string()])])).optional(), assets: z.array(z.enum(['assets.read', 'assets.publish'])).optional() })
+const capabilityGrants = z.object({ ui: z.array(z.literal('ui.notify')).optional(), 'events.subscribe': z.array(z.union([z.enum(['documents', 'narrative', 'agent', 'diagnostics', 'platform-data', 'state', 'usage']), z.templateLiteral(['extension:', z.string()])])).optional(), assets: z.array(z.enum(['assets.read', 'assets.publish'])).optional() })
 
 function toCapabilityGrants(grants: z.infer<typeof capabilityGrants> | undefined): ExtensionModuleCapabilityGrants | undefined {
   if (!grants) return undefined

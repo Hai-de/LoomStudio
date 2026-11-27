@@ -19,6 +19,7 @@ export function createExtensionHostHarness(options: {
   extensionAgentTasks?: ExtensionHostOptions['extensionAgentTasks']
   logger?: Logger
   grantAssetCapabilities?: (packageId: string, moduleId: string) => readonly ExtensionAssetCapability[]
+  grantEventCapabilities?: ExtensionHostOptions['grantEventCapabilities']
   assets?: ExtensionHostOptions['assets']
   canAccessAsset?: ExtensionHostOptions['canAccessAsset']
   portablePayloads?: ExtensionHostOptions['portablePayloads']
@@ -28,6 +29,8 @@ export function createExtensionHostHarness(options: {
   aiCapabilities?: AiGatewayCapabilityRegistry
   aiGateway?: ProfiledAiGateway
   invokeModel?: ExtensionHostOptions['invokeModel']
+  listProviderProfiles?: ExtensionHostOptions['listProviderProfiles']
+  getProviderJson?: ExtensionHostOptions['getProviderJson']
   buildPrompt?: ExtensionHostOptions['buildPrompt']
   registerPromptProcessor?: ExtensionHostOptions['registerPromptProcessor']
   registerMacroProvider?: ExtensionHostOptions['registerMacroProvider']
@@ -57,6 +60,7 @@ export function createExtensionHostHarness(options: {
     grantAssetCapabilities: (packageManifest: { id: string }, moduleManifest: { id: string }) => (
       options.grantAssetCapabilities?.(packageManifest.id, moduleManifest.id) ?? []
     ),
+    grantEventCapabilities: options.grantEventCapabilities,
     assets: options.assets,
     canAccessAsset: options.canAccessAsset,
     portablePayloads: options.portablePayloads,
@@ -66,6 +70,8 @@ export function createExtensionHostHarness(options: {
     aiCapabilities: options.aiCapabilities,
     aiGateway: options.aiGateway,
     invokeModel: options.invokeModel,
+    listProviderProfiles: options.listProviderProfiles,
+    getProviderJson: options.getProviderJson,
     buildPrompt: options.buildPrompt,
     registerPromptProcessor: options.registerPromptProcessor,
     registerMacroProvider: options.registerMacroProvider,

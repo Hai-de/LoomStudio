@@ -79,6 +79,7 @@ export const messages = {
   'renderer.packagePartial': 'Some modules failed; see details',
   'renderer.enablePackageConfirm': 'Enabling "{{name}}" executes extension code. Enable only code you trust; Card scope is not a security sandbox. No new permissions will be granted automatically.\n\nModules and declared capabilities:\n{{capabilities}}',
   'renderer.allowNotifications': 'Allow in-app notifications',
+  'renderer.eventGrantUsage': 'Allow reading model call usage (no prompts or API keys)',
   'renderer.disable': 'Disable module',
   'renderer.reload': 'Reload module',
   'renderer.noContributions': 'This module has no client contributions.',

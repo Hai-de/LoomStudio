@@ -1021,7 +1021,7 @@ function PackageControls(props: {
             onChange={event => void props.onGrant(module, { 'events.subscribe': event.currentTarget.checked
               ? [...(module.desired.grants?.['events.subscribe'] ?? []), capability]
               : (module.desired.grants?.['events.subscribe'] ?? []).filter(item => item !== capability) })} />
-          {module.moduleId}: events.subscribe: {capability}
+          {module.moduleId}: {capability === 'usage' ? props.t('renderer.eventGrantUsage') : `events.subscribe: ${capability}`}
         </label>)}
         {module.desired.enabled && (module.requestedAssetCapabilities ?? []).map(capability => <label key={capability}>
           <input type="checkbox" disabled={props.busy} checked={module.desired.grants?.assets?.includes(capability) ?? false}

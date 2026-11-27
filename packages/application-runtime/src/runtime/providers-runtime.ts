@@ -44,13 +44,29 @@ import {
   secretWriteContext,
 } from './context.js'
 import { officialFakeModelId } from '@loom-studio/ai-gateway'
+import { fetch as undiciFetch, ProxyAgent } from 'undici'
+import type { ExtensionProviderJsonRequest, ExtensionProviderJsonResponse } from '@loom-studio/extension-sdk'
 export { officialFakeModelId } from '@loom-studio/ai-gateway'
 
 type ProvidersRuntimeContext = Pick<ApplicationRuntimeContext,
-  'dataEngine' | 'aiCapabilities' | 'createId' | 'documents' | 'gateway' | 'now' | 'providerAdapters' | 'secrets'
+  'dataEngine' | 'aiCapabilities' | 'createId' | 'documents' | 'gateway' | 'now' | 'providerAdapters' | 'resolveProxyUrl' | 'secrets'
 >
 
 export function createProvidersRuntimeMethods(ctx: ProvidersRuntimeContext) {
+  const adminTransports = new Map<string, typeof fetch>()
+  function resolveAdminTransport(): typeof fetch {
+    const proxyUrl = ctx.resolveProxyUrl?.()
+    if (!proxyUrl) return fetch
+    const existing = adminTransports.get(proxyUrl)
+    if (existing) return existing
+    const dispatcher = new ProxyAgent(proxyUrl)
+    const transport = (async (input, init) => {
+      return await undiciFetch(input as never, { ...init, dispatcher } as never) as unknown as Response
+    }) as typeof fetch
+    adminTransports.set(proxyUrl, transport)
+    return transport
+  }
+
   return {
     createProviderProfile: async (input: CreateProviderProfileInput, requestContext?: RuntimeRequestContext): Promise<CreateProviderProfileResult> => {
       assertNonEmpty(input.providerExtensionId, 'providerExtensionId')
@@ -119,6 +135,85 @@ export function createProvidersRuntimeMethods(ctx: ProvidersRuntimeContext) {
         providerProfiles: await Promise.all(result.items.map(profile => toProviderProfileView(ctx, profile as never))),
         nextCursor: result.nextCursor,
       }
+    },
+
+    getProviderJson: async (input: ExtensionProviderJsonRequest): Promise<ExtensionProviderJsonResponse> => {
+      if (!input || typeof input.providerProfileId !== 'string' || !input.providerProfileId.trim()
+        || typeof input.path !== 'string' || !input.path.trim()) {
+        throw providerRequestError('ai.provider.invalid_request', 'Provider request requires a Profile ID and path')
+      }
+      const profile = await readDocument<ProviderProfileContent>(
+        ctx.documents,
+        input.providerProfileId,
+        applicationDocumentTypes.providerProfile,
+      )
+      const rawBaseUrl = typeof profile.content.config.baseUrl === 'string' ? profile.content.config.baseUrl : undefined
+      if (!rawBaseUrl) throw providerRequestError('ai.provider.unsupported_endpoint', 'Provider has no API base URL configured')
+      let baseUrl: URL
+      let requestUrl: URL
+      try {
+        baseUrl = new URL(rawBaseUrl)
+        // The provider API origin is the security boundary. Relative paths cannot escape it.
+        if (input.path.startsWith('//')) throw new Error('protocol-relative path')
+        requestUrl = new URL(input.path, baseUrl)
+      } catch {
+        throw providerRequestError('ai.provider.unsupported_endpoint', 'Provider request path or API base URL is invalid')
+      }
+      if (baseUrl.protocol !== 'https:' || requestUrl.protocol !== 'https:' || requestUrl.origin !== baseUrl.origin
+        || requestUrl.username || requestUrl.password) {
+        throw providerRequestError('ai.provider.unsupported_endpoint', 'Provider requests must stay on the configured HTTPS origin')
+      }
+      if (!profile.content.secretRef) throw providerRequestError('ai.provider.credential_missing', 'Provider credential is not configured')
+      const auth = input.auth ?? { kind: 'bearer' as const }
+      if (auth.kind !== 'bearer' && auth.kind !== 'x-api-key') {
+        throw providerRequestError('ai.provider.invalid_request', 'Provider request auth kind is invalid')
+      }
+      const secrets = requireSecrets(ctx)
+      return await secrets.withSecret(profile.content.secretRef, {
+        caller: 'application.ai-gateway',
+        owner: { type: 'provider-profile', id: profile.id },
+        purpose: 'provider.credentials',
+      }, async secret => {
+        const credential = secret.values.apiKey
+        if (!credential) throw providerRequestError('ai.provider.credential_missing', 'Provider credential is missing apiKey')
+        let response: Response
+        try {
+          response = await resolveAdminTransport()(requestUrl, {
+            method: 'GET',
+            headers: {
+              Accept: 'application/json',
+              ...(auth.kind === 'bearer' ? { Authorization: `Bearer ${credential}` } : { 'x-api-key': credential }),
+            },
+            redirect: 'error',
+            signal: AbortSignal.timeout(15_000),
+          })
+        } catch (error) {
+          throw providerRequestError('ai.provider.read_failed', error instanceof Error && error.name === 'TimeoutError'
+            ? 'Provider request timed out'
+            : 'Provider request failed', error)
+        }
+        const declaredBytes = Number(response.headers.get('content-length'))
+        if (Number.isFinite(declaredBytes) && declaredBytes > 256 * 1024) {
+          throw providerRequestError('ai.provider.response_too_large', 'Provider response exceeds the size limit')
+        }
+        let text: string
+        try { text = await readProviderResponseBody(response, 256 * 1024) } catch (error) {
+          if (error instanceof Error && 'code' in error && error.code === 'ai.provider.response_too_large') throw error
+          throw providerRequestError('ai.provider.invalid_response', 'Provider response could not be read', error)
+        }
+        let body: ExtensionProviderJsonResponse['body']
+        if (text.trim()) {
+          try { body = JSON.parse(text) as ExtensionProviderJsonResponse['body'] } catch {
+            // HTTP status is still useful to callers even when the body is not JSON.
+          }
+        }
+        return {
+          providerProfileId: profile.id,
+          status: response.status,
+          ok: response.ok,
+          ...(body !== undefined ? { body } : {}),
+        }
+      })
     },
 
     updateProviderProfile: async (input: UpdateProviderProfileInput, requestContext?: RuntimeRequestContext): Promise<UpdateProviderProfileResult> => {
@@ -471,6 +566,35 @@ async function toAiCapabilityProfileView(
     updatedAt: profile.content.updatedAt,
   }
 }
+
+function providerRequestError(code: string, message: string, cause?: unknown): Error {
+  return Object.assign(new Error(message, cause === undefined ? undefined : { cause }), { code })
+}
+
+async function readProviderResponseBody(response: Response, maxBytes: number): Promise<string> {
+  const reader = response.body?.getReader()
+  if (!reader) return ''
+  const decoder = new TextDecoder()
+  const chunks: string[] = []
+  let received = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      received += value.byteLength
+      if (received > maxBytes) {
+        await reader.cancel().catch(() => undefined)
+        throw providerRequestError('ai.provider.response_too_large', 'Provider response exceeds the size limit')
+      }
+      chunks.push(decoder.decode(value, { stream: true }))
+    }
+    chunks.push(decoder.decode())
+    return chunks.join('')
+  } finally {
+    reader.releaseLock()
+  }
+}
+
 
 export async function initializeOfficialFakeProviderProfiles(
   ctx: Pick<ApplicationRuntimeContext, 'createId' | 'documents' | 'now' | 'providerAdapters'>,

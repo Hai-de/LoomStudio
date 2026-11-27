@@ -79,6 +79,7 @@ export const messages = {
   'renderer.packagePartial': '一部のモジュールで操作に失敗しました。詳細を確認してください',
   'renderer.enablePackageConfirm': '「{{name}}」を有効化するとコードが実行されます。信頼できるコードのみを有効化してください。キャラクターのスコープは安全なサンドボックスではありません。\n\nモジュールと宣言された能力：\n{{capabilities}}',
   'renderer.allowNotifications': 'アプリ内通知を許可',
+  'renderer.eventGrantUsage': 'モデル呼び出しの使用量の読み取りを許可（プロンプトや API キーは含みません）',
   'renderer.disable': 'モジュールを無効化',
   'renderer.reload': 'モジュールを再読み込み',
   'renderer.noContributions': 'このモジュールにはクライアントへの貢献がありません。',

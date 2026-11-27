@@ -131,7 +131,7 @@ const headerStart = '// ==LoomScript=='
 const headerEnd = '// ==/LoomScript=='
 const singles = new Set(['format', 'id', 'name', 'version', 'runtime'])
 const repeated = new Set(['capability', 'contribution', 'require', 'setting', 'tag'])
-const capabilities = new Set(['configs.read', 'configs.write', 'state.read', 'state.write', 'state.contribute', 'state.processContent', 'ui.notify', 'macros.provide', 'prompt.process', 'narrative.context.provide', 'narrative.read', 'agent.tasks', 'vfs.provide', 'assets.read', 'assets.publish', 'ai.invoke', 'runtime.client', 'runtime.client-worker', 'runtime.server', 'events.subscribe:state', 'events.subscribe:narrative', 'events.subscribe:agent', 'events.subscribe:diagnostics', 'events.subscribe:platform-data', 'events.subscribe:documents'])
+const capabilities = new Set(['configs.read', 'configs.write', 'state.read', 'state.write', 'state.contribute', 'state.processContent', 'ui.notify', 'macros.provide', 'prompt.process', 'narrative.context.provide', 'narrative.read', 'agent.tasks', 'vfs.provide', 'assets.read', 'assets.publish', 'ai.invoke', 'ai.profiles.read', 'ai.provider.read', 'runtime.client', 'runtime.client-worker', 'runtime.server', 'events.subscribe:state', 'events.subscribe:narrative', 'events.subscribe:agent', 'events.subscribe:diagnostics', 'events.subscribe:platform-data', 'events.subscribe:documents', 'events.subscribe:usage'])
 export function parseLoomScriptSource(source: string): ParsedLoomScriptMetadata {
   if (/^\uFEFF?---\r?\n/.test(source)) return parseMarkdownRuleSource(source)
   const lines = source.split(/\r?\n/)

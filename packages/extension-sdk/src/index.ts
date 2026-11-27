@@ -5,7 +5,7 @@ import type { ExtensionAgentTaskCreate, ExtensionAgentTaskInvoke, ExtensionAgent
 export type { ExtensionNarrativeSource, ExtensionNarrativeRead, ExtensionNarrativeSnapshot, ExtensionNarrativeActivity, ExtensionReadonlyFiles, ExtensionRecordArchive } from './narrative-work.js'
 import type { ClientStyleFactory, ExtensionStyleContribution } from './styles.js'
 export * from './styles.js'
-import type { TextTokenCounter } from '@loom-studio/shared/tokenizer/contracts'
+import type { TextTokenCounter, TokenUsage } from '@loom-studio/shared/tokenizer/contracts'
 import type {
   AiGatewayInvokeInput,
   AiGatewayInvokeResult,
@@ -162,7 +162,46 @@ export type EventCapabilityCategory =
   | 'diagnostics'
   | 'platform-data'
   | 'state'
+  | 'usage'
   | `extension:${string}`
+
+/** Non-secret Provider Profile identity available to extensions with ai.profiles.read. */
+export type ExtensionProviderProfileSummary = {
+  id: string
+  displayName: string
+  providerExtensionId: string
+  baseUrl?: string
+  enabledModelIds: string[]
+  credentialConfigured: boolean
+}
+
+/**
+ * Host-mediated GET request against a Provider Profile origin. The credential is
+ * injected by the Host and never returned to the extension.
+ */
+export type ExtensionProviderJsonRequest = {
+  providerProfileId: string
+  path: string
+  auth?: { kind: 'bearer' | 'x-api-key' }
+}
+
+export type ExtensionProviderJsonResponse = {
+  providerProfileId: string
+  status: number
+  ok: boolean
+  body?: JsonValue
+}
+
+/** Terminal provider call usage delivered to modules granted events.subscribe:usage. */
+export type AiUsageRecordedEvent = {
+  providerProfileId: string
+  modelId: string
+  outcome: 'completed' | 'failed' | 'cancelled'
+  usage?: TokenUsage
+  durationMs?: number
+  providerCallId?: string
+  finishedAt: string
+}
 
 export type ExtensionAssetCapability = 'assets.publish' | 'assets.read'
 
@@ -859,6 +898,8 @@ export type ExtensionModuleManifest = {
     'assets.publish'?: boolean
     'assets.read'?: boolean
     'ai.invoke'?: boolean
+    'ai.profiles.read'?: boolean
+    'ai.provider.read'?: boolean
     'macros.provide'?: boolean
     'prompt.process'?: boolean
     'narrative.context.provide'?: boolean
@@ -1184,6 +1225,10 @@ export type ExtensionActivationContext = {
   ai: {
     registerProvider(registration: AiGatewayProviderRegistration): AiGatewayProviderRegistrationHandle
     listProviders(): RegisteredAiGatewayProvider[]
+    /** Safe Provider Profile metadata; requires ai.profiles.read. */
+    listProviderProfiles(): Promise<ExtensionProviderProfileSummary[]>
+    /** Same-origin GET with a Host-injected Provider credential; requires ai.provider.read. */
+    getProviderJson(input: ExtensionProviderJsonRequest): Promise<ExtensionProviderJsonResponse>
     invoke(input: Omit<AiGatewayInvokeInput, 'caller'>): Promise<AiGatewayInvokeResult>
     invokeModel(input: {
       model: { providerProfileId: string; modelId: string }

@@ -708,6 +708,40 @@ export function createContext(
         assertScopeActive(instance)
         return options.aiCapabilities?.list() ?? []
       },
+      listProviderProfiles: async () => {
+        assertScopeActive(instance)
+        if (moduleManifest.capabilities?.['ai.profiles.read'] !== true) {
+          throw new Error(`Extension module is not allowed to read Provider Profiles: ${moduleKey(packageManifest.id, moduleManifest.id)}`)
+        }
+        if (!options.listProviderProfiles) throw new Error('Provider Profile metadata is not available in this host')
+        const profiles = await options.listProviderProfiles({
+          packageId: packageManifest.id,
+          moduleId: moduleManifest.id,
+          instanceId: instance.instanceId,
+          target: structuredClone(record.target),
+        })
+        assertScopeActive(instance)
+        return profiles
+      },
+      getProviderJson: async input => {
+        assertScopeActive(instance)
+        if (moduleManifest.capabilities?.['ai.provider.read'] !== true) {
+          throw new Error(`Extension module is not allowed to request Provider endpoints: ${moduleKey(packageManifest.id, moduleManifest.id)}`)
+        }
+        if (!options.getProviderJson) throw new Error('Provider endpoint requests are not available in this host')
+        if (!input || typeof input.providerProfileId !== 'string' || !input.providerProfileId.trim()
+          || typeof input.path !== 'string' || !input.path.trim()) {
+          throw new Error('Provider endpoint request requires a Provider Profile ID and path')
+        }
+        const result = await options.getProviderJson(structuredClone(input), {
+          packageId: packageManifest.id,
+          moduleId: moduleManifest.id,
+          instanceId: instance.instanceId,
+          target: structuredClone(record.target),
+        })
+        assertScopeActive(instance)
+        return result
+      },
       invoke: async input => {
         assertScopeActive(instance)
         if (moduleManifest.capabilities?.['ai.invoke'] !== true) {

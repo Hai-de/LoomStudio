@@ -36,6 +36,8 @@ type ApplicationAdapter = Pick<Parameters<typeof createExtensionHost>[0],
   | 'portablePayloads'
   | 'aiGateway'
   | 'invokeModel'
+  | 'listProviderProfiles'
+  | 'getProviderJson'
   | 'buildPrompt'
   | 'registerMacroProvider'
   | 'registerPromptProcessor'
@@ -256,6 +258,24 @@ export function createExtensionApplicationAdapter({
         ...(result.raw ? { raw: result.raw } : {}),
       }
     },
+    listProviderProfiles: async () => {
+      const profiles = []
+      let cursor: string | undefined
+      do {
+        const page = await applicationRuntime.listProviderProfiles({ ...(cursor ? { cursor } : {}), limit: 100 })
+        profiles.push(...page.providerProfiles.map(profile => ({
+          id: profile.id,
+          displayName: profile.displayName,
+          providerExtensionId: profile.providerExtensionId,
+          ...(typeof profile.config.baseUrl === 'string' ? { baseUrl: profile.config.baseUrl } : {}),
+          enabledModelIds: [...profile.enabledModelIds],
+          credentialConfigured: profile.credential.configured,
+        })))
+        cursor = page.nextCursor
+      } while (cursor)
+      return profiles
+    },
+    getProviderJson: (input, _owner) => applicationRuntime.getProviderJson(input),
     buildPrompt: async (input, target, packageId, lease, observation) => await applicationRuntime.buildExtensionPrompt(
       input, target, packageId, lease, { observationOrigin: observation },
     ),

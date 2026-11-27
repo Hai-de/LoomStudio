@@ -58,7 +58,7 @@ function parseCapabilities(module: ManagedExtensionModule, t: Translator): Array
   if (module.requestedEventCapabilities?.length) {
     for (const cap of module.requestedEventCapabilities) {
       const id = `events.subscribe:${cap}`
-      list.push({ id, label: t('extension.enable.eventSubscribe', { name: cap }) })
+      list.push({ id, label: cap === 'usage' ? t('renderer.eventGrantUsage') : t('extension.enable.eventSubscribe', { name: cap }) })
     }
   }
   return list

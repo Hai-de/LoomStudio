@@ -167,6 +167,34 @@ describe('extension manifest contract', () => {
     }).modules?.[0]?.contributes?.renderers?.[0]?.surface).toBe('statistics.page')
   })
 
+  it('validates provider data capability flags', () => {
+    const base = {
+      manifestVersion: 2,
+      id: 'example.accounts',
+      version: '0.0.0',
+      displayName: 'Accounts',
+      engines: { studio: '^0.1.0' },
+    } as const
+    expect(parseExtensionManifest({
+      ...base,
+      modules: [{
+        id: 'server',
+        runtime: 'server',
+        entry: './dist/index.js',
+        capabilities: { 'ai.profiles.read': true, 'ai.provider.read': true, 'events.subscribe': ['usage'] },
+      }],
+    }).modules?.[0]?.capabilities).toMatchObject({ 'ai.profiles.read': true, 'ai.provider.read': true, 'events.subscribe': ['usage'] })
+    expect(() => parseExtensionManifest({
+      ...base,
+      modules: [{
+        id: 'server',
+        runtime: 'server',
+        entry: './dist/index.js',
+        capabilities: { 'ai.profiles.read': 'yes' },
+      }],
+    })).toThrow('must be a boolean')
+  })
+
   it('validates manifest-declared Client Commands and Action Placements', () => {
     const base = {
       manifestVersion: 2,

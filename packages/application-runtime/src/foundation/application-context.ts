@@ -90,6 +90,7 @@ export type ApplicationRuntimeContext = {
   swipes: NarrativeSwipeStore
   sourceArtifacts?: SourceArtifactStorage
   mediaAssets?: MediaAssetLookup
+  resolveProxyUrl?: ApplicationRuntimeOptions['resolveProxyUrl']
   secrets: ApplicationRuntimeOptions['secrets']
   gateway: AiGateway
   providerAdapters: ProviderAdapterRegistry
@@ -208,6 +209,7 @@ export function createApplicationRuntimeContext(options: ApplicationRuntimeOptio
     mediaAssets: options.mediaAssets,
     secrets: options.secrets,
     providerAdapters,
+    resolveProxyUrl: options.resolveProxyUrl,
     aiCapabilities,
     agentTools,
     macroProviders,

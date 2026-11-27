@@ -10,6 +10,8 @@ Preset contribution 的 `loreMounts` / `textUses` 表达资源使用关系，支
 
 Server Module 可用授权的 `ctx.prompt.build` 构建本安装资源或逐次 Anchor 内容，也可用 `ctx.ai.invokeModel` 显式指定模型进行直接调用；两者不要求 Session，不选择默认预设或绕过安装资源/凭据边界。接口详情见[Provider 与 PromptBuild](../../docs/architecture/application/agent/provider-and-prompt-build.md#extension-直接构建与模型调用)。
 
+需要统计 Provider 调用的 Server Module 可订阅受保护的 `ai.usage.recorded` 事件（`events.subscribe: usage`），事件只携带非敏感的 Profile、模型、终态与 TokenUsage。`ctx.ai.listProviderProfiles()` 提供脱敏的 Provider Profile 摘要；`ctx.ai.getProviderJson()` 允许 Host 使用 Provider Profile 的 `apiKey` 和网络配置，向同一 HTTPS Origin 发起只读 GET。Host 注入凭据且不返回；跨 Origin、重定向和超过 256 KiB 的响应会被拒绝。两者分别需要 `ai.profiles.read` 与 `ai.provider.read`。
+
 Server Module 还可用 `ctx.prompt.registerProcessor` 注册作者正文的候选准备/有序渲染会话，
 由资源 `capabilities.processorId` 显式采用；需 `prompt.process`，读取 Timeline 快照另需 `state.read`。
 处理器不接管 Session/工具消息；新 Run 构建一次，后续工具 Step 和恢复不重跑已接受模板。

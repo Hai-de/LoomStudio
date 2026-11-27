@@ -35,6 +35,7 @@ import type {
   ExtensionStorageScope,
   ExtensionTextExtractorContribution,
   ExtensionTextTransformRuleContribution,
+  ExtensionProviderJsonResponse,
 } from '@loom-studio/extension-sdk'
 export type { ExtensionConfigEntry, ExtensionEntityRef, ExtensionRecordEntry, ExtensionStorageScope } from '@loom-studio/extension-sdk'
 import type { Logger } from '@loom-studio/logging'
@@ -324,6 +325,7 @@ export type ApplicationRuntime = ReturnType<typeof import('./runtime/resource-au
   createProviderProfile(input: CreateProviderProfileInput, context?: RuntimeRequestContext): Promise<CreateProviderProfileResult>
   getProviderProfile(input: GetProviderProfileInput): Promise<GetProviderProfileResult>
   listProviderProfiles(input?: ListProviderProfilesInput): Promise<ListProviderProfilesResult>
+  getProviderJson(input: import('@loom-studio/extension-sdk').ExtensionProviderJsonRequest): Promise<ExtensionProviderJsonResponse>
   updateProviderProfile(input: UpdateProviderProfileInput, context?: RuntimeRequestContext): Promise<UpdateProviderProfileResult>
   replaceProviderCredential(input: ReplaceProviderCredentialInput, context?: RuntimeRequestContext): Promise<ReplaceProviderCredentialResult>
   deleteProviderProfile(input: DeleteProviderProfileInput, context?: RuntimeRequestContext): Promise<DeleteProviderProfileResult>

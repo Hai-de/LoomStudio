@@ -175,6 +175,8 @@ export type ExtensionHostOptions = {
   aiGateway?: ProfiledAiGateway
   invokeModel?: (input: Parameters<import('@loom-studio/extension-sdk').ExtensionActivationContext['ai']['invokeModel']>[0], owner?: { packageId: string; installationId: string; moduleId: string; timelineId?: string } & ExtensionObservationContext) =>
     ReturnType<import('@loom-studio/extension-sdk').ExtensionActivationContext['ai']['invokeModel']>
+  listProviderProfiles?(owner: { packageId: string; moduleId: string; instanceId: string; target: ExtensionInstallationTarget }): Promise<import('@loom-studio/extension-sdk').ExtensionProviderProfileSummary[]>
+  getProviderJson?(input: import('@loom-studio/extension-sdk').ExtensionProviderJsonRequest, owner: { packageId: string; moduleId: string; instanceId: string; target: ExtensionInstallationTarget }): Promise<import('@loom-studio/extension-sdk').ExtensionProviderJsonResponse>
   buildPrompt?: (input: import('@loom-studio/extension-sdk').ExtensionPromptBuildInput, target: ExtensionInstallationTarget, packageId: string, lease?: import('@loom-studio/extension-sdk').ExtensionTimelineLease, observation?: ExtensionObservationContext) =>
     Promise<import('@loom-studio/extension-sdk').ExtensionPromptBuildResult>
   registerPromptProcessor?(processor: import('@loom-studio/extension-sdk').ExtensionPromptProcessor, owner: {

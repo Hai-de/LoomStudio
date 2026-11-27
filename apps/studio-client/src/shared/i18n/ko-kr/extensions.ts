@@ -79,6 +79,7 @@ export const messages = {
   'renderer.packagePartial': '일부 모듈 작업 실패. 세부 정보를 확인하세요',
   'renderer.enablePackageConfirm': '"{{name}}"을(를) 활성화하면 코드가 실행됩니다. 신뢰할 수 있는 코드만 활성화하세요. 캐릭터 범위는 안전한 샌드박스가 아닙니다.\n\n선언된 모듈 및 권한:\n{{capabilities}}',
   'renderer.allowNotifications': '앱 내 알림 허용',
+  'renderer.eventGrantUsage': '모델 호출 사용량 읽기 허용 (프롬프트 및 API 키 미포함)',
   'renderer.disable': '모듈 비활성화',
   'renderer.reload': '모듈 다시 불러오기',
   'renderer.noContributions': '이 모듈에는 클라이언트 기여가 없습니다.',

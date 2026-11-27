@@ -337,6 +337,24 @@ export function createStudioServer(options: CreateStudioServerOptions = {}): Stu
             statistics,
             resolveProxyUrl: networkSettings.resolveProxyUrl,
             providerLogger: options.providerLogger,
+            onGatewayLog: event => {
+              if (event.phase === 'started' || !event.providerProfileId) return
+              try {
+                const payload = {
+                  providerProfileId: event.providerProfileId,
+                  modelId: event.model ?? 'unknown',
+                  outcome: event.phase,
+                  ...(event.phase === 'completed' && event.usage ? { usage: event.usage } : {}),
+                  durationMs: event.durationMs,
+                  ...(event.phase === 'completed' && event.providerCallId ? { providerCallId: event.providerCallId } : {}),
+                  finishedAt: nowIso(),
+                }
+                kernel.getEventBus().emit('ai.usage.recorded', payload, {
+                  publisher: { kind: 'kernel' },
+                  source: 'application.ai-gateway',
+                })
+              } catch { /* Usage fan-out cannot affect the provider call. */ }
+            },
             logger: options.promptBuildLogger,
             runtimeLogger: options.runtimeLogger,
           })

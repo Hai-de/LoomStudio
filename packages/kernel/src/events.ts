@@ -118,6 +118,7 @@ export function registerBuiltinEventDefinitions(eventBus: EventBus): void {
     platformEvent('data.changed', 'Low-level platform data commit completed', 'protected', 'platform-data'),
     platformEvent('state.changed', 'State commit completed', 'protected', 'state'),
     platformEvent('diagnostics.updated', 'Diagnostics registry changed', 'protected', 'diagnostics'),
+    platformEvent('ai.usage.recorded', 'Provider call terminal usage was recorded', 'protected', 'usage'),
     platformEvent('extensions.changed', 'Extension runtime state changed', 'public'),
     platformEvent('extensions.data.changed', 'Extension-visible data projection may have changed', 'public'),
     platformEvent('entity.lifecycle.changed', 'Application entity lifecycle transaction completed', 'public'),

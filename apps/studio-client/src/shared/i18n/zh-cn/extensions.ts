@@ -77,6 +77,7 @@ export const messages = {
   'renderer.packagePartial': '部分模块操作失败，请查看详情',
   'renderer.enablePackageConfirm': '启用“{{name}}”将执行扩展代码。请只启用信任的代码；角色作用域不是安全沙箱。不会自动授予新权限。\n\n模块与声明能力：\n{{capabilities}}',
   'renderer.allowNotifications': '允许应用内通知',
+  'renderer.eventGrantUsage': '允许读取模型调用用量（不包含 Prompt 和 API Key）',
   'renderer.disable': '停用模块',
   'renderer.reload': '重新加载模块',
   'renderer.noContributions': '这个模块没有 Client Contribution。',

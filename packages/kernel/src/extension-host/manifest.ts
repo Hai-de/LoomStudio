@@ -319,7 +319,7 @@ function validateManifest(manifest: Partial<ExtensionManifest>): void {
     if (eventCapabilities !== undefined && (!Array.isArray(eventCapabilities) || !eventCapabilities.every(value => typeof value === 'string'))) {
       throw new Error(`Module capabilities.events.subscribe must be a string array: ${moduleManifest.id}`)
     }
-    for (const capability of ['assets.publish', 'assets.read', 'ai.invoke', 'macros.provide', 'prompt.process', 'narrative.context.provide', 'narrative.read', 'agent.tasks', 'vfs.provide', 'resources.provide', 'state.contribute', 'state.read', 'state.write', 'state.processContent', 'ui.notify'] as const) {
+    for (const capability of ['assets.publish', 'assets.read', 'ai.invoke', 'ai.profiles.read', 'ai.provider.read', 'macros.provide', 'prompt.process', 'narrative.context.provide', 'narrative.read', 'agent.tasks', 'vfs.provide', 'resources.provide', 'state.contribute', 'state.read', 'state.write', 'state.processContent', 'ui.notify'] as const) {
       const requested = moduleManifest.capabilities?.[capability]
       if (requested !== undefined && typeof requested !== 'boolean') {
         throw new Error(`Module capabilities.${capability} must be a boolean: ${moduleManifest.id}`)

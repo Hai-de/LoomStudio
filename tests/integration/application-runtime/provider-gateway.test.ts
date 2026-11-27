@@ -22,7 +22,9 @@ describe('application runtime Provider Profile integration', () => {
     try {
       createNarrativeStore({ engine: f.engine })
       const stats = createStatisticsStore(f.engine, () => '2026-10-25T00:00:00.000Z')
-      const gateway = createDocumentBackedAiGateway({ documents: f.documents, secrets: f.secrets, statistics: stats })
+      const logs: Array<{ phase: string }> = []
+      const gateway = createDocumentBackedAiGateway({ documents: f.documents, secrets: f.secrets, statistics: stats,
+        onLog: event => logs.push(event) })
       const { providerProfile } = await f.runtime.createProviderProfile({ providerExtensionId: 'official.openai-compatible',
         displayName: 'Metered', config: { baseUrl: 'https://metered.test/v1' }, enabledModelIds: ['metered'], credential: { apiKey: 'test-only' } })
       await gateway.invokeChat({ model: { providerProfileId: providerProfile.id, modelId: 'metered' },
@@ -30,6 +32,7 @@ describe('application runtime Provider Profile integration', () => {
       await f.runtime.deleteProviderProfile({ providerProfileId: providerProfile.id })
       const result = await stats.usage({ to: '2026-10-26T00:00:00.000Z', timeZone: 'UTC' })
       expect(result.totals).toMatchObject({ requests: 1, total: 15, input: 12, output: 3 })
+      expect(logs).toContainEqual(expect.objectContaining({ phase: 'completed' }))
       expect(result.collectionErrors).toBe(0)
       expect(result.providers[0]?.name).toBe('Metered')
     } finally { f.close() }
@@ -392,6 +395,87 @@ describe('application runtime Provider Profile integration', () => {
     expect(requests[0]?.body).not.toHaveProperty('max_tokens')
     expect(requests[0]?.init.headers).toMatchObject({ authorization: 'Bearer test-key' })
     expect(result.text).toBe('真实模型回复。')
+  })
+
+  it('requests a Provider endpoint with the stored credential without exposing it', async () => {
+    const requests: Array<{ url: string; authorization: string | null; apiKey: string | null; redirect: string | undefined }> = []
+    vi.stubGlobal('fetch', (async (input, init) => {
+      requests.push({
+        url: String(input),
+        authorization: new Headers(init?.headers).get('authorization'),
+        apiKey: new Headers(init?.headers).get('x-api-key'),
+        redirect: init?.redirect,
+      })
+      return new Response(JSON.stringify({ status: 'ok', available: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) satisfies typeof fetch)
+    const fixture = createRuntimeFixture()
+    try {
+      const { providerProfile } = await fixture.runtime.createProviderProfile({
+        providerExtensionId: 'official.openai-compatible',
+        displayName: 'Provider',
+        config: { baseUrl: 'https://provider.example/v1/' },
+        enabledModelIds: ['example-model'],
+        credential: { apiKey: 'provider-secret-key' },
+      })
+      const result = await fixture.runtime.getProviderJson({
+        providerProfileId: providerProfile.id,
+        path: 'account/status',
+        auth: { kind: 'bearer' },
+      })
+      expect(result).toEqual({
+        providerProfileId: providerProfile.id,
+        status: 200,
+        ok: true,
+        body: { status: 'ok', available: true },
+      })
+      await fixture.runtime.getProviderJson({
+        providerProfileId: providerProfile.id,
+        path: '/account/status',
+        auth: { kind: 'x-api-key' },
+      })
+      expect(requests).toEqual([
+        {
+          url: 'https://provider.example/v1/account/status',
+          authorization: 'Bearer provider-secret-key',
+          apiKey: null,
+          redirect: 'error',
+        },
+        {
+          url: 'https://provider.example/account/status',
+          authorization: null,
+          apiKey: 'provider-secret-key',
+          redirect: 'error',
+        },
+      ])
+      expect(JSON.stringify(result)).not.toContain('provider-secret-key')
+    } finally { fixture.close() }
+  })
+
+  it('keeps Provider endpoint requests on the configured HTTPS origin', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>()
+    vi.stubGlobal('fetch', fetch)
+    const fixture = createRuntimeFixture()
+    try {
+      const { providerProfile } = await fixture.runtime.createProviderProfile({
+        providerExtensionId: 'official.openai-compatible',
+        displayName: 'Provider',
+        config: { baseUrl: 'https://provider.example/v1' },
+        enabledModelIds: ['example-model'],
+        credential: { apiKey: 'provider-key' },
+      })
+      await expect(fixture.runtime.getProviderJson({
+        providerProfileId: providerProfile.id,
+        path: '//other.example/status',
+      })).rejects.toMatchObject({ code: 'ai.provider.unsupported_endpoint' })
+      await expect(fixture.runtime.getProviderJson({
+        providerProfileId: providerProfile.id,
+        path: 'https://other.example/status',
+      })).rejects.toMatchObject({ code: 'ai.provider.unsupported_endpoint' })
+      expect(fetch).not.toHaveBeenCalled()
+    } finally { fixture.close() }
   })
 
   it('keeps provider-boundary validation in the delegated gateway path', async () => {

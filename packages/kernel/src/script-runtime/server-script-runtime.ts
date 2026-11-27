@@ -301,7 +301,7 @@ function identity(run: ServerScriptRun): string {
 function eventCapability(value: string): EventCapabilityCategory | undefined {
   if (!value.startsWith('events.subscribe:')) return undefined
   const category = value.slice('events.subscribe:'.length)
-  if (['documents', 'narrative', 'agent', 'diagnostics', 'platform-data', 'state'].includes(category)
+  if (['documents', 'narrative', 'agent', 'diagnostics', 'platform-data', 'state', 'usage'].includes(category)
     || (category.startsWith('extension:') && category.length > 'extension:'.length)) return category as EventCapabilityCategory
   return undefined
 }
