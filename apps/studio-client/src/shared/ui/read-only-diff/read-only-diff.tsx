@@ -147,7 +147,7 @@ export type ReadOnlyDiffProps = {
   before: string
   after: string
   t: Translator
-  language?: 'markdown' | 'javascript' | 'loom-script' | 'loom-rule'
+  language?: 'markdown' | 'yaml' | 'javascript' | 'loom-script' | 'loom-rule'
   flow?: boolean
   defaultExpanded?: boolean
   defaultWrap?: boolean

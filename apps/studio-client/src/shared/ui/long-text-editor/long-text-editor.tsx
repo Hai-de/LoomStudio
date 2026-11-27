@@ -28,8 +28,9 @@ const LazyReadOnlyDiff = lazy(async () => {
 })
 
 type LongTextEditorBaseProps = {
-  language?: 'markdown' | 'javascript' | 'loom-script' | 'loom-rule'
+  language?: 'markdown' | 'yaml' | 'javascript' | 'loom-script' | 'loom-rule'
   hideLabel?: boolean
+  height?: number | string
   headerExtra?: ReactNode
   clearLabel: string
   clearedLabel: string
@@ -74,6 +75,10 @@ type LongTextEditorProps = LongTextEditorBaseProps & ({
 
 export type LongTextEditorHandle = CodeMirrorEditorHandle
 
+function cssLength(value: number | string): string {
+  return typeof value === 'number' ? `${value}px` : value
+}
+
 export const LongTextEditor = forwardRef<LongTextEditorHandle, LongTextEditorProps>(function LongTextEditor(props, ref) {
   const labelId = useId()
   const codeEditorRef = useRef<CodeMirrorEditorHandle>(null)
@@ -110,6 +115,9 @@ export const LongTextEditor = forwardRef<LongTextEditorHandle, LongTextEditorPro
     focus: () => codeEditorRef.current?.focus(),
     undo: () => codeEditorRef.current?.undo() ?? false,
     revealLine: line => codeEditorRef.current?.revealLine(line),
+    requestMeasure: () => codeEditorRef.current?.requestMeasure(),
+    scrollToTop: () => codeEditorRef.current?.scrollToTop(),
+    scrollToBottom: () => codeEditorRef.current?.scrollToBottom(),
   }), [])
 
   useEffect(() => {
@@ -146,20 +154,24 @@ export const LongTextEditor = forwardRef<LongTextEditorHandle, LongTextEditorPro
       ? props.copyFailedLabel
       : ''
   const liveFeedback = copyFeedback || (state.undoValue === undefined ? '' : props.clearedLabel)
-  const editorStyle = props.minHeight === undefined
-    ? undefined
-    : {
-        '--loom-long-text-editor-content-min-height': props.compact
-          ? '0px'
-          : `max(0px, calc(${props.minHeight}px - 46px))`,
-        '--loom-long-text-editor-min-height': `${props.minHeight}px`,
-      } as CSSProperties
+  const editorStyle = {
+    ...(props.minHeight === undefined ? {} : {
+      '--loom-long-text-editor-content-min-height': props.compact
+        ? '0px'
+        : `max(0px, calc(${props.minHeight}px - 46px))`,
+      '--loom-long-text-editor-min-height': `${props.minHeight}px`,
+    }),
+    ...(props.height === undefined ? {} : {
+      '--loom-long-text-editor-height': cssLength(props.height),
+    }),
+  } as CSSProperties
 
   return (
     <section
       className={styles.editor}
       data-copy-state={copyStatus}
       data-compact={props.compact ? 'true' : 'false'}
+      data-bounded={props.height === undefined ? 'false' : 'true'}
       data-disabled={props.disabled ? 'true' : 'false'}
       data-loom-component="long-text-editor"
       data-mode={props.mode}

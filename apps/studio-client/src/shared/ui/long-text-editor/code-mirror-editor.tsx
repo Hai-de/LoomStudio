@@ -1,4 +1,4 @@
-import { yamlFrontmatter } from '@codemirror/lang-yaml'
+import { yaml, yamlFrontmatter } from '@codemirror/lang-yaml'
 import { buildSearchMatchPattern, searchRevealKey, type SearchReveal } from '../../lib/search-match.js'
 import { defaultKeymap, history, historyKeymap, undo as undoChange, undoDepth } from '@codemirror/commands'
 import { javascript } from '@codemirror/lang-javascript'
@@ -32,10 +32,13 @@ export type CodeMirrorEditorHandle = {
   focus(): void
   undo(): boolean
   revealLine(line: number): void
+  requestMeasure(): void
+  scrollToTop(): void
+  scrollToBottom(): void
 }
 
 type CodeMirrorEditorProps = {
-  language?: 'markdown' | 'javascript' | 'loom-script' | 'loom-rule'
+  language?: 'markdown' | 'yaml' | 'javascript' | 'loom-script' | 'loom-rule'
   autoFocus?: boolean
   hidden?: boolean
   disabled?: boolean
@@ -173,6 +176,17 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       const target = view.state.doc.line(Math.max(1, Math.min(line, view.state.doc.lines)))
       view.dispatch({ selection: { anchor: target.from, head: target.to }, effects: EditorView.scrollIntoView(target.from, { y: 'center' }) })
       view.focus()
+    },
+    requestMeasure: () => viewRef.current?.requestMeasure(),
+    scrollToTop: () => {
+      const view = viewRef.current
+      if (!view) return
+      view.dispatch({ effects: EditorView.scrollIntoView(0, { y: 'start' }) })
+    },
+    scrollToBottom: () => {
+      const view = viewRef.current
+      if (!view) return
+      view.dispatch({ effects: EditorView.scrollIntoView(view.state.doc.length, { y: 'end' }) })
     },
   }), [])
 
@@ -332,6 +346,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
 })
 
 export function editorLanguage(language: CodeMirrorEditorProps['language']) {
+  if (language === 'yaml') return [yaml()]
   if (language === 'loom-rule') return [yamlFrontmatter({ content: markdown({ codeLanguages }) })]
   if (language === 'loom-script') return [javascript(), loomScriptMetadataHighlighting]
   if (language === 'javascript') return [javascript()]

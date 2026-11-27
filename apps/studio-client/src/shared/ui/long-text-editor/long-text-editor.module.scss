@@ -11,6 +11,28 @@
   background: var(--loom-color-surface-subtle);
 }
 
+.editor[data-bounded='true'] {
+  height: var(--loom-long-text-editor-height);
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.editor[data-bounded='true'] .editorHost {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.editor[data-bounded='true'] .editorHost > :global(.cm-editor) {
+  height: 100%;
+  min-height: 0;
+}
+
+.editor[data-bounded='true'] .editorHost > :global(.cm-editor) > :global(.cm-scroller) {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
 .editor[data-disabled='true'] {
   color: var(--loom-color-text-subtle);
 }

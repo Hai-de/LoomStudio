@@ -260,16 +260,40 @@ export function loomScriptMediaType(fileName: string): 'text/javascript' | 'text
   return fileName.endsWith('.md') ? 'text/markdown' : 'text/javascript'
 }
 
-/** Only the header is YAML. The body is sliced from the original source, never reserialized. */
-function parseMarkdownRuleSource(source: string): ParsedLoomScriptMetadata {
-  const opening = /^\uFEFF?---\r?\n/.exec(source)!
+export type MarkdownRuleSourceParts = {
+  openingDelimiter: string
+  frontmatter: string
+  closingDelimiter: string
+  body: string
+}
+
+/** Split a Markdown rule into raw, non-serialized slices so UI editors can preserve the author's exact source. */
+export function splitMarkdownRuleSource(source: string): MarkdownRuleSourceParts | undefined {
+  const opening = /^\uFEFF?---\r?\n/.exec(source)
+  if (!opening) return undefined
   const remainder = source.slice(opening[0].length)
   const closing = /^---[ \t]*(?:\r?\n|$)/m.exec(remainder)
-  if (!closing) throw new Error('Markdown rule frontmatter closing delimiter is missing')
-  const document = parseDocument(remainder.slice(0, closing.index), { uniqueKeys: true })
+  if (!closing) return undefined
+  return {
+    openingDelimiter: opening[0],
+    frontmatter: remainder.slice(0, closing.index),
+    closingDelimiter: closing[0],
+    body: remainder.slice(closing.index + closing[0].length),
+  }
+}
+
+export function joinMarkdownRuleSource(parts: MarkdownRuleSourceParts): string {
+  return `${parts.openingDelimiter}${parts.frontmatter}${parts.closingDelimiter}${parts.body}`
+}
+
+/** Only the header is YAML. The body is sliced from the original source, never reserialized. */
+function parseMarkdownRuleSource(source: string): ParsedLoomScriptMetadata {
+  const parts = splitMarkdownRuleSource(source)
+  if (!parts) throw new Error('Markdown rule frontmatter closing delimiter is missing')
+  const document = parseDocument(parts.frontmatter, { uniqueKeys: true })
   if (document.errors.length) throw new Error(`Invalid rule frontmatter: ${document.errors[0]!.message}`)
   const header = markdownRuleHeader.parse(document.toJS({ maxAliasCount: 0 }))
-  const body = remainder.slice(closing.index + closing[0].length)
+  const body = parts.body
   const effect: ScriptTextTransformRule['effect'] = header.action === 'promote-reasoning'
     ? { kind: 'promote-reasoning', contentGroup: header.content_group, visibility: header.visibility, replay: header.replay, dialect: header.dialect }
     : header.action === 'mark' ? { kind: 'mark', markerType: header.marker_type } : { kind: 'replace', replacement: body }

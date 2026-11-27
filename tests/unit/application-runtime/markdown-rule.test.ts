@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseLoomScriptSource, serializeMarkdownTextRule, resolveTextTransformContributionRule } from '@loom-studio/shared/loom-scripts'
+import { joinMarkdownRuleSource, parseLoomScriptSource, serializeMarkdownTextRule, resolveTextTransformContributionRule, splitMarkdownRuleSource } from '@loom-studio/shared/loom-scripts'
 import { projectHistoryEntries, type TextTransformRuleEntry } from '@loom-studio/application-runtime'
 
 function parse(body: string, extra = '') {
@@ -17,6 +17,17 @@ function project(text: string, draft: ReturnType<typeof contribution>, streaming
 }
 
 describe('Markdown text rule source', () => {
+  it('splits and rejoins the raw declaration and replacement body without changing either', () => {
+    const raw = '\uFEFF---\r\nid: example.rule\r\nname: 示例\r\nregex: \'^(.*)$\'\r\n---\r\n\r\n<div>$1</div>\r\n'
+    const parts = splitMarkdownRuleSource(raw)!
+    expect(parts.frontmatter).toBe("id: example.rule\r\nname: 示例\r\nregex: '^(.*)$'\r\n")
+    expect(parts.body).toBe('\r\n<div>$1</div>\r\n')
+    expect(joinMarkdownRuleSource(parts)).toBe(raw)
+    expect(joinMarkdownRuleSource({ ...parts, frontmatter: parts.frontmatter.replace('示例', '改名') })).toContain('name: 改名')
+    expect(joinMarkdownRuleSource({ ...parts, body: '<span>$1</span>' }).endsWith('<span>$1</span>')).toBe(true)
+    expect(splitMarkdownRuleSource('---\nid: missing')).toBeUndefined()
+  })
+
   it('round trips stable Lore links without embedding their content', () => {
     const rule = contribution(parse('replacement', 'lore_refs:\n  - resourceId: lore-a\n    nodeId: entry-a\n'))
     expect(rule.loreRefs).toEqual([{ resourceId: 'lore-a', nodeId: 'entry-a' }])

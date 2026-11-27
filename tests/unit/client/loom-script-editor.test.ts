@@ -32,6 +32,66 @@ it('uses JavaScript language while keeping multiline metadata readable and navig
   expect(onChange).not.toHaveBeenCalled()
 })
 
+it('separates a Markdown rule declaration from its replacement body and bounds both editors', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+  const host = document.createElement('div')
+  document.body.append(host)
+  root = createRoot(host)
+  const source = createTextRuleScriptTemplate()
+  await act(async () => root!.render(createElement(LoomScriptSourceFields, {
+    source, fileName: 'new-rule.md', onSourceChange: vi.fn(), onFileNameChange: vi.fn(), t: createTranslator('zh-CN'),
+  })))
+  const summary = host.querySelector('[aria-label="规则摘要"]')!
+  expect(summary.textContent).toContain('新文本规则')
+  expect(summary.querySelector('[data-loom-component="long-text-editor"]')).not.toBeNull()
+  expect(host.querySelectorAll('[data-loom-component="long-text-editor"]')).toHaveLength(2)
+  const body = host.querySelector('[aria-label="替换内容"]')!
+  const bodyEditor = body.querySelector('[data-loom-component="long-text-editor"]')!
+  expect(bodyEditor.getAttribute('data-bounded')).toBe('true')
+  expect(body.querySelector('[aria-label="回到替换内容顶部"]')).not.toBeNull()
+  expect(body.querySelector('[aria-label="跳到替换内容底部"]')).not.toBeNull()
+  expect(body.querySelector('[aria-label="展开源码编辑器"]')).not.toBeNull()
+  expect(body.querySelector('button[aria-expanded="true"]')?.textContent).toContain('收起替换正文')
+  const before = bodyEditor.getAttribute('style')
+
+  await act(async () => body.querySelector<HTMLButtonElement>('[aria-label="展开源码编辑器"]')!.click())
+  expect(body.querySelector('[data-loom-component="long-text-editor"]')!.getAttribute('style')).not.toBe(before)
+})
+
+it('uses localized labels for the split Markdown rule editor', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+  const host = document.createElement('div')
+  document.body.append(host)
+  root = createRoot(host)
+  const source = "---\nid: example.rule\nname: Example\nregex: 'x'\nregex_flags: g\nphases: [display]\n---\nbody"
+  await act(async () => root!.render(createElement(LoomScriptSourceFields, {
+    source, fileName: 'example.md', onSourceChange: vi.fn(), onFileNameChange: vi.fn(), t: createTranslator('en-US'),
+  })))
+  expect(host.querySelector('[aria-label="Rule summary"]')?.textContent).toContain('Rule declaration')
+  expect(host.textContent).toContain('Replacement')
+  expect(host.textContent).toContain('Copy full source')
+})
+
+it('auto-collapses only a long replacement body and keeps the declaration editor visible', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+  const host = document.createElement('div')
+  document.body.append(host)
+  root = createRoot(host)
+  const source = createTextRuleScriptTemplate().replace('替换后文字', 'x'.repeat(9_000))
+  await act(async () => root!.render(createElement(LoomScriptSourceFields, {
+    source, fileName: 'long-rule.md', onSourceChange: vi.fn(), onFileNameChange: vi.fn(), t: createTranslator('zh-CN'),
+  })))
+  const summary = host.querySelector('[aria-label="规则摘要"]')!
+  expect(summary.querySelector('[data-loom-component="long-text-editor"]')).not.toBeNull()
+  const body = host.querySelector('[aria-label="替换内容"]')!
+  expect(body.querySelector('[data-loom-component="long-text-editor"]')).toBeNull()
+  expect(body.textContent).toContain('9,000 个字符')
+  const expand = [...body.querySelectorAll('button')].find(button => button.textContent === '展开替换正文')!
+  await act(async () => expand.click())
+  expect(body.querySelector('[data-loom-component="long-text-editor"]')).not.toBeNull()
+  expect(host.querySelectorAll('[data-loom-component="long-text-editor"]')).toHaveLength(2)
+})
+
 it('previews the complete unsaved rule source and shows the result without saving or changing it', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   const host = document.createElement('div')
